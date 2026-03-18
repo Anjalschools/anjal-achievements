@@ -1,93 +1,106 @@
 "use client";
 
+import Image from "next/image";
+import Link from "next/link";
 import { platformName } from "@/data/landing-content";
 
 const MainHeader = () => {
   return (
-    <header className="bg-white border-b border-gray-200 sticky top-0 z-50 shadow-sm">
-      <div className="container mx-auto px-4">
-        <div className="flex items-center justify-between h-20">
-          {/* Logo / Platform Name */}
-          <div className="flex items-center gap-3">
-            <div className="flex flex-col">
-              <h1 className="text-lg font-bold text-primary leading-tight whitespace-nowrap">
+    <header className="sticky top-0 z-50 border-b border-gray-200 bg-white/95 shadow-sm backdrop-blur">
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        <div className="flex min-h-[84px] items-center justify-between gap-4">
+          <Link
+            href="/"
+            className="flex min-w-0 items-center gap-3 transition-opacity hover:opacity-90"
+            aria-label="العودة إلى الصفحة الرئيسية"
+          >
+            <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-xl bg-white ring-1 ring-gray-200">
+              <Image
+                src="/logow.png"
+                alt="شعار مدارس الأنجال الأهلية"
+                fill
+                priority
+                className="object-contain p-1"
+                sizes="48px"
+              />
+            </div>
+
+            <div className="min-w-0">
+              <h1 className="truncate text-lg font-bold leading-tight text-primary sm:text-xl">
                 {platformName.ar}
               </h1>
-              <p className="text-[10px] text-text-light leading-tight whitespace-nowrap">
+              <p className="truncate text-[11px] leading-tight text-text-light sm:text-xs">
                 {platformName.tagline}
               </p>
             </div>
-          </div>
+          </Link>
 
-          {/* Navigation Links */}
-          <nav className="hidden md:flex items-center gap-6">
-            <a
+          <nav className="hidden items-center gap-5 lg:flex xl:gap-7">
+            <Link
               href="/achievements"
-              className="text-sm text-text hover:text-primary transition-colors font-medium whitespace-nowrap"
+              className="whitespace-nowrap text-sm font-medium text-text transition-colors hover:text-primary"
             >
               الإنجازات
-            </a>
-            <a
+            </Link>
+
+            <Link
               href="/rankings"
-              className="text-sm text-text hover:text-primary transition-colors font-medium whitespace-nowrap"
+              className="whitespace-nowrap text-sm font-medium text-text transition-colors hover:text-primary"
             >
               التصنيفات
-            </a>
-            <a
+            </Link>
+
+            <Link
               href="/hall-of-fame"
-              className="text-sm text-text hover:text-primary transition-colors font-medium whitespace-nowrap"
+              className="whitespace-nowrap text-sm font-medium text-text transition-colors hover:text-primary"
             >
               Hall of Fame
-            </a>
-            <a
+            </Link>
+
+            <Link
               href="/categories"
-              className="text-sm text-text hover:text-primary transition-colors font-medium whitespace-nowrap"
+              className="whitespace-nowrap text-sm font-medium text-text transition-colors hover:text-primary"
             >
-              التصنيفات
-            </a>
+              المجالات
+            </Link>
           </nav>
 
-          {/* Search and Actions */}
-          <div className="flex items-center gap-3">
-            {/* Search Bar */}
-            <div className="hidden lg:block">
-              <div className="relative">
-                <input
-                  type="text"
-                  placeholder="ابحث عن إنجاز أو طالب..."
-                  className="w-56 px-3 py-1.5 pr-9 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent text-xs"
+          <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+            <div className="relative hidden xl:block">
+              <input
+                type="text"
+                placeholder="ابحث عن إنجاز أو طالب..."
+                className="h-11 w-64 rounded-xl border border-gray-300 bg-white pr-10 pl-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
+              />
+              <svg
+                className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+                aria-hidden="true"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
                 />
-                <svg
-                  className="absolute left-2.5 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-                  />
-                </svg>
-              </div>
+              </svg>
             </div>
 
-            {/* Action Buttons */}
-            <div className="flex items-center gap-2">
-              <a
-                href="/login"
-                className="px-3 py-1.5 text-xs text-text hover:text-primary transition-colors font-medium whitespace-nowrap"
-              >
-                تسجيل الدخول
-              </a>
-              <a
-                href="/register"
-                className="px-4 py-1.5 bg-primary text-white rounded-lg hover:bg-primary-dark transition-colors text-xs font-medium whitespace-nowrap"
-              >
-                انضم الآن
-              </a>
-            </div>
+            <Link
+              href="/login"
+              className="whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium text-text transition-colors hover:text-primary sm:px-4"
+            >
+              تسجيل الدخول
+            </Link>
+
+            <Link
+              href="/register"
+              className="whitespace-nowrap rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-primary-dark sm:px-5"
+            >
+              انضم الآن
+            </Link>
           </div>
         </div>
       </div>
