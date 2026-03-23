@@ -8,12 +8,18 @@ import { getLocale, initLocale } from "@/lib/i18n";
 import { getTranslation } from "@/locales";
 import PlatformLogo from "@/components/branding/PlatformLogo";
 import { ArrowLeft } from "lucide-react";
+import HeaderAccountMenu, {
+  type HeaderAccountMenuProps,
+} from "@/components/layout/HeaderAccountMenu";
+import NotificationBell from "@/components/notifications/NotificationBell";
 
 type MainHeaderProps = {
   variant?: "default" | "auth";
+  /** Logged-in app shell: show account menu instead of login / انضم الآن */
+  userAccount?: HeaderAccountMenuProps;
 };
 
-const MainHeader = ({ variant = "default" }: MainHeaderProps) => {
+const MainHeader = ({ variant = "default", userAccount }: MainHeaderProps) => {
   useEffect(() => {
     initLocale();
   }, []);
@@ -21,9 +27,10 @@ const MainHeader = ({ variant = "default" }: MainHeaderProps) => {
   const locale = getLocale();
   const t = getTranslation(locale);
   const isAuth = variant === "auth";
+  const isLoggedIn = Boolean(userAccount);
 
   return (
-    <header className="sticky top-0 z-50 border-b border-gray-200 bg-white/95 shadow-sm backdrop-blur">
+    <header className="border-b border-gray-200 bg-white/95 shadow-sm backdrop-blur">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="flex min-h-[84px] items-center justify-between gap-4">
           <Link
@@ -54,7 +61,7 @@ const MainHeader = ({ variant = "default" }: MainHeaderProps) => {
 
           {!isAuth && (
             <>
-              <nav className="hidden items-center gap-5 lg:flex xl:gap-7">
+              <nav className="hidden items-center gap-4 lg:flex xl:gap-6">
                 <Link
                   href="/achievements"
                   className="whitespace-nowrap text-sm font-medium text-text transition-colors hover:text-primary"
@@ -84,12 +91,12 @@ const MainHeader = ({ variant = "default" }: MainHeaderProps) => {
                 </Link>
               </nav>
 
-              <div className="flex min-w-0 items-center gap-2 sm:gap-3">
-                <div className="relative hidden xl:block">
+              <div className="flex min-w-0 shrink-0 items-center gap-2 sm:gap-3">
+                <div className="relative hidden lg:block xl:w-64">
                   <input
                     type="text"
                     placeholder={t.header.searchPlaceholder}
-                    className="h-11 w-64 rounded-xl border border-gray-300 bg-white pr-10 pl-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
+                    className="h-10 w-48 rounded-xl border border-gray-300 bg-white pr-10 pl-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20 xl:w-64"
                   />
                   <svg
                     className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400"
@@ -109,19 +116,33 @@ const MainHeader = ({ variant = "default" }: MainHeaderProps) => {
 
                 <LanguageSwitcher />
 
-                <Link
-                  href="/login"
-                  className="whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium text-text transition-colors hover:text-primary sm:px-4"
-                >
-                  {t.header.login}
-                </Link>
+                {isLoggedIn && userAccount ? (
+                  <>
+                    <NotificationBell />
+                    <HeaderAccountMenu
+                      userName={userAccount.userName}
+                      userFullName={userAccount.userFullName}
+                      userEmail={userAccount.userEmail}
+                      userAvatar={userAccount.userAvatar}
+                    />
+                  </>
+                ) : (
+                  <>
+                    <Link
+                      href="/login"
+                      className="whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium text-text transition-colors hover:text-primary sm:px-4"
+                    >
+                      {t.header.login}
+                    </Link>
 
-                <Link
-                  href="/register"
-                  className="whitespace-nowrap rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-primary-dark sm:px-5"
-                >
-                  {t.header.joinNow}
-                </Link>
+                    <Link
+                      href="/register"
+                      className="whitespace-nowrap rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-primary-dark sm:px-5"
+                    >
+                      {t.header.joinNow}
+                    </Link>
+                  </>
+                )}
               </div>
             </>
           )}
