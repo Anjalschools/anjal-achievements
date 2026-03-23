@@ -1,145 +1,92 @@
 "use client";
 
-import { platformName, footerLinks } from "@/data/landing-content";
+import { Instagram, Mail, Twitter, Youtube } from "lucide-react";
+
+const SnapchatIcon = ({ className }: { className?: string }) => (
+  <svg
+    className={className}
+    fill="currentColor"
+    viewBox="0 0 24 24"
+    aria-hidden
+  >
+    <path d="M12.206.793c.99 0 4.347.276 5.93 3.821.529 1.193.403 3.219.299 4.847l-.003 1.847h2.048c1.509 0 2.81.753 3.59 2.006.896 1.451.89 3.333-.01 4.773-.857 1.36-2.02 2.24-3.58 2.24h-2.05v2.894c0 3.06-2.474 5.544-5.52 5.544-3.047 0-5.521-2.484-5.521-5.544v-2.894H4.752c-1.56 0-2.723-.88-3.58-2.24-.9-1.44-.906-3.322-.01-4.773.78-1.253 2.081-2.006 3.59-2.006h2.048v-1.847c0-1.628-.23-3.654.299-4.847C8.859 1.069 11.216.793 12.206.793zm-5.95 5.847v1.847H4.752c-1.004 0-1.627.842-1.627 1.5 0 .659.623 1.5 1.627 1.5h1.504v9.544c0 2.203 1.78 3.99 3.97 3.99 2.19 0 3.97-1.787 3.97-3.99v-9.544h1.504c1.004 0 1.627-.841 1.627-1.5 0-.658-.623-1.5-1.627-1.5h-1.504V6.64c-.01-1.582.02-3.267-.29-4.23-.33-1.01-1.88-1.29-2.96-1.29-1.08 0-2.63.28-2.96 1.29-.31.963-.28 2.648-.29 4.23z" />
+  </svg>
+);
+
+type SocialEntry =
+  | {
+      label: string;
+      href: string;
+      kind: "lucide";
+      Icon: typeof Twitter;
+    }
+  | {
+      label: string;
+      href: string;
+      kind: "snapchat";
+    };
+
+const social: SocialEntry[] = [
+  {
+    label: "X (تويتر)",
+    href: "https://x.com/alanjal_schools?s=20",
+    kind: "lucide",
+    Icon: Twitter,
+  },
+  {
+    label: "إنستقرام",
+    href: "https://www.instagram.com/schoolanjal1/?utm_source=qr",
+    kind: "lucide",
+    Icon: Instagram,
+  },
+  {
+    label: "سناب شات",
+    href: "https://www.snapchat.com/@alanjal_schools",
+    kind: "snapchat",
+  },
+  {
+    label: "يوتيوب",
+    href: "https://www.youtube.com/channel/UC2as75i57nQMG09ZIRDlxiA",
+    kind: "lucide",
+    Icon: Youtube,
+  },
+  {
+    label: "البريد الإلكتروني",
+    href: "mailto:info@al-anjal.sch.sa",
+    kind: "lucide",
+    Icon: Mail,
+  },
+];
+
+const iconBtn =
+  "inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/20 bg-white/5 text-white/90 shadow-sm transition hover:-translate-y-0.5 hover:border-white/35 hover:bg-white/12 hover:text-white";
 
 const SiteFooter = () => {
   return (
-    <footer className="bg-slate-900 text-white py-16">
-      <div className="container mx-auto px-4">
-        <div className="grid md:grid-cols-2 lg:grid-cols-5 gap-8 mb-12">
-          {/* About Section */}
-          <div className="lg:col-span-2">
-            <h3 className="text-2xl font-bold mb-4">{platformName.ar}</h3>
-            <p className="text-gray-300 mb-4 leading-relaxed">
-              {platformName.tagline}
-            </p>
-            <p className="text-gray-400 text-sm leading-relaxed">
-              منصة رقمية احترافية لتوثيق وتصنيف وإبراز إنجازات طلاب مدارس
-              الأنجال الأهلية
-            </p>
-          </div>
-
-          {/* About Links */}
-          <div>
-            <h4 className="text-lg font-bold mb-4">{footerLinks.about.title}</h4>
-            <ul className="space-y-2">
-              {footerLinks.about.links.map((link) => (
-                <li key={link.href}>
-                  <a
-                    href={link.href}
-                    className="text-gray-300 hover:text-secondary transition-colors"
-                  >
-                    {link.name}
-                  </a>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          {/* Categories Links */}
-          <div>
-            <h4 className="text-lg font-bold mb-4">
-              {footerLinks.categories.title}
-            </h4>
-            <ul className="space-y-2">
-              {footerLinks.categories.links.slice(0, 6).map((link) => (
-                <li key={link.href}>
-                  <a
-                    href={link.href}
-                    className="text-gray-300 hover:text-secondary transition-colors"
-                  >
-                    {link.name}
-                  </a>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          {/* Achievements & Support */}
-          <div>
-            <h4 className="text-lg font-bold mb-4">
-              {footerLinks.achievements.title}
-            </h4>
-            <ul className="space-y-2 mb-6">
-              {footerLinks.achievements.links.map((link) => (
-                <li key={link.href}>
-                  <a
-                    href={link.href}
-                    className="text-gray-300 hover:text-secondary transition-colors"
-                  >
-                    {link.name}
-                  </a>
-                </li>
-              ))}
-            </ul>
-            <h4 className="text-lg font-bold mb-4">
-              {footerLinks.support.title}
-            </h4>
-            <ul className="space-y-2">
-              {footerLinks.support.links.map((link) => (
-                <li key={link.href}>
-                  <a
-                    href={link.href}
-                    className="text-gray-300 hover:text-secondary transition-colors"
-                  >
-                    {link.name}
-                  </a>
-                </li>
-              ))}
-            </ul>
-          </div>
+    <footer className="border-t border-white/10 bg-gradient-to-b from-[#0a1628] to-[#0f172a] text-white">
+      <div className="mx-auto flex max-w-3xl flex-col items-center justify-center gap-5 px-4 py-8 text-center sm:gap-6 sm:py-10">
+        <div className="flex flex-wrap items-center justify-center gap-2.5 sm:gap-3">
+          {social.map((item) => (
+            <a
+              key={item.href}
+              href={item.href}
+              target={item.href.startsWith("mailto:") ? undefined : "_blank"}
+              rel={item.href.startsWith("mailto:") ? undefined : "noopener noreferrer"}
+              className={iconBtn}
+              aria-label={item.label}
+            >
+              {item.kind === "lucide" ? (
+                <item.Icon className="h-4 w-4" strokeWidth={2} aria-hidden />
+              ) : (
+                <SnapchatIcon className="h-4 w-4" />
+              )}
+            </a>
+          ))}
         </div>
 
-        {/* Social Media & Copyright */}
-        <div className="border-t border-gray-700 pt-8">
-          <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-            <div className="text-gray-400 text-sm">
-              © {new Date().getFullYear()} {platformName.ar}. جميع الحقوق محفوظة.
-            </div>
-            <div className="flex gap-4">
-              {/* Social Media Placeholders */}
-              <a
-                href="#"
-                className="w-10 h-10 bg-gray-800 rounded-full flex items-center justify-center hover:bg-primary transition-colors"
-                aria-label="Twitter"
-              >
-                <svg
-                  className="w-5 h-5"
-                  fill="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path d="M8.29 20.251c7.547 0 11.675-6.253 11.675-11.675 0-.178 0-.355-.012-.53A8.348 8.348 0 0022 5.92a8.19 8.19 0 01-2.357.646 4.118 4.118 0 001.804-2.27 8.224 8.224 0 01-2.605.996 4.107 4.107 0 00-6.993 3.743 11.65 11.65 0 01-8.457-4.287 4.106 4.106 0 001.27 5.477A4.072 4.072 0 012.8 9.713v.052a4.105 4.105 0 003.292 4.022 4.095 4.095 0 01-1.853.07 4.108 4.108 0 003.834 2.85A8.233 8.233 0 012 18.407a11.616 11.616 0 006.29 1.84" />
-                </svg>
-              </a>
-              <a
-                href="#"
-                className="w-10 h-10 bg-gray-800 rounded-full flex items-center justify-center hover:bg-primary transition-colors"
-                aria-label="Facebook"
-              >
-                <svg
-                  className="w-5 h-5"
-                  fill="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
-                </svg>
-              </a>
-              <a
-                href="#"
-                className="w-10 h-10 bg-gray-800 rounded-full flex items-center justify-center hover:bg-primary transition-colors"
-                aria-label="Instagram"
-              >
-                <svg
-                  className="w-5 h-5"
-                  fill="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path d="M12.315 2c2.43 0 2.784.013 3.808.06 1.064.049 1.791.218 2.427.465a4.902 4.902 0 011.772 1.153 4.902 4.902 0 011.153 1.772c.247.636.416 1.363.465 2.427.048 1.067.06 1.407.06 4.123v.08c0 2.643-.012 2.987-.06 4.043-.049 1.064-.218 1.791-.465 2.427a4.902 4.902 0 01-1.153 1.772 4.902 4.902 0 01-1.772 1.153c-.636.247-1.363.416-2.427.465-1.067.048-1.407.06-4.123.06h-.08c-2.643 0-2.987-.012-4.043-.06-1.064-.049-1.791-.218-2.427-.465a4.902 4.902 0 01-1.772-1.153 4.902 4.902 0 01-1.153-1.772c-.247-.636-.416-1.363-.465-2.427-.047-1.024-.06-1.379-.06-3.808v-.63c0-2.43.013-2.784.06-3.808.049-1.064.218-1.791.465-2.427a4.902 4.902 0 011.153-1.772A4.902 4.902 0 015.45 2.525c.636-.247 1.363-.416 2.427-.465C8.901 2.013 9.256 2 11.685 2h.63zm-.081 1.802h-.468c-2.456 0-2.784.011-3.807.058-.975.045-1.504.207-1.857.344-.467.182-.8.398-1.15.748-.35.35-.566.683-.748 1.15-.137.353-.3.882-.344 1.857-.047 1.023-.058 1.351-.058 3.807v.468c0 2.456.011 2.784.058 3.807.045.975.207 1.504.344 1.857.182.466.399.8.748 1.15.35.35.683.566 1.15.748.353.137.882.3 1.857.344 1.054.048 1.37.058 4.041.058h.08c2.597 0 2.917-.01 3.96-.058.976-.045 1.505-.207 1.858-.344.466-.182.8-.398 1.15-.748.35-.35.566-.683.748-1.15.137-.353.3-.882.344-1.857.048-1.055.058-1.37.058-4.041v-.08c0-2.597-.01-2.917-.058-3.96-.045-.976-.207-1.505-.344-1.858a3.097 3.097 0 00-.748-1.15 3.098 3.098 0 00-1.15-.748c-.353-.137-.882-.3-1.857-.344-1.023-.047-1.351-.058-3.807-.058zM12 6.865a5.135 5.135 0 110 10.27 5.135 5.135 0 010-10.27zm0 1.802a3.333 3.333 0 100 6.666 3.333 3.333 0 000-6.666zm5.338-3.205a1.2 1.2 0 110 2.4 1.2 1.2 0 010-2.4z" />
-                </svg>
-              </a>
-            </div>
-          </div>
-        </div>
+        <p className="max-w-xl text-sm leading-relaxed text-white/75 sm:text-[0.95rem]">
+          جميع الحقوق محفوظة © قسم الحاسب الآلي بمدارس الأنجال الأهلية
+        </p>
       </div>
     </footer>
   );

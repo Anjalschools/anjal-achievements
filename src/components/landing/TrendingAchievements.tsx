@@ -1,16 +1,16 @@
 "use client";
 
-import Image from "next/image";
-import { useState } from "react";
+import { Globe, Star, Trophy } from "lucide-react";
+import SafeLocalImage from "@/components/media/SafeLocalImage";
+import { PUBLIC_IMG } from "@/lib/publicImages";
 
 type AchievementCard = {
   title: string;
   subtitle: string;
   image?: string;
-  alt?: string;
+  imageAlt?: string;
   objectFit?: "cover" | "contain";
-  objectPosition?: string;
-  bgColor?: string;
+  accent?: "globe" | "star" | "trophy";
 };
 
 type FeaturedColumn = {
@@ -27,18 +27,16 @@ const featuredColumns: FeaturedColumn[] = [
       {
         title: "مشاركة عالمية في ISEF",
         subtitle: "تمثيل مشرف لطلاب مدارس الأنجال في المحافل الدولية",
-        image: "/global-isef-group.jpg",
-        alt: "فريق طلاب مدارس الأنجال في معرض ISEF",
-        objectFit: "cover",
-        objectPosition: "center",
+        image: PUBLIC_IMG.isef,
+        imageAlt: "فريق طلاب مدارس الأنجال في معرض ISEF",
+        accent: "globe",
       },
       {
         title: "تمثيل المملكة دوليًا",
         subtitle: "نماذج طلابية مؤثرة ترفع راية الوطن في المنافسات العالمية",
-        image: "/images/landing/featured-saudi-flag.jpg",
-        alt: "طالب من مدارس الأنجال مع علم المملكة",
-        objectFit: "cover",
-        objectPosition: "center",
+        image: PUBLIC_IMG.saudiFlag,
+        imageAlt: "طالب من مدارس الأنجال مع علم المملكة",
+        accent: "trophy",
       },
     ],
   },
@@ -49,18 +47,18 @@ const featuredColumns: FeaturedColumn[] = [
       {
         title: "قصة إنجاز ملهمة",
         subtitle: "المنصة تعرض أسبوعيًا أبرز إنجازات الطلاب بشكل بصري احترافي",
-        image: "/IJSO.jpg",
-        alt: "طالب متميز في فعالية موهبة",
+        image: PUBLIC_IMG.achieveWeeklySection,
+        imageAlt: "طالب متميز",
         objectFit: "cover",
-        objectPosition: "top",
+        accent: "star",
       },
       {
         title: "ملفات إنجاز حديثة",
         subtitle: "إبراز قصص النجاح بأسلوب عرض بصري حديث ومؤثر",
-        image: "/images/landing/bebras-collage.jpg",
-        alt: "كولاج إنجازات طلاب مدارس الأنجال",
+        image: PUBLIC_IMG.achieveFile,
+        imageAlt: "كأس وإنجاز طلابي",
         objectFit: "contain",
-        bgColor: "bg-slate-50",
+        accent: "trophy",
       },
     ],
   },
@@ -92,52 +90,38 @@ function getColumnClass(tone: FeaturedColumn["tone"]) {
   if (tone === "dark") {
     return "bg-[linear-gradient(135deg,#16233f_0%,#0b1530_100%)] text-white";
   }
-
   if (tone === "gold") {
     return "bg-[#d4af37] text-slate-950";
   }
-
   return "bg-[#2848b4] text-white";
 }
 
-type ImageWithFallbackProps = {
-  src: string;
-  alt: string;
-  className?: string;
-  objectFit?: "cover" | "contain";
-  objectPosition?: string;
-  bgColor?: string;
-};
+const CardTopVisual = ({ card, tone }: { card: AchievementCard; tone: FeaturedColumn["tone"] }) => {
+  const accent = card.accent;
+  const Icon = !accent ? null : accent === "globe" ? Globe : accent === "star" ? Star : Trophy;
+  const iconCls =
+    tone === "gold" ? "text-slate-950/45" : tone === "dark" ? "text-[#d4af37]/50" : "text-white/40";
 
-const ImageWithFallback = ({
-  src,
-  alt,
-  className,
-  objectFit = "cover",
-  objectPosition = "center",
-  bgColor,
-}: ImageWithFallbackProps) => {
-  const [hasError, setHasError] = useState(false);
+  const iconFallback = Icon ? (
+    <div className="flex h-44 w-full items-center justify-center border-b border-white/10 bg-black/10">
+      <Icon className={`h-14 w-14 ${iconCls}`} strokeWidth={1.2} aria-hidden />
+    </div>
+  ) : null;
 
-  if (hasError) {
-    return (
-      <div className="flex h-52 w-full items-center justify-center bg-slate-200">
-        <span className="text-xs text-slate-500">الصورة غير متاحة</span>
-      </div>
-    );
+  if (!card.image) {
+    return iconFallback;
   }
 
-  const positionClass = objectPosition === "top" ? "object-top" : "object-center";
-
   return (
-    <div className={`relative h-52 w-full ${bgColor ?? ""}`}>
-      <Image
-        src={src}
-        alt={alt}
+    <div className="relative h-44 w-full border-b border-white/10">
+      <SafeLocalImage
+        src={card.image}
+        alt={card.imageAlt ?? card.title}
         fill
-        className={`${className ?? ""} ${objectFit === "contain" ? "object-contain" : "object-cover"} ${positionClass}`}
         sizes="(max-width: 768px) 100vw, 33vw"
-        onError={() => setHasError(true)}
+        objectFit={card.objectFit ?? "cover"}
+        className="object-center"
+        fallback={iconFallback ?? <div className="h-44 w-full bg-white/5" aria-hidden />}
       />
     </div>
   );
@@ -145,18 +129,9 @@ const ImageWithFallback = ({
 
 export default function TrendingAchievements() {
   const rankingItems = [
-    {
-      rank: "1",
-      text: "تحقيق المركز الأول في اختبارات القدرات على مستوى المملكة",
-    },
-    {
-      rank: "2",
-      text: "تحقيق المركز الأول في اختبارات التحصيلي على مستوى المملكة",
-    },
-    {
-      rank: "3",
-      text: "تحقيق المركز الأول عالميًا في جائزة الموهوبين من مؤسسة حمدان بن راشد",
-    },
+    { rank: "1", text: "تحقيق المركز الأول في اختبارات القدرات على مستوى المملكة" },
+    { rank: "2", text: "تحقيق المركز الأول في اختبارات التحصيلي على مستوى المملكة" },
+    { rank: "3", text: "تحقيق المركز الأول عالميًا في جائزة الموهوبين من مؤسسة حمدان بن راشد" },
     {
       rank: "4",
       text: "الحصول على 24 درع تميز في نتائج التقويم والاعتماد والتصنيف المدرسي على مدى عامين متتاليين",
@@ -170,9 +145,7 @@ export default function TrendingAchievements() {
   return (
     <section className="mx-auto max-w-7xl px-6 py-16 lg:px-10">
       <div className="text-center">
-        <h2 className="text-4xl font-black text-slate-950 lg:text-5xl">
-          أبرز إنجازات مدارس الأنجال الأهلية
-        </h2>
+        <h2 className="text-4xl font-black text-slate-950 lg:text-5xl">أبرز إنجازات مدارس الأنجال الأهلية</h2>
         <p className="mt-4 text-lg text-slate-500">
           إنجازات متميزة تعكس التميز والتفوق في مختلف المجالات التعليمية والتربوية
         </p>
@@ -180,10 +153,7 @@ export default function TrendingAchievements() {
 
       <div className="mt-12 grid gap-6 lg:grid-cols-3">
         {featuredColumns.map((column) => (
-          <div
-            key={column.title}
-            className={`rounded-[28px] p-6 shadow-lg ${getColumnClass(column.tone)}`}
-          >
+          <div key={column.title} className={`rounded-[28px] p-6 shadow-lg ${getColumnClass(column.tone)}`}>
             <h3 className="text-3xl font-black">{column.title}</h3>
 
             <div className="mt-6 space-y-4">
@@ -191,28 +161,14 @@ export default function TrendingAchievements() {
                 <div
                   key={card.title}
                   className={`overflow-hidden rounded-2xl border ${
-                    column.tone === "gold"
-                      ? "border-black/10 bg-white/15"
-                      : "border-white/10 bg-white/10"
+                    column.tone === "gold" ? "border-black/10 bg-white/15" : "border-white/10 bg-white/10"
                   }`}
                 >
-                  {card.image ? (
-                    <ImageWithFallback
-                      src={card.image}
-                      alt={card.alt ?? card.title}
-                      className=""
-                      objectFit={card.objectFit}
-                      objectPosition={card.objectPosition}
-                      bgColor={card.bgColor}
-                    />
-                  ) : null}
-
+                  <CardTopVisual card={card} tone={column.tone} />
                   <div className="p-5">
                     <div className="text-xl font-black">{card.title}</div>
                     <div
-                      className={`mt-2 text-sm leading-7 ${
-                        column.tone === "gold" ? "text-slate-800" : "text-white/80"
-                      }`}
+                      className={`mt-2 text-sm leading-7 ${column.tone === "gold" ? "text-slate-800" : "text-white/80"}`}
                     >
                       {card.subtitle}
                     </div>
@@ -231,7 +187,7 @@ export default function TrendingAchievements() {
             className="flex items-center justify-between rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm"
           >
             <p className="max-w-[85%] text-lg leading-8 text-slate-800">{item.text}</p>
-            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#eef2ff] text-xl font-black text-[#2848b4]">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[#eef2ff] text-xl font-black text-[#2848b4]">
               {item.rank}
             </div>
           </div>

@@ -1,8 +1,9 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
-import { useState } from "react";
+import { FileStack, Medal, Trophy } from "lucide-react";
+import SafeLocalImage from "@/components/media/SafeLocalImage";
+import { PUBLIC_IMG } from "@/lib/publicImages";
 
 type SideCard = {
   title: string;
@@ -10,77 +11,54 @@ type SideCard = {
   image: string;
   alt: string;
   objectFit?: "cover" | "contain";
-  objectPosition?: string;
-  bgColor?: string;
+  visual: "trophy" | "medal" | "files";
 };
 
 const sideCards: SideCard[] = [
   {
     title: "تمثيل المملكة عالميًا",
     description: "طالب من مدارس الأنجال يرفع راية الوطن في المحافل الدولية.",
-    image: "/trophy-hero.jpg",
-    alt: "طالب من مدارس الأنجال يحمل علم المملكة",
+    visual: "trophy",
+    image: PUBLIC_IMG.saudiFlag,
+    alt: "إنجاز طلابي وطني",
     objectFit: "cover",
-    objectPosition: "center",
   },
   {
     title: "تميّز موهبة",
     description: "نموذج طلابي متميز في مسارات الموهبة والتفوق.",
-    image: "/sahib.jpg",
-    alt: "طالب مع ميدالية في فعالية موهبة",
+    visual: "medal",
+    image: PUBLIC_IMG.achieveWeeklySection,
+    alt: "ميدالية إنجاز",
     objectFit: "cover",
-    objectPosition: "center",
   },
   {
     title: "ملف إنجازات مصور",
     description: "عرض حديث ومؤثر لقصص النجاح الطلابية داخل المنصة.",
-    image: "/timss-or-school-excellence.jpg",
-    alt: "ملف إنجازات مصور لطلاب مدارس الأنجال",
-    objectFit: "contain",
-    bgColor: "bg-slate-50",
+    visual: "files",
+    image: PUBLIC_IMG.achieveFile,
+    alt: "طلاب في فعالية دولية",
+    objectFit: "cover",
   },
 ];
 
-type ImageWithFallbackProps = {
-  src: string;
-  alt: string;
-  className?: string;
-  sizes?: string;
-  objectFit?: "cover" | "contain";
-  objectPosition?: string;
-  bgColor?: string;
-};
-
-const ImageWithFallback = ({
-  src,
-  alt,
-  className,
-  sizes,
-  objectFit = "cover",
-  objectPosition = "center",
-  bgColor,
-}: ImageWithFallbackProps) => {
-  const [hasError, setHasError] = useState(false);
-
-  if (hasError) {
-    return (
-      <div className="flex h-56 w-full items-center justify-center bg-slate-200">
-        <span className="text-xs text-slate-500">الصورة غير متاحة</span>
-      </div>
-    );
-  }
-
-  const positionClass = objectPosition === "top" ? "object-top" : "object-center";
+const VisualBlock = ({ card }: { card: SideCard }) => {
+  const Icon = card.visual === "trophy" ? Trophy : card.visual === "medal" ? Medal : FileStack;
+  const iconFallback = (
+    <div className="flex h-56 w-full items-center justify-center bg-gradient-to-br from-slate-100 to-slate-200/80">
+      <Icon className="h-16 w-16 text-primary/35" strokeWidth={1.25} aria-hidden />
+    </div>
+  );
 
   return (
-    <div className={`relative h-56 w-full ${bgColor ?? ""}`}>
-      <Image
-        src={src}
-        alt={alt}
+    <div className="relative h-56 w-full">
+      <SafeLocalImage
+        src={card.image}
+        alt={card.alt}
         fill
-        className={`${className ?? ""} ${objectFit === "contain" ? "object-contain" : "object-cover"} ${positionClass}`}
-        sizes={sizes ?? "(max-width: 768px) 100vw, 50vw"}
-        onError={() => setHasError(true)}
+        sizes="(max-width: 768px) 100vw, (max-width: 1280px) 50vw, 33vw"
+        objectFit={card.objectFit ?? "cover"}
+        className="object-center"
+        fallback={iconFallback}
       />
     </div>
   );
@@ -90,11 +68,10 @@ export default function FeaturedShowcase() {
   return (
     <section className="mx-auto max-w-7xl px-6 py-16 lg:px-10">
       <div className="relative overflow-hidden rounded-[32px] bg-gradient-to-r from-[#0d5cd6] via-[#2f5ed3] to-[#66d2b5] p-6 text-white lg:p-8">
-        {/* Pattern overlay */}
         <div
           className="absolute inset-0 opacity-[0.04]"
           style={{
-            backgroundImage: "url('/placeholders/pattern.svg')",
+            backgroundImage: `url('${PUBLIC_IMG.pattern}')`,
             backgroundRepeat: "repeat",
             backgroundSize: "150px 150px",
           }}
@@ -103,15 +80,13 @@ export default function FeaturedShowcase() {
         <div className="relative grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
           <div className="flex flex-col justify-between rounded-[24px] bg-white/10 p-5 backdrop-blur-sm lg:p-6">
             <div>
-              <div className="text-sm font-bold uppercase tracking-[0.3em] text-white/80">
-                Featured Story
-              </div>
+              <div className="text-sm font-bold uppercase tracking-[0.3em] text-white/80">Featured Story</div>
               <h3 className="mt-5 text-3xl font-black leading-tight lg:text-4xl">
                 إنجازات طلاب الأنجال تصل إلى المحافل الوطنية والعالمية
               </h3>
               <p className="mt-4 max-w-2xl text-base leading-8 text-white/90 lg:text-lg">
-                توظف المنصة الصور الحقيقية للإنجازات الطلابية لتقديم تجربة أصيلة وملهمة،
-                تجمع بين التوثيق المؤسسي والبعد الوطني وروح المنافسة الراقية.
+                توظف المنصة الصور الحقيقية للإنجازات الطلابية لتقديم تجربة أصيلة وملهمة، تجمع بين التوثيق المؤسسي والبعد الوطني
+                وروح المنافسة الراقية.
               </p>
 
               <div className="mt-8 grid grid-cols-3 gap-4 text-center">
@@ -146,15 +121,7 @@ export default function FeaturedShowcase() {
                 key={card.title}
                 className="overflow-hidden rounded-[24px] border border-white/15 bg-white text-slate-900 shadow-xl"
               >
-                <ImageWithFallback
-                  src={card.image}
-                  alt={card.alt}
-                  className=""
-                  sizes="(max-width: 768px) 100vw, (max-width: 1280px) 50vw, 33vw"
-                  objectFit={card.objectFit}
-                  objectPosition={card.objectPosition}
-                  bgColor={card.bgColor}
-                />
+                <VisualBlock card={card} />
                 <div className="p-5">
                   <h4 className="text-xl font-black text-slate-950">{card.title}</h4>
                   <p className="mt-3 leading-7 text-slate-600">{card.description}</p>

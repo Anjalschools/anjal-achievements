@@ -93,6 +93,10 @@ npm start
 - دعم اللغة الإنجليزية
 - نظام البحث المتقدم
 
+## Performance debugging (dev)
+
+Set `PERF_DEBUG=1` in `.env.local` to print `[PERF] …` timings for login, session user lookup, dashboard query, and achievement-details query (see `src/lib/perf-debug.ts`).
+
 ## الترخيص
 
 جميع الحقوق محفوظة © 2024 منصة تميز الأنجال

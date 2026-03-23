@@ -4,6 +4,9 @@ const nextConfig = {
     domains: [],
     unoptimized: false,
   },
+  experimental: {
+    serverComponentsExternalPackages: ["pdf-parse", "@napi-rs/canvas"],
+  },
 };
 
 export default nextConfig;

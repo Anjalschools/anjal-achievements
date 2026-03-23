@@ -1,60 +1,40 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
-import { useState } from "react";
-
-type ImageWithFallbackProps = {
-  src: string;
-  alt: string;
-  className?: string;
-  sizes?: string;
-};
-
-const ImageWithFallback = ({ src, alt, className, sizes }: ImageWithFallbackProps) => {
-  const [hasError, setHasError] = useState(false);
-
-  if (hasError) {
-    return (
-      <div className="flex h-[520px] w-full items-center justify-center bg-slate-200">
-        <span className="text-xs text-slate-500">الصورة غير متاحة</span>
-      </div>
-    );
-  }
-
-  return (
-    <div className="relative h-[520px] w-full">
-      <Image
-        src={src}
-        alt={alt}
-        fill
-        className={className}
-        sizes={sizes ?? "(max-width: 1024px) 100vw, 50vw"}
-        onError={() => setHasError(true)}
-      />
-    </div>
-  );
-};
+import { Building2 } from "lucide-react";
+import SafeLocalImage from "@/components/media/SafeLocalImage";
+import { PUBLIC_IMG } from "@/lib/publicImages";
 
 export default function InstitutionalSection() {
+  const fallback = (
+    <div
+      className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-gradient-to-br from-[#0a4fd6]/15 via-[#eef3fb] to-[#d4af37]/25 px-6"
+      role="img"
+      aria-label="صورة توضيحية"
+    >
+      <div className="flex h-20 w-20 items-center justify-center rounded-2xl bg-white/90 shadow-lg ring-1 ring-[#0a4fd6]/15">
+        <Building2 className="h-10 w-10 text-[#0a4fd6]" aria-hidden />
+      </div>
+    </div>
+  );
+
   return (
-    <section className="relative overflow-hidden bg-[#eef3fb] py-20">
-      <div className="mx-auto grid max-w-7xl gap-10 px-6 lg:grid-cols-[1.05fr_0.95fr] lg:items-center lg:px-10">
-        <div>
+    <section className="relative overflow-hidden border-t border-slate-200/80 bg-gray-50 py-20">
+      <div className="mx-auto grid max-w-7xl grid-cols-1 items-center gap-12 px-6 lg:grid-cols-2 lg:gap-16 lg:px-10">
+        <div className="mx-auto max-w-xl space-y-4 text-start">
           <div className="inline-flex rounded-full bg-[#dce8ff] px-4 py-2 text-sm font-bold text-[#0a4fd6]">
             For Schools
           </div>
 
-          <h2 className="mt-5 text-4xl font-black leading-tight text-slate-950 lg:text-5xl">
+          <h2 className="text-3xl font-bold leading-tight tracking-tight text-slate-950">
             واجهة مؤسسية تبرز أثر المدرسة في صناعة التميز
           </h2>
 
-          <p className="mt-6 text-lg leading-8 text-slate-600">
-            توظف منصة تميز الأنجال الصور الحقيقية للوفود والمشاركات والمحافل الرسمية
-            لإظهار الأثر المؤسسي الحقيقي للمدرسة، وربط إنجاز الطالب بصورة المدرسة ورسالتها.
+          <p className="text-base leading-relaxed text-gray-600">
+            توظف منصة تميز الأنجال الصور الحقيقية للوفود والمشاركات والمحافل الرسمية لإظهار الأثر المؤسسي الحقيقي للمدرسة، وربط إنجاز الطالب بصورة المدرسة ورسالتها.
           </p>
 
-          <div className="mt-8 space-y-4">
+          <div className="space-y-4 pt-2">
             {[
               "توثيق الإنجازات بصورة احترافية ومعتمدة",
               "إبراز المشاركات المحلية والوطنية والعالمية",
@@ -62,13 +42,13 @@ export default function InstitutionalSection() {
               "تعزيز الفخر والانتماء والهوية التعليمية",
             ].map((item) => (
               <div key={item} className="flex items-start gap-3">
-                <div className="mt-2 h-2.5 w-2.5 rounded-full bg-[#d4af37]" />
-                <p className="text-base leading-7 text-slate-700">{item}</p>
+                <div className="mt-2 h-2.5 w-2.5 shrink-0 rounded-full bg-[#d4af37]" />
+                <p className="text-base leading-relaxed text-slate-700">{item}</p>
               </div>
             ))}
           </div>
 
-          <div className="mt-8">
+          <div className="pt-2">
             <Link
               href="/about"
               className="inline-flex items-center justify-center rounded-md bg-[#0a4fd6] px-5 py-3 text-sm font-bold text-white transition hover:bg-[#0b44b4]"
@@ -78,13 +58,20 @@ export default function InstitutionalSection() {
           </div>
         </div>
 
-        <div className="overflow-hidden rounded-[30px] bg-white shadow-xl">
-          <ImageWithFallback
-            src="/images/landing/airport-delegation.jpg"
-            alt="وفد طلابي من مدارس الأنجال في مشاركة رسمية"
-            className="object-cover object-center"
-            sizes="(max-width: 1024px) 100vw, 50vw"
-          />
+        <div className="mx-auto w-full max-w-md">
+          <div className="overflow-hidden rounded-2xl bg-white p-2 shadow-lg ring-1 ring-slate-200/80">
+            <div className="relative aspect-[4/3] w-full overflow-hidden rounded-xl bg-slate-50">
+              <SafeLocalImage
+                src={PUBLIC_IMG.faceSchools}
+                alt="واجهة مؤسسية — مدارس الأنجال"
+                fill
+                sizes="(max-width: 1024px) 100vw, 28rem"
+                objectFit="contain"
+                className="object-center p-2"
+                fallback={fallback}
+              />
+            </div>
+          </div>
         </div>
       </div>
     </section>
