@@ -3,6 +3,7 @@ import Achievement from "@/models/Achievement";
 import User from "@/models/User";
 import QRCode from "qrcode";
 import Link from "next/link";
+import AppreciationCertificate from "@/components/certificates/AppreciationCertificate";
 import {
   type AchievementCertificateLike,
   isCertificateVerificationChainOk,
@@ -10,11 +11,17 @@ import {
   labelCertificateIssuerRole,
 } from "@/lib/certificate-eligibility";
 import {
+  buildCertificateSnapshot,
+  type AppreciationCertificateSnapshot,
+  snapshotToCertificateProps,
+} from "@/lib/certificate-content";
+import {
   formatCertificateDisplayId,
   getAchievementDisplayData,
 } from "@/lib/achievement-verify-display";
 import { getBaseUrl } from "@/lib/get-base-url";
 import { PUBLIC_IMG } from "@/lib/publicImages";
+import { VERIFICATION_CONFIG } from "@/lib/verification-config";
 
 type PageProps = { params: { token: string } };
 
@@ -36,18 +43,17 @@ const VerifyHeader = () => (
       <div className="flex min-w-[5rem] flex-1 flex-col items-center gap-1 sm:items-start">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src={PUBLIC_IMG.saudiFlag}
+          src={PUBLIC_IMG.verificationMoe}
           alt="وزارة التعليم"
-          className="h-11 w-auto max-w-[5.5rem] object-contain sm:h-12"
+          className="h-12 w-auto max-w-[6.25rem] object-contain sm:h-[52px]"
           width={120}
           height={48}
         />
-        <span className="text-center text-[10px] font-semibold text-slate-600 sm:text-start">وزارة التعليم</span>
       </div>
       <div className="flex flex-1 flex-col items-center gap-1">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src={PUBLIC_IMG.logoColor}
+          src={PUBLIC_IMG.verificationAnjal}
           alt="مدارس الأنجال الأهلية"
           className="h-14 w-auto object-contain sm:h-16"
           width={160}
@@ -59,16 +65,21 @@ const VerifyHeader = () => (
         <div className="flex flex-wrap items-center justify-center gap-2 sm:justify-end">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src={PUBLIC_IMG.faceSchools}
-            alt=""
-            className="h-10 w-auto max-w-[4.5rem] object-contain opacity-95"
+            src={PUBLIC_IMG.verificationMawhiba}
+            alt="موهبة"
+            className="h-11 w-auto max-w-[5rem] object-contain opacity-95"
+            width={80}
+            height={40}
+          />
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={PUBLIC_IMG.verificationCognia}
+            alt="Cognia"
+            className="h-11 w-auto max-w-[5rem] object-contain opacity-95"
             width={80}
             height={40}
           />
         </div>
-        <span className="text-center text-[9px] font-medium leading-tight text-slate-500 sm:text-end">
-          موهبة · Cognia
-        </span>
       </div>
     </div>
   </header>
@@ -210,12 +221,19 @@ export default async function VerifyCertificatePage({ params }: PageProps) {
     typeof d.certificateId === "string" && d.certificateId.trim() ? d.certificateId : String(doc._id)
   );
   const ver = typeof d.certificateVersion === "number" ? d.certificateVersion : 1;
+  const verifyPath = `/verify/certificate/${token}`;
+  const snap = d.certificateSnapshot as AppreciationCertificateSnapshot | undefined;
+  const certificateContent =
+    snap && (snap.schemaVersion === 2 || snap.schemaVersion === 3)
+      ? snapshotToCertificateProps(snap)
+      : snapshotToCertificateProps(buildCertificateSnapshot(d, (u || {}) as Record<string, unknown>, ver));
 
   return (
     <div className="flex min-h-[60vh] flex-col bg-gradient-to-b from-slate-100 to-slate-50" dir="rtl">
       <VerifyHeader />
 
-      <div className="mx-auto w-full max-w-xl flex-1 px-4 py-8 md:py-10">
+      <div className="mx-auto w-full max-w-6xl flex-1 px-4 py-8 md:py-10">
+        <div className="mx-auto w-full max-w-xl">
         <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-lg">
           <div className="bg-[#0a2744] px-6 py-6 text-center text-white">
             <p className="text-sm font-medium text-slate-200">منصة تميز الأنجال</p>
@@ -263,7 +281,7 @@ export default async function VerifyCertificatePage({ params }: PageProps) {
                 أصدرها أول اعتماد من: <span className="font-bold text-slate-900">{issuerLabel}</span>
               </p>
               <p className="mt-1 text-[10px] text-slate-600">
-                الجهات المخوّلة: الإدارة، مدير المدرسة، رائد/مشرف النشاط، المحكم — يكفي واحد فقط لإصدار الشهادة.
+                الجهات المخوّلة: {VERIFICATION_CONFIG.authorityLabel}
               </p>
               {legacy ? (
                 <p className="mt-1 text-[10px] text-slate-500">سجل أصدر قبل حفظ نوع الجهة المصدرة بالكامل.</p>
@@ -292,6 +310,16 @@ export default async function VerifyCertificatePage({ params }: PageProps) {
         <p className="mt-6 text-center text-xs text-slate-500">
           هذه الصفحة للتحقق الرقمي من السجل ضمن المنصة فقط.
         </p>
+        </div>
+
+        <section className="mt-8">
+          <h2 className="mb-4 text-center text-lg font-bold text-slate-900">معاينة الشهادة</h2>
+          <AppreciationCertificate
+            content={certificateContent}
+            verifyPath={verifyPath}
+            certificateId={typeof d.certificateId === "string" ? d.certificateId : String(doc._id)}
+          />
+        </section>
       </div>
     </div>
   );

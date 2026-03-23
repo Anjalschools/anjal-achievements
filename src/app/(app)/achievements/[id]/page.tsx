@@ -41,6 +41,7 @@ import {
   resolveStudentAttachmentHref,
   studentDataUrlDownloadName,
 } from "@/lib/student-achievement-details-display";
+import { openResolvedAttachmentInNewTab } from "@/lib/achievement-attachment-open";
 
 type ReviewComment = {
   message?: string;
@@ -187,6 +188,7 @@ const AchievementDetailsPage = () => {
   const [imageFailed, setImageFailed] = useState(false);
   const [resubmitBusy, setResubmitBusy] = useState(false);
   const [clientOrigin, setClientOrigin] = useState("");
+  const [openAttachmentError, setOpenAttachmentError] = useState<string | null>(null);
 
   const handleResubmit = useCallback(async () => {
     if (!params?.id) return;
@@ -212,6 +214,22 @@ const AchievementDetailsPage = () => {
   useEffect(() => {
     setClientOrigin(typeof window !== "undefined" ? window.location.origin : "");
   }, []);
+
+  const handleOpenAttachment = useCallback(
+    (href: string | null | undefined) => {
+      if (!href) return;
+      setOpenAttachmentError(null);
+      const ok = openResolvedAttachmentInNewTab(href);
+      if (!ok) {
+        setOpenAttachmentError(
+          locale === "ar"
+            ? "تعذر فتح الملف. جرّب زر «تحميل»."
+            : "Could not open the file. Try “Download”."
+        );
+      }
+    },
+    [locale]
+  );
 
   useEffect(() => {
     const fetchDetails = async () => {
@@ -630,6 +648,12 @@ const AchievementDetailsPage = () => {
             {locale === "ar" ? "الوصف والمرفقات" : "Description & attachments"}
           </h2>
 
+          {openAttachmentError ? (
+            <p className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800" role="alert">
+              {openAttachmentError}
+            </p>
+          ) : null}
+
           <div className="mb-6 rounded-xl border border-neutral-100 bg-neutral-50/60 p-4 md:p-5">
             <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-text-muted">
               {locale === "ar" ? "الوصف" : "Description"}
@@ -651,15 +675,14 @@ const AchievementDetailsPage = () => {
               <div className="flex flex-wrap items-center gap-2">
                 {hasEvidenceUrl && evidenceLinkWorks && evidenceHrefResolved ? (
                   <>
-                    <a
-                      href={evidenceHrefResolved}
-                      target="_blank"
-                      rel="noopener noreferrer"
+                    <button
+                      type="button"
+                      onClick={() => handleOpenAttachment(evidenceHrefResolved)}
                       className="inline-flex items-center justify-center gap-2 rounded-lg border border-primary/30 bg-white px-4 py-2 text-sm font-semibold text-primary hover:bg-primary/5"
                     >
                       <ExternalLink className="h-4 w-4 shrink-0" aria-hidden />
                       {locale === "ar" ? "فتح" : "Open"}
-                    </a>
+                    </button>
                     <a
                       href={evidenceHrefResolved}
                       target="_blank"
@@ -700,15 +723,14 @@ const AchievementDetailsPage = () => {
                       ) : null}
                       {row.canOpen && row.href ? (
                         <>
-                          <a
-                            href={row.href}
-                            target="_blank"
-                            rel="noopener noreferrer"
+                          <button
+                            type="button"
+                            onClick={() => handleOpenAttachment(row.href)}
                             className="inline-flex items-center justify-center gap-2 rounded-lg border border-primary/30 bg-white px-4 py-2 text-sm font-semibold text-primary hover:bg-primary/5"
                           >
                             <ExternalLink className="h-4 w-4 shrink-0" aria-hidden />
                             {locale === "ar" ? "فتح" : "Open"}
-                          </a>
+                          </button>
                           <a
                             href={row.href}
                             target="_blank"

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import PageContainer from "@/components/layout/PageContainer";
 import PageHeader from "@/components/layout/PageHeader";
@@ -20,8 +20,18 @@ const AchievementFormPage = () => {
   const [initialData, setInitialData] = useState<Record<string, unknown> | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const saveErrorRef = useRef<HTMLDivElement | null>(null);
   const locale = getLocale();
   getTranslation(locale);
+
+  useEffect(() => {
+    if (!error) return;
+    const t = window.setTimeout(() => {
+      saveErrorRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      saveErrorRef.current?.focus({ preventScroll: true });
+    }, 120);
+    return () => window.clearTimeout(t);
+  }, [error]);
 
   useEffect(() => {
     const fetchForEdit = async () => {
@@ -292,11 +302,18 @@ const AchievementFormPage = () => {
       )}
 
       {error && (
-        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-4 text-red-800">
-          <p className="font-medium">
-            {locale === "ar" ? "حدث خطأ" : "Error"}
+        <div
+          ref={saveErrorRef}
+          id="achievement-save-error"
+          role="alert"
+          aria-live="assertive"
+          tabIndex={-1}
+          className="mb-4 rounded-xl border-2 border-red-500 bg-red-50 p-4 text-red-900 shadow-sm outline-none ring-2 ring-red-200"
+        >
+          <p className="font-bold">
+            {locale === "ar" ? "تعذّر حفظ الإنجاز" : "Could not save the achievement"}
           </p>
-          <p className="mt-1 text-sm">{error}</p>
+          <p className="mt-2 whitespace-pre-line text-sm font-medium">{error}</p>
         </div>
       )}
 

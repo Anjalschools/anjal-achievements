@@ -55,18 +55,28 @@ export const openResolvedAttachmentInNewTab = (href: string): boolean => {
     if (typeof window === "undefined") return false;
     const blobUrl = dataUrlToObjectUrl(href);
     if (!blobUrl) return false;
-    const w = window.open(blobUrl, "_blank", "noopener,noreferrer");
+    // Two-arg open avoids edge cases where feature flags block blob navigation
+    const w = window.open(blobUrl, "_blank");
     if (!w) {
       URL.revokeObjectURL(blobUrl);
       return false;
+    }
+    try {
+      w.opener = null;
+    } catch {
+      /* ignore */
     }
     revokeLater(blobUrl, 120_000);
     return true;
   }
 
   if (typeof document === "undefined") return false;
+  const absoluteHref =
+    href.startsWith("/") && typeof window !== "undefined"
+      ? `${window.location.origin}${href}`
+      : href;
   const a = document.createElement("a");
-  a.href = href;
+  a.href = absoluteHref;
   a.target = "_blank";
   a.rel = "noopener noreferrer";
   a.style.display = "none";

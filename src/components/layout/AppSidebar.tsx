@@ -16,6 +16,7 @@ import {
   Gauge,
   UserCog,
   FileBarChart,
+  Star,
 } from "lucide-react";
 import { useUnreadNotificationCount } from "@/hooks/useUnreadNotificationCount";
 import { getLocale } from "@/lib/i18n";
@@ -58,6 +59,11 @@ const AppSidebar = () => {
     href: "/dashboard",
     icon: LayoutDashboard,
     label: locale === "ar" ? "لوحة التحكم" : "Dashboard",
+  };
+  const hallOfFameItem = {
+    href: "/hall-of-fame",
+    icon: Star,
+    label: locale === "ar" ? "لوحة التميز" : "Hall of Fame",
   };
   const adminDashboardItem = {
     href: "/admin/dashboard",
@@ -103,6 +109,7 @@ const AppSidebar = () => {
         reviewItem,
         usersItem,
         reportsItem,
+        hallOfFameItem,
         achievementsItem,
         addAchievementItem,
         notificationsItem,
@@ -111,6 +118,7 @@ const AppSidebar = () => {
       ]
     : [
         studentDashboardItem,
+        hallOfFameItem,
         achievementsItem,
         addAchievementItem,
         ...(reviewerNav ? [adminDashboardItem, reviewItem, reportsItem] : []),
@@ -134,6 +142,9 @@ const AppSidebar = () => {
     }
     if (href === "/admin/achievements/reports") {
       return pathname?.startsWith("/admin/achievements/reports");
+    }
+    if (href === "/hall-of-fame") {
+      return pathname === "/hall-of-fame";
     }
     return pathname?.startsWith(href);
   };

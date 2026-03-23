@@ -18,5 +18,10 @@ export const PUBLIC_IMG = {
   saudiFlag: "/saudi_flag.jpg",
   /** قسم المدرسة المؤسسي */
   faceSchools: "/Face_Schools.png",
+  /** Official verification logos (fixed filenames in /public). */
+  verificationMoe: "/logo-moe.png",
+  verificationAnjal: "/logoc.png",
+  verificationMawhiba: "/logo-mawhiba.png",
+  verificationCognia: "/logo-cognia.png",
   pattern: "/pattern.svg",
 } as const;

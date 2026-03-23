@@ -24,7 +24,7 @@ export const heroContent = {
   description:
     "بوابة احترافية لعرض وتوثيق وتصنيف إنجازات طلاب مدارس الأنجال الأهلية، مع تجربة رقمية حديثة تجمع بين الفخر المؤسسي، والهوية التعليمية، وروح المنافسة الراقية.",
   primaryCTA: "استكشف الإنجازات",
-  secondaryCTA: "عرض Hall of Fame",
+  secondaryCTA: "عرض لوحة التميز",
 };
 
 export const topAchievements: Achievement[] = [
@@ -109,7 +109,7 @@ export const quickActions: QuickAction[] = [
   },
   {
     id: "2",
-    title: "استكشف Hall of Fame",
+    title: "استكشف لوحة التميز",
     description: "اطّلع على أبرز الإنجازات والطلاب المتميزين",
     href: "/hall-of-fame",
   },
@@ -223,7 +223,7 @@ export const footerLinks = {
     title: "الإنجازات",
     links: [
       { name: "جميع الإنجازات", href: "/achievements" },
-      { name: "Hall of Fame", href: "/hall-of-fame" },
+      { name: "لوحة التميز", href: "/hall-of-fame" },
       { name: "التصنيفات", href: "/rankings" },
       { name: "المسابقات", href: "/competitions" },
     ],

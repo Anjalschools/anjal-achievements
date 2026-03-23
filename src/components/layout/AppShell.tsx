@@ -1,6 +1,7 @@
 "use client";
 
 import { ReactNode } from "react";
+import { usePathname } from "next/navigation";
 import AppSidebar from "./AppSidebar";
 import UnifiedHeader from "./UnifiedHeader";
 import UnifiedFooter from "./UnifiedFooter";
@@ -23,6 +24,9 @@ const AppShell = ({
 }: AppShellProps) => {
   const locale = getLocale();
   const isArabic = locale === "ar";
+  const pathname = usePathname();
+  /** Showcase layout: full width, no sidebar (Hall of Fame only). */
+  const isHallOfFameShowcase = pathname === "/hall-of-fame";
 
   return (
     <div className="flex min-h-screen min-w-0 flex-col bg-gray-50">
@@ -36,15 +40,18 @@ const AppShell = ({
         }}
       />
       <div className="flex min-h-0 min-w-0 flex-1 flex-col lg:flex-row">
-        {/* Single flex child wrapper so sidebar fragment does not create multiple flex items */}
-        <div className="shrink-0 overflow-visible lg:w-0 lg:min-w-0">
-          <AppSidebar />
-        </div>
+        {!isHallOfFameShowcase ? (
+          <div className="shrink-0 overflow-visible lg:w-0 lg:min-w-0">
+            <AppSidebar />
+          </div>
+        ) : null}
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
           <main className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
             <div
-              className={`mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8 ${
-                isArabic ? "lg:pr-[280px]" : "lg:pl-[280px]"
+              className={`mx-auto w-full px-4 py-6 sm:px-6 lg:px-8 ${
+                isHallOfFameShowcase
+                  ? "max-w-[1680px]"
+                  : `max-w-7xl ${isArabic ? "lg:pr-[280px]" : "lg:pl-[280px]"}`
               }`}
             >
               {children}

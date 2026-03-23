@@ -846,7 +846,16 @@ const AchievementForm = ({
     }
 
     setErrors(nextErrors);
-    return Object.keys(nextErrors).length === 0;
+    const errKeys = Object.keys(nextErrors);
+    if (errKeys.length === 0) return true;
+
+    setTimeout(() => {
+      const el = document.getElementById("achievement-form-validation-alert");
+      el?.scrollIntoView({ behavior: "smooth", block: "center" });
+      if (el instanceof HTMLElement) el.focus({ preventScroll: true });
+    }, 120);
+
+    return false;
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -901,8 +910,31 @@ const AchievementForm = ({
   const hasAutoLockInfo =
     autoLocks.levelLocked || autoLocks.participationLocked || autoLocks.resultLocked;
 
+  const validationErrorEntries = Object.entries(errors);
+
   return (
     <form onSubmit={handleSubmit} className="space-y-6" dir={isArabic ? "rtl" : "ltr"}>
+      {validationErrorEntries.length > 0 && (
+        <div
+          id="achievement-form-validation-alert"
+          role="alert"
+          aria-live="assertive"
+          tabIndex={-1}
+          className="rounded-xl border-2 border-red-500 bg-red-50 p-4 text-red-900 shadow-sm outline-none ring-2 ring-red-200"
+        >
+          <p className="text-sm font-bold">
+            {isArabic
+              ? "تعذّر الحفظ — يرجى تصحيح ما يلي:"
+              : "Could not save — please fix the following:"}
+          </p>
+          <ul className="mt-2 list-inside list-disc space-y-1 text-sm font-medium">
+            {validationErrorEntries.map(([fieldKey, message]) => (
+              <li key={fieldKey}>{message}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       <SectionCard>
         <h3 className="mb-4 text-lg font-bold text-text">
           {isArabic ? "معلومات الإنجاز الأساسية" : "Basic Achievement Information"}

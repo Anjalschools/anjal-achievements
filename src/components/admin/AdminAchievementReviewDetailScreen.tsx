@@ -7,12 +7,13 @@ import { useRouter } from "next/navigation";
 import PageContainer from "@/components/layout/PageContainer";
 import AchievementStatusBadge from "@/components/achievements/AchievementStatusBadge";
 import AdminAchievementReviewActions from "@/components/admin/AdminAchievementReviewActions";
+import AdminAchievementAdminEditForm from "@/components/admin/AdminAchievementAdminEditForm";
 import { AdminAchievementReviewDetailBody } from "@/components/admin/AdminAchievementReviewDetailBody";
 import { detailApiToListRow } from "@/lib/admin-achievement-detail-to-list-row";
 import { getLocale } from "@/lib/i18n";
 import { resolveAchievementTitleForAdmin } from "@/lib/admin-achievement-labels";
 import type { AdminAchievementDetailApi, AdminAchievementReviewListRow } from "@/types/admin-achievement-review";
-import { Loader2, Sparkles, ArrowLeft, ArrowRight } from "lucide-react";
+import { Loader2, Sparkles, ArrowLeft, ArrowRight, Pencil } from "lucide-react";
 
 type ConfirmPatch = {
   id: string;
@@ -58,6 +59,7 @@ const AdminAchievementReviewDetailScreen = ({
   const [rejectOpen, setRejectOpen] = useState<AdminAchievementReviewListRow | null>(null);
   const [rejectText, setRejectText] = useState("");
   const [clientOrigin, setClientOrigin] = useState("");
+  const [editAchievementOpen, setEditAchievementOpen] = useState(false);
 
   useEffect(() => {
     setClientOrigin(typeof window !== "undefined" ? window.location.origin : "");
@@ -352,6 +354,22 @@ const AdminAchievementReviewDetailScreen = ({
                 {isAr ? "رجوع إلى المراجعة" : "Back to review"}
               </Link>
               {listRow ? <AchievementStatusBadge status={listRow.approvalStatus} locale={loc} /> : null}
+              {userRole === "admin" && detailPayload ? (
+                <button
+                  type="button"
+                  onClick={() => setEditAchievementOpen((v) => !v)}
+                  className={`inline-flex items-center gap-2 rounded-xl border px-4 py-2 text-sm font-semibold transition ${
+                    editAchievementOpen
+                      ? "border-indigo-600 bg-indigo-50 text-indigo-900"
+                      : "border-indigo-300 bg-white text-indigo-900 hover:bg-indigo-50/80"
+                  }`}
+                  aria-expanded={editAchievementOpen}
+                  aria-controls="admin-achievement-edit-panel"
+                >
+                  <Pencil className="h-4 w-4 shrink-0" aria-hidden />
+                  {isAr ? "تعديل الإنجاز" : "Edit achievement"}
+                </button>
+              ) : null}
             </div>
             <div className="min-w-0 flex-1 text-start">
               <p className="text-xs font-semibold uppercase tracking-wide text-text-light">
@@ -377,6 +395,18 @@ const AdminAchievementReviewDetailScreen = ({
           </div>
         ) : detailPayload && listRow ? (
           <div className="grid gap-6 lg:grid-cols-12">
+            {userRole === "admin" ? (
+              <div id="admin-achievement-edit-panel" className="lg:col-span-12">
+                <AdminAchievementAdminEditForm
+                  achievementId={achievementId}
+                  detail={detailPayload}
+                  isAr={isAr}
+                  open={editAchievementOpen}
+                  onOpenChange={setEditAchievementOpen}
+                  onSaved={loadDetail}
+                />
+              </div>
+            ) : null}
             <aside className="space-y-4 lg:col-span-4 xl:col-span-3">
               <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
                 <h2 className="text-xs font-bold uppercase tracking-wide text-text-light">

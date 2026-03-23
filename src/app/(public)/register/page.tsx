@@ -916,27 +916,41 @@ export default function RegisterPage() {
               </div>
 
               <div className="space-y-4">
-                <label
-                  htmlFor="terms-agreement"
-                  className={`flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 bg-white p-4 transition hover:border-sky-300 ${
-                    isArabic ? "flex-row-reverse" : ""
-                  }`}
-                >
-                  <input
-                    ref={termsRef}
-                    id="terms-agreement"
-                    name="termsAgreed"
-                    type="checkbox"
-                    checked={termsAgreed}
-                    onChange={(e) => setTermsAgreed(e.target.checked)}
-                    className={`mt-0.5 h-4 w-4 rounded border-slate-300 text-sky-600 focus:ring-sky-500 ${
-                      isArabic ? "ml-3" : "mr-3"
+                <div className="rounded-xl border border-slate-200 bg-white p-4">
+                  <h3 className="text-base font-bold text-slate-900">
+                    {t.register.termsAgreementTitle}
+                  </h3>
+                  <div
+                    className={`mt-3 max-h-56 overflow-y-auto rounded-lg border border-slate-100 bg-slate-50/90 p-4 text-sm leading-relaxed text-slate-700 ${
+                      isArabic ? "text-right" : "text-left"
                     }`}
-                  />
-                  <span className="flex-1 text-sm text-slate-700">
-                    {t.register.termsAgreement}
-                  </span>
-                </label>
+                    role="region"
+                    aria-label={t.register.termsAgreementTitle}
+                  >
+                    <p className="whitespace-pre-wrap">{t.register.termsAgreementBody}</p>
+                  </div>
+                  <label
+                    htmlFor="terms-agreement"
+                    className={`mt-4 flex cursor-pointer items-start gap-3 rounded-lg border border-slate-200 bg-white p-3 transition hover:border-sky-300 ${
+                      isArabic ? "flex-row-reverse" : ""
+                    }`}
+                  >
+                    <input
+                      ref={termsRef}
+                      id="terms-agreement"
+                      name="termsAgreed"
+                      type="checkbox"
+                      checked={termsAgreed}
+                      onChange={(e) => setTermsAgreed(e.target.checked)}
+                      className={`mt-0.5 h-4 w-4 shrink-0 rounded border-slate-300 text-sky-600 focus:ring-sky-500 ${
+                        isArabic ? "ml-3" : "mr-3"
+                      }`}
+                    />
+                    <span className="flex-1 text-sm font-semibold text-slate-800">
+                      {t.register.termsAgreement}
+                    </span>
+                  </label>
+                </div>
 
                 <label
                   htmlFor="notifications-agreement"

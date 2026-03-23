@@ -2,11 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAchievementReviewer } from "@/lib/review-auth";
 import {
   buildAllAchievementsReportStats,
+  buildUnifiedAdminAchievementReports,
   buildCompetitionAchievementReportStats,
   buildFieldAchievementReportStats,
   buildStudentAchievementReportStats,
   buildUrgentReviewQueueStats,
 } from "@/lib/achievement-admin-reports";
+import { parseReportCsvParam } from "@/lib/report-filter-options";
 
 export const dynamic = "force-dynamic";
 
@@ -16,8 +18,27 @@ export async function GET(request: NextRequest) {
 
   const { searchParams } = new URL(request.url);
   const type = String(searchParams.get("type") || "all").trim();
+  const unified = searchParams.get("view") === "unified";
 
   try {
+    if (unified) {
+      const payload = await buildUnifiedAdminAchievementReports({
+        academicYear: String(searchParams.get("academicYear") || "").trim() || undefined,
+        gender: String(searchParams.get("gender") || "").trim() || undefined,
+        stage: String(searchParams.get("stage") || "").trim() || undefined,
+        grade: String(searchParams.get("grade") || "").trim() || undefined,
+        categories: parseReportCsvParam(searchParams.get("category")),
+        achievementName: String(searchParams.get("achievementName") || "").trim() || undefined,
+        levels: parseReportCsvParam(searchParams.get("level")),
+        resultTokens: parseReportCsvParam(searchParams.get("result")),
+        status: String(searchParams.get("status") || "").trim() || undefined,
+        certificateStatus: String(searchParams.get("certificateStatus") || "").trim() || undefined,
+        fromDate: String(searchParams.get("fromDate") || "").trim() || undefined,
+        toDate: String(searchParams.get("toDate") || "").trim() || undefined,
+      });
+      return NextResponse.json({ ok: true, ...payload });
+    }
+
     if (type === "all") {
       const stats = await buildAllAchievementsReportStats();
       return NextResponse.json({ ok: true, stats });
