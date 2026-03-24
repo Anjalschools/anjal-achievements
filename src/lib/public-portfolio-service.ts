@@ -439,7 +439,10 @@ export const loadPublicPortfolioPayload = async (
         achievementDate: d ? d.toISOString() : null,
         academicYear: typeof row.achievementYear === "number" ? row.achievementYear : 0,
         descriptionShortAr: truncate(descSource, 220) || (titleAr ? truncate(titleAr, 120) : "—"),
-        descriptionShortEn: truncate(descSource, 220) || (titleEn ? truncate(titleEn, 120) : "—"),
+        descriptionShortEn:
+          (titleEn ? truncate(titleEn, 220) : "") ||
+          truncate(descSource, 220) ||
+          (titleAr ? truncate(titleAr, 120) : "—"),
         isFeatured: row.isFeatured === true || row.featured === true,
         hasCertificate: Boolean(hasCert),
         certificateVerificationPath: certPath,
