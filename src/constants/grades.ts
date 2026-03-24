@@ -27,6 +27,13 @@ export function normalizeGrade(value: string | number | null | undefined): strin
     return str;
   }
 
+  // e.g. grade10 → g10 (legacy UI keys)
+  const gradeWord = str.match(/^grade(\d{1,2})$/i);
+  if (gradeWord) {
+    const num = parseInt(gradeWord[1], 10);
+    if (num >= 1 && num <= 12) return `g${num}`;
+  }
+
   // Convert numeric to new format
   const num = parseInt(str, 10);
   if (num >= 1 && num <= 12) {

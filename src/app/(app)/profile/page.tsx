@@ -20,6 +20,12 @@ import {
   safeTrim,
 } from "@/lib/achievementDisplay";
 import { countsTowardApprovedScore } from "@/lib/achievementWorkflow";
+import { isAchievementReviewerRole } from "@/lib/achievement-reviewer-roles";
+import { isAdminManagerRole } from "@/lib/app-navigation-roles";
+import type { AdminDashboardPayload } from "@/lib/admin-dashboard-stats";
+import ReviewerProfileSection, {
+  type ReviewerProfileUserPayload,
+} from "@/components/profile/ReviewerProfileSection";
 
 /** Tier order for "أعلى مستوى" — higher = better (aligned with scoring tiers). */
 const LEVEL_RANK: Record<string, number> = {
@@ -113,6 +119,10 @@ const ProfilePage = () => {
   const [profileLoading, setProfileLoading] = useState(true);
   const profileLoadAbortRef = useRef<AbortController | null>(null);
 
+  const [reviewerProfile, setReviewerProfile] = useState<ReviewerProfileUserPayload | null>(null);
+  const [adminDashboard, setAdminDashboard] = useState<AdminDashboardPayload | null>(null);
+  const [adminDashboardError, setAdminDashboardError] = useState<string | null>(null);
+
   const applyAchievementsList = useCallback((raw: unknown) => {
     const list = Array.isArray(raw) ? raw : [];
     const asRecords = list as Record<string, unknown>[];
@@ -179,45 +189,94 @@ const ProfilePage = () => {
       if (!silent) {
         setProfileLoading(true);
         setPublicPortfolioError(null);
+        setAdminDashboardError(null);
       }
 
       try {
-        const [profileResponse, statsResponse, achievementsResponse, portfolioResponse] = await Promise.all([
-          fetch("/api/user/profile", { credentials: "same-origin", signal }),
+        const profileResponse = await fetch("/api/user/profile", { credentials: "same-origin", signal });
+
+        if (profileResponse.status === 401) {
+          router.push("/login");
+          return;
+        }
+
+        if (!profileResponse.ok) {
+          if (!silent) setProfileLoading(false);
+          return;
+        }
+
+        const profileData = (await profileResponse.json()) as Record<string, unknown>;
+        const resolvedRole = String(profileData.role || "");
+        setUserRole(resolvedRole);
+        setUserData({
+          fullName: String(profileData.fullName || ""),
+          email: String(profileData.email || ""),
+          username: String(profileData.username || ""),
+          studentId: String(profileData.studentId || ""),
+          nationalId: String(profileData.nationalId || ""),
+          gender: String(profileData.gender || ""),
+          grade: String(profileData.grade || ""),
+          section: String(profileData.section || ""),
+          phone: String(profileData.phone || ""),
+          guardianName: String(profileData.guardianName || ""),
+          guardianPhone: String(profileData.guardianPhone || ""),
+          avatar: typeof profileData.profilePhoto === "string" ? profileData.profilePhoto : undefined,
+        });
+
+        if (isAchievementReviewerRole(resolvedRole)) {
+          setReviewerProfile({
+            fullName: String(profileData.fullName || ""),
+            email: String(profileData.email || ""),
+            username: String(profileData.username || ""),
+            phone: String(profileData.phone || ""),
+            profilePhoto: typeof profileData.profilePhoto === "string" ? profileData.profilePhoto : undefined,
+            role: resolvedRole,
+            preferredLanguage:
+              profileData.preferredLanguage === "en" || profileData.preferredLanguage === "ar"
+                ? profileData.preferredLanguage
+                : undefined,
+            accountStatus: typeof profileData.accountStatus === "string" ? profileData.accountStatus : "active",
+            createdAt: typeof profileData.createdAt === "string" ? profileData.createdAt : undefined,
+            lastLoginAt:
+              profileData.lastLoginAt === null
+                ? null
+                : typeof profileData.lastLoginAt === "string"
+                  ? profileData.lastLoginAt
+                  : null,
+          });
+          setPublicPortfolio(null);
+          setPublicPortfolioError(null);
+
+          const dashRes = await fetch("/api/admin/dashboard", { cache: "no-store", credentials: "same-origin", signal });
+          if (dashRes.ok) {
+            const dash = (await dashRes.json()) as AdminDashboardPayload;
+            setAdminDashboard(dash);
+            setAdminDashboardError(null);
+          } else {
+            setAdminDashboard(null);
+            setAdminDashboardError(
+              locale === "ar"
+                ? "تعذر تحميل إحصاءات لوحة الإدارة. قد لا تملك صلاحية كافية."
+                : "Could not load admin dashboard metrics. You may not have access."
+            );
+          }
+          if (!silent) setProfileLoading(false);
+          return;
+        }
+
+        setReviewerProfile(null);
+        setAdminDashboard(null);
+        setAdminDashboardError(null);
+
+        const [statsResponse, achievementsResponse, portfolioResponse] = await Promise.all([
           fetch("/api/user/stats", { cache: "no-store", credentials: "same-origin", signal }),
           fetch("/api/achievements", { cache: "no-store", credentials: "same-origin", signal }),
           fetch("/api/user/public-portfolio", { cache: "no-store", credentials: "same-origin", signal }),
         ]);
 
-        if (
-          profileResponse.status === 401 ||
-          statsResponse.status === 401 ||
-          achievementsResponse.status === 401 ||
-          portfolioResponse.status === 401
-        ) {
+        if (statsResponse.status === 401 || achievementsResponse.status === 401 || portfolioResponse.status === 401) {
           router.push("/login");
           return;
-        }
-
-        let resolvedRole = "";
-        if (profileResponse.ok) {
-          const profileData = await profileResponse.json();
-          resolvedRole = String(profileData.role || "");
-          setUserRole(resolvedRole);
-          setUserData({
-            fullName: profileData.fullName || "",
-            email: profileData.email || "",
-            username: profileData.username || "",
-            studentId: profileData.studentId || "",
-            nationalId: profileData.nationalId || "",
-            gender: profileData.gender || "",
-            grade: profileData.grade || "",
-            section: profileData.section || "",
-            phone: profileData.phone || "",
-            guardianName: profileData.guardianName || "",
-            guardianPhone: profileData.guardianPhone || "",
-            avatar: profileData.profilePhoto,
-          });
         }
 
         if (statsResponse.ok) {
@@ -321,6 +380,29 @@ const ProfilePage = () => {
       avatarSrc.startsWith("https://"));
   const avatarUnopt =
     avatarSrc.startsWith("data:") || avatarSrc.startsWith("http://") || avatarSrc.startsWith("https://");
+
+  if (profileLoading) {
+    return (
+      <PageContainer>
+        <div className="py-16 text-center text-text-light" role="status">
+          {locale === "ar" ? "جاري التحميل..." : "Loading..."}
+        </div>
+      </PageContainer>
+    );
+  }
+
+  if (isAchievementReviewerRole(userRole) && reviewerProfile) {
+    return (
+      <PageContainer>
+        <ReviewerProfileSection
+          user={reviewerProfile}
+          dashboard={adminDashboard}
+          dashboardError={adminDashboardError}
+          canManageUsers={isAdminManagerRole(userRole)}
+        />
+      </PageContainer>
+    );
+  }
 
   return (
     <PageContainer>

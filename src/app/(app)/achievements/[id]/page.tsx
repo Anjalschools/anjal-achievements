@@ -42,6 +42,7 @@ import {
   studentDataUrlDownloadName,
 } from "@/lib/student-achievement-details-display";
 import { openResolvedAttachmentInNewTab } from "@/lib/achievement-attachment-open";
+import { isAchievementReviewerRole } from "@/lib/achievement-reviewer-roles";
 
 type ReviewComment = {
   message?: string;
@@ -182,6 +183,9 @@ const SummaryTile = ({ title, value, tone }: SummaryTileProps) => (
 const AchievementDetailsPage = () => {
   const params = useParams<{ id: string }>();
   const locale = getLocale();
+  const [viewerRole, setViewerRole] = useState<string | null>(null);
+  const [roleLoading, setRoleLoading] = useState(true);
+  const isStaffViewer = isAchievementReviewerRole(viewerRole);
   const [isLoading, setIsLoading] = useState(true);
   const [achievement, setAchievement] = useState<AchievementDetails | null>(null);
   const [error, setError] = useState("");
@@ -189,6 +193,12 @@ const AchievementDetailsPage = () => {
   const [resubmitBusy, setResubmitBusy] = useState(false);
   const [clientOrigin, setClientOrigin] = useState("");
   const [openAttachmentError, setOpenAttachmentError] = useState<string | null>(null);
+
+  const detailUrl = useCallback(
+    (id: string) =>
+      isStaffViewer ? `/api/admin/achievements/${encodeURIComponent(id)}` : `/api/achievements/${encodeURIComponent(id)}`,
+    [isStaffViewer]
+  );
 
   const handleResubmit = useCallback(async () => {
     if (!params?.id) return;
@@ -199,7 +209,7 @@ const AchievementDetailsPage = () => {
         const j = await res.json().catch(() => ({}));
         throw new Error(typeof j.error === "string" ? j.error : "Failed");
       }
-      const response = await fetch(`/api/achievements/${params.id}`, { cache: "no-store" });
+      const response = await fetch(detailUrl(params.id), { cache: "no-store", credentials: "same-origin" });
       if (response.ok) {
         const data = await response.json();
         setAchievement(data);
@@ -209,7 +219,7 @@ const AchievementDetailsPage = () => {
     } finally {
       setResubmitBusy(false);
     }
-  }, [params?.id]);
+  }, [params?.id, detailUrl]);
 
   useEffect(() => {
     setClientOrigin(typeof window !== "undefined" ? window.location.origin : "");
@@ -232,15 +242,46 @@ const AchievementDetailsPage = () => {
   );
 
   useEffect(() => {
+    const loadRole = async () => {
+      try {
+        setRoleLoading(true);
+        const res = await fetch("/api/user/profile", { cache: "no-store", credentials: "same-origin" });
+        if (res.status === 401) {
+          setViewerRole(null);
+          return;
+        }
+        if (!res.ok) {
+          setViewerRole(null);
+          return;
+        }
+        const j = (await res.json()) as { role?: string };
+        setViewerRole(typeof j.role === "string" ? j.role : null);
+      } catch {
+        setViewerRole(null);
+      } finally {
+        setRoleLoading(false);
+      }
+    };
+    void loadRole();
+  }, []);
+
+  useEffect(() => {
     const fetchDetails = async () => {
-      if (!params?.id) return;
+      if (!params?.id || roleLoading) return;
       try {
         setIsLoading(true);
-        const response = await fetch(`/api/achievements/${params.id}`, { cache: "no-store" });
+        setError("");
+        const url = detailUrl(params.id);
+        const response = await fetch(url, { cache: "no-store", credentials: "same-origin" });
+        if (response.status === 404) {
+          setAchievement(null);
+          setError(locale === "ar" ? "تعذر العثور على الإنجاز" : "Achievement could not be found");
+          return;
+        }
         if (!response.ok) {
           throw new Error("Failed to fetch achievement");
         }
-        const data = await response.json();
+        const data = (await response.json()) as AchievementDetails;
         setAchievement(data);
         setImageFailed(false);
       } catch (err) {
@@ -251,8 +292,8 @@ const AchievementDetailsPage = () => {
       }
     };
 
-    fetchDetails();
-  }, [params?.id, locale]);
+    void fetchDetails();
+  }, [params?.id, locale, roleLoading, detailUrl]);
 
   const loc = locale === "ar" ? "ar" : "en";
 
@@ -280,7 +321,7 @@ const AchievementDetailsPage = () => {
       .filter((x): x is NonNullable<typeof x> => Boolean(x));
   }, [achievement, loc, clientOrigin]);
 
-  if (isLoading) {
+  if (roleLoading || isLoading) {
     return (
       <PageContainer>
         <div className="py-12 text-center text-text-light">{locale === "ar" ? "جاري التحميل..." : "Loading..."}</div>
@@ -345,7 +386,7 @@ const AchievementDetailsPage = () => {
     return rev?.message || achievement.reviewNote || "";
   })();
 
-  const showStudentFollowUp = needsRevision || isRejected;
+  const showStudentFollowUp = !isStaffViewer && (needsRevision || isRejected);
 
   const typeLabel = studentFormatAchievementType(achievement.achievementType, loc);
   const catLabel = studentFormatCategory(achievement.achievementCategory, loc);

@@ -12,7 +12,7 @@ import {
   labelAchievementSlugOrKey,
   labelCertificateUiStatus,
 } from "@/lib/achievement-labels";
-import { formatOrgLabel } from "@/lib/admin-achievement-labels";
+import { formatAchievementFieldLabel, formatOrgLabel } from "@/lib/admin-achievement-labels";
 import type { CertificateUiStatus } from "@/lib/certificate-eligibility";
 import { isArabicText } from "@/lib/achievementNormalize";
 import {
@@ -22,7 +22,6 @@ import {
   labelAchievementCategory,
   labelAchievementClassification,
   labelAchievementLevel,
-  labelInferredField,
   labelResultType,
   safeTrim,
 } from "@/lib/achievementDisplay";
@@ -53,10 +52,7 @@ export const studentFormatClassification = (v: unknown, loc: Loc): string => {
 export const studentFormatField = (v: unknown, loc: Loc): string => {
   const s = safeTrim(v);
   if (!s) return studentNotSpecified(loc);
-  const direct = labelInferredField(s, loc);
-  if (direct && direct !== "—" && direct !== s) return direct;
-  if (direct === s && !isLikelyTechnicalSlug(s)) return s;
-  return labelAchievementSlugOrKey(s, loc);
+  return formatAchievementFieldLabel(s, loc);
 };
 
 export const studentFormatAchievementType = (v: unknown, loc: Loc): string =>

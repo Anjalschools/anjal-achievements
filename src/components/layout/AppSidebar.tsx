@@ -24,11 +24,11 @@ import {
 } from "lucide-react";
 import { useUnreadNotificationCount } from "@/hooks/useUnreadNotificationCount";
 import { getLocale } from "@/lib/i18n";
+import { isAdminManagerRole, isReviewerNavRole } from "@/lib/app-navigation-roles";
 
 const AppSidebar = () => {
   const [isOpen, setIsOpen] = useState(false);
-  const [reviewerNav, setReviewerNav] = useState(false);
-  const [adminManagerNav, setAdminManagerNav] = useState(false);
+  const [navRole, setNavRole] = useState<string | null>(null);
   const pathname = usePathname();
   const locale = getLocale();
   const { count: unreadNotifications } = useUnreadNotificationCount();
@@ -37,17 +37,21 @@ const AppSidebar = () => {
     const load = async () => {
       try {
         const res = await fetch("/api/user/profile", { cache: "no-store" });
-        if (!res.ok) return;
+        if (!res.ok) {
+          setNavRole(null);
+          return;
+        }
         const data = await res.json();
-        const role = String(data.role || "");
-        setReviewerNav(["admin", "supervisor", "schoolAdmin", "teacher", "judge"].includes(role));
-        setAdminManagerNav(role === "admin" || role === "supervisor");
+        setNavRole(String(data.role || ""));
       } catch {
-        setReviewerNav(false);
+        setNavRole(null);
       }
     };
     load();
   }, []);
+
+  const isReviewer = isReviewerNavRole(navRole);
+  const isAdminManager = isAdminManagerRole(navRole);
 
   const achievementsItem = {
     href: "/achievements",
@@ -131,23 +135,25 @@ const AppSidebar = () => {
     label: locale === "ar" ? "الإعدادات" : "Settings",
   };
 
-  /** Admin/supervisor: executive order — no student `/dashboard` to avoid confusion with admin dashboard. */
-  const navItems = adminManagerNav
+  /**
+   * Students: dashboard + hall + achievements + student add + notifications + profile + settings.
+   * Reviewers/staff: admin dashboard + review + admin add + (managers only: users, AI news, audit, platform settings)
+   * + reports + analytics + hall + achievements list + notifications + profile + settings.
+   * Never show student "Add achievement" for reviewer roles.
+   */
+  const navItems = isReviewer
     ? [
         adminDashboardItem,
         reviewItem,
         adminAddAchievementItem,
-        usersItem,
+        ...(isAdminManager ? [usersItem] : []),
         reportsItem,
         analyticsItem,
         hallOfFameItem,
         achievementsItem,
-        addAchievementItem,
         notificationsItem,
         profileItem,
-        aiNewsItem,
-        auditLogItem,
-        adminSettingsItem,
+        ...(isAdminManager ? [aiNewsItem, auditLogItem, adminSettingsItem] : []),
         settingsItem,
       ]
     : [
@@ -155,7 +161,6 @@ const AppSidebar = () => {
         hallOfFameItem,
         achievementsItem,
         addAchievementItem,
-        ...(reviewerNav ? [adminDashboardItem, reviewItem, reportsItem] : []),
         notificationsItem,
         profileItem,
         settingsItem,

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import PageContainer from "@/components/layout/PageContainer";
@@ -18,11 +18,15 @@ import {
   User,
   Star,
   ClipboardList,
+  Link2,
+  Copy,
+  QrCode,
 } from "lucide-react";
 import { getLocale } from "@/lib/i18n";
 import AchievementStatusBadge from "@/components/achievements/AchievementStatusBadge";
 import type { WorkflowDisplayStatus } from "@/lib/achievementWorkflow";
 import type { DashboardAchievementRow } from "@/lib/dashboard-achievement-format";
+import type { UserPublicPortfolioPayload } from "@/lib/user-public-portfolio-types";
 
 type DashboardPayload = {
   totalAchievements: number;
@@ -42,6 +46,10 @@ const DashboardPage = () => {
 
   const [data, setData] = useState<DashboardPayload | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [publicPortfolio, setPublicPortfolio] = useState<UserPublicPortfolioPayload | null>(null);
+  const [publicPortfolioLoading, setPublicPortfolioLoading] = useState(true);
+  const [publicPortfolioQrDataUrl, setPublicPortfolioQrDataUrl] = useState<string | null>(null);
+  const [copyDone, setCopyDone] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -72,6 +80,59 @@ const DashboardPage = () => {
     void fetchData();
   }, [isAr, router]);
 
+  useEffect(() => {
+    const fetchPublicPortfolio = async () => {
+      try {
+        setPublicPortfolioLoading(true);
+        const res = await fetch("/api/user/public-portfolio", {
+          cache: "no-store",
+          credentials: "same-origin",
+        });
+        if (res.status === 401) {
+          router.push("/login");
+          return;
+        }
+        if (!res.ok) {
+          setPublicPortfolio(null);
+          return;
+        }
+        const json = (await res.json()) as UserPublicPortfolioPayload;
+        setPublicPortfolio(json);
+      } catch (error) {
+        console.error("Error fetching public portfolio:", error);
+        setPublicPortfolio(null);
+      } finally {
+        setPublicPortfolioLoading(false);
+      }
+    };
+    void fetchPublicPortfolio();
+  }, [router]);
+
+  useEffect(() => {
+    const qrValue = publicPortfolio?.qrValue?.trim();
+    if (!qrValue) {
+      setPublicPortfolioQrDataUrl(null);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const QR = await import("qrcode");
+        const dataUrl = await QR.toDataURL(qrValue, {
+          width: 140,
+          margin: 1,
+          errorCorrectionLevel: "M",
+        });
+        if (!cancelled) setPublicPortfolioQrDataUrl(dataUrl);
+      } catch {
+        if (!cancelled) setPublicPortfolioQrDataUrl(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [publicPortfolio?.qrValue]);
+
   const stats = data ?? {
     totalAchievements: 0,
     points: 0,
@@ -84,6 +145,21 @@ const DashboardPage = () => {
   };
 
   const recentAchievements = stats.recentAchievements;
+  const publicUrl = useMemo(
+    () => (publicPortfolio?.enabled ? publicPortfolio.publicUrl?.trim() || "" : ""),
+    [publicPortfolio?.enabled, publicPortfolio?.publicUrl]
+  );
+
+  const handleCopyPublicUrl = async () => {
+    if (!publicUrl) return;
+    try {
+      await navigator.clipboard.writeText(publicUrl);
+      setCopyDone(true);
+      window.setTimeout(() => setCopyDone(false), 1500);
+    } catch {
+      setCopyDone(false);
+    }
+  };
 
   return (
     <PageContainer>
@@ -329,6 +405,79 @@ const DashboardPage = () => {
                 </p>
               </div>
             </Link>
+
+            <div className="rounded-lg border border-gray-200 bg-white p-4">
+              <div className="flex items-start gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+                  <QrCode className="h-5 w-5 text-primary" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="font-semibold text-text">
+                    {isAr ? "ملف الإنجاز العام" : "Public portfolio"}
+                  </h3>
+                  <p className="text-sm text-text-light">
+                    {isAr
+                      ? "الحصول على رابط الملف العام ورمز QR للمشاركة"
+                      : "Get your public portfolio link and QR code"}
+                  </p>
+                </div>
+              </div>
+
+              {publicPortfolioLoading ? (
+                <p className="mt-3 text-xs text-text-muted">{isAr ? "جاري التحميل..." : "Loading..."}</p>
+              ) : !publicPortfolio?.enabled || !publicUrl ? (
+                <p className="mt-3 text-xs text-amber-700">
+                  {isAr
+                    ? "الملف العام غير متاح حاليًا. يمكنك التحقق من صفحة الملف الشخصي."
+                    : "Public portfolio is currently unavailable. Check your profile page."}
+                </p>
+              ) : (
+                <div className="mt-3 space-y-3">
+                  <div className="rounded-md border border-gray-200 bg-gray-50 p-2 text-[11px] text-text-muted" dir="ltr">
+                    {publicUrl}
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    <Link
+                      href={publicUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-primary-dark"
+                    >
+                      <Link2 className="h-4 w-4" />
+                      {isAr ? "فتح الرابط" : "Open link"}
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={() => void handleCopyPublicUrl()}
+                      className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-semibold text-text transition-colors hover:bg-gray-50"
+                    >
+                      <Copy className="h-4 w-4" />
+                      {copyDone ? (isAr ? "تم النسخ" : "Copied") : isAr ? "نسخ الرابط" : "Copy link"}
+                    </button>
+                    <Link
+                      href="/profile"
+                      className="inline-flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-xs font-semibold text-primary transition-colors hover:bg-primary/10"
+                    >
+                      <QrCode className="h-4 w-4" />
+                      {isAr ? "إدارة الملف" : "Manage portfolio"}
+                    </Link>
+                  </div>
+
+                  {publicPortfolioQrDataUrl ? (
+                    <div className="inline-flex rounded-lg border border-gray-200 bg-white p-2">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={publicPortfolioQrDataUrl}
+                        alt={isAr ? "رمز QR لملف الإنجاز العام" : "QR code for public portfolio"}
+                        width={120}
+                        height={120}
+                      />
+                    </div>
+                  ) : null}
+                </div>
+              )}
+            </div>
           </div>
         </SectionCard>
       </div>

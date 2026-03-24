@@ -233,11 +233,10 @@ export default async function PublicPortfolioPage({ params, searchParams }: Page
     ? formatPortfolioDate(student.lastUpdatedAt, lang)
     : "—";
 
-  const schoolPrimary = pickLocalizedText(lang, branding.schoolNameAr, branding.schoolNameEn);
-  const schoolSecondaryRaw =
-    lang === "ar" ? String(branding.schoolNameEn || "").trim() : String(branding.schoolNameAr || "").trim();
-  const schoolSecondary =
-    schoolSecondaryRaw && schoolSecondaryRaw !== schoolPrimary.trim() ? schoolSecondaryRaw : null;
+  const schoolNameAr = "مدارس الأنجال الأهلية";
+  const schoolNameEn = "Al Anjal Private Schools";
+  const schoolPrimary = lang === "ar" ? schoolNameAr : schoolNameEn;
+  const schoolSecondary = lang === "ar" ? schoolNameEn : schoolNameAr;
 
   const studentPrimary = pickLocalizedText(lang, student.fullNameAr, student.fullNameEn);
   const studentSecondaryRaw =
@@ -275,7 +274,9 @@ export default async function PublicPortfolioPage({ params, searchParams }: Page
             </div>
           ) : (
             <div className="bg-[#0a2744] px-6 py-8 text-center text-white">
-              <p className="text-sm text-sky-100">{copy.platformTagline}</p>
+              <p className="text-2xl font-black tracking-tight text-sky-100 sm:text-3xl">
+                {copy.platformTagline}
+              </p>
             </div>
           )}
 
@@ -291,22 +292,22 @@ export default async function PublicPortfolioPage({ params, searchParams }: Page
                   <img src={logoSec} alt="" className="h-14 w-auto max-w-[120px] object-contain" />
                 ) : null}
               </div>
-              <div className={`min-w-0 flex-1 ${textMain}`}>
-                <p className="text-lg font-bold text-slate-900 sm:text-xl">{schoolPrimary}</p>
+              <div className="min-w-0 flex-1 text-center">
+                <p className="text-xl font-extrabold text-slate-900 sm:text-2xl">{schoolPrimary}</p>
                 {schoolSecondary ? (
                   <p
-                    className="mt-1 text-sm text-slate-600"
+                    className="mt-1 text-base font-semibold text-slate-700"
                     dir={lang === "ar" ? "ltr" : "rtl"}
                     lang={lang === "ar" ? "en" : "ar"}
                   >
                     {schoolSecondary}
                   </p>
                 ) : null}
-                <h1 className="mt-4 text-2xl font-black text-[#0a2744] sm:text-3xl">
+                <h1 className="mt-4 text-center text-3xl font-black text-[#0a2744] sm:text-4xl">
                   {copy.portfolioTitle}
                 </h1>
                 <p
-                  className="mt-1 text-sm font-semibold text-sky-800"
+                  className="mt-1 text-center text-lg font-bold text-sky-800"
                   dir={lang === "ar" ? "ltr" : "rtl"}
                   lang={lang === "ar" ? "en" : "ar"}
                 >

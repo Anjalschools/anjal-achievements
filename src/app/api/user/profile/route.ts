@@ -26,6 +26,12 @@ export async function GET(request: NextRequest) {
 
     console.log("[GET /api/user/profile] Found user:", user._id.toString());
 
+    const u = user as unknown as {
+      createdAt?: Date;
+      lastLoginAt?: Date;
+      status?: string;
+    };
+
     return NextResponse.json({
       id: user._id.toString(),
       fullName: user.fullName,
@@ -39,6 +45,7 @@ export async function GET(request: NextRequest) {
       grade: user.grade,
       gradeLabel: getGradeLabel(user.grade, user.preferredLanguage || "ar"),
       section: user.section === "arabic" ? "عربي" : "دولي",
+      sectionRaw: user.section,
       phone: user.phone || "",
       guardianName: user.guardianName || "",
       guardianPhone: user.guardianPhone || "",
@@ -46,6 +53,9 @@ export async function GET(request: NextRequest) {
       profilePhoto: user.profilePhoto,
       role: user.role,
       preferredLanguage: user.preferredLanguage,
+      accountStatus: u.status || "active",
+      createdAt: u.createdAt instanceof Date ? u.createdAt.toISOString() : undefined,
+      lastLoginAt: u.lastLoginAt instanceof Date ? u.lastLoginAt.toISOString() : null,
     });
   } catch (error) {
     console.error("Error fetching user profile:", error);
@@ -143,6 +153,12 @@ export async function PUT(request: NextRequest) {
       );
     }
 
+    const uu = user as unknown as {
+      createdAt?: Date;
+      lastLoginAt?: Date;
+      status?: string;
+    };
+
     return NextResponse.json({
       id: user._id.toString(),
       fullName: user.fullName,
@@ -156,6 +172,7 @@ export async function PUT(request: NextRequest) {
       grade: user.grade,
       gradeLabel: getGradeLabel(user.grade, user.preferredLanguage || "ar"),
       section: user.section === "arabic" ? "عربي" : "دولي",
+      sectionRaw: user.section,
       phone: user.phone || "",
       guardianName: user.guardianName || "",
       guardianPhone: user.guardianPhone || "",
@@ -163,6 +180,9 @@ export async function PUT(request: NextRequest) {
       profilePhoto: user.profilePhoto,
       role: user.role,
       preferredLanguage: user.preferredLanguage,
+      accountStatus: uu.status || "active",
+      createdAt: uu.createdAt instanceof Date ? uu.createdAt.toISOString() : undefined,
+      lastLoginAt: uu.lastLoginAt instanceof Date ? uu.lastLoginAt.toISOString() : null,
     });
   } catch (error: any) {
     console.error("Error updating user profile:", error);

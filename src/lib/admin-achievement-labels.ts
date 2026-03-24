@@ -1,12 +1,16 @@
 import { extractAttachmentUrl } from "@/lib/achievement-attachments";
+import { getGradeLabel } from "@/constants/grades";
+import {
+  normalizeInferredFieldCandidate,
+  getInferredFieldUiLabel,
+} from "@/lib/achievement-inferred-field-allowlist";
+import { getDbAchievementTypeLabel, labelAchievementSlugOrKey } from "@/lib/achievement-labels";
 import {
   formatLocalizedResultLine,
   getAchievementDisplayName,
   getDisplayLabel,
   labelAchievementCategory,
   labelAchievementClassification,
-  labelInferredField,
-  labelLegacyAchievementType,
   getAchievementLevelLabel,
 } from "@/lib/achievementDisplay";
 
@@ -22,8 +26,9 @@ export const emptyOrDash = (v: unknown, loc: AdminLabelLocale): string => {
   return s;
 };
 
+/** DB `achievementType` → localized label (covers olympiad, mawhiba_annual, slugs, events). */
 export const formatAchievementTypeLabel = (v: string | undefined, loc: AdminLabelLocale) =>
-  labelLegacyAchievementType(v, loc);
+  getDbAchievementTypeLabel(v ?? "", loc);
 
 export const formatAchievementCategoryLabel = (v: string | undefined, loc: AdminLabelLocale) => {
   const raw = labelAchievementCategory(v, loc);
@@ -31,8 +36,19 @@ export const formatAchievementCategoryLabel = (v: string | undefined, loc: Admin
   return v ? getDisplayLabel(v, loc) : loc === "ar" ? "غير محدد" : "—";
 };
 
-export const formatAchievementFieldLabel = (v: string | undefined, loc: AdminLabelLocale) =>
-  labelInferredField(v, loc);
+/**
+ * Inferred field / domain: allowlist first, then known slug maps (competitions, olympiad events, etc.).
+ * Avoids raw keys like `physics`, `wro`, `nesmo_stage_1` in admin UI.
+ */
+export const formatAchievementFieldLabel = (v: string | undefined, loc: AdminLabelLocale): string => {
+  const s = String(v ?? "").trim();
+  if (!s) return loc === "ar" ? "غير محدد" : "—";
+  const norm = normalizeInferredFieldCandidate(s);
+  if (norm === "other") return loc === "ar" ? "غير محدد" : "Not specified";
+  const fromList = getInferredFieldUiLabel(s, loc);
+  if (fromList) return fromList;
+  return labelAchievementSlugOrKey(s, loc);
+};
 
 export const formatAchievementLevelLabel = (v: string | undefined, loc: AdminLabelLocale) =>
   getAchievementLevelLabel(v, loc);
@@ -69,6 +85,76 @@ export const formatParticipationLabel = (v: string | undefined, loc: AdminLabelL
   if (k === "team") return loc === "ar" ? "فريق" : "Team";
   return loc === "ar" ? "غير محدد" : "—";
 };
+
+export const formatStudentGenderLabel = (v: string | undefined, loc: AdminLabelLocale): string => {
+  const k = String(v ?? "").trim().toLowerCase();
+  if (k === "male") return loc === "ar" ? "ذكر" : "Male";
+  if (k === "female") return loc === "ar" ? "أنثى" : "Female";
+  if (!k) return loc === "ar" ? "غير محدد" : "—";
+  return labelAchievementSlugOrKey(v, loc);
+};
+
+/** User `section` (track): arabic | international */
+export const formatStudentSectionLabel = (v: string | undefined, loc: AdminLabelLocale): string => {
+  const k = String(v ?? "").trim().toLowerCase();
+  if (!k) return loc === "ar" ? "غير محدد" : "—";
+  if (k === "arabic") return loc === "ar" ? "عربي" : "Arabic track";
+  if (k === "international") return loc === "ar" ? "دولي" : "International";
+  return labelAchievementSlugOrKey(v, loc);
+};
+
+export const formatDirectoryGradeLabel = (v: string | undefined, loc: AdminLabelLocale): string =>
+  getGradeLabel(v, loc);
+
+/**
+ * Achievement `studentSourceType` (linked_user | external_student | …) + legacy synonyms.
+ */
+export const formatStudentSourceTypeLabel = (v: string | undefined, loc: AdminLabelLocale): string => {
+  const k = String(v ?? "").trim().toLowerCase();
+  if (!k) return loc === "ar" ? "طالب مسجل" : "Registered student";
+  const map: Record<string, { ar: string; en: string }> = {
+    linked_user: { ar: "طالب مسجل", en: "Registered student" },
+    external_student: { ar: "طالب خارجي", en: "External student" },
+    alumni_student: { ar: "خريج", en: "Alumni" },
+    registered: { ar: "مسجّل", en: "Registered" },
+    manual: { ar: "إدخال إداري", en: "Admin entry" },
+    external: { ar: "خارجي", en: "External" },
+    linked: { ar: "مرتبط بحساب", en: "Linked account" },
+  };
+  const row = map[k];
+  if (row) return loc === "ar" ? row.ar : row.en;
+  return labelAchievementSlugOrKey(v, loc);
+};
+
+/** Workflow `status` string on achievement rows (directory / lists). */
+export const formatWorkflowStatusLabel = (v: string | undefined, loc: AdminLabelLocale): string => {
+  const s = String(v ?? "").trim().toLowerCase();
+  if (!s) return loc === "ar" ? "غير محدد" : "—";
+  const map: Record<string, { ar: string; en: string }> = {
+    pending: { ar: "قيد الانتظار", en: "Pending" },
+    pending_review: { ar: "بانتظار المراجعة", en: "Pending review" },
+    pending_re_review: { ar: "بانتظار إعادة المراجعة", en: "Pending re-review" },
+    needs_revision: { ar: "يحتاج تعديل", en: "Needs revision" },
+    approved: { ar: "معتمد", en: "Approved" },
+    rejected: { ar: "مرفوض", en: "Rejected" },
+    featured: { ar: "مميز", en: "Featured" },
+  };
+  if (map[s]) return loc === "ar" ? map[s].ar : map[s].en;
+  return labelAchievementSlugOrKey(v, loc);
+};
+
+/** Directory card title — same resolution as student detail (no raw slugs when avoidable). */
+export const formatDirectoryAchievementTitle = (
+  row: {
+    title?: string;
+    nameAr?: string;
+    nameEn?: string;
+    achievementName?: string;
+    customAchievementName?: string;
+    titleAr?: string;
+  },
+  loc: AdminLabelLocale
+): string => getAchievementDisplayName(row as Record<string, unknown>, loc);
 
 export const resolveAchievementTitleForAdmin = (raw: Record<string, unknown>, loc: AdminLabelLocale): string => {
   const title = getAchievementDisplayName(raw, loc);

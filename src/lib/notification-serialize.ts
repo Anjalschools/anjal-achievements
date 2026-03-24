@@ -41,7 +41,11 @@ export const serializeNotification = (doc: INotification | Record<string, unknow
   if (type === "certificate_issued" && relatedCertificateToken) {
     actionHref = `/verify/certificate/${relatedCertificateToken}`;
   } else if (type === "achievement_updated_for_review") {
-    actionHref = "/admin/achievements/review";
+    actionHref = relatedAchievementId
+      ? `/admin/achievements/review/${relatedAchievementId}`
+      : "/admin/achievements/review";
+  } else if (type === "ai_flag_notice" && relatedAchievementId) {
+    actionHref = `/admin/achievements/review/${relatedAchievementId}`;
   } else if (relatedAchievementId && type !== "achievement_deleted") {
     actionHref = `/achievements/${relatedAchievementId}`;
   }

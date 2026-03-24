@@ -7,10 +7,34 @@ import { achievementDisplayTitle, createStudentNotification } from "@/lib/studen
 import { inferAchievementField } from "@/lib/achievement-field-inference";
 import { clampInferredFieldToAllowlist } from "@/lib/achievement-inferred-field-allowlist";
 import { calculateAchievementScore } from "@/lib/achievement-scoring";
+import { buildStudentAchievementDetailPayload } from "@/lib/achievement-detail-response";
 
 export const dynamic = "force-dynamic";
 
 type RouteParams = { params: { id: string } };
+
+/** Reviewer-only: same JSON shape as GET /api/achievements/[id], without student ownership filter. */
+export async function GET(_request: NextRequest, { params }: RouteParams) {
+  const gate = await requireAchievementReviewer();
+  if (!gate.ok) return gate.response;
+
+  const id = params.id;
+  if (!id || !mongoose.Types.ObjectId.isValid(id)) {
+    return NextResponse.json({ error: "Invalid achievement id" }, { status: 400 });
+  }
+
+  try {
+    await connectDB();
+    const achievement = await Achievement.findById(id).lean();
+    if (!achievement) {
+      return NextResponse.json({ error: "Achievement not found" }, { status: 404 });
+    }
+    return NextResponse.json(buildStudentAchievementDetailPayload(achievement));
+  } catch (e) {
+    console.error("[GET admin achievement]", e);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  }
+}
 
 const ADMIN_EDITABLE_STRING_KEYS = [
   "nameAr",

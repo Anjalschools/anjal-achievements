@@ -1,14 +1,9 @@
 import { NextResponse } from "next/server";
 import { getCurrentDbUser } from "@/lib/auth";
+import { ACHIEVEMENT_REVIEWER_ROLES_LIST } from "@/lib/achievement-reviewer-roles";
 
 /** Admin, supervisor, school lead, activity lead (teacher), evaluator (judge) */
-export const REVIEWER_ROLES_LIST = [
-  "admin",
-  "supervisor",
-  "schoolAdmin",
-  "teacher",
-  "judge",
-] as const;
+export const REVIEWER_ROLES_LIST = ACHIEVEMENT_REVIEWER_ROLES_LIST;
 
 const REVIEWER_ROLES = new Set<string>(REVIEWER_ROLES_LIST);
 

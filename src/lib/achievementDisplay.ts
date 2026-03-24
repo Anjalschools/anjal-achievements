@@ -243,7 +243,7 @@ const LEVEL: Record<string, { ar: string; en: string }> = {
   administration: { ar: "الإدارة التعليمية", en: "Administration" },
   local_authority: { ar: "الجهة المحلية", en: "Local authority" },
   kingdom: { ar: "المملكة", en: "Kingdom" },
-  international: { ar: "العالم", en: "International" },
+  international: { ar: "دولي", en: "International" },
   global: { ar: "العالم", en: "Global" },
   world: { ar: "العالم", en: "World" },
   national: { ar: "المملكة", en: "National" },
