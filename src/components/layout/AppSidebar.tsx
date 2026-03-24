@@ -17,6 +17,10 @@ import {
   UserCog,
   FileBarChart,
   Star,
+  SlidersHorizontal,
+  ScrollText,
+  LineChart,
+  Sparkles,
 } from "lucide-react";
 import { useUnreadNotificationCount } from "@/hooks/useUnreadNotificationCount";
 import { getLocale } from "@/lib/i18n";
@@ -85,6 +89,31 @@ const AppSidebar = () => {
     icon: FileBarChart,
     label: locale === "ar" ? "التقارير" : "Reports",
   };
+  const adminAddAchievementItem = {
+    href: "/admin/achievements/add",
+    icon: PlusCircle,
+    label: locale === "ar" ? "إضافة إنجاز (إداري)" : "Add achievement (admin)",
+  };
+  const analyticsItem = {
+    href: "/admin/analytics",
+    icon: LineChart,
+    label: locale === "ar" ? "الإحصاءات المتقدمة" : "Advanced analytics",
+  };
+  const aiNewsItem = {
+    href: "/admin/ai/news",
+    icon: Sparkles,
+    label: locale === "ar" ? "إنشاء خبر بالذكاء الاصطناعي" : "AI news",
+  };
+  const auditLogItem = {
+    href: "/admin/audit-log",
+    icon: ScrollText,
+    label: locale === "ar" ? "سجل العمليات" : "Audit log",
+  };
+  const adminSettingsItem = {
+    href: "/admin/settings",
+    icon: SlidersHorizontal,
+    label: locale === "ar" ? "إعدادات المنصة" : "Platform settings",
+  };
   const notificationsItem = {
     href: "/notifications",
     icon: Bell,
@@ -107,13 +136,18 @@ const AppSidebar = () => {
     ? [
         adminDashboardItem,
         reviewItem,
+        adminAddAchievementItem,
         usersItem,
         reportsItem,
+        analyticsItem,
         hallOfFameItem,
         achievementsItem,
         addAchievementItem,
         notificationsItem,
         profileItem,
+        aiNewsItem,
+        auditLogItem,
+        adminSettingsItem,
         settingsItem,
       ]
     : [
@@ -143,6 +177,21 @@ const AppSidebar = () => {
     if (href === "/admin/achievements/reports") {
       return pathname?.startsWith("/admin/achievements/reports");
     }
+    if (href === "/admin/achievements/add") {
+      return pathname === "/admin/achievements/add";
+    }
+    if (href === "/admin/analytics") {
+      return pathname === "/admin/analytics" || pathname?.startsWith("/admin/analytics/");
+    }
+    if (href === "/admin/ai/news") {
+      return pathname === "/admin/ai/news" || pathname?.startsWith("/admin/ai/");
+    }
+    if (href === "/admin/audit-log") {
+      return pathname === "/admin/audit-log";
+    }
+    if (href === "/admin/settings") {
+      return pathname === "/admin/settings";
+    }
     if (href === "/hall-of-fame") {
       return pathname === "/hall-of-fame";
     }
@@ -168,23 +217,23 @@ const AppSidebar = () => {
 
       {/* Sidebar */}
       <aside
-        className={`fixed bottom-0 z-40 w-[280px] transform border-gray-200 bg-white shadow-lg transition-transform duration-300 ease-in-out lg:translate-x-0 top-[7.75rem] ${
+        className={`fixed bottom-0 z-40 flex w-[280px] transform flex-col border-gray-200 bg-white shadow-lg transition-transform duration-300 ease-in-out lg:translate-x-0 top-[7.75rem] max-h-[calc(100vh-7.75rem)] min-h-0 ${
           locale === "ar"
             ? `right-0 border-l ${isOpen ? "translate-x-0" : "translate-x-full"}`
             : `left-0 border-r ${isOpen ? "translate-x-0" : "-translate-x-full"}`
         }`}
         dir={locale === "ar" ? "rtl" : "ltr"}
       >
-        <div className="flex h-full flex-col">
+        <div className="flex min-h-0 flex-1 flex-col">
           {/* Logo/Header */}
-          <div className="flex h-16 items-center border-b border-gray-200 px-6">
+          <div className="flex h-16 shrink-0 items-center border-b border-gray-200 px-6">
             <h2 className="text-lg font-bold text-primary">
               {locale === "ar" ? "منصة التميز" : "Excellence Platform"}
             </h2>
           </div>
 
-          {/* Navigation */}
-          <nav className="flex-1 space-y-1 px-4 py-6">
+          {/* Navigation: scroll independently so all items stay reachable without zooming out */}
+          <nav className="min-h-0 flex-1 space-y-1 overflow-y-auto overscroll-contain px-4 py-6">
             {navItems.map((item) => {
               const Icon = item.icon;
               const active = isActive(item.href);

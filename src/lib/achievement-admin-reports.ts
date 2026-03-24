@@ -471,26 +471,59 @@ export const buildUnifiedAdminAchievementReports = async (
 
   const achievements = (await Achievement.find(query)
     .select(
-      "userId achievementType achievementCategory achievementName customAchievementName nameAr nameEn title achievementLevel participationType resultType resultValue medalType rank score achievementYear date createdAt description status certificateIssued certificateIssuedAt verificationStatus pendingReReview attachments evidenceUrl"
+      "userId studentSourceType studentSnapshot studentProfileKey achievementType achievementCategory achievementName customAchievementName nameAr nameEn title achievementLevel participationType resultType resultValue medalType rank score achievementYear date createdAt description status certificateIssued certificateIssuedAt verificationStatus pendingReReview attachments evidenceUrl"
     )
     .sort({ createdAt: -1 })
     .lean()) as unknown as Record<string, unknown>[];
 
-  const userIds = [...new Set(achievements.map((a) => String(a.userId || "")).filter(Boolean))].map(
-    (x) => new mongoose.Types.ObjectId(x)
-  );
-  const users = (await User.find({ _id: { $in: userIds } })
-    .select("fullName fullNameAr fullNameEn gender grade studentId")
-    .lean()) as unknown as Record<string, unknown>[];
+  const userIds = [
+    ...new Set(achievements.map((a) => String(a.userId || "")).filter(Boolean)),
+  ].map((x) => new mongoose.Types.ObjectId(x));
+  const users =
+    userIds.length > 0
+      ? ((await User.find({ _id: { $in: userIds } })
+          .select("fullName fullNameAr fullNameEn gender grade studentId")
+          .lean()) as unknown as Record<string, unknown>[])
+      : [];
   const userMap = new Map<string, Record<string, unknown>>();
   for (const u of users) userMap.set(String(u._id), u);
+
+  const resolveStudent = (
+    a: Record<string, unknown>,
+    u: Record<string, unknown>
+  ): { studentId: string; studentName: string; gender: string; grade: string } => {
+    const uid = String(a.userId || "");
+    if (uid && u && Object.keys(u).length > 0) {
+      return {
+        studentId: String(u.studentId || ""),
+        studentName:
+          String(u.fullNameAr || "").trim() ||
+          String(u.fullNameEn || "").trim() ||
+          String(u.fullName || "").trim() ||
+          "—",
+        gender: String(u.gender || "").trim().toLowerCase(),
+        grade: String(u.grade || "").trim(),
+      };
+    }
+    const snap = (a.studentSnapshot || {}) as Record<string, unknown>;
+    return {
+      studentId: safeStr(a.studentProfileKey) || "—",
+      studentName:
+        String(snap.fullNameAr || "").trim() ||
+        String(snap.fullNameEn || "").trim() ||
+        "—",
+      gender: String(snap.gender || "male").trim().toLowerCase() === "female" ? "female" : "male",
+      grade: String(snap.grade || "").trim(),
+    };
+  };
 
   const rows: AdminReportRow[] = [];
   for (const a of achievements) {
     const uid = String(a.userId || "");
     const u = userMap.get(uid) || {};
-    const gender = String(u.gender || "").trim().toLowerCase();
-    const grade = String(u.grade || "").trim();
+    const rs = resolveStudent(a, u);
+    const gender = rs.gender;
+    const grade = rs.grade;
     const stage = getStageByGrade(grade);
     const refDate = (a.date as Date) || (a.createdAt as Date) || null;
     const eventLabelAr = getAchievementDisplayName(a, "ar");
@@ -499,12 +532,8 @@ export const buildUnifiedAdminAchievementReports = async (
 
     const row: AdminReportRow = {
       id: String(a._id),
-      studentId: String(u.studentId || ""),
-      studentName:
-        String(u.fullNameAr || "").trim() ||
-        String(u.fullNameEn || "").trim() ||
-        String(u.fullName || "").trim() ||
-        "—",
+      studentId: rs.studentId,
+      studentName: rs.studentName,
       gender,
       grade,
       stage,

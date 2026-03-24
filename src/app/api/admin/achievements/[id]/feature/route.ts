@@ -5,6 +5,7 @@ import Achievement from "@/models/Achievement";
 import { requireAchievementReviewer } from "@/lib/review-auth";
 import { isApprovedForFeature } from "@/lib/achievementWorkflow";
 import { achievementDisplayTitle, createStudentNotification } from "@/lib/student-notifications";
+import { applyDefaultShowInPublicPortfolioWhenPublished } from "@/lib/achievement-public-portfolio-policy";
 
 export const dynamic = "force-dynamic";
 
@@ -52,6 +53,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     if (typeof body.featureNote === "string" && body.featureNote.trim()) {
       doc.set("featureNote", body.featureNote.trim().slice(0, 2000));
     }
+    applyDefaultShowInPublicPortfolioWhenPublished(doc);
     await doc.save();
 
     try {

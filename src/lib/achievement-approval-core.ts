@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import type { ReviewerUser } from "@/lib/review-auth";
+import { applyDefaultShowInPublicPortfolioWhenPublished } from "@/lib/achievement-public-portfolio-policy";
 
 export type CertificatePartyStamp = "fromRole" | "principal" | "activitySupervisor" | "judge";
 
@@ -102,6 +103,8 @@ export const applyAchievementPlatformApproval = (
     });
     doc.set("reviewComments", comments);
   }
+
+  applyDefaultShowInPublicPortfolioWhenPublished(doc);
 };
 
 export type CertificateIssuerKind = "admin" | "principal" | "activitySupervisor" | "judge";

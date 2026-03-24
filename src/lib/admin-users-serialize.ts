@@ -20,6 +20,9 @@ export type AdminUserListRow = {
   createdAt: string | null;
   updatedAt: string | null;
   lastLoginAt: string | null;
+  publicPortfolioEnabled?: boolean;
+  publicPortfolioSlug?: string;
+  publicPortfolioPublishedAt?: string | null;
 };
 
 export const serializeAdminUserRow = (u: Record<string, unknown>): AdminUserListRow => ({
@@ -44,4 +47,13 @@ export const serializeAdminUserRow = (u: Record<string, unknown>): AdminUserList
   createdAt: u.createdAt instanceof Date ? u.createdAt.toISOString() : null,
   updatedAt: u.updatedAt instanceof Date ? u.updatedAt.toISOString() : null,
   lastLoginAt: u.lastLoginAt instanceof Date ? u.lastLoginAt.toISOString() : null,
+  publicPortfolioEnabled: u.publicPortfolioEnabled === true,
+  publicPortfolioSlug:
+    typeof u.publicPortfolioSlug === "string" && u.publicPortfolioSlug.trim()
+      ? u.publicPortfolioSlug.trim().toLowerCase()
+      : undefined,
+  publicPortfolioPublishedAt:
+    u.publicPortfolioPublishedAt instanceof Date
+      ? u.publicPortfolioPublishedAt.toISOString()
+      : null,
 });

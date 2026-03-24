@@ -193,6 +193,9 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     const displayTitle = achievementDisplayTitle(doc);
 
     try {
+      if (!doc.userId) {
+        // External / snapshot achievements — no student account to notify
+      } else {
       await createStudentNotification({
         userId: doc.userId,
         type: "achievement_deleted",
@@ -205,6 +208,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
           achievementTitle: displayTitle,
         },
       });
+      }
     } catch (notifyErr) {
       console.error("[delete notification]", notifyErr);
     }

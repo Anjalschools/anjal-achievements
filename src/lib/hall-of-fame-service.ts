@@ -106,6 +106,151 @@ export type HallOfFameListResult = {
   pageSize: number;
 };
 
+const snapshotDisplayName = (snap: Record<string, unknown>, loc: "ar" | "en"): string => {
+  const ar = safeStr(snap.fullNameAr);
+  const en = safeStr(snap.fullNameEn);
+  if (loc === "ar") return ar || en || "—";
+  return en || ar || "—";
+};
+
+const buildHallProfilePayloadFromData = (
+  studentId: string,
+  u: Record<string, unknown>,
+  list: Record<string, unknown>[],
+  locale: "ar" | "en"
+): StudentHallProfilePayload => {
+  const levelTiers: HallTier[] =
+    list.length > 0
+      ? list.map((a) => hallTierFromLevelsOnly(String(a.achievementLevel || a.level || "")))
+      : ["school" as HallTier];
+  const hi = list.length > 0 ? highestTier(levelTiers) : "school";
+
+  const categoryLabelFor = (a: Record<string, unknown>) => {
+    const cls = safeStr(a.achievementClassification);
+    if (cls) return labelAchievementClassification(cls, locale);
+    return labelLegacyAchievementType(String(a.achievementType || ""), locale);
+  };
+
+  const cards: HallAchievementCard[] = list.length
+    ? list.map((a) => {
+        const id = String(a._id ?? "");
+        const title = getAchievementDisplayName(a, locale);
+        const cat = categoryLabelFor(a);
+        const rawLevel = String(a.achievementLevel || a.level || "");
+        const tier = normalizeRawLevelToTier(rawLevel);
+        const isParticipationResult = String(a.resultType || "") === "participation";
+        const levelTierForUi: HallTier = isParticipationResult ? "participation" : tier;
+        const section = getAchievementHallSection(a);
+        const resultLine = formatLocalizedResultLine(
+          String(a.resultType || ""),
+          String(a.medalType || ""),
+          String(a.rank || ""),
+          locale,
+          typeof a.score === "number" ? a.score : undefined
+        );
+        const pt = String(a.participationType || "");
+        const participationLabel =
+          pt === "team" ? (locale === "ar" ? "فريق" : "Team") : locale === "ar" ? "فردي" : "Individual";
+
+        const y = Number(a.achievementYear);
+        const d = a.date instanceof Date ? a.date : a.createdAt instanceof Date ? (a.createdAt as Date) : null;
+        const dateLabel = d
+          ? d.toLocaleDateString(locale === "ar" ? "ar-SA" : "en-GB", {
+              year: "numeric",
+              month: "short",
+              day: "numeric",
+            })
+          : "—";
+
+        const desc = safeStr(a.description) || safeStr(a.title) || "";
+
+        return {
+          id,
+          title,
+          categoryLabel: cat,
+          levelLabel: getAchievementLevelLabel(rawLevel, locale),
+          levelTier: levelTierForUi,
+          resultLine,
+          participationLabel,
+          year: Number.isFinite(y) ? y : new Date().getFullYear(),
+          dateLabel,
+          description: desc.length > 220 ? `${desc.slice(0, 217)}…` : desc,
+          section,
+        };
+      })
+    : [];
+
+  const sectionMeta: Array<{ key: 1 | 2 | 3 | 4 | 5; title: { ar: string; en: string } }> = [
+    { key: 1, title: { ar: "الإنجازات الدولية", en: "International achievements" } },
+    { key: 2, title: { ar: "إنجازات المملكة", en: "National achievements" } },
+    { key: 3, title: { ar: "إنجازات المحافظة / الإدارة / المنطقة", en: "Regional / district achievements" } },
+    { key: 4, title: { ar: "إنجازات المدرسة", en: "School-level achievements" } },
+    { key: 5, title: { ar: "المشاركات", en: "Participation" } },
+  ];
+
+  const sections = sectionMeta.map((s) => ({
+    key: s.key,
+    title: locale === "ar" ? s.title.ar : s.title.en,
+    items: cards
+      .filter((c) => c.section === s.key)
+      .sort((a, b) => b.year - a.year || a.title.localeCompare(b.title)),
+  }));
+
+  const gradeVal = safeStr(u.grade) || "g12";
+  const stage = getStageByGrade(gradeVal);
+
+  return {
+    student: {
+      id: studentId,
+      name: studentName(u, locale),
+      photo: typeof u.profilePhoto === "string" && u.profilePhoto.trim() ? u.profilePhoto.trim() : null,
+      grade: gradeVal,
+      gradeLabel: getGradeLabel(gradeVal, locale),
+      stageLabel: reportStageLabel(stage, locale === "ar"),
+      gender: u.gender === "female" ? "female" : "male",
+      totalAchievements: list.length,
+      highestTier: hi,
+      highestTierLabel: getDisplayLabelForTier(hi, locale),
+    },
+    sections: sections.filter((sec) => sec.items.length > 0),
+  };
+};
+
+const buildExternalStudentHallProfile = async (
+  profileKey: mongoose.Types.ObjectId,
+  locale: "ar" | "en"
+): Promise<StudentHallProfilePayload | null> => {
+  const approved = hallOfFameApprovedAchievementFilter();
+  const andArr = Array.isArray((approved as { $and?: unknown[] }).$and)
+    ? (approved as { $and: Record<string, unknown>[] }).$and
+    : [approved];
+
+  const achievements = await Achievement.find({
+    $and: [
+      ...andArr,
+      { studentProfileKey: profileKey },
+      { studentSourceType: { $in: ["external_student", "alumni_student"] } },
+    ],
+  })
+    .sort({ achievementYear: -1, createdAt: -1 })
+    .lean();
+
+  const list = (achievements as unknown as Record<string, unknown>[]) || [];
+  if (list.length === 0) return null;
+
+  const snap = (list[0].studentSnapshot || {}) as Record<string, unknown>;
+  const syntheticUser: Record<string, unknown> = {
+    fullNameAr: snap.fullNameAr,
+    fullNameEn: snap.fullNameEn,
+    fullName: snap.fullNameAr || snap.fullNameEn,
+    profilePhoto: "",
+    grade: snap.grade || "g12",
+    gender: safeStr(snap.gender).toLowerCase() === "female" ? "female" : "male",
+  };
+
+  return buildHallProfilePayloadFromData(String(profileKey), syntheticUser, list, locale);
+};
+
 export const buildHallOfFameStudents = async (q: HallOfFameQuery): Promise<HallOfFameListResult> => {
   await connectDB();
 
@@ -115,32 +260,38 @@ export const buildHallOfFameStudents = async (q: HallOfFameQuery): Promise<HallO
   const achFilter = hallOfFameApprovedAchievementFilter();
   const achievements = await Achievement.find(achFilter)
     .select(
-      "userId achievementLevel level score resultType achievementYear achievementType achievementCategory nameAr nameEn achievementName customAchievementName title description date createdAt"
+      "userId studentSourceType studentProfileKey studentSnapshot achievementLevel level score resultType achievementYear achievementType achievementCategory nameAr nameEn achievementName customAchievementName title description date createdAt"
     )
     .lean();
 
-  const byUser = new Map<string, Record<string, unknown>[]>();
+  const byKey = new Map<string, Record<string, unknown>[]>();
   for (const raw of achievements) {
     const a = raw as unknown as Record<string, unknown>;
-    const uid = safeStr(a.userId);
-    if (!uid) continue;
     if (!yearFilter(q.academicYear, a.achievementYear)) continue;
-    if (!byUser.has(uid)) byUser.set(uid, []);
-    byUser.get(uid)!.push(a);
+    const st = String(a.studentSourceType || "linked_user");
+    let key: string;
+    if (st === "linked_user" || !a.studentProfileKey) {
+      const uid = safeStr(a.userId);
+      if (!uid) continue;
+      key = uid;
+    } else {
+      key = `ext:${safeStr(a.studentProfileKey)}`;
+    }
+    if (!byKey.has(key)) byKey.set(key, []);
+    byKey.get(key)!.push(a);
   }
 
-  const userIds = [...byUser.keys()].filter((id) => mongoose.Types.ObjectId.isValid(id));
-  if (userIds.length === 0) {
-    return { items: [], total: 0, page, pageSize };
-  }
-
-  const users = await User.find({
-    _id: { $in: userIds.map((id) => new mongoose.Types.ObjectId(id)) },
-    role: "student",
-    status: "active",
-  })
-    .select("fullName fullNameAr fullNameEn profilePhoto grade gender")
-    .lean();
+  const linkedIds = [...byKey.keys()].filter((k) => !k.startsWith("ext:"));
+  const users =
+    linkedIds.length > 0
+      ? await User.find({
+          _id: { $in: linkedIds.filter((id) => mongoose.Types.ObjectId.isValid(id)).map((id) => new mongoose.Types.ObjectId(id)) },
+          role: "student",
+          status: "active",
+        })
+          .select("fullName fullNameAr fullNameEn profilePhoto grade gender")
+          .lean()
+      : [];
 
   const loc = q.locale;
   const rows: HallOfFameStudentRow[] = [];
@@ -148,7 +299,7 @@ export const buildHallOfFameStudents = async (q: HallOfFameQuery): Promise<HallO
   for (const rawU of users) {
     const u = rawU as unknown as Record<string, unknown>;
     const id = String(u._id);
-    const list = byUser.get(id);
+    const list = byKey.get(id);
     if (!list || list.length === 0) continue;
 
     const g = u.gender === "female" ? "female" : "male";
@@ -202,6 +353,63 @@ export const buildHallOfFameStudents = async (q: HallOfFameQuery): Promise<HallO
     });
   }
 
+  for (const k of [...byKey.keys()].filter((x) => x.startsWith("ext:"))) {
+    const list = byKey.get(k);
+    if (!list || list.length === 0) continue;
+    const first = list[0];
+    const snap = (first.studentSnapshot || {}) as Record<string, unknown>;
+    const profileId = k.replace(/^ext:/, "");
+    const g = safeStr(snap.gender).toLowerCase() === "female" ? "female" : "male";
+    if (q.gender && q.gender !== "all" && q.gender !== g) continue;
+
+    const gradeVal = safeStr(snap.grade) || "g12";
+    const stage = getStageByGrade(gradeVal);
+    if (q.stage && q.stage !== "all" && stage !== q.stage && stage !== "unknown") continue;
+    if (q.stage && q.stage !== "all" && stage === "unknown") continue;
+
+    if (q.grade && q.grade !== "all" && gradeVal !== q.grade) continue;
+
+    const name = snapshotDisplayName(snap, loc);
+    if (q.search) {
+      const needle = q.search.trim().toLowerCase();
+      if (needle && !name.toLowerCase().includes(needle)) continue;
+    }
+
+    let totalScore = 0;
+    const levelTiers: HallTier[] = [];
+    for (const a of list) {
+      const sc = a.score;
+      if (typeof sc === "number" && Number.isFinite(sc)) totalScore += sc;
+      levelTiers.push(hallTierFromLevelsOnly(String(a.achievementLevel || a.level || "")));
+    }
+
+    const hi = highestTier(levelTiers);
+    if (q.minTier && q.minTier !== "all") {
+      if ((HALL_LEVEL_PRIORITY[hi] ?? 0) < (HALL_LEVEL_PRIORITY[q.minTier] ?? 0)) continue;
+    }
+
+    const sortWeight =
+      (HALL_LEVEL_PRIORITY[hi] ?? 0) * 1_000_000 +
+      totalScore * 100 +
+      list.length * 10;
+
+    rows.push({
+      studentId: profileId,
+      studentName: name,
+      studentPhoto: null,
+      grade: gradeVal,
+      gradeLabel: getGradeLabel(gradeVal, loc),
+      stage,
+      stageLabel: reportStageLabel(stage, loc === "ar"),
+      gender: g,
+      totalAchievements: list.length,
+      totalScore,
+      highestTier: hi,
+      highestTierLabel: getDisplayLabelForTier(hi, loc),
+      sortWeight,
+    });
+  }
+
   rows.sort((a, b) => b.sortWeight - a.sortWeight || a.studentName.localeCompare(b.studentName));
 
   const total = rows.length;
@@ -230,7 +438,9 @@ export const buildStudentHallProfile = async (
     .select("fullName fullNameAr fullNameEn profilePhoto grade gender")
     .lean();
 
-  if (!user) return null;
+  if (!user) {
+    return buildExternalStudentHallProfile(uid, locale);
+  }
 
   const u = user as unknown as Record<string, unknown>;
   const achievements = await Achievement.find({
@@ -241,99 +451,5 @@ export const buildStudentHallProfile = async (
 
   const list = (achievements as unknown as Record<string, unknown>[]) || [];
 
-  const levelTiers: HallTier[] =
-    list.length > 0
-      ? list.map((a) => hallTierFromLevelsOnly(String(a.achievementLevel || a.level || "")))
-      : ["school" as HallTier];
-  const hi = list.length > 0 ? highestTier(levelTiers) : "school";
-
-  let totalScore = 0;
-  for (const a of list) {
-    const sc = a.score;
-    if (typeof sc === "number" && Number.isFinite(sc)) totalScore += sc;
-  }
-
-  const categoryLabelFor = (a: Record<string, unknown>) => {
-    const cls = safeStr(a.achievementClassification);
-    if (cls) return labelAchievementClassification(cls, locale);
-    return labelLegacyAchievementType(String(a.achievementType || ""), locale);
-  };
-
-  const cards: HallAchievementCard[] = list.length ? list.map((a) => {
-    const id = String(a._id ?? "");
-    const title = getAchievementDisplayName(a, locale);
-    const cat = categoryLabelFor(a);
-    const rawLevel = String(a.achievementLevel || a.level || "");
-    const tier = normalizeRawLevelToTier(rawLevel);
-    const isParticipationResult = String(a.resultType || "") === "participation";
-    const levelTierForUi: HallTier = isParticipationResult ? "participation" : tier;
-    const section = getAchievementHallSection(a);
-    const resultLine = formatLocalizedResultLine(
-      String(a.resultType || ""),
-      String(a.medalType || ""),
-      String(a.rank || ""),
-      locale,
-      typeof a.score === "number" ? a.score : undefined
-    );
-    const pt = String(a.participationType || "");
-    const participationLabel =
-      pt === "team" ? (locale === "ar" ? "فريق" : "Team") : locale === "ar" ? "فردي" : "Individual";
-
-    const y = Number(a.achievementYear);
-    const d = a.date instanceof Date ? a.date : a.createdAt instanceof Date ? (a.createdAt as Date) : null;
-    const dateLabel = d
-      ? d.toLocaleDateString(locale === "ar" ? "ar-SA" : "en-GB", { year: "numeric", month: "short", day: "numeric" })
-      : "—";
-
-    const desc = safeStr(a.description) || safeStr(a.title) || "";
-
-    return {
-      id,
-      title,
-      categoryLabel: cat,
-      levelLabel: getAchievementLevelLabel(rawLevel, locale),
-      levelTier: levelTierForUi,
-      resultLine,
-      participationLabel,
-      year: Number.isFinite(y) ? y : new Date().getFullYear(),
-      dateLabel,
-      description: desc.length > 220 ? `${desc.slice(0, 217)}…` : desc,
-      section,
-    };
-  }) : [];
-
-  const sectionMeta: Array<{ key: 1 | 2 | 3 | 4 | 5; title: { ar: string; en: string } }> = [
-    { key: 1, title: { ar: "الإنجازات الدولية", en: "International achievements" } },
-    { key: 2, title: { ar: "إنجازات المملكة", en: "National achievements" } },
-    { key: 3, title: { ar: "إنجازات المحافظة / الإدارة / المنطقة", en: "Regional / district achievements" } },
-    { key: 4, title: { ar: "إنجازات المدرسة", en: "School-level achievements" } },
-    { key: 5, title: { ar: "المشاركات", en: "Participation" } },
-  ];
-
-  const sections = sectionMeta.map((s) => ({
-    key: s.key,
-    title: locale === "ar" ? s.title.ar : s.title.en,
-    items: cards
-      .filter((c) => c.section === s.key)
-      .sort((a, b) => b.year - a.year || a.title.localeCompare(b.title)),
-  }));
-
-  const gradeVal = safeStr(u.grade) || "g12";
-  const stage = getStageByGrade(gradeVal);
-
-  return {
-    student: {
-      id: studentId,
-      name: studentName(u, locale),
-      photo: typeof u.profilePhoto === "string" && u.profilePhoto.trim() ? u.profilePhoto.trim() : null,
-      grade: gradeVal,
-      gradeLabel: getGradeLabel(gradeVal, locale),
-      stageLabel: reportStageLabel(stage, locale === "ar"),
-      gender: u.gender === "female" ? "female" : "male",
-      totalAchievements: list.length,
-      highestTier: hi,
-      highestTierLabel: getDisplayLabelForTier(hi, locale),
-    },
-    sections: sections.filter((sec) => sec.items.length > 0),
-  };
+  return buildHallProfilePayloadFromData(studentId, u, list, locale);
 };

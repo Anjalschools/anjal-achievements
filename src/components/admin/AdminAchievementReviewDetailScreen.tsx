@@ -8,6 +8,7 @@ import PageContainer from "@/components/layout/PageContainer";
 import AchievementStatusBadge from "@/components/achievements/AchievementStatusBadge";
 import AdminAchievementReviewActions from "@/components/admin/AdminAchievementReviewActions";
 import AdminAchievementAdminEditForm from "@/components/admin/AdminAchievementAdminEditForm";
+import AdminAchievementVisibilityCard from "@/components/admin/AdminAchievementVisibilityCard";
 import { AdminAchievementReviewDetailBody } from "@/components/admin/AdminAchievementReviewDetailBody";
 import { detailApiToListRow } from "@/lib/admin-achievement-detail-to-list-row";
 import { getLocale } from "@/lib/i18n";
@@ -436,6 +437,13 @@ const AdminAchievementReviewDetailScreen = ({
                   </div>
                 ) : null}
               </div>
+
+              <AdminAchievementVisibilityCard
+                achievementId={achievementId}
+                detail={detailPayload}
+                isAr={isAr}
+                onSaved={loadDetail}
+              />
 
               <div className="rounded-2xl border border-gray-200 bg-slate-50/80 p-4 shadow-sm">
                 <h2 className="text-xs font-bold uppercase tracking-wide text-slate-700">

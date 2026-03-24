@@ -1,10 +1,12 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import PageContainer from "@/components/layout/PageContainer";
 import SectionCard from "@/components/layout/SectionCard";
 import StatCard from "@/components/layout/StatCard";
+import StudentPublicPortfolioCard from "@/components/profile/StudentPublicPortfolioCard";
+import type { UserPublicPortfolioPayload } from "@/lib/user-public-portfolio-types";
 import { Edit, Trophy, Award, Calendar, User, PlusCircle, ArrowRight, Phone, Mail, Star } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
@@ -105,6 +107,11 @@ const ProfilePage = () => {
   const [recentAchievementsList, setRecentAchievementsList] = useState<Record<string, unknown>[]>([]);
   const [insights, setInsights] = useState<ProfileInsights>(emptyInsights);
   const [totalScore, setTotalScore] = useState(0);
+  const [userRole, setUserRole] = useState("");
+  const [publicPortfolio, setPublicPortfolio] = useState<UserPublicPortfolioPayload | null>(null);
+  const [publicPortfolioError, setPublicPortfolioError] = useState<string | null>(null);
+  const [profileLoading, setProfileLoading] = useState(true);
+  const profileLoadAbortRef = useRef<AbortController | null>(null);
 
   const applyAchievementsList = useCallback((raw: unknown) => {
     const list = Array.isArray(raw) ? raw : [];
@@ -161,64 +168,120 @@ const ProfilePage = () => {
     setRecentAchievementsList(sorted.slice(0, 5));
   }, []);
 
-  const loadProfileData = useCallback(async () => {
-    try {
-      const [profileResponse, statsResponse, achievementsResponse] = await Promise.all([
-        fetch("/api/user/profile", { credentials: "same-origin" }),
-        fetch("/api/user/stats", { cache: "no-store", credentials: "same-origin" }),
-        fetch("/api/achievements", { cache: "no-store", credentials: "same-origin" }),
-      ]);
+  const loadProfileData = useCallback(
+    async (opts?: { silent?: boolean }) => {
+      const silent = opts?.silent === true;
+      profileLoadAbortRef.current?.abort();
+      const ac = new AbortController();
+      profileLoadAbortRef.current = ac;
+      const signal = ac.signal;
 
-      if (
-        profileResponse.status === 401 ||
-        statsResponse.status === 401 ||
-        achievementsResponse.status === 401
-      ) {
-        router.push("/login");
-        return;
+      if (!silent) {
+        setProfileLoading(true);
+        setPublicPortfolioError(null);
       }
 
-      if (profileResponse.ok) {
-        const profileData = await profileResponse.json();
-        setUserData({
-          fullName: profileData.fullName || "",
-          email: profileData.email || "",
-          username: profileData.username || "",
-          studentId: profileData.studentId || "",
-          nationalId: profileData.nationalId || "",
-          gender: profileData.gender || "",
-          grade: profileData.grade || "",
-          section: profileData.section || "",
-          phone: profileData.phone || "",
-          guardianName: profileData.guardianName || "",
-          guardianPhone: profileData.guardianPhone || "",
-          avatar: profileData.profilePhoto,
-        });
-      }
+      try {
+        const [profileResponse, statsResponse, achievementsResponse, portfolioResponse] = await Promise.all([
+          fetch("/api/user/profile", { credentials: "same-origin", signal }),
+          fetch("/api/user/stats", { cache: "no-store", credentials: "same-origin", signal }),
+          fetch("/api/achievements", { cache: "no-store", credentials: "same-origin", signal }),
+          fetch("/api/user/public-portfolio", { cache: "no-store", credentials: "same-origin", signal }),
+        ]);
 
-      if (statsResponse.ok) {
-        const statsData = await statsResponse.json();
-        setStats(statsData);
-        if (typeof statsData.totalScore === "number") {
-          setTotalScore(statsData.totalScore);
+        if (
+          profileResponse.status === 401 ||
+          statsResponse.status === 401 ||
+          achievementsResponse.status === 401 ||
+          portfolioResponse.status === 401
+        ) {
+          router.push("/login");
+          return;
         }
-      }
 
-      if (achievementsResponse.ok) {
-        const allAchievements = await achievementsResponse.json();
-        applyAchievementsList(allAchievements);
-      } else {
-        setTotalScore(0);
-        setInsights(emptyInsights());
-        setRecentAchievementsList([]);
+        let resolvedRole = "";
+        if (profileResponse.ok) {
+          const profileData = await profileResponse.json();
+          resolvedRole = String(profileData.role || "");
+          setUserRole(resolvedRole);
+          setUserData({
+            fullName: profileData.fullName || "",
+            email: profileData.email || "",
+            username: profileData.username || "",
+            studentId: profileData.studentId || "",
+            nationalId: profileData.nationalId || "",
+            gender: profileData.gender || "",
+            grade: profileData.grade || "",
+            section: profileData.section || "",
+            phone: profileData.phone || "",
+            guardianName: profileData.guardianName || "",
+            guardianPhone: profileData.guardianPhone || "",
+            avatar: profileData.profilePhoto,
+          });
+        }
+
+        if (statsResponse.ok) {
+          const statsData = await statsResponse.json();
+          setStats(statsData);
+          if (typeof statsData.totalScore === "number") {
+            setTotalScore(statsData.totalScore);
+          }
+        }
+
+        if (achievementsResponse.ok) {
+          const allAchievements = await achievementsResponse.json();
+          applyAchievementsList(allAchievements);
+        } else {
+          setTotalScore(0);
+          setInsights(emptyInsights());
+          setRecentAchievementsList([]);
+        }
+
+        if (resolvedRole !== "student") {
+          setPublicPortfolio(null);
+          setPublicPortfolioError(null);
+        } else if (portfolioResponse.status === 403) {
+          setPublicPortfolio(null);
+          setPublicPortfolioError(null);
+        } else if (portfolioResponse.ok) {
+          const pj = (await portfolioResponse.json()) as UserPublicPortfolioPayload;
+          setPublicPortfolio(pj);
+          if (process.env.NODE_ENV === "development") {
+            console.info("[profile-page] public portfolio payload ready", {
+              enabled: pj.enabled,
+              slug: pj.slug ?? null,
+              hasToken: Boolean(pj.token && String(pj.token).trim()),
+              publicUrl: pj.publicUrl ?? null,
+            });
+          }
+        } else if (!silent) {
+          const j = (await portfolioResponse.json().catch(() => ({}))) as { error?: string };
+          setPublicPortfolioError(
+            typeof j.error === "string"
+              ? j.error
+              : locale === "ar"
+                ? "تعذر تحميل ملف الإنجاز العام"
+                : "Could not load public portfolio"
+          );
+          setPublicPortfolio(null);
+        }
+      } catch (error) {
+        if (error instanceof Error && error.name === "AbortError") return;
+        console.error("Error fetching user data:", error);
+      } finally {
+        if (!silent) setProfileLoading(false);
       }
-    } catch (error) {
-      console.error("Error fetching user data:", error);
-    }
-  }, [applyAchievementsList, router]);
+    },
+    [applyAchievementsList, router, locale]
+  );
+
+  const handlePublicPortfolioRetry = useCallback(() => {
+    void loadProfileData();
+  }, [loadProfileData]);
 
   useEffect(() => {
-    loadProfileData();
+    void loadProfileData();
+    return () => profileLoadAbortRef.current?.abort();
   }, [loadProfileData]);
 
   useEffect(() => {
@@ -228,7 +291,7 @@ const ProfilePage = () => {
   useEffect(() => {
     const handleFocus = () => {
       router.refresh();
-      loadProfileData();
+      void loadProfileData({ silent: true });
     };
     window.addEventListener("focus", handleFocus);
     return () => window.removeEventListener("focus", handleFocus);
@@ -379,6 +442,17 @@ const ProfilePage = () => {
           </div>
         </div>
       </SectionCard>
+
+      {userRole === "student" ? (
+        <div className="mb-6">
+          <StudentPublicPortfolioCard
+            data={publicPortfolio}
+            loading={profileLoading}
+            error={publicPortfolioError}
+            onRetry={handlePublicPortfolioRetry}
+          />
+        </div>
+      ) : null}
 
       {/* Stats Grid */}
       <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">

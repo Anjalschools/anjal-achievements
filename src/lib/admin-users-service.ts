@@ -7,9 +7,17 @@ import { normalizeGrade } from "@/constants/grades";
 import { type AdminManageableRole, isAdminManageableRole } from "@/lib/admin-users-constants";
 import { roleNeedsAcademicFields } from "@/lib/role-academic-fields";
 import { serializeAdminUserRow, type AdminUserListRow } from "@/lib/admin-users-serialize";
+import {
+  buildPublicPortfolioUrl,
+  ensureUniquePublicPortfolioSlug,
+  generatePublicPortfolioSlugBase,
+  generatePublicPortfolioToken,
+} from "@/lib/public-portfolio";
+import { getBaseUrl } from "@/lib/get-base-url";
+import { ensureStudentPublicPortfolioReady } from "@/lib/public-portfolio-bootstrap";
 
 const LIST_FIELDS =
-  "fullName fullNameAr fullNameEn username email role status studentId nationalId phone profilePhoto preferredLanguage gender section grade createdAt updatedAt lastLoginAt";
+  "fullName fullNameAr fullNameEn username email role status studentId nationalId phone profilePhoto preferredLanguage gender section grade createdAt updatedAt lastLoginAt publicPortfolioEnabled publicPortfolioSlug publicPortfolioPublishedAt";
 
 const escapeRx = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
@@ -226,6 +234,10 @@ export const adminCreateUser = async (input: AdminCreateUserInput): Promise<Admi
     preferredLanguage: input.preferredLanguage === "en" ? "en" : "ar",
   });
 
+  if (input.role === "student") {
+    await ensureStudentPublicPortfolioReady(String(doc._id));
+  }
+
   const u = await User.findById(doc._id).select(LIST_FIELDS).lean();
   return serializeAdminUserRow(u as unknown as Record<string, unknown>);
 };
@@ -369,4 +381,181 @@ export const adminDeleteUser = async (id: string, actorId: string): Promise<void
   }
   const r = await User.deleteOne({ _id: id });
   if (r.deletedCount === 0) throw new Error("User not found");
+};
+
+export type AdminPublicPortfolioUpdateInput = {
+  enabled?: boolean;
+  regenerateToken?: boolean;
+  regenerateSlug?: boolean;
+};
+
+export type AdminPublicPortfolioResponse = {
+  publicPortfolioEnabled: boolean;
+  publicPortfolioSlug: string | null;
+  publicPortfolioPublishedAt: string | null;
+  publicPortfolioUrl: string | null;
+  publicPortfolioToken: string | null;
+};
+
+/** Admin-only read of slug/token/url (for management UI). */
+export const getAdminPublicPortfolioState = async (
+  userId: string
+): Promise<AdminPublicPortfolioResponse> => {
+  await connectDB();
+  const roleRow = await User.findById(userId).select("role").lean();
+  if (!roleRow) {
+    return {
+      publicPortfolioEnabled: false,
+      publicPortfolioSlug: null,
+      publicPortfolioPublishedAt: null,
+      publicPortfolioUrl: null,
+      publicPortfolioToken: null,
+    };
+  }
+  if (String((roleRow as { role?: string }).role) !== "student") {
+    return {
+      publicPortfolioEnabled: false,
+      publicPortfolioSlug: null,
+      publicPortfolioPublishedAt: null,
+      publicPortfolioUrl: null,
+      publicPortfolioToken: null,
+    };
+  }
+
+  await ensureStudentPublicPortfolioReady(userId);
+
+  const row = await User.findById(userId)
+    .select("+publicPortfolioToken publicPortfolioEnabled publicPortfolioSlug publicPortfolioPublishedAt")
+    .lean();
+  if (!row) {
+    return {
+      publicPortfolioEnabled: false,
+      publicPortfolioSlug: null,
+      publicPortfolioPublishedAt: null,
+      publicPortfolioUrl: null,
+      publicPortfolioToken: null,
+    };
+  }
+  const r = row as unknown as Record<string, unknown>;
+  const enabled = r.publicPortfolioEnabled === true;
+  const slug =
+    typeof r.publicPortfolioSlug === "string" && r.publicPortfolioSlug.trim()
+      ? r.publicPortfolioSlug.trim().toLowerCase()
+      : "";
+  const tok =
+    typeof r.publicPortfolioToken === "string" && r.publicPortfolioToken.trim()
+      ? r.publicPortfolioToken.trim()
+      : "";
+  const pub =
+    r.publicPortfolioPublishedAt instanceof Date
+      ? r.publicPortfolioPublishedAt.toISOString()
+      : null;
+  const baseUrl = getBaseUrl();
+  const url =
+    enabled && slug && tok ? buildPublicPortfolioUrl({ slug, token: tok, baseUrl }) : null;
+  return {
+    publicPortfolioEnabled: enabled,
+    publicPortfolioSlug: slug || null,
+    publicPortfolioPublishedAt: pub,
+    publicPortfolioUrl: url,
+    publicPortfolioToken: enabled ? tok : null,
+  };
+};
+
+export const adminUpdatePublicPortfolio = async (
+  id: string,
+  input: AdminPublicPortfolioUpdateInput,
+  _actorId: string
+): Promise<AdminPublicPortfolioResponse> => {
+  void _actorId;
+  if (!mongoose.Types.ObjectId.isValid(id)) throw new Error("Invalid user id");
+  await connectDB();
+
+  const u = await User.findById(id)
+    .select(
+      "+publicPortfolioToken role publicPortfolioEnabled publicPortfolioSlug publicPortfolioToken publicPortfolioPublishedAt fullName fullNameAr fullNameEn"
+    )
+    .lean();
+  if (!u) throw new Error("User not found");
+
+  const doc = u as unknown as Record<string, unknown>;
+  if (String(doc.role || "") !== "student") {
+    throw new Error("Public portfolio is only for students");
+  }
+
+  if (input.enabled === false) {
+    const $setDisable: Record<string, unknown> = { publicPortfolioEnabled: false };
+    let slugDisable =
+      typeof doc.publicPortfolioSlug === "string" ? doc.publicPortfolioSlug.trim().toLowerCase() : "";
+    const tokDisable =
+      typeof doc.publicPortfolioToken === "string" ? doc.publicPortfolioToken.trim() : "";
+    if (!slugDisable) {
+      const base = generatePublicPortfolioSlugBase({
+        fullNameEn: typeof doc.fullNameEn === "string" ? doc.fullNameEn : undefined,
+        fullNameAr: typeof doc.fullNameAr === "string" ? doc.fullNameAr : undefined,
+        fullName: typeof doc.fullName === "string" ? doc.fullName : undefined,
+      });
+      slugDisable = await ensureUniquePublicPortfolioSlug(base, id);
+      $setDisable.publicPortfolioSlug = slugDisable;
+    }
+    if (!tokDisable) {
+      $setDisable.publicPortfolioToken = generatePublicPortfolioToken();
+    }
+    if (!doc.publicPortfolioPublishedAt) {
+      $setDisable.publicPortfolioPublishedAt = new Date();
+    }
+    await User.updateOne({ _id: id }, { $set: $setDisable });
+    return getAdminPublicPortfolioState(id);
+  }
+
+  const enabling = input.enabled === true;
+  const wasEnabled = doc.publicPortfolioEnabled === true;
+  const mustStayEnabled = wasEnabled || enabling;
+
+  if ((input.regenerateToken || input.regenerateSlug) && !mustStayEnabled) {
+    throw new Error("Enable the portfolio before regenerating the link");
+  }
+
+  if (
+    !mustStayEnabled &&
+    input.enabled === undefined &&
+    !input.regenerateToken &&
+    !input.regenerateSlug
+  ) {
+    return getAdminPublicPortfolioState(id);
+  }
+
+  const $set: Record<string, unknown> = {};
+  if (mustStayEnabled) {
+    $set.publicPortfolioEnabled = true;
+  }
+  if (enabling && !doc.publicPortfolioPublishedAt) {
+    $set.publicPortfolioPublishedAt = new Date();
+  }
+
+  let slug =
+    typeof doc.publicPortfolioSlug === "string" ? doc.publicPortfolioSlug.trim().toLowerCase() : "";
+  let tok =
+    typeof doc.publicPortfolioToken === "string" ? doc.publicPortfolioToken.trim() : "";
+
+  if (mustStayEnabled && (!slug || input.regenerateSlug)) {
+    const base = generatePublicPortfolioSlugBase({
+      fullNameEn: typeof doc.fullNameEn === "string" ? doc.fullNameEn : undefined,
+      fullNameAr: typeof doc.fullNameAr === "string" ? doc.fullNameAr : undefined,
+      fullName: typeof doc.fullName === "string" ? doc.fullName : undefined,
+    });
+    slug = await ensureUniquePublicPortfolioSlug(base, id);
+    $set.publicPortfolioSlug = slug;
+  }
+
+  if (mustStayEnabled && (!tok || input.regenerateToken)) {
+    tok = generatePublicPortfolioToken();
+    $set.publicPortfolioToken = tok;
+  }
+
+  if (Object.keys($set).length > 0) {
+    await User.updateOne({ _id: id }, { $set });
+  }
+
+  return getAdminPublicPortfolioState(id);
 };

@@ -26,6 +26,11 @@ export interface IUser extends Document {
   preferredLanguage: "ar" | "en";
   /** Set on successful login (optional for legacy rows). */
   lastLoginAt?: Date;
+  /** Public achievement portfolio (slug + secret token). */
+  publicPortfolioEnabled?: boolean;
+  publicPortfolioSlug?: string;
+  publicPortfolioToken?: string;
+  publicPortfolioPublishedAt?: Date;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -143,11 +148,34 @@ const UserSchema: Schema = new Schema(
       type: Date,
       required: false,
     },
+    publicPortfolioEnabled: {
+      type: Boolean,
+      default: true,
+      index: true,
+    },
+    publicPortfolioSlug: {
+      type: String,
+      trim: true,
+      lowercase: true,
+      sparse: true,
+      unique: true,
+      index: true,
+    },
+    publicPortfolioToken: {
+      type: String,
+      trim: true,
+      select: false,
+    },
+    publicPortfolioPublishedAt: {
+      type: Date,
+    },
   },
   {
     timestamps: true,
   }
 );
+
+UserSchema.index({ publicPortfolioEnabled: 1, publicPortfolioSlug: 1 });
 
 const User: Model<IUser> =
   mongoose.models.User || mongoose.model<IUser>("User", UserSchema);

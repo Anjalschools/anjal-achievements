@@ -1,19 +1,48 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import PageContainer from "@/components/layout/PageContainer";
 import PageHeader from "@/components/layout/PageHeader";
 import AchievementForm from "@/components/achievements/AchievementForm";
+import AdminAchievementIdentitySection, {
+  type AdminAchievementIdentityState,
+  type AdminIdentitySearchHit,
+} from "@/components/achievements/AdminAchievementIdentitySection";
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { getLocale } from "@/lib/i18n";
 import { getTranslation } from "@/locales";
+import { buildAchievementFormSubmitPayload } from "@/lib/achievement-form-submit-payload";
 
-const AchievementFormPage = () => {
+export type AchievementFormPageVariant = "student" | "admin";
+
+type AchievementFormPageProps = {
+  variant?: AchievementFormPageVariant;
+};
+
+const defaultAdminIdentity = (): AdminAchievementIdentityState => ({
+  inputMode: "linked",
+  q: "",
+  hits: [] as AdminIdentitySearchHit[],
+  linkedUserId: "",
+  linkedLabel: "",
+  snapshotFullNameAr: "",
+  snapshotFullNameEn: "",
+  snapshotGender: "male",
+  snapshotGrade: "g12",
+  snapshotSection: "arabic",
+  externalStudentKind: "external_student",
+  snapshotStudentStatus: "current",
+  adminStatus: "pending_review",
+  showInPublicPortfolio: true,
+  showInHallOfFame: true,
+});
+
+const AchievementFormPage = ({ variant = "student" }: AchievementFormPageProps) => {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const editId = searchParams?.get("edit");
+  const editId = variant === "admin" ? null : searchParams?.get("edit");
   const isEdit = Boolean(editId);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoadingEditData, setIsLoadingEditData] = useState(false);
@@ -22,7 +51,27 @@ const AchievementFormPage = () => {
   const [success, setSuccess] = useState(false);
   const saveErrorRef = useRef<HTMLDivElement | null>(null);
   const locale = getLocale();
+  const isAr = locale === "ar";
   getTranslation(locale);
+
+  const [adminIdentity, setAdminIdentity] = useState<AdminAchievementIdentityState>(defaultAdminIdentity);
+
+  const runStudentSearch = useCallback(async (q: string) => {
+    if (q.trim().length < 2) {
+      setAdminIdentity((s) => ({ ...s, hits: [] }));
+      return;
+    }
+    const res = await fetch(`/api/admin/students/search?q=${encodeURIComponent(q)}`, { cache: "no-store" });
+    const data = (await res.json()) as { items?: AdminIdentitySearchHit[] };
+    setAdminIdentity((s) => ({ ...s, hits: data.items || [] }));
+  }, []);
+
+  useEffect(() => {
+    if (variant !== "admin") return;
+    const q = adminIdentity.q;
+    const t = window.setTimeout(() => void runStudentSearch(q), 300);
+    return () => window.clearTimeout(t);
+  }, [variant, adminIdentity.q, runStudentSearch]);
 
   useEffect(() => {
     if (!error) return;
@@ -46,167 +95,89 @@ const AchievementFormPage = () => {
         }
         const data = await response.json();
         setInitialData(data);
-      } catch (err: any) {
-        setError(err?.message || (locale === "ar" ? "تعذر تحميل بيانات الإنجاز للتعديل" : "Failed to load achievement for editing"));
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : "";
+        setError(
+          msg ||
+            (locale === "ar" ? "تعذر تحميل بيانات الإنجاز للتعديل" : "Failed to load achievement for editing")
+        );
       } finally {
         setIsLoadingEditData(false);
       }
     };
-    fetchForEdit();
+    void fetchForEdit();
   }, [editId, locale]);
 
-  const handleSubmit = async (data: any) => {
+  const handleSubmit = async (data: Record<string, unknown>) => {
     setIsSubmitting(true);
     setError(null);
     setSuccess(false);
 
     try {
-      let imageBase64: string | undefined = undefined;
-      if (data.image instanceof File) {
-        imageBase64 = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onloadend = () => {
-            if (typeof reader.result === "string") {
-              resolve(reader.result);
-            } else {
-              reject(new Error("Failed to convert image to base64"));
-            }
-          };
-          reader.onerror = reject;
-          reader.readAsDataURL(data.image);
-        });
-      } else if (typeof data.image === "string") {
-        imageBase64 = data.image;
-      }
+      const payload = await buildAchievementFormSubmitPayload(data);
 
-      const attachmentsBase64: string[] = [];
-      if (data.attachments && Array.isArray(data.attachments)) {
-        for (const file of data.attachments) {
-          if (file instanceof File) {
-            const base64 = await new Promise<string>((resolve, reject) => {
-              const reader = new FileReader();
-              reader.onloadend = () => {
-                if (typeof reader.result === "string") {
-                  resolve(reader.result);
-                } else {
-                  reject(new Error("Failed to convert attachment to base64"));
-                }
-              };
-              reader.onerror = reject;
-              reader.readAsDataURL(file);
-            });
-            attachmentsBase64.push(base64);
-          } else if (typeof file === "string") {
-            attachmentsBase64.push(file);
+      if (variant === "admin") {
+        if (adminIdentity.inputMode === "linked" && !adminIdentity.linkedUserId.trim()) {
+          throw new Error(
+            isAr ? "يجب اختيار الطالب المسجل قبل الحفظ." : "Select a registered student before saving."
+          );
+        }
+        if (adminIdentity.inputMode === "external") {
+          const ar = adminIdentity.snapshotFullNameAr.trim();
+          const en = adminIdentity.snapshotFullNameEn.trim();
+          if (!ar && !en) {
+            throw new Error(isAr ? "أدخل اسم الطالب بالعربية أو الإنجليزية." : "Enter student name in Arabic or English.");
           }
         }
-      }
 
-      let actualAchievementName: string | undefined = undefined;
-      if (data.achievementName && data.achievementName !== "other") {
-        actualAchievementName = data.achievementName;
-      } else if (data.customAchievementName) {
-        actualAchievementName = data.customAchievementName;
-      } else if (data.nameAr || data.nameEn) {
-        actualAchievementName = data.nameAr || data.nameEn;
-      } else if (data.achievementType === "gifted_discovery") {
-        actualAchievementName = "exceptional_gifted";
-      }
+        const basePayload = { ...payload } as Record<string, unknown>;
+        delete basePayload.userId;
+        delete basePayload.linkedUserId;
 
-      const payload: any = {
-        achievementType: data.achievementType,
-        achievementCategory: data.achievementCategory || data.achievementType || "competition",
-        achievementClassification: data.achievementClassification,
-        achievementLevel: data.achievementLevel,
-        participationType: data.participationType,
-        resultType: data.resultType,
-        resultValue: data.resultValue,
-        nameAr: data.nameAr || actualAchievementName || "",
-        nameEn: data.nameEn || actualAchievementName || "",
-        achievementYear: data.achievementYear || new Date().getFullYear(),
-        achievementDate: data.achievementDate,
-        featured: data.featured || false,
-        evidenceRequiredMode: data.evidenceRequiredMode || "provided",
-      };
+        const manualBody: Record<string, unknown> = {
+          ...basePayload,
+          inputMode: adminIdentity.inputMode,
+          externalStudentKind: adminIdentity.externalStudentKind,
+          snapshotFullNameAr: adminIdentity.snapshotFullNameAr.trim(),
+          snapshotFullNameEn: adminIdentity.snapshotFullNameEn.trim(),
+          snapshotGender: adminIdentity.snapshotGender,
+          snapshotGrade: adminIdentity.snapshotGrade,
+          snapshotSection: adminIdentity.snapshotSection,
+          snapshotStudentStatus: adminIdentity.snapshotStudentStatus,
+          adminStatus: adminIdentity.adminStatus,
+          showInHallOfFame: adminIdentity.showInHallOfFame,
+          showInPublicPortfolio: adminIdentity.showInPublicPortfolio,
+          requiresCommitteeReview: payload.evidenceRequiredMode === "skipped",
+        };
 
-      if (data.inferredField && String(data.inferredField).trim()) {
-        payload.inferredField = String(data.inferredField).trim();
-      }
-
-      if (actualAchievementName) {
-        if (data.achievementName && data.achievementName !== "other") {
-          payload.achievementName = data.achievementName;
-        } else if (data.customAchievementName) {
-          payload.customAchievementName = data.customAchievementName;
+        if (adminIdentity.inputMode === "linked") {
+          manualBody.linkedUserId = adminIdentity.linkedUserId.trim();
         }
-      }
 
-      if (data.medalType) payload.medalType = data.medalType;
-      if (data.rank) payload.rank = data.rank;
-      if (data.nominationText) payload.nominationText = data.nominationText;
-      if (data.specialAwardText) payload.specialAwardText = data.specialAwardText;
-      if (data.recognitionText) payload.recognitionText = data.recognitionText;
-      if (data.otherResultText) payload.otherResultText = data.otherResultText;
+        const response = await fetch("/api/admin/achievements/manual", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(manualBody),
+        });
+        const responseData = (await response.json()) as Record<string, unknown>;
 
-      if (data.participationType === "team" && data.teamRole) {
-        payload.teamRole = data.teamRole;
-      }
-
-      if (data.achievementType === "program") {
-        if (data.programName && data.programName !== "other") {
-          payload.programName = data.programName;
-        } else if (data.customProgramName) {
-          payload.customProgramName = data.customProgramName;
+        if (!response.ok) {
+          if (responseData.errors) {
+            const errorMessages = Array.isArray(responseData.errors)
+              ? responseData.errors.join(", ")
+              : Object.values(responseData.errors as Record<string, string>).join(", ");
+            throw new Error(errorMessages);
+          }
+          throw new Error(String(responseData.error || "Failed to save achievement"));
         }
-      }
 
-      if (data.achievementType === "competition") {
-        if (data.competitionName && data.competitionName !== "other") {
-          payload.competitionName = data.competitionName;
-        } else if (data.customCompetitionName) {
-          payload.customCompetitionName = data.customCompetitionName;
-        }
+        setSuccess(true);
+        setTimeout(() => {
+          router.refresh();
+          router.push("/admin/achievements/review");
+        }, 1500);
+        return;
       }
-
-      if (data.achievementType === "exhibition") {
-        if (data.exhibitionName && data.exhibitionName !== "other") {
-          payload.exhibitionName = data.exhibitionName;
-        } else if (data.customExhibitionName) {
-          payload.customExhibitionName = data.customExhibitionName;
-        }
-      }
-
-      if (data.achievementType === "olympiad") {
-        if (data.olympiadMeeting) payload.olympiadMeeting = data.olympiadMeeting;
-        if (data.olympiadField) payload.olympiadField = data.olympiadField;
-      }
-
-      if (data.achievementType === "excellence_program") {
-        if (data.excellenceProgramName && data.excellenceProgramName !== "other") {
-          payload.excellenceProgramName = data.excellenceProgramName;
-        } else if (data.customExcellenceProgramName) {
-          payload.customExcellenceProgramName = data.customExcellenceProgramName;
-        }
-      }
-
-      if (data.achievementType === "qudrat" && data.qudratScore) {
-        payload.qudratScore = data.qudratScore;
-      }
-
-      if (data.achievementType === "mawhiba_annual") {
-        if (data.mawhibaAnnualRank) payload.mawhibaAnnualRank = data.mawhibaAnnualRank;
-        if (data.mawhibaAnnualSubject) payload.mawhibaAnnualSubject = data.mawhibaAnnualSubject;
-      }
-
-      if (data.achievementType === "gifted_discovery" && data.giftedDiscoveryScore) {
-        payload.giftedDiscoveryScore = data.giftedDiscoveryScore;
-      }
-
-      if (data.description) payload.description = data.description;
-      if (imageBase64) payload.image = imageBase64;
-      if (attachmentsBase64.length > 0) payload.attachments = attachmentsBase64;
-      if (data.evidenceUrl) payload.evidenceUrl = data.evidenceUrl;
-      if (data.evidenceFileName) payload.evidenceFileName = data.evidenceFileName;
 
       const endpoint = isEdit && editId ? `/api/achievements/${editId}` : "/api/achievements";
       const method = isEdit ? "PUT" : "POST";
@@ -248,38 +219,55 @@ const AchievementFormPage = () => {
         router.refresh();
         router.push("/achievements");
       }, 1500);
-    } catch (error: any) {
-      console.error("Error saving achievement:", error);
-      setError(error.message || (locale === "ar" ? "حدث خطأ أثناء حفظ الإنجاز" : "Error saving achievement"));
+    } catch (err: unknown) {
+      console.error("Error saving achievement:", err);
+      setError(
+        err instanceof Error
+          ? err.message
+          : locale === "ar"
+            ? "حدث خطأ أثناء حفظ الإنجاز"
+            : "Error saving achievement"
+      );
     } finally {
       setIsSubmitting(false);
     }
   };
 
+  const cancelHref = variant === "admin" ? "/admin/dashboard" : "/achievements";
+  const isAdmin = variant === "admin";
+
   return (
     <PageContainer>
       <PageHeader
         title={
-          isEdit
-            ? locale === "ar"
-              ? "تعديل إنجاز"
-              : "Edit Achievement"
-            : locale === "ar"
-              ? "إضافة إنجاز جديد"
-              : "Add New Achievement"
+          isAdmin
+            ? isAr
+              ? "إضافة إنجاز (إداري)"
+              : "Add achievement (admin)"
+            : isEdit
+              ? isAr
+                ? "تعديل إنجاز"
+                : "Edit Achievement"
+              : isAr
+                ? "إضافة إنجاز جديد"
+                : "Add New Achievement"
         }
         subtitle={
-          locale === "ar"
-            ? "شارك إنجازك مع المجتمع التعليمي"
-            : "Share your achievement with the educational community"
+          isAdmin
+            ? isAr
+              ? "نفس نموذج الطالب مع بيانات تعريف الطالب أعلاه."
+              : "Same form as students, with student identity at the top."
+            : isAr
+              ? "شارك إنجازك مع المجتمع التعليمي"
+              : "Share your achievement with the educational community"
         }
         actions={
           <Link
-            href="/achievements"
+            href={cancelHref}
             className="inline-flex items-center gap-2 rounded-xl border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-text transition-colors hover:bg-gray-50"
           >
             <ArrowLeft className="h-4 w-4" />
-            <span>{locale === "ar" ? "إلغاء" : "Cancel"}</span>
+            <span>{isAr ? "إلغاء" : "Cancel"}</span>
           </Link>
         }
       />
@@ -287,16 +275,20 @@ const AchievementFormPage = () => {
       {success && (
         <div className="mb-4 rounded-lg border border-green-200 bg-green-50 p-4 text-green-800">
           <p className="font-medium">
-            {isEdit
-              ? locale === "ar"
-                ? "تم تحديث الإنجاز بنجاح!"
-                : "Achievement updated successfully!"
-              : locale === "ar"
-                ? "تم إنشاء الإنجاز بنجاح!"
-                : "Achievement created successfully!"}
+            {isAdmin
+              ? isAr
+                ? "تم حفظ الإنجاز الإداري بنجاح!"
+                : "Admin achievement saved successfully!"
+              : isEdit
+                ? isAr
+                  ? "تم تحديث الإنجاز بنجاح!"
+                  : "Achievement updated successfully!"
+                : isAr
+                  ? "تم إنشاء الإنجاز بنجاح!"
+                  : "Achievement created successfully!"}
           </p>
           <p className="mt-1 text-sm">
-            {locale === "ar" ? "جاري إعادة التوجيه..." : "Redirecting..."}
+            {isAr ? "جاري إعادة التوجيه..." : "Redirecting..."}
           </p>
         </div>
       )}
@@ -311,7 +303,7 @@ const AchievementFormPage = () => {
           className="mb-4 rounded-xl border-2 border-red-500 bg-red-50 p-4 text-red-900 shadow-sm outline-none ring-2 ring-red-200"
         >
           <p className="font-bold">
-            {locale === "ar" ? "تعذّر حفظ الإنجاز" : "Could not save the achievement"}
+            {isAr ? "تعذّر حفظ الإنجاز" : "Could not save the achievement"}
           </p>
           <p className="mt-2 whitespace-pre-line text-sm font-medium">{error}</p>
         </div>
@@ -319,15 +311,20 @@ const AchievementFormPage = () => {
 
       {isLoadingEditData ? (
         <div className="rounded-xl border border-gray-200 bg-white p-6 text-center text-sm text-text-light">
-          {locale === "ar" ? "جاري تحميل بيانات الإنجاز..." : "Loading achievement data..."}
+          {isAr ? "جاري تحميل بيانات الإنجاز..." : "Loading achievement data..."}
         </div>
       ) : (
-        <AchievementForm
-          onSubmit={handleSubmit}
-          isSubmitting={isSubmitting}
-          initialData={initialData || undefined}
-          userRole="student"
-        />
+        <div className="space-y-6">
+          {isAdmin ? (
+            <AdminAchievementIdentitySection isAr={isAr} state={adminIdentity} setState={setAdminIdentity} />
+          ) : null}
+          <AchievementForm
+            onSubmit={handleSubmit}
+            isSubmitting={isSubmitting}
+            initialData={initialData || undefined}
+            userRole="student"
+          />
+        </div>
       )}
     </PageContainer>
   );

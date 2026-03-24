@@ -1,8 +1,33 @@
 import mongoose, { Schema, Document, Model } from "mongoose";
 import type { AchievementAttachmentStored } from "@/lib/achievement-attachments";
 
+export type StudentSnapshotStatus = "current" | "alumni" | "external";
+
 export interface IAchievement extends Document {
-  userId: mongoose.Types.ObjectId;
+  /** Required when studentSourceType is linked_user or omitted (legacy). */
+  userId?: mongoose.Types.ObjectId;
+  /** Defaults to linked_user for legacy rows. */
+  studentSourceType?: "linked_user" | "external_student" | "alumni_student";
+  /** Stable key to group external/alumni achievements for the same person. */
+  studentProfileKey?: mongoose.Types.ObjectId;
+  studentSnapshot?: {
+    fullNameAr?: string;
+    fullNameEn?: string;
+    gender?: string;
+    grade?: string;
+    section?: string;
+    track?: string;
+    stage?: string;
+    status?: StudentSnapshotStatus;
+  };
+  submittedByRole?: "student" | "admin" | "bulk_import";
+  submittedByAdminId?: mongoose.Types.ObjectId;
+  /** When false, excluded from public Hall of Fame lists. */
+  showInHallOfFame?: boolean;
+  /** When false, excluded from public student portfolio. */
+  showInPublicPortfolio?: boolean;
+  /** When true, do not auto-enable `showInPublicPortfolio` on approve/feature (admin opted out). */
+  publicPortfolioSuppressedByAdmin?: boolean;
   
   // Basic Info
   achievementType: string;
@@ -171,10 +196,25 @@ const AchievementSchema: Schema = new Schema(
     userId: {
       type: Schema.Types.ObjectId,
       ref: "User",
-      required: true,
+      /** Presence enforced in pre("validate") when `studentSourceType` is linked (or omitted legacy). */
+      required: false,
+      index: true,
+      sparse: true,
+    },
+    studentSourceType: {
+      type: String,
+      enum: ["linked_user", "external_student", "alumni_student"],
       index: true,
     },
-    
+    studentProfileKey: {
+      type: Schema.Types.ObjectId,
+      index: true,
+      sparse: true,
+    },
+    studentSnapshot: {
+      type: Schema.Types.Mixed,
+    },
+
     // Basic Info
     achievementType: {
       type: String,
@@ -587,11 +627,49 @@ const AchievementSchema: Schema = new Schema(
     adminDuplicateMarked: { type: Boolean, default: false, index: true },
     adminWorkflowNote: { type: String, trim: true, maxlength: 4000 },
     workflowState: { type: Schema.Types.Mixed, default: undefined },
+    showInHallOfFame: {
+      type: Boolean,
+      default: true,
+      index: true,
+    },
+    showInPublicPortfolio: {
+      type: Boolean,
+      default: true,
+      index: true,
+    },
+    publicPortfolioSuppressedByAdmin: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
   },
   {
     timestamps: true,
   }
 );
+
+AchievementSchema.pre("validate", function preAchievementIdentity() {
+  const doc = this as mongoose.Document & {
+    studentSourceType?: string;
+    userId?: mongoose.Types.ObjectId;
+    studentProfileKey?: mongoose.Types.ObjectId;
+    studentSnapshot?: { fullNameAr?: string; fullNameEn?: string };
+  };
+  const st = doc.studentSourceType || "linked_user";
+  if (st === "linked_user") {
+    if (!doc.userId) {
+      throw new Error("userId is required for linked_user achievements");
+    }
+  } else {
+    if (!doc.studentProfileKey) {
+      throw new Error("studentProfileKey is required for external/alumni achievements");
+    }
+    const snap = doc.studentSnapshot || {};
+    if (!String(snap.fullNameAr || "").trim() && !String(snap.fullNameEn || "").trim()) {
+      throw new Error("studentSnapshot must include fullNameAr or fullNameEn");
+    }
+  }
+});
 
 AchievementSchema.pre("save", async function preAchievementWorkflow() {
   const doc = this as mongoose.Document & {
@@ -644,6 +722,7 @@ AchievementSchema.pre("save", async function preAchievementWorkflow() {
 AchievementSchema.index({ userId: 1, createdAt: -1 });
 AchievementSchema.index({ featured: 1, approved: 1 });
 AchievementSchema.index({ status: 1, isFeatured: 1, createdAt: -1 });
+AchievementSchema.index({ userId: 1, status: 1, showInPublicPortfolio: 1 });
 
 const Achievement: Model<IAchievement> =
   mongoose.models.Achievement ||

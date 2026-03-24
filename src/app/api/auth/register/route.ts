@@ -4,6 +4,7 @@ import User from "@/models/User";
 import UserConsent from "@/models/UserConsent";
 import bcrypt from "bcryptjs";
 import { normalizeGrade } from "@/constants/grades";
+import { ensureStudentPublicPortfolioReady } from "@/lib/public-portfolio-bootstrap";
 
 export async function POST(request: NextRequest) {
   try {
@@ -165,6 +166,8 @@ export async function POST(request: NextRequest) {
       status: "active",
       preferredLanguage: preferredLanguage === "en" ? "en" : "ar",
     });
+
+    await ensureStudentPublicPortfolioReady(user._id.toString());
 
     // Create consent record
     await UserConsent.create({

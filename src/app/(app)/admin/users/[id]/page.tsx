@@ -63,6 +63,9 @@ const AdminUserEditPage = () => {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [portfolioBusy, setPortfolioBusy] = useState(false);
+  const [portfolioUrl, setPortfolioUrl] = useState<string | null>(null);
+  const [portfolioToken, setPortfolioToken] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -114,6 +117,25 @@ const AdminUserEditPage = () => {
       setGrade(u.grade);
       setProfilePhoto(u.profilePhoto || "");
       setPreferredLanguage(u.preferredLanguage);
+      if (u.role === "student") {
+        try {
+          const pr = await fetch(`/api/admin/users/${id}/public-portfolio`, { cache: "no-store" });
+          if (pr.ok) {
+            const pj = (await pr.json()) as Record<string, unknown>;
+            setPortfolioUrl(typeof pj.publicPortfolioUrl === "string" ? pj.publicPortfolioUrl : null);
+            setPortfolioToken(typeof pj.publicPortfolioToken === "string" ? pj.publicPortfolioToken : null);
+          } else {
+            setPortfolioUrl(null);
+            setPortfolioToken(null);
+          }
+        } catch {
+          setPortfolioUrl(null);
+          setPortfolioToken(null);
+        }
+      } else {
+        setPortfolioUrl(null);
+        setPortfolioToken(null);
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error");
     } finally {
@@ -160,6 +182,56 @@ const AdminUserEditPage = () => {
       setError(err instanceof Error ? err.message : "Error");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const patchPublicPortfolio = async (body: Record<string, unknown>) => {
+    if (!id) return;
+    setPortfolioBusy(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/admin/users/${id}/public-portfolio`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const j = (await res.json()) as Record<string, unknown>;
+      if (!res.ok) throw new Error(typeof j.error === "string" ? j.error : "Failed");
+      const url = typeof j.publicPortfolioUrl === "string" ? j.publicPortfolioUrl : null;
+      const tok = typeof j.publicPortfolioToken === "string" ? j.publicPortfolioToken : null;
+      setPortfolioUrl(url);
+      setPortfolioToken(tok);
+      setUser((prev) =>
+        prev
+          ? {
+              ...prev,
+              publicPortfolioEnabled: j.publicPortfolioEnabled === true,
+              publicPortfolioSlug:
+                typeof j.publicPortfolioSlug === "string" ? j.publicPortfolioSlug : prev.publicPortfolioSlug,
+              publicPortfolioPublishedAt:
+                typeof j.publicPortfolioPublishedAt === "string"
+                  ? j.publicPortfolioPublishedAt
+                  : prev.publicPortfolioPublishedAt ?? null,
+            }
+          : prev
+      );
+      setToast(isAr ? "تم تحديث ملف الإنجاز العام" : "Public portfolio updated");
+      setTimeout(() => setToast(null), 2500);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Error");
+    } finally {
+      setPortfolioBusy(false);
+    }
+  };
+
+  const handleCopyPortfolioUrl = async () => {
+    if (!portfolioUrl) return;
+    try {
+      await navigator.clipboard.writeText(portfolioUrl);
+      setToast(isAr ? "تم نسخ الرابط" : "Link copied");
+      setTimeout(() => setToast(null), 2000);
+    } catch {
+      setError(isAr ? "تعذر النسخ" : "Copy failed");
     }
   };
 
@@ -304,6 +376,131 @@ const AdminUserEditPage = () => {
             </p>
           ) : null}
         </section>
+
+        {user.role === "student" ? (
+          <section className="rounded-2xl border border-sky-200/80 bg-sky-50/40 p-4 text-sm shadow-sm">
+            <h3 className="text-base font-bold text-slate-900">
+              {isAr ? "ملف الإنجاز العام (رابط خارجي)" : "Public achievement portfolio"}
+            </h3>
+            <p className="mt-2 text-xs text-slate-600">
+              {isAr
+                ? "مفعّل افتراضيًا لجميع الطلاب ويعرض إنجازاته المعتمدة المنشورة. يمكن للإدارة إيقاف نشر الرابط العام عند الحاجة فقط."
+                : "Enabled by default for all students; shows approved published achievements. Admins may stop public publishing when needed."}
+            </p>
+            <div className="mt-3 space-y-2 rounded-xl border border-white/70 bg-white/60 px-3 py-2">
+              <p className="text-xs font-bold text-slate-800">
+                {isAr ? "التحكم في النشر العام" : "Public publishing control"}
+              </p>
+              <p className="text-[11px] text-slate-600">
+                {isAr
+                  ? "لا يُطلب «موافقة» لأول مرة — الملف جاهز تلقائيًا. استخدم الأزرار أدناه لإيقاف النشر أو إعادته أو تحديث الرابط."
+                  : "No first-time approval needed — the link is ready by default. Use the actions below to stop publishing, resume it, or rotate the link."}
+              </p>
+            </div>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <span className="text-xs font-semibold text-slate-700">
+                {isAr ? "حالة النشر: " : "Publishing: "}
+                {user.publicPortfolioEnabled ? (
+                  <span className="text-emerald-700">{isAr ? "النشر مفعّل" : "Publishing on"}</span>
+                ) : (
+                  <span className="text-slate-600">{isAr ? "النشر موقوف من الإدارة" : "Publishing off (admin)"}</span>
+                )}
+              </span>
+              <span className="text-xs text-slate-500">·</span>
+              <span className="text-xs font-semibold text-slate-700">
+                {isAr ? "الرابط متاح الآن: " : "Link available: "}
+                {user.publicPortfolioEnabled && portfolioUrl ? (
+                  <span className="text-emerald-700">{isAr ? "نعم" : "Yes"}</span>
+                ) : (
+                  <span className="text-amber-800">{isAr ? "لا" : "No"}</span>
+                )}
+              </span>
+              {user.publicPortfolioPublishedAt ? (
+                <>
+                  <span className="text-xs text-slate-500">·</span>
+                  <span className="text-[11px] text-slate-600">
+                    {isAr ? "آخر تفعيل للنشر: " : "Last enabled: "}
+                    {fmtDateTime(user.publicPortfolioPublishedAt, isAr)}
+                  </span>
+                </>
+              ) : null}
+              {user.publicPortfolioSlug ? (
+                <span className="block w-full font-mono text-[11px] text-slate-600 md:inline md:w-auto" dir="ltr">
+                  /portfolio/{user.publicPortfolioSlug}
+                </span>
+              ) : null}
+            </div>
+            {portfolioUrl ? (
+              <div className="mt-3 rounded-xl border border-white/80 bg-white/90 p-3">
+                <p className="text-[10px] font-bold text-slate-500">{isAr ? "الرابط الكامل" : "Full URL"}</p>
+                <p className="mt-1 break-all font-mono text-[11px] text-slate-800" dir="ltr">
+                  {portfolioUrl}
+                </p>
+                {portfolioToken ? (
+                  <p className="mt-2 text-[10px] text-amber-800">
+                    {isAr
+                      ? "احفظ الرمز السري في مكان آمن — يُعرض هنا بعد التفعيل أو إعادة التوليد فقط."
+                      : "Store the secret token safely — it is only shown here after enable or regenerate."}
+                  </p>
+                ) : null}
+              </div>
+            ) : user.publicPortfolioEnabled ? (
+              <p className="mt-2 text-xs text-amber-800">
+                {isAr
+                  ? "الملف مفعّل لكن لا يوجد رابط في هذه الجلسة. استخدم «إعادة توليد الرمز» لإظهار الرابط هنا."
+                  : "Portfolio is enabled but this session has no link. Use “Regenerate token” to reveal the URL here."}
+              </p>
+            ) : null}
+            <div className="mt-4 flex flex-wrap gap-2">
+              <button
+                type="button"
+                disabled={portfolioBusy}
+                onClick={() => void patchPublicPortfolio({ enabled: !user.publicPortfolioEnabled })}
+                className="rounded-xl bg-[#0a2744] px-4 py-2 text-xs font-bold text-white disabled:opacity-50"
+              >
+                {user.publicPortfolioEnabled
+                  ? isAr
+                    ? "إيقاف نشر الملف بالكامل"
+                    : "Disable publishing"
+                  : isAr
+                    ? "إعادة تفعيل نشر الملف"
+                    : "Resume publishing"}
+              </button>
+              <button
+                type="button"
+                disabled={portfolioBusy || !user.publicPortfolioEnabled}
+                onClick={() => void patchPublicPortfolio({ regenerateToken: true })}
+                className="rounded-xl border border-sky-300 bg-white px-4 py-2 text-xs font-bold text-sky-900 disabled:opacity-40"
+              >
+                {isAr ? "إعادة توليد الرمز" : "Regenerate token"}
+              </button>
+              <button
+                type="button"
+                disabled={portfolioBusy || !user.publicPortfolioEnabled}
+                onClick={() => void patchPublicPortfolio({ regenerateSlug: true })}
+                className="rounded-xl border border-sky-300 bg-white px-4 py-2 text-xs font-bold text-sky-900 disabled:opacity-40"
+              >
+                {isAr ? "إعادة توليد المسار (slug)" : "Regenerate slug"}
+              </button>
+              <button
+                type="button"
+                disabled={!portfolioUrl || portfolioBusy}
+                onClick={() => void handleCopyPortfolioUrl()}
+                className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-xs font-bold text-gray-800 disabled:opacity-40"
+              >
+                {isAr ? "نسخ الرابط" : "Copy link"}
+              </button>
+              <button
+                type="button"
+                disabled={!portfolioUrl || portfolioBusy}
+                onClick={() => portfolioUrl && window.open(portfolioUrl, "_blank", "noopener,noreferrer")}
+                className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-xs font-bold text-gray-800 disabled:opacity-40"
+              >
+                {isAr ? "فتح الصفحة" : "Open page"}
+              </button>
+            </div>
+          </section>
+        ) : null}
 
         <form onSubmit={handleSave} className="space-y-4 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm md:p-6">
           <div className="grid gap-4 sm:grid-cols-2">

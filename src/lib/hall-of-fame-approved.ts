@@ -22,5 +22,8 @@ export const hallOfFameApprovedAchievementFilter = (): Record<string, unknown> =
       ],
     },
     { status: { $ne: "rejected" } },
+    {
+      $or: [{ showInHallOfFame: { $ne: false } }, { showInHallOfFame: { $exists: false } }],
+    },
   ],
 });
