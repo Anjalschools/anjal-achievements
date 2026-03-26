@@ -24,6 +24,7 @@ import {
   Share2,
   LayoutGrid,
   ListOrdered,
+  PanelsTopLeft,
   type LucideIcon,
   MessagesSquare,
 } from "lucide-react";
@@ -135,6 +136,11 @@ const AppSidebar = () => {
     icon: MessagesSquare,
     label: locale === "ar" ? "رسائل التواصل" : "Contact messages",
   };
+  const homeHighlightsItem = {
+    href: "/admin/home-highlights",
+    icon: PanelsTopLeft,
+    label: locale === "ar" ? "إبرازات الصفحة الرئيسية" : "Home highlights",
+  };
   const notificationsItem = {
     href: "/notifications",
     icon: Bell,
@@ -170,6 +176,7 @@ const AppSidebar = () => {
     { ...usersItem, capability: "userManagement" },
     { ...reportsItem, capability: "reports" },
     { ...leaderboardItem, capability: "reviewAchievements" },
+    { ...homeHighlightsItem, capability: "contactMessages" },
     { ...analyticsItem, capability: "advancedAnalytics" },
     { ...hallOfFameItem, capability: "viewAchievements" },
     { ...achievementsItem, capability: "viewAchievements" },
@@ -244,6 +251,9 @@ const AppSidebar = () => {
     }
     if (href === "/admin/contact-messages") {
       return pathname === "/admin/contact-messages" || pathname?.startsWith("/admin/contact-messages/");
+    }
+    if (href === "/admin/home-highlights") {
+      return pathname === "/admin/home-highlights" || pathname?.startsWith("/admin/home-highlights/");
     }
     if (href === "/hall-of-fame") {
       return pathname === "/hall-of-fame";

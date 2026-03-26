@@ -268,6 +268,7 @@ export const ADMIN_ROUTE_REQUIRED_CAPABILITY: Array<{
   { prefix: "/admin/leaderboard", capability: "reviewAchievements" },
   { prefix: "/admin/achievements/review", capability: "reviewAchievements" },
   { prefix: "/admin/school-years", capability: "schoolYearsAdmin" },
+  { prefix: "/admin/home-highlights", capability: "contactMessages" },
   { prefix: "/admin/contact-messages", capability: "contactMessages" },
   /** Any other /admin/* screen requires at least staff (prevents students from loading admin shell). */
   { prefix: "/admin", capability: "staffArea" },

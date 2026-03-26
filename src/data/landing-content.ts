@@ -86,6 +86,115 @@ export const recognitions: Recognition[] = [
   ...competitions,
 ];
 
+export type ParticipationCategoryKey =
+  | "all"
+  | "national_achievement"
+  | "global_achievement"
+  | "exhibition"
+  | "competition";
+
+export type ParticipationFilter = {
+  id: ParticipationCategoryKey;
+  labelAr: string;
+  labelEn: string;
+};
+
+export type ParticipationHighlight = {
+  id: string;
+  titleAr: string;
+  titleEn: string;
+  descriptionAr: string;
+  descriptionEn: string;
+  image: string;
+  category: Exclude<ParticipationCategoryKey, "all">;
+  badgeAr: string;
+  badgeEn: string;
+  iconKey: "trophy" | "medal" | "globe" | "award" | "star" | "school";
+};
+
+export const participationFilters: ParticipationFilter[] = [
+  { id: "all", labelAr: "الكل", labelEn: "All" },
+  { id: "national_achievement", labelAr: "إنجاز وطني", labelEn: "National Achievement" },
+  { id: "global_achievement", labelAr: "إنجاز عالمي", labelEn: "Global Achievement" },
+  { id: "exhibition", labelAr: "معرض", labelEn: "Exhibition" },
+  { id: "competition", labelAr: "مسابقة", labelEn: "Competition" },
+];
+
+export const participationHighlights: ParticipationHighlight[] = [
+  {
+    id: "p1",
+    titleAr: "المركز الأول في اختبارات القدرات",
+    titleEn: "1st Place in Qudurat Exams",
+    descriptionAr: "تحقيق المركز الأول في اختبارات القدرات على مستوى المملكة.",
+    descriptionEn: "Achieving first place in Qudurat exams at the Kingdom level.",
+    image: "/Achive_st.jpg",
+    category: "national_achievement",
+    badgeAr: "إنجاز وطني",
+    badgeEn: "National Achievement",
+    iconKey: "medal",
+  },
+  {
+    id: "p2",
+    titleAr: "المركز الأول في اختبارات التحصيلي",
+    titleEn: "1st Place in Tahsili Exams",
+    descriptionAr: "تحقيق المركز الأول في اختبارات التحصيلي على مستوى المملكة.",
+    descriptionEn: "Achieving first place in Tahsili exams at the Kingdom level.",
+    image: "/Achive_file.jpg",
+    category: "national_achievement",
+    badgeAr: "إنجاز وطني",
+    badgeEn: "National Achievement",
+    iconKey: "trophy",
+  },
+  {
+    id: "p3",
+    titleAr: "مشاركة عالمية في معرض آيسف",
+    titleEn: "Global Participation in ISEF",
+    descriptionAr: "تمثيل مشرف لطلاب مدارس الأنجال في معرض آيسف الدولي.",
+    descriptionEn: "Distinguished representation of Al-Anjal students at the international ISEF fair.",
+    image: "/ISEF.jpg",
+    category: "exhibition",
+    badgeAr: "معرض",
+    badgeEn: "Exhibition",
+    iconKey: "globe",
+  },
+  {
+    id: "p4",
+    titleAr: "المركز الأول عالميًا في جائزة الموهوبين",
+    titleEn: "1st Place Globally in the Gifted Award",
+    descriptionAr: "تحقيق المركز الأول عالميًا في جائزة الموهوبين من مؤسسة حمدان بن راشد.",
+    descriptionEn: "Achieving first place globally in the Gifted Award from the Hamdan bin Rashid Foundation.",
+    image: "/saudi_flag.jpg",
+    category: "global_achievement",
+    badgeAr: "إنجاز عالمي",
+    badgeEn: "Global Achievement",
+    iconKey: "award",
+  },
+  {
+    id: "p5",
+    titleAr: "مشاركة متميزة في تايسف - تايوان",
+    titleEn: "Outstanding Participation in TISEF - Taiwan",
+    descriptionAr: "مشاركة طلاب مدارس الأنجال في تايسف بتايوان ضمن مشاريع نوعية.",
+    descriptionEn: "Al-Anjal students participated in TISEF Taiwan with high-quality projects.",
+    image: "/ISEF.jpg",
+    category: "competition",
+    badgeAr: "مسابقة",
+    badgeEn: "Competition",
+    iconKey: "star",
+  },
+  {
+    id: "p6",
+    titleAr: "مشاركة في إيتكس - ماليزيا",
+    titleEn: "Participation in ITEX - Malaysia",
+    descriptionAr: "عرض ابتكارات طلابية في معرض إيتكس الدولي بماليزيا.",
+    descriptionEn: "Showcasing student innovations at the international ITEX exhibition in Malaysia.",
+    image: "/Achive_file.jpg",
+    category: "exhibition",
+    badgeAr: "معرض",
+    badgeEn: "Exhibition",
+    iconKey: "school",
+  },
+];
+
 export const categories: Category[] = [
   { id: "scientific", name: "العلمي" },
   { id: "religious", name: "الديني" },

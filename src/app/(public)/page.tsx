@@ -1,9 +1,13 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import InstitutionalSection from "@/components/landing/InstitutionalSection";
 import PlatformFeaturedStrip from "@/components/landing/PlatformFeaturedStrip";
-import { recognitions, categories } from "@/data/landing-content";
+import {
+  categories,
+} from "@/data/landing-content";
+import { DEFAULT_HOME_HIGHLIGHTS } from "@/lib/home-highlights";
+import { getLocale } from "@/lib/i18n";
 import {
   Upload,
   Trophy,
@@ -18,27 +22,28 @@ import {
   Globe,
   Eye,
   Lightbulb,
+  Newspaper,
 } from "lucide-react";
 import Link from "next/link";
 import PlatformLogo from "@/components/branding/PlatformLogo";
 import SafeLocalImage from "@/components/media/SafeLocalImage";
 import { PUBLIC_IMG } from "@/lib/publicImages";
+import InstitutionalAchievementCard from "@/components/landing/InstitutionalAchievementCard";
+import type { HomeHighlightBlockPayload, HomeHighlightItemPayload } from "@/lib/home-highlights";
 
-const heroImageFallback = <div className="absolute inset-0 bg-[#071a3d]" aria-hidden />;
+const HOME_HIGHLIGHTS_STATIC_DEFAULT = DEFAULT_HOME_HIGHLIGHTS;
 
 const HeroSection = () => {
   return (
     <section className="relative overflow-hidden bg-[#071a3d]">
       <div className="absolute inset-0">
-        <SafeLocalImage
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
           src={PUBLIC_IMG.mainHero}
           alt="خلفية رئيسية — منصة تميز الأنجال"
-          fill
-          priority
-          sizes="100vw"
-          objectFit="cover"
-          className="object-center"
-          fallback={heroImageFallback}
+          className="h-full w-full object-cover object-center"
+          loading="eager"
+          fetchPriority="high"
         />
       </div>
 
@@ -249,7 +254,7 @@ const CategoryChipsSection = () => {
             <a
               key={category.id}
               href={`/categories/${category.id}`}
-              className="rounded-full border border-gray-200 bg-white px-6 py-3 font-semibold text-text shadow-md transition-all duration-200 hover:scale-105 hover:border-primary hover:text-primary hover:shadow-lg"
+              className="rounded-full border border-[#1e3a8a] bg-[#21409a] px-6 py-3 font-semibold text-white shadow-md transition-all duration-200 hover:scale-105 hover:bg-[#1a327a] hover:shadow-lg"
             >
               {category.name}
             </a>
@@ -265,7 +270,10 @@ const EventAnnouncement = () => {
     <section id="award-ceremony" className="bg-white py-16">
       <div className="container mx-auto px-4">
         <div className="mx-auto max-w-4xl">
-          <div className="overflow-hidden rounded-2xl border-t-4 border-[#d4af37] bg-background-soft shadow-xl">
+          <div className="relative overflow-hidden rounded-2xl border-2 border-[#d4af37] bg-background-soft shadow-[0_20px_45px_rgba(7,26,61,0.22)] ring-2 ring-[#071a3d]/10">
+            <div className="absolute end-5 top-4 rounded-full border border-[#d4af37]/60 bg-[#071a3d] px-3 py-1 text-xs font-bold text-[#f3cf63]">
+              بطاقة دعوة
+            </div>
             <div className="bg-gradient-to-r from-[#071a3d] to-[#1e3a8a] px-8 py-6">
               <div className="flex items-center justify-center gap-3">
                 <Trophy className="h-10 w-10 text-[#d4af37]" />
@@ -330,12 +338,54 @@ const EventAnnouncement = () => {
   );
 };
 
+const formatHomeStatNumber = (n: number) =>
+  n.toLocaleString("en-US", { maximumFractionDigits: 0 });
+
 const StatisticsBar = () => {
+  const [statsData, setStatsData] = useState({
+    studentsCount: 0,
+    achievementsCount: 0,
+    fieldsCount: 0,
+    awardsCount: 50,
+  });
+
+  useEffect(() => {
+    let mounted = true;
+    const run = async () => {
+      try {
+        const res = await fetch("/api/public/home-stats", { cache: "no-store" });
+        if (!res.ok) return;
+        const json = (await res.json()) as {
+          ok?: boolean;
+          data?: {
+            studentsCount?: number;
+            achievementsCount?: number;
+            fieldsCount?: number;
+            awardsCount?: number;
+          };
+        };
+        if (!mounted || !json?.ok || !json.data) return;
+        setStatsData({
+          studentsCount: Number(json.data.studentsCount || 0),
+          achievementsCount: Number(json.data.achievementsCount || 0),
+          fieldsCount: Number(json.data.fieldsCount || 0),
+          awardsCount: 50,
+        });
+      } catch {
+        // Keep zeros on failure.
+      }
+    };
+    void run();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
   const stats = [
-    { value: "200+", label: "عدد الطلاب المسجلين", icon: Users },
-    { value: "60+", label: "عدد الجوائز المقدمة", icon: AwardIcon },
-    { value: "500+", label: "عدد الإنجازات", icon: FileText },
-    { value: "12", label: "عدد مجالات الإنجاز", icon: Target },
+    { value: formatHomeStatNumber(statsData.studentsCount), label: "عدد الطلاب المسجلين", icon: Users },
+    { value: "50+", label: "عدد الجوائز المقدمة", icon: AwardIcon },
+    { value: formatHomeStatNumber(statsData.achievementsCount), label: "عدد الإنجازات", icon: FileText },
+    { value: formatHomeStatNumber(statsData.fieldsCount), label: "عدد مجالات الإنجاز المسجلة", icon: Target },
   ];
 
   return (
@@ -353,7 +403,10 @@ const StatisticsBar = () => {
                   </div>
                 </div>
 
-                <div className="mb-2 text-3xl font-extrabold tabular-nums tracking-tight text-primary md:text-4xl">
+                <div
+                  dir={stat.label === "عدد الجوائز المقدمة" ? "ltr" : undefined}
+                  className="mb-2 text-3xl font-extrabold tabular-nums tracking-tight text-primary md:text-4xl"
+                >
                   {stat.value}
                 </div>
 
@@ -369,221 +422,235 @@ const StatisticsBar = () => {
   );
 };
 
-const RecognitionStrip = () => {
-  const limitedRecognitions = recognitions.slice(0, 6);
+const ParticipationNewsSection = () => {
+  const locale = getLocale();
+  const isAr = locale === "ar";
+  const [sectionData, setSectionData] = useState(HOME_HIGHLIGHTS_STATIC_DEFAULT);
+
+  const pickBi = (ar?: string, en?: string, legacy?: string) => {
+    const a = String(ar || "").trim();
+    const e = String(en || "").trim();
+    const l = String(legacy || "").trim();
+    if (isAr) return a || e || l || "—";
+    return e || a || l || "—";
+  };
+
+  useEffect(() => {
+    let mounted = true;
+    const run = async () => {
+      try {
+        const res = await fetch("/api/public/home-highlights", { cache: "no-store" });
+        if (!res.ok) return;
+        const json = (await res.json()) as {
+          ok?: boolean;
+          data?: typeof HOME_HIGHLIGHTS_STATIC_DEFAULT;
+        };
+        if (!mounted || !json?.ok || !json.data) return;
+        setSectionData(json.data);
+      } catch {
+        // Keep static fallback.
+      }
+    };
+    void run();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const participationBlocks = useMemo(() => {
+    const raw =
+      sectionData.participationBlocks && sectionData.participationBlocks.length > 0
+        ? sectionData.participationBlocks
+        : DEFAULT_HOME_HIGHLIGHTS.participationBlocks || [];
+    return [...raw]
+      .filter((b) => Array.isArray(b.items) && b.items.length > 0)
+      .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+  }, [sectionData.participationBlocks]);
+
+  if (sectionData.participationSectionEnabled === false) return null;
+
+  const resolveBlockIcon = (block: HomeHighlightBlockPayload) => {
+    if (block.headerIconKey === "globe") return Globe;
+    if (block.headerIconKey === "star") return Star;
+    return block.color === "gold" ? Star : Globe;
+  };
+
+  const blockColumnClass = (color: HomeHighlightBlockPayload["color"]) =>
+    color === "gold"
+      ? "flex flex-col rounded-2xl bg-[#c5a021] p-5 shadow-[0_8px_24px_rgba(0,0,0,0.12)] ring-1 ring-amber-900/20 sm:p-6"
+      : "flex flex-col rounded-2xl bg-[#1a2f66] p-5 shadow-[0_8px_24px_rgba(0,0,0,0.15)] ring-1 ring-white/10 sm:p-6";
+
+  const articleClass = (color: HomeHighlightBlockPayload["color"]) =>
+    color === "gold"
+      ? "flex w-full flex-col overflow-hidden rounded-2xl border border-amber-900/30 bg-[#a88f18]/50 p-4 shadow-[0_4px_14px_rgba(0,0,0,0.12)] sm:p-5"
+      : "flex w-full flex-col overflow-hidden rounded-2xl border border-white/20 bg-[#253b71] p-4 shadow-[0_4px_14px_rgba(0,0,0,0.18)] sm:p-5";
+
+  const blockTitleClass = (color: HomeHighlightBlockPayload["color"]) =>
+    color === "gold"
+      ? "text-xl font-bold leading-snug tracking-tight text-slate-900"
+      : "text-xl font-bold leading-snug tracking-tight text-white";
+
+  const itemTitleClass = (color: HomeHighlightBlockPayload["color"]) =>
+    color === "gold"
+      ? "text-lg font-bold leading-snug tracking-tight text-slate-900"
+      : "text-lg font-bold leading-snug tracking-tight text-white";
+
+  const itemDescClass = (color: HomeHighlightBlockPayload["color"]) =>
+    color === "gold"
+      ? "text-sm leading-relaxed text-slate-800/90"
+      : "text-sm leading-relaxed text-blue-100/85";
+
+  const headerIconClass = (color: HomeHighlightBlockPayload["color"]) =>
+    color === "gold" ? "h-7 w-7 shrink-0 text-slate-900" : "h-7 w-7 shrink-0 text-[#d4af37]";
 
   return (
-    <section className="border-y border-gray-200 bg-white py-12">
-      <div className="container mx-auto px-4">
-        <div className="mb-8 text-center">
-          <h2 className="mb-2 text-2xl font-bold leading-snug tracking-tight text-text md:text-3xl">
-            مشاركات طلاب وطالبات مدارس الأنجال بالمعارض والمسابقات المحلية
-            والعالمية
+    <section className="border-y border-gray-200 bg-[#eceff3] py-12">
+      <div className="container mx-auto max-w-6xl px-4 md:px-6">
+        <div className="mx-auto mb-10 max-w-2xl space-y-3 text-center md:mb-12">
+          <h2 className="text-2xl font-bold leading-[1.2] tracking-tight text-slate-950 md:text-3xl">
+            {pickBi(
+              sectionData.participationTitleAr,
+              sectionData.participationTitleEn,
+              DEFAULT_HOME_HIGHLIGHTS.participationTitleAr
+            )}
           </h2>
-          <p className="text-text-light">
-            إنجازات طلاب مدارس الأنجال الأهلية في المحافل المحلية والعالمية
+          <p className="text-base leading-relaxed text-gray-600">
+            {pickBi(
+              sectionData.participationSubtitleAr,
+              sectionData.participationSubtitleEn,
+              DEFAULT_HOME_HIGHLIGHTS.participationSubtitleAr
+            )}
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center justify-center gap-4 md:gap-6">
-          {limitedRecognitions.map((recognition) => (
-            <div
-              key={recognition.id}
-              className="rounded-full bg-gradient-to-r from-primary to-primary-dark px-6 py-3 text-sm font-semibold text-white shadow-md transition-all duration-200 hover:scale-105 hover:shadow-lg md:text-base"
-            >
-              {recognition.name}
-            </div>
-          ))}
-
-          <Link
-            href="/competitions"
-            className="rounded-full border-2 border-primary bg-white px-6 py-3 text-sm font-semibold text-primary shadow-md transition-all duration-200 hover:scale-105 hover:bg-primary hover:text-white hover:shadow-lg md:text-base"
-          >
-            عرض المزيد
-          </Link>
+        <div className="grid grid-cols-1 items-stretch gap-6 lg:grid-cols-2 lg:gap-8">
+          {participationBlocks.map((block, blockIdx) => {
+            const Icon = resolveBlockIcon(block);
+            const items = (block.items || [])
+              .filter((item) => item?.isActive !== false)
+              .sort((a, b) => (a.order || 0) - (b.order || 0)) as HomeHighlightItemPayload[];
+            return (
+              <div
+                key={`${block.titleAr || block.titleEn || block.title}-${blockIdx}`}
+                className={blockColumnClass(block.color)}
+              >
+                <div className="mb-5 flex items-center gap-2 text-start sm:mb-6">
+                  <Icon className={headerIconClass(block.color)} strokeWidth={2} aria-hidden />
+                  <h3 className={blockTitleClass(block.color)}>
+                    {pickBi(block.titleAr, block.titleEn, block.title)}
+                  </h3>
+                </div>
+                <div className="flex flex-1 flex-col gap-5 md:gap-6">
+                  {items.map((item, idx) => (
+                    <article
+                      key={`${item.titleAr || item.titleEn || item.title}-${idx}`}
+                      className={articleClass(block.color)}
+                    >
+                      <div className="relative isolate aspect-[16/9] w-full overflow-hidden rounded-xl ring-1 ring-black/10">
+                        <SafeLocalImage
+                          src={item.imageUrl || PUBLIC_IMG.achieveFile}
+                          alt={pickBi(item.titleAr, item.titleEn, item.title)}
+                          fill
+                          objectFit="cover"
+                          className="object-cover object-center"
+                          fallback={<div className="absolute inset-0 bg-black/10" aria-hidden />}
+                        />
+                      </div>
+                      <div className="mt-4 space-y-2 text-start">
+                        <h4 className={itemTitleClass(block.color)}>
+                          {pickBi(item.titleAr, item.titleEn, item.title)}
+                        </h4>
+                        <p className={itemDescClass(block.color)}>
+                          {pickBi(item.descriptionAr, item.descriptionEn, item.description)}
+                        </p>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
     </section>
   );
 };
 
-/** بطاقة إنجاز كالمرجع: صورة أعلى، عنوان وعنوان فرعي أسفلها (بدون تغطية على الصورة) */
-type ReferenceAchievementCardProps = {
-  variant: "gold" | "blue";
-  imageSrc: string;
-  imageAlt: string;
-  title: string;
-  description: string;
-  fallbackIcon: ReactNode;
-};
-
-const ReferenceAchievementCard = ({
-  variant,
-  imageSrc,
-  imageAlt,
-  title,
-  description,
-  fallbackIcon,
-}: ReferenceAchievementCardProps) => {
-  const shell =
-    variant === "blue"
-      ? "border border-white/20 bg-[#253b71] shadow-[0_4px_14px_rgba(0,0,0,0.18)]"
-      : "border border-amber-900/30 bg-[#a88f18]/50 shadow-[0_4px_14px_rgba(0,0,0,0.12)]";
-
-  return (
-    <article
-      className={`flex w-full flex-col overflow-hidden rounded-2xl p-4 transition-transform duration-200 hover:-translate-y-0.5 sm:p-5 ${shell}`}
-    >
-      <div className="relative isolate aspect-[16/9] w-full overflow-hidden rounded-xl ring-1 ring-black/10">
-        <SafeLocalImage
-          src={imageSrc}
-          alt={imageAlt}
-          fill
-          sizes="(max-width: 768px) 100vw, 50vw"
-          objectFit="cover"
-          className="object-cover object-center"
-          fallback={
-            <div
-              className="absolute inset-0 flex items-center justify-center rounded-xl bg-black/10"
-              role="img"
-              aria-hidden
-            >
-              {fallbackIcon}
-            </div>
-          }
-        />
-      </div>
-      <div className="mt-4 space-y-2 text-start">
-        {variant === "blue" ? (
-          <>
-            <h4 className="text-lg font-bold leading-snug tracking-tight text-white">{title}</h4>
-            <p className="text-sm leading-relaxed text-blue-100/85">{description}</p>
-          </>
-        ) : (
-          <>
-            <h4 className="text-lg font-bold leading-snug tracking-tight text-slate-900">{title}</h4>
-            <p className="text-sm leading-relaxed text-slate-800/90">{description}</p>
-          </>
-        )}
-      </div>
-    </article>
-  );
-};
-
 const TopAchievementsSection = () => {
-  const weeklySpotlight = {
-    title: "الإنجاز الأسبوعي",
-    achievements: [
-      {
-        title: "قصة إنجاز ملهمة",
-        description:
-          "حصول الطالب/ عبدالله السحيب على الميدالية البرونزية في ملتقى الربيع 2025م المقام بمدينة الرياض تخصص فيزياء للتدريبات على الأولمبياد الدولية 2025م",
-      },
-      {
-        title: "ملفات إنجاز حديثة",
-        description: "إبراز قصص النجاح بأسلوب عرض بصري حديث ومؤثر",
-        image: PUBLIC_IMG.achieveFile,
-        alt: "ملفات إنجاز حديثة",
-        objectFit: "contain" as const,
-      },
-    ],
+  const locale = getLocale();
+  const isAr = locale === "ar";
+  const [sectionData, setSectionData] = useState(HOME_HIGHLIGHTS_STATIC_DEFAULT);
+
+  const pickBi = (ar?: string, en?: string, legacy?: string) => {
+    const a = String(ar || "").trim();
+    const e = String(en || "").trim();
+    const l = String(legacy || "").trim();
+    if (isAr) return a || e || l || "—";
+    return e || a || l || "—";
   };
 
-  const globalAchievements = {
-    title: "الإنجازات العالمية",
-    achievements: [
-      {
-        title: "مشاركة عالمية في ISEF",
-        description: "تمثيل مشرف لطلاب مدارس الأنجال في المحافل الدولية",
-        image: PUBLIC_IMG.isef,
-        alt: "مشاركة عالمية في معرض ISEF",
-        objectFit: "cover" as const,
-      },
-      {
-        title: "تمثيل المملكة دوليًا",
-        description: "إنجازات طلابية ترفع راية الوطن في المحافل الدولية",
-        image: PUBLIC_IMG.saudiFlag,
-        alt: "تمثيل المملكة العربية السعودية دوليًا",
-        objectFit: "cover" as const,
-      },
-    ],
-  };
+  useEffect(() => {
+    let mounted = true;
+    const run = async () => {
+      try {
+        const res = await fetch("/api/public/home-highlights", { cache: "no-store" });
+        if (!res.ok) return;
+        const json = (await res.json()) as {
+          ok?: boolean;
+          data?: typeof HOME_HIGHLIGHTS_STATIC_DEFAULT;
+        };
+        if (!mounted || !json?.ok || !json.data) return;
+        setSectionData(json.data);
+      } catch {
+        // Keep static fallback silently.
+      }
+    };
+    void run();
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
-  const weeklyStory = weeklySpotlight.achievements[0];
-  const recentFiles = weeklySpotlight.achievements[1] as {
-    title: string;
-    description: string;
-    image: string;
-    alt: string;
-    objectFit: "cover" | "contain";
-  };
+  const items = useMemo(() => {
+    const all = (sectionData.blocks || [])
+      .flatMap((b) => (Array.isArray(b.items) ? b.items : []))
+      .filter((item) => item?.isActive !== false) as HomeHighlightItemPayload[];
+    return all.sort((a, b) => (a.order || 0) - (b.order || 0));
+  }, [sectionData.blocks]);
 
   return (
     <section id="featured-achievements" className="border-t border-slate-200/80 bg-gray-50 py-16 md:py-20">
       <div className="container mx-auto max-w-6xl px-4 md:px-6">
         <div className="mx-auto mb-10 max-w-2xl space-y-3 text-center md:mb-12">
           <h2 className="text-2xl font-bold leading-[1.2] tracking-tight text-slate-950 md:text-3xl">
-            إبراز النماذج المتميزة والإنجازات البارزة
+            {pickBi(sectionData.sectionTitleAr, sectionData.sectionTitleEn, sectionData.sectionTitle)}
           </h2>
           <p className="text-base leading-relaxed text-gray-600">
-            واجهة مؤسسية تبرز أثر المدرسة في صناعة التميز
+            {pickBi(
+              sectionData.sectionSubtitleAr,
+              sectionData.sectionSubtitleEn,
+              sectionData.sectionSubtitle
+            )}
           </p>
         </div>
 
-        {/* عمودان كالمرجع: ذهبي | أزرق — في RTL العمود الأول يمين (ذهبي)، الثاني يسار (أزرق) */}
-        <div className="grid grid-cols-1 items-stretch gap-6 lg:grid-cols-2 lg:gap-8">
-          {/* عمود الإنجاز الأسبوعي — خلفية ذهبية كالمرجع */}
-          <div className="flex flex-col rounded-2xl bg-[#c5a021] p-5 shadow-[0_8px_24px_rgba(0,0,0,0.12)] ring-1 ring-amber-900/20 sm:p-6">
-            <div className="mb-5 flex items-center gap-2 text-start sm:mb-6">
-              <Star className="h-7 w-7 shrink-0 text-slate-900" strokeWidth={2} aria-hidden />
-              <h3 className="text-xl font-bold leading-snug tracking-tight text-slate-900">{weeklySpotlight.title}</h3>
-            </div>
-            <div className="flex flex-1 flex-col gap-5 md:gap-6">
-              <ReferenceAchievementCard
-                variant="gold"
-                imageSrc={PUBLIC_IMG.achieveWeeklySection}
-                imageAlt="الإنجاز الأسبوعي — منصة تميز الأنجال"
-                title={weeklyStory.title}
-                description={weeklyStory.description}
-                fallbackIcon={<Star className="h-12 w-12 text-amber-900/25" aria-hidden />}
-              />
-              <ReferenceAchievementCard
-                variant="gold"
-                imageSrc={recentFiles.image}
-                imageAlt={recentFiles.alt}
-                title={recentFiles.title}
-                description={recentFiles.description}
-                fallbackIcon={<FileText className="h-12 w-12 text-amber-900/25" aria-hidden />}
-              />
-            </div>
+        {sectionData.sectionEnabled === false ? null : (
+          <div
+            className={`grid grid-cols-1 gap-4 md:grid-cols-2 ${
+              sectionData.layoutColumns === 2 ? "xl:grid-cols-2" : "xl:grid-cols-3"
+            }`}
+          >
+          {items.map((item, idx) => (
+            <InstitutionalAchievementCard
+              key={`${item.titleAr || item.titleEn || item.title}-${idx}`}
+              iconKey={item.iconKey || "star"}
+              title={pickBi(item.titleAr, item.titleEn, item.title)}
+              description={pickBi(item.descriptionAr, item.descriptionEn, item.description)}
+              badge={pickBi(item.badgeAr, item.badgeEn, item.type || "")}
+            />
+          ))}
           </div>
-
-          {/* عمود الإنجازات العالمية — خلفية كحلي كالمرجع */}
-          <div className="flex flex-col rounded-2xl bg-[#1a2b56] p-5 shadow-[0_8px_24px_rgba(0,0,0,0.15)] ring-1 ring-white/10 sm:p-6">
-            <div className="mb-5 flex items-center gap-2 text-start sm:mb-6">
-              <Globe className="h-7 w-7 shrink-0 text-[#d4af37]" strokeWidth={2} aria-hidden />
-              <h3 className="text-xl font-bold leading-snug tracking-tight text-white">{globalAchievements.title}</h3>
-            </div>
-            <div className="flex flex-1 flex-col gap-5 md:gap-6">
-              <ReferenceAchievementCard
-                variant="blue"
-                imageSrc={globalAchievements.achievements[0].image}
-                imageAlt={globalAchievements.achievements[0].alt}
-                title={globalAchievements.achievements[0].title}
-                description={globalAchievements.achievements[0].description}
-                fallbackIcon={<Globe className="h-12 w-12 text-white/25" aria-hidden />}
-              />
-              <ReferenceAchievementCard
-                variant="blue"
-                imageSrc={globalAchievements.achievements[1].image}
-                imageAlt={globalAchievements.achievements[1].alt}
-                title={globalAchievements.achievements[1].title}
-                description={globalAchievements.achievements[1].description}
-                fallbackIcon={<Globe className="h-12 w-12 text-white/25" aria-hidden />}
-              />
-            </div>
-          </div>
-        </div>
+        )}
       </div>
     </section>
   );
@@ -599,7 +666,7 @@ export default function Home() {
       <CategoryChipsSection />
       <EventAnnouncement />
       <StatisticsBar />
-      <RecognitionStrip />
+      <ParticipationNewsSection />
       <TopAchievementsSection />
       <PlatformFeaturedStrip />
       <InstitutionalSection />
