@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import { perfElapsed, perfLog, perfNow } from "@/lib/perf-debug";
 
+/** Prefer Atlas `mongodb+srv://` URIs for lower DNS/TLS friction in production. */
 const MONGODB_URI = process.env.MONGODB_URI as string;
 
 if (!MONGODB_URI) {

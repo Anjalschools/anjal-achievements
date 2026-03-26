@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { LogOut, User, Settings, ChevronDown, Bell } from "lucide-react";
+import { LogOut, User, Settings, ChevronDown, Bell, LayoutDashboard } from "lucide-react";
 import { getLocale } from "@/lib/i18n";
 
 export type HeaderAccountMenuProps = {
@@ -11,6 +11,8 @@ export type HeaderAccountMenuProps = {
   userFullName?: string;
   userEmail?: string;
   userAvatar?: string;
+  /** لوحة التحكم / العودة للمنطقة الداخلية بعد تصفح الصفحات العامة */
+  appHome?: { href: string; label: string };
 };
 
 const HeaderAccountMenu = ({
@@ -18,6 +20,7 @@ const HeaderAccountMenu = ({
   userFullName,
   userEmail,
   userAvatar,
+  appHome,
 }: HeaderAccountMenuProps) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [avatarFailed, setAvatarFailed] = useState(false);
@@ -109,6 +112,22 @@ const HeaderAccountMenu = ({
           <div className="fixed inset-0 z-40" onClick={() => setIsMenuOpen(false)} aria-hidden />
           <div className="absolute end-0 top-full z-50 mt-2 w-56 rounded-lg border border-gray-200 bg-white shadow-lg">
             <div className="p-2">
+              {appHome ? (
+                <>
+                  <Link
+                    href={appHome.href}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setIsMenuOpen(false);
+                    }}
+                    className="flex w-full items-center gap-3 rounded-lg border border-primary/15 bg-primary/5 px-3 py-2 text-sm font-semibold text-primary transition-colors hover:bg-primary/10"
+                  >
+                    <LayoutDashboard className="h-4 w-4 shrink-0" aria-hidden />
+                    <span>{appHome.label}</span>
+                  </Link>
+                  <div className="my-1.5 border-t border-gray-100" aria-hidden />
+                </>
+              ) : null}
               <Link
                 href="/notifications"
                 onClick={(e) => {

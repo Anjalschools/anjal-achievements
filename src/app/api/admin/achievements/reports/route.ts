@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAchievementReviewer } from "@/lib/review-auth";
+import { roleHasCapability } from "@/lib/app-role-scope-matrix";
 import {
   buildAllAchievementsReportStats,
   buildUnifiedAdminAchievementReports,
@@ -15,6 +16,9 @@ export const dynamic = "force-dynamic";
 export async function GET(request: NextRequest) {
   const gate = await requireAchievementReviewer();
   if (!gate.ok) return gate.response;
+  if (!roleHasCapability(String(gate.user.role), "reports")) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   const { searchParams } = new URL(request.url);
   const type = String(searchParams.get("type") || "all").trim();

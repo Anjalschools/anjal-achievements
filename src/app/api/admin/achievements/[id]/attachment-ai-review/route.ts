@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import mongoose from "mongoose";
 import connectDB from "@/lib/mongodb";
 import Achievement from "@/models/Achievement";
-import { requireAchievementReviewer } from "@/lib/review-auth";
+import { requireAchievementReviewerForAchievementId } from "@/lib/review-auth";
 import { isAiAssistEnabled } from "@/lib/openai-env";
 import { runAdminAchievementAttachmentAiReview } from "@/lib/achievement-admin-attachment-ai";
 
@@ -11,7 +11,8 @@ export const dynamic = "force-dynamic";
 type RouteParams = { params: { id: string } };
 
 export async function POST(_request: NextRequest, { params }: RouteParams) {
-  const gate = await requireAchievementReviewer();
+  const id = params.id;
+  const gate = await requireAchievementReviewerForAchievementId(id);
   if (!gate.ok) return gate.response;
 
   if (!isAiAssistEnabled()) {
@@ -19,11 +20,6 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
       { error: "AI assist is disabled or not configured", code: "ai_disabled" },
       { status: 503 }
     );
-  }
-
-  const id = params.id;
-  if (!id || !mongoose.Types.ObjectId.isValid(id)) {
-    return NextResponse.json({ error: "Invalid achievement id" }, { status: 400 });
   }
 
   try {

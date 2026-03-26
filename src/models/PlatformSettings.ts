@@ -14,6 +14,23 @@ export interface IPlatformSettings extends Document {
     cityAr?: string;
     cityEn?: string;
     websiteUrl?: string;
+    contactEmailPrimary?: string;
+    contactEmailSecondary?: string;
+    contactPhonePrimary?: string;
+    contactPhoneSecondary?: string;
+    contactAddressAr?: string;
+    contactAddressEn?: string;
+    contactInfoTitleAr?: string;
+    contactInfoTitleEn?: string;
+    contactPageIntroAr?: string;
+    contactPageIntroEn?: string;
+    mapEmbedUrl?: string;
+    mapTitleAr?: string;
+    mapTitleEn?: string;
+    mapLocationLabelAr?: string;
+    mapLocationLabelEn?: string;
+    latitude?: number;
+    longitude?: number;
     socialFacebook?: string;
     socialX?: string;
     socialYoutube?: string;
@@ -62,6 +79,9 @@ export interface IPlatformSettings extends Document {
     showApprovedDirectlyInHallOfFame?: boolean;
     requireMediaApprovalBeforePublishing?: boolean;
   };
+  scoring?: Record<string, unknown>;
+  /** Dynamic role -> permissions matrix overrides */
+  rolePermissions?: Record<string, string[]>;
   updatedAt: Date;
 }
 
@@ -73,6 +93,8 @@ const PlatformSettingsSchema = new Schema(
     ai: { type: Schema.Types.Mixed, default: {} },
     certificate: { type: Schema.Types.Mixed, default: {} },
     workflow: { type: Schema.Types.Mixed, default: {} },
+    scoring: { type: Schema.Types.Mixed, default: {} },
+    rolePermissions: { type: Schema.Types.Mixed, default: {} },
   },
   { timestamps: { createdAt: false, updatedAt: true } }
 );

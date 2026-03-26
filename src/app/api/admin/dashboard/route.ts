@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireAchievementReviewer } from "@/lib/review-auth";
 import { buildAdminDashboardPayload } from "@/lib/admin-dashboard-stats";
+import { buildAchievementAccessFilter } from "@/lib/achievement-scope-filter";
 
 export const dynamic = "force-dynamic";
 
@@ -9,7 +10,10 @@ export async function GET() {
   if (!gate.ok) return gate.response;
 
   try {
-    const data = await buildAdminDashboardPayload();
+    const scope = await buildAchievementAccessFilter(gate.user);
+    const data = await buildAdminDashboardPayload(scope, {
+      scopedUser: scope ? gate.user : undefined,
+    });
     return NextResponse.json(data);
   } catch (e) {
     console.error("[GET /api/admin/dashboard]", e);

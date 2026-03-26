@@ -39,6 +39,14 @@ type DashboardPayload = {
   recentAchievements: DashboardAchievementRow[];
 };
 
+type UserRankPayload = {
+  ok: boolean;
+  totalPoints: number;
+  achievementsCount: number;
+  rank: number | null;
+  totalRankedStudents: number;
+};
+
 const DashboardPage = () => {
   const router = useRouter();
   const locale = getLocale();
@@ -50,6 +58,8 @@ const DashboardPage = () => {
   const [publicPortfolioLoading, setPublicPortfolioLoading] = useState(true);
   const [publicPortfolioQrDataUrl, setPublicPortfolioQrDataUrl] = useState<string | null>(null);
   const [copyDone, setCopyDone] = useState(false);
+  const [rankData, setRankData] = useState<UserRankPayload | null>(null);
+  const [rankLoading, setRankLoading] = useState(true);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -79,6 +89,33 @@ const DashboardPage = () => {
     };
     void fetchData();
   }, [isAr, router]);
+
+  useEffect(() => {
+    const fetchRankData = async () => {
+      try {
+        setRankLoading(true);
+        const res = await fetch("/api/user/rank", {
+          cache: "no-store",
+          credentials: "same-origin",
+        });
+        if (res.status === 401) {
+          router.push("/login");
+          return;
+        }
+        if (!res.ok) {
+          setRankData(null);
+          return;
+        }
+        const json = (await res.json()) as UserRankPayload;
+        setRankData(json?.ok ? json : null);
+      } catch {
+        setRankData(null);
+      } finally {
+        setRankLoading(false);
+      }
+    };
+    void fetchRankData();
+  }, [router]);
 
   useEffect(() => {
     const fetchPublicPortfolio = async () => {
@@ -234,6 +271,40 @@ const DashboardPage = () => {
           icon={Clock}
         />
       </div>
+
+      <SectionCard className="mb-8">
+        <h2 className="mb-4 text-xl font-bold text-text">{isAr ? "إحصاءات الترتيب" : "Ranking stats"}</h2>
+        {rankLoading ? (
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {[1, 2, 3, 4].map((k) => (
+              <div key={k} className="h-16 animate-pulse rounded-lg border border-gray-100 bg-gray-100" />
+            ))}
+          </div>
+        ) : (
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="rounded-lg border border-gray-200 bg-white p-3">
+              <p className="text-xs text-text-light">{isAr ? "مجموع النقاط" : "Total Points"}</p>
+              <p className="mt-1 text-lg font-bold text-text">{rankData?.totalPoints ?? stats.points ?? 0}</p>
+            </div>
+            <div className="rounded-lg border border-gray-200 bg-white p-3">
+              <p className="text-xs text-text-light">{isAr ? "ترتيبك" : "Your Rank"}</p>
+              <p className="mt-1 text-lg font-bold text-text">
+                {rankData?.rank ? `#${rankData.rank}` : isAr ? "غير مصنف بعد" : "Not ranked yet"}
+              </p>
+            </div>
+            <div className="rounded-lg border border-gray-200 bg-white p-3">
+              <p className="text-xs text-text-light">
+                {isAr ? "عدد الإنجازات المعتمدة" : "Approved Achievements"}
+              </p>
+              <p className="mt-1 text-lg font-bold text-text">{rankData?.achievementsCount ?? 0}</p>
+            </div>
+            <div className="rounded-lg border border-gray-200 bg-white p-3">
+              <p className="text-xs text-text-light">{isAr ? "إجمالي الطلاب المصنفين" : "Total Ranked Students"}</p>
+              <p className="mt-1 text-lg font-bold text-text">{rankData?.totalRankedStudents ?? 0}</p>
+            </div>
+          </div>
+        )}
+      </SectionCard>
 
       <div className="grid gap-6 lg:grid-cols-2">
         <SectionCard>

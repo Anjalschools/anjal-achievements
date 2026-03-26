@@ -31,9 +31,99 @@ export interface IUser extends Document {
   publicPortfolioSlug?: string;
   publicPortfolioToken?: string;
   publicPortfolioPublishedAt?: Date;
+  /** In-app / email notification toggles (optional for legacy documents). */
+  notificationPreferences?: {
+    news?: boolean;
+    review?: boolean;
+    system?: boolean;
+    email?: boolean;
+  };
+  /** Visibility preferences within the platform (optional for legacy documents). */
+  privacyPreferences?: {
+    showNameInSystem?: boolean;
+    showEmailToSupervisors?: boolean;
+    showProfileInAdminPanel?: boolean;
+  };
+  /**
+   * Optional organizational scope for staff (schoolAdmin / teacher / judge).
+   * When set, achievement/report access is limited to students matching these dimensions.
+   * If omitted, the account’s own gender / section / grade are used as a single assignment.
+   */
+  staffScope?: {
+    genders?: ("male" | "female")[];
+    sections?: ("arabic" | "international")[];
+    grades?: string[];
+  };
+  /** Optional per-user permission overrides/additions. */
+  permissions?: string[];
+  /** Rich text/blocks for the public achievement portfolio page (student-edited). */
+  studentPortfolioContent?: {
+    bio?: string;
+    technicalSkills?: string[];
+    personalSkills?: string[];
+    courses?: Array<{
+      title?: string;
+      provider?: string;
+      type?: string;
+      trainingHours?: number;
+      date?: string;
+      url?: string;
+    }>;
+    activities?: Array<{
+      title?: string;
+      type?: string;
+      organization?: string;
+      description?: string;
+      hours?: number;
+      date?: string;
+    }>;
+    portfolioContact?: {
+      showEmail?: boolean;
+      showPhone?: boolean;
+    };
+  };
   createdAt: Date;
   updatedAt: Date;
 }
+
+const PortfolioCourseSchema = new Schema(
+  {
+    title: { type: String, trim: true },
+    provider: { type: String, trim: true },
+    type: { type: String, trim: true },
+    trainingHours: { type: Number, min: 0 },
+    date: { type: String, trim: true },
+    url: { type: String, trim: true },
+  },
+  { _id: false }
+);
+
+const PortfolioActivitySchema = new Schema(
+  {
+    title: { type: String, trim: true },
+    type: { type: String, trim: true },
+    organization: { type: String, trim: true },
+    description: { type: String, trim: true },
+    hours: { type: Number, min: 0 },
+    date: { type: String, trim: true },
+  },
+  { _id: false }
+);
+
+const StudentPortfolioContentSchema = new Schema(
+  {
+    bio: { type: String, trim: true, maxlength: 4000, default: "" },
+    technicalSkills: [{ type: String, trim: true, maxlength: 120 }],
+    personalSkills: [{ type: String, trim: true, maxlength: 120 }],
+    courses: [PortfolioCourseSchema],
+    activities: [PortfolioActivitySchema],
+    portfolioContact: {
+      showEmail: { type: Boolean, default: false },
+      showPhone: { type: Boolean, default: false },
+    },
+  },
+  { _id: false }
+);
 
 const UserSchema: Schema = new Schema(
   {
@@ -168,6 +258,27 @@ const UserSchema: Schema = new Schema(
     },
     publicPortfolioPublishedAt: {
       type: Date,
+    },
+    notificationPreferences: {
+      news: { type: Boolean, default: true },
+      review: { type: Boolean, default: true },
+      system: { type: Boolean, default: true },
+      email: { type: Boolean, default: true },
+    },
+    privacyPreferences: {
+      showNameInSystem: { type: Boolean, default: true },
+      showEmailToSupervisors: { type: Boolean, default: true },
+      showProfileInAdminPanel: { type: Boolean, default: true },
+    },
+    staffScope: {
+      genders: [{ type: String, enum: ["male", "female"] }],
+      sections: [{ type: String, enum: ["arabic", "international"] }],
+      grades: [{ type: String, trim: true }],
+    },
+    permissions: [{ type: String, trim: true }],
+    studentPortfolioContent: {
+      type: StudentPortfolioContentSchema,
+      default: undefined,
     },
   },
   {

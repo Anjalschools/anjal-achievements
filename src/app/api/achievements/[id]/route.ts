@@ -25,6 +25,7 @@ import { buildStudentAchievementDetailPayload } from "@/lib/achievement-detail-r
 import { normalizeAttachmentsArray } from "@/lib/achievement-attachments";
 import { mergeResubmitWorkflowState } from "@/lib/achievement-workflow-state";
 import { perfElapsed, perfLog, perfNow } from "@/lib/perf-debug";
+import { actorFromUser, logAuditEvent } from "@/lib/audit-log-service";
 
 export const dynamic = "force-dynamic";
 
@@ -98,6 +99,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     const fromNeedsRevision = String(existing.status ?? "") === "needs_revision";
 
     const body = (await request.json()) as Record<string, unknown>;
+    const hasOwn = (k: string) => Object.prototype.hasOwnProperty.call(body, k);
     const achievementType = String(body.achievementType || existing.achievementType || "");
     let achievementLevel = String(body.achievementLevel || existing.achievementLevel || "");
     const participationType = String(body.participationType || existing.participationType || "individual");
@@ -123,8 +125,22 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
         : achievementName === OLYMPIAD_EVENT_OTHER_VALUE
           ? (customAchievementName || achievementName)
           : achievementName || customAchievementName || "Achievement";
-    const nameAr = String(body.nameAr || existing.nameAr || "").trim() || finalName;
-    const nameEn = String(body.nameEn || existing.nameEn || "").trim() || finalName;
+    const existingNameKey = String(existing.achievementName || "").trim();
+    const didChangeNameKey =
+      typeof body.achievementName === "string" && String(body.achievementName || "").trim() !== existingNameKey;
+    // CRITICAL: if the name key changed, refresh nameAr/nameEn too so UI doesn't keep showing the old hydrated title.
+    const nameArRaw = hasOwn("nameAr") ? String(body.nameAr || "").trim() : "";
+    const nameEnRaw = hasOwn("nameEn") ? String(body.nameEn || "").trim() : "";
+    const nameAr = hasOwn("nameAr")
+      ? (nameArRaw || finalName)
+      : didChangeNameKey
+        ? finalName
+        : String(existing.nameAr || "").trim() || finalName;
+    const nameEn = hasOwn("nameEn")
+      ? (nameEnRaw || finalName)
+      : didChangeNameKey
+        ? finalName
+        : String(existing.nameEn || "").trim() || finalName;
     const achievementCategory = String(
       body.achievementCategory || existing.achievementCategory || achievementType || "competition"
     ).trim();
@@ -262,6 +278,9 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
         fromNeedsRevision: true,
         lastAction: "saved_after_revision",
       });
+    } else if (String(existing.status || "") === "pending") {
+      // When record was returned to pending (e.g. after unapprove), student edits should re-enter pending_review.
+      updateData.status = "pending_review";
     }
 
     let pendingReReview = wasPendingReReview;
@@ -333,6 +352,49 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     }
 
     const updated = await Achievement.findByIdAndUpdate(params.id, mongoUpdate, { new: true });
+    if (!updated) {
+      return NextResponse.json({ error: "Failed to update achievement" }, { status: 500 });
+    }
+
+    // Audit: student edits after unapprove (certificate revoked without re-approval yet).
+    const revokedAt = existing.certificateRevokedAt instanceof Date ? existing.certificateRevokedAt : null;
+    const editedAfterUnapprove =
+      revokedAt instanceof Date &&
+      String(existing.status || "") !== "approved" &&
+      existing.approved !== true &&
+      (existing.lastStudentEditAt ? existing.lastStudentEditAt < revokedAt : true);
+    if (editedAfterUnapprove) {
+      await logAuditEvent({
+        actionType: "achievement_student_edited_after_unapprove",
+        entityType: "achievement",
+        entityId: updated._id.toString(),
+        entityTitle: String(updated.nameAr || updated.nameEn || updated.achievementName || updated.title || "")
+          .trim()
+          .slice(0, 200) || undefined,
+        descriptionAr: "قام الطالب بتعديل إنجاز بعد إلغاء اعتماده (قبل إعادة الاعتماد).",
+        actor: actorFromUser(currentUser as any),
+        before: {
+          status: existing.status,
+          approved: existing.approved,
+          certificateRevokedAt: existing.certificateRevokedAt,
+          nameAr: existing.nameAr,
+          nameEn: existing.nameEn,
+          achievementName: existing.achievementName,
+        },
+        after: {
+          status: updated.status,
+          approved: updated.approved,
+          lastStudentEditAt: (updated as any).lastStudentEditAt,
+          editVersion: (updated as any).editVersion,
+          changedFields: (updated as any).changedFields,
+          nameAr: updated.nameAr,
+          nameEn: updated.nameEn,
+          achievementName: updated.achievementName,
+        },
+        outcome: "success",
+        platform: "website",
+      });
+    }
 
     if (enteredReReview && updated) {
       try {
@@ -354,12 +416,13 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 
     return NextResponse.json({
       success: true,
-      achievementId: updated?._id?.toString?.() || params.id,
-      inferredField: updated?.inferredField || resolvedInferredField,
-      score: updated?.score ?? scoreResult.score,
-      scoreBreakdown: updated?.scoreBreakdown || scoreResult.scoreBreakdown,
-      pendingReReview: updated?.pendingReReview === true,
+      achievementId: updated._id.toString(),
+      inferredField: updated.inferredField || resolvedInferredField,
+      score: updated.score ?? scoreResult.score,
+      scoreBreakdown: (updated as any).scoreBreakdown || scoreResult.scoreBreakdown,
+      pendingReReview: (updated as any).pendingReReview === true,
       message: "Achievement updated successfully",
+      title: String(updated.nameAr || updated.nameEn || updated.achievementName || updated.title || "").trim(),
     });
   } catch (error) {
     console.error("Error updating achievement:", error);

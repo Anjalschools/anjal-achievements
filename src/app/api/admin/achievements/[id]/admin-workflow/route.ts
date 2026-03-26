@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import connectDB from "@/lib/mongodb";
 import mongoose from "mongoose";
 import Achievement from "@/models/Achievement";
-import { requireAchievementReviewer } from "@/lib/review-auth";
+import { requireAchievementReviewerForAchievementId } from "@/lib/review-auth";
 import { achievementDisplayTitle, createStudentNotification } from "@/lib/student-notifications";
 
 export const dynamic = "force-dynamic";
@@ -56,13 +56,9 @@ const revokeCertificatesLikePending = (doc: mongoose.Document) => {
 };
 
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
-  const gate = await requireAchievementReviewer();
-  if (!gate.ok) return gate.response;
-
   const id = params.id;
-  if (!id || !mongoose.Types.ObjectId.isValid(id)) {
-    return NextResponse.json({ error: "Invalid achievement id" }, { status: 400 });
-  }
+  const gate = await requireAchievementReviewerForAchievementId(id);
+  if (!gate.ok) return gate.response;
 
   let body: Body = {};
   try {

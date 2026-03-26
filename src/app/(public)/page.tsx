@@ -58,15 +58,15 @@ const HeroSection = () => {
       <div className="relative mx-auto max-w-7xl px-6 py-16 sm:py-20 lg:px-10 lg:py-28">
         <div className="grid items-start gap-8 lg:grid-cols-[1fr_auto]">
           <div className="max-w-3xl">
-            <div className="inline-flex items-center rounded-full border border-white/15 bg-white/10 px-4 py-2 text-sm font-medium text-white/90 backdrop-blur">
+            <div className="inline-flex items-center rounded-full border border-white/15 bg-white/10 px-4 py-2 text-sm font-medium text-white/95 backdrop-blur">
               منصة تميز الأنجال
             </div>
 
-            <h1 className="mt-6 text-4xl font-black leading-[1.15] tracking-tight text-white sm:text-5xl lg:text-7xl">
+            <h1 className="mt-6 text-[2.4rem] font-extrabold leading-[1.3] tracking-normal text-white sm:text-5xl sm:leading-[1.22] lg:text-7xl lg:leading-[1.12]">
               سجّل إنجازك وابدأ رحلتك نحو التميز
             </h1>
 
-            <p className="mt-6 max-w-2xl text-base leading-8 text-white/85 sm:text-lg">
+            <p className="mt-6 max-w-2xl text-base font-normal leading-relaxed text-white/90 sm:text-lg">
               ارفع إنجازاتك، وشاركها مع مجتمعك التعليمي، واحصل على فرص التكريم في
               حفل التميّز للطلاب، واستفد من المنصة في توثيق إنجازاتك وتعزيز فرصك
               في التسجيل في الجامعات المحلية والعالمية.
@@ -93,10 +93,10 @@ const HeroSection = () => {
 
 const VisionMissionSection = () => {
   return (
-    <section className="bg-white py-16">
+    <section id="vision-mission" className="bg-white py-16">
       <div className="container mx-auto px-4">
         <div className="mx-auto max-w-5xl">
-          <h2 className="mb-12 text-center text-3xl font-black text-slate-950 md:text-4xl">
+          <h2 className="mb-12 text-center text-3xl font-bold leading-tight tracking-tight text-slate-950 md:text-4xl">
             رؤيتنا - رسالتنا
           </h2>
 
@@ -106,7 +106,7 @@ const VisionMissionSection = () => {
                 <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
                   <Eye className="h-6 w-6 text-primary" />
                 </div>
-                <h3 className="text-2xl font-black text-primary">الرؤية</h3>
+                <h3 className="text-2xl font-bold leading-snug tracking-tight text-primary">الرؤية</h3>
               </div>
               <p className="text-lg leading-relaxed text-slate-700">
                 إبراز تميز طلاب مدارس الأنجال وتوثيق إنجازاتهم في منصة تربوية
@@ -119,7 +119,7 @@ const VisionMissionSection = () => {
                 <div className="flex h-12 w-12 items-center justify-center rounded-full bg-secondary/10">
                   <Lightbulb className="h-6 w-6 text-secondary" />
                 </div>
-                <h3 className="text-2xl font-black text-secondary">الرسالة</h3>
+                <h3 className="text-2xl font-bold leading-snug tracking-tight text-secondary">الرسالة</h3>
               </div>
               <p className="text-lg leading-relaxed text-slate-700">
                 توفير بيئة رقمية موثوقة لتسجيل الإنجازات المعتمدة، وتحفيز الطلاب
@@ -176,11 +176,11 @@ const QuickActionTiles = () => {
                     <IconComponent className="h-8 w-8 text-primary transition-colors group-hover:text-white" />
                   </div>
 
-                  <h3 className="text-xl font-bold text-text transition-colors group-hover:text-primary">
+                  <h3 className="text-xl font-bold leading-snug tracking-tight text-text transition-colors group-hover:text-primary">
                     {action.title}
                   </h3>
 
-                  <p className="leading-relaxed text-text-light">
+                  <p className="font-normal leading-relaxed text-text-light">
                     {action.description}
                   </p>
                 </div>
@@ -203,10 +203,10 @@ const WhyShareSection = () => {
   ];
 
   return (
-    <section className="bg-white py-16">
+    <section id="why-share" className="bg-white py-16">
       <div className="container mx-auto px-4">
         <div className="mx-auto max-w-4xl">
-          <h2 className="mb-8 text-center text-3xl font-black text-text md:text-4xl">
+          <h2 className="mb-8 text-center text-3xl font-bold leading-tight tracking-tight text-text md:text-4xl">
             لماذا تشارك إنجازك؟
           </h2>
 
@@ -233,10 +233,10 @@ const WhyShareSection = () => {
 
 const CategoryChipsSection = () => {
   return (
-    <section className="bg-background-soft py-16">
+    <section id="achievement-fields" className="bg-background-soft py-16">
       <div className="container mx-auto px-4">
         <div className="mb-12 text-center">
-          <h2 className="mb-4 text-3xl font-bold text-text md:text-4xl">
+          <h2 className="mb-4 text-3xl font-bold leading-tight tracking-tight text-text md:text-4xl md:leading-tight">
             مجالات الإنجاز
           </h2>
           <p className="mx-auto max-w-2xl text-lg text-text-light">
@@ -262,14 +262,14 @@ const CategoryChipsSection = () => {
 
 const EventAnnouncement = () => {
   return (
-    <section className="bg-white py-16">
+    <section id="award-ceremony" className="bg-white py-16">
       <div className="container mx-auto px-4">
         <div className="mx-auto max-w-4xl">
           <div className="overflow-hidden rounded-2xl border-t-4 border-[#d4af37] bg-background-soft shadow-xl">
             <div className="bg-gradient-to-r from-[#071a3d] to-[#1e3a8a] px-8 py-6">
               <div className="flex items-center justify-center gap-3">
                 <Trophy className="h-10 w-10 text-[#d4af37]" />
-                <h2 className="text-center text-xl font-black text-white sm:text-2xl md:text-2xl">
+                <h2 className="text-center text-xl font-bold leading-snug tracking-tight text-white sm:text-2xl md:text-2xl">
                   حفل تكريم الطلاب والطالبات المحققين أعلى الإنجازات
                 </h2>
                 <CalendarDays className="h-10 w-10 text-[#d4af37]" />
@@ -318,7 +318,7 @@ const EventAnnouncement = () => {
 
               <div className="rounded-xl bg-[#071a3d] p-6 text-white">
                 <p className="mb-2 text-lg font-bold">كما سيتم تقديم:</p>
-                <p className="text-lg font-black text-[#d4af37] sm:text-xl">
+                <p className="text-lg font-bold text-[#d4af37] sm:text-xl">
                   3 جوائز قيمة للطلاب المحققين تنوعًا في الإنجازات والحاصلين على أعلى النقاط
                 </p>
               </div>
@@ -353,7 +353,7 @@ const StatisticsBar = () => {
                   </div>
                 </div>
 
-                <div className="mb-2 text-3xl font-black text-primary md:text-4xl">
+                <div className="mb-2 text-3xl font-extrabold tabular-nums tracking-tight text-primary md:text-4xl">
                   {stat.value}
                 </div>
 
@@ -376,7 +376,7 @@ const RecognitionStrip = () => {
     <section className="border-y border-gray-200 bg-white py-12">
       <div className="container mx-auto px-4">
         <div className="mb-8 text-center">
-          <h2 className="mb-2 text-2xl font-bold text-text md:text-3xl">
+          <h2 className="mb-2 text-2xl font-bold leading-snug tracking-tight text-text md:text-3xl">
             مشاركات طلاب وطالبات مدارس الأنجال بالمعارض والمسابقات المحلية
             والعالمية
           </h2>
@@ -456,12 +456,12 @@ const ReferenceAchievementCard = ({
       <div className="mt-4 space-y-2 text-start">
         {variant === "blue" ? (
           <>
-            <h4 className="text-lg font-bold leading-snug text-white">{title}</h4>
+            <h4 className="text-lg font-bold leading-snug tracking-tight text-white">{title}</h4>
             <p className="text-sm leading-relaxed text-blue-100/85">{description}</p>
           </>
         ) : (
           <>
-            <h4 className="text-lg font-bold leading-snug text-slate-900">{title}</h4>
+            <h4 className="text-lg font-bold leading-snug tracking-tight text-slate-900">{title}</h4>
             <p className="text-sm leading-relaxed text-slate-800/90">{description}</p>
           </>
         )}
@@ -519,10 +519,10 @@ const TopAchievementsSection = () => {
   };
 
   return (
-    <section className="border-t border-slate-200/80 bg-gray-50 py-16 md:py-20">
+    <section id="featured-achievements" className="border-t border-slate-200/80 bg-gray-50 py-16 md:py-20">
       <div className="container mx-auto max-w-6xl px-4 md:px-6">
         <div className="mx-auto mb-10 max-w-2xl space-y-3 text-center md:mb-12">
-          <h2 className="text-2xl font-bold leading-tight tracking-tight text-slate-950 md:text-3xl">
+          <h2 className="text-2xl font-bold leading-[1.2] tracking-tight text-slate-950 md:text-3xl">
             إبراز النماذج المتميزة والإنجازات البارزة
           </h2>
           <p className="text-base leading-relaxed text-gray-600">
@@ -536,7 +536,7 @@ const TopAchievementsSection = () => {
           <div className="flex flex-col rounded-2xl bg-[#c5a021] p-5 shadow-[0_8px_24px_rgba(0,0,0,0.12)] ring-1 ring-amber-900/20 sm:p-6">
             <div className="mb-5 flex items-center gap-2 text-start sm:mb-6">
               <Star className="h-7 w-7 shrink-0 text-slate-900" strokeWidth={2} aria-hidden />
-              <h3 className="text-xl font-bold text-slate-900">{weeklySpotlight.title}</h3>
+              <h3 className="text-xl font-bold leading-snug tracking-tight text-slate-900">{weeklySpotlight.title}</h3>
             </div>
             <div className="flex flex-1 flex-col gap-5 md:gap-6">
               <ReferenceAchievementCard
@@ -562,7 +562,7 @@ const TopAchievementsSection = () => {
           <div className="flex flex-col rounded-2xl bg-[#1a2b56] p-5 shadow-[0_8px_24px_rgba(0,0,0,0.15)] ring-1 ring-white/10 sm:p-6">
             <div className="mb-5 flex items-center gap-2 text-start sm:mb-6">
               <Globe className="h-7 w-7 shrink-0 text-[#d4af37]" strokeWidth={2} aria-hidden />
-              <h3 className="text-xl font-bold text-white">{globalAchievements.title}</h3>
+              <h3 className="text-xl font-bold leading-snug tracking-tight text-white">{globalAchievements.title}</h3>
             </div>
             <div className="flex flex-1 flex-col gap-5 md:gap-6">
               <ReferenceAchievementCard

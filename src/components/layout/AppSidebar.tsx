@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -21,37 +21,29 @@ import {
   ScrollText,
   LineChart,
   Sparkles,
+  Share2,
+  LayoutGrid,
+  ListOrdered,
+  type LucideIcon,
+  MessagesSquare,
 } from "lucide-react";
 import { useUnreadNotificationCount } from "@/hooks/useUnreadNotificationCount";
 import { getLocale } from "@/lib/i18n";
-import { isAdminManagerRole, isReviewerNavRole } from "@/lib/app-navigation-roles";
+import { isReviewerNavRole } from "@/lib/app-navigation-roles";
+import { useAppSession } from "@/contexts/AppSessionContext";
+import { roleHasCapability, type RoleCapabilityKey } from "@/lib/app-role-scope-matrix";
 
 const AppSidebar = () => {
   const [isOpen, setIsOpen] = useState(false);
-  const [navRole, setNavRole] = useState<string | null>(null);
   const pathname = usePathname();
   const locale = getLocale();
   const { count: unreadNotifications } = useUnreadNotificationCount();
-
-  useEffect(() => {
-    const load = async () => {
-      try {
-        const res = await fetch("/api/user/profile", { cache: "no-store" });
-        if (!res.ok) {
-          setNavRole(null);
-          return;
-        }
-        const data = await res.json();
-        setNavRole(String(data.role || ""));
-      } catch {
-        setNavRole(null);
-      }
-    };
-    load();
-  }, []);
+  const { profile } = useAppSession();
+  const navRole = profile?.role ?? null;
 
   const isReviewer = isReviewerNavRole(navRole);
-  const isAdminManager = isAdminManagerRole(navRole);
+
+  const can = (key: RoleCapabilityKey) => roleHasCapability(navRole, key);
 
   const achievementsItem = {
     href: "/achievements",
@@ -93,6 +85,11 @@ const AppSidebar = () => {
     icon: FileBarChart,
     label: locale === "ar" ? "التقارير" : "Reports",
   };
+  const leaderboardItem = {
+    href: "/admin/leaderboard",
+    icon: ListOrdered,
+    label: locale === "ar" ? "ترتيب الطلاب" : "Student leaderboard",
+  };
   const adminAddAchievementItem = {
     href: "/admin/achievements/add",
     icon: PlusCircle,
@@ -118,6 +115,26 @@ const AppSidebar = () => {
     icon: SlidersHorizontal,
     label: locale === "ar" ? "إعدادات المنصة" : "Platform settings",
   };
+  const socialIntegrationsItem = {
+    href: "/admin/settings/social-integrations",
+    icon: Share2,
+    label: locale === "ar" ? "التكاملات الاجتماعية" : "Social integrations",
+  };
+  const scoringSettingsItem = {
+    href: "/admin/scoring",
+    icon: SlidersHorizontal,
+    label: locale === "ar" ? "إعدادات النقاط" : "Points settings",
+  };
+  const accessMatrixItem = {
+    href: "/admin/access-matrix",
+    icon: LayoutGrid,
+    label: locale === "ar" ? "مصفوفة الصلاحيات" : "Access matrix",
+  };
+  const contactMessagesItem = {
+    href: "/admin/contact-messages",
+    icon: MessagesSquare,
+    label: locale === "ar" ? "رسائل التواصل" : "Contact messages",
+  };
   const notificationsItem = {
     href: "/notifications",
     icon: Bell,
@@ -137,25 +154,41 @@ const AppSidebar = () => {
 
   /**
    * Students: dashboard + hall + achievements + student add + notifications + profile + settings.
-   * Reviewers/staff: admin dashboard + review + admin add + (managers only: users, AI news, audit, platform settings)
-   * + reports + analytics + hall + achievements list + notifications + profile + settings.
+   * Staff: items filtered by `app-role-scope-matrix` (same rules as AdminAreaGuard + APIs).
    * Never show student "Add achievement" for reviewer roles.
    */
+  const staffNavCandidates: Array<{
+    href: string;
+    icon: LucideIcon;
+    label: string;
+    capability: RoleCapabilityKey | null;
+    badgeCount?: number;
+  }> = [
+    { ...adminDashboardItem, capability: "staffArea" },
+    { ...reviewItem, capability: "reviewAchievements" },
+    { ...adminAddAchievementItem, capability: "adminAddAchievement" },
+    { ...usersItem, capability: "userManagement" },
+    { ...reportsItem, capability: "reports" },
+    { ...leaderboardItem, capability: "reviewAchievements" },
+    { ...analyticsItem, capability: "advancedAnalytics" },
+    { ...hallOfFameItem, capability: "viewAchievements" },
+    { ...achievementsItem, capability: "viewAchievements" },
+    { ...notificationsItem, capability: null },
+    { ...profileItem, capability: null },
+    { ...aiNewsItem, capability: "aiNews" },
+    { ...contactMessagesItem, capability: "contactMessages" },
+    { ...auditLogItem, capability: "auditLog" },
+    { ...adminSettingsItem, capability: "platformSettings" },
+    { ...scoringSettingsItem, capability: "platformSettings" },
+    { ...socialIntegrationsItem, capability: "socialIntegrations" },
+    { ...accessMatrixItem, capability: "accessMatrix" },
+    { ...settingsItem, capability: null },
+  ];
+
   const navItems = isReviewer
-    ? [
-        adminDashboardItem,
-        reviewItem,
-        adminAddAchievementItem,
-        ...(isAdminManager ? [usersItem] : []),
-        reportsItem,
-        analyticsItem,
-        hallOfFameItem,
-        achievementsItem,
-        notificationsItem,
-        profileItem,
-        ...(isAdminManager ? [aiNewsItem, auditLogItem, adminSettingsItem] : []),
-        settingsItem,
-      ]
+    ? staffNavCandidates
+        .filter((row) => row.capability === null || can(row.capability))
+        .map(({ capability: _omit, ...rest }) => rest)
     : [
         studentDashboardItem,
         hallOfFameItem,
@@ -182,6 +215,9 @@ const AppSidebar = () => {
     if (href === "/admin/achievements/reports") {
       return pathname?.startsWith("/admin/achievements/reports");
     }
+    if (href === "/admin/leaderboard") {
+      return pathname === "/admin/leaderboard" || pathname?.startsWith("/admin/leaderboard/");
+    }
     if (href === "/admin/achievements/add") {
       return pathname === "/admin/achievements/add";
     }
@@ -196,6 +232,18 @@ const AppSidebar = () => {
     }
     if (href === "/admin/settings") {
       return pathname === "/admin/settings";
+    }
+    if (href === "/admin/settings/social-integrations") {
+      return pathname?.startsWith("/admin/settings/social-integrations");
+    }
+    if (href === "/admin/scoring") {
+      return pathname === "/admin/scoring" || pathname?.startsWith("/admin/scoring/");
+    }
+    if (href === "/admin/access-matrix") {
+      return pathname === "/admin/access-matrix" || pathname?.startsWith("/admin/access-matrix/");
+    }
+    if (href === "/admin/contact-messages") {
+      return pathname === "/admin/contact-messages" || pathname?.startsWith("/admin/contact-messages/");
     }
     if (href === "/hall-of-fame") {
       return pathname === "/hall-of-fame";

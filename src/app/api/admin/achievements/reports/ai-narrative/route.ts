@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAchievementReviewer } from "@/lib/review-auth";
+import { roleHasCapability } from "@/lib/app-role-scope-matrix";
 import { isAiAssistEnabled } from "@/lib/openai-env";
 import { openAiChatJsonObject } from "@/lib/openai-server";
 
@@ -8,6 +9,9 @@ export const dynamic = "force-dynamic";
 export async function POST(request: NextRequest) {
   const gate = await requireAchievementReviewer();
   if (!gate.ok) return gate.response;
+  if (!roleHasCapability(String(gate.user.role), "reports")) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   if (!isAiAssistEnabled()) {
     return NextResponse.json(

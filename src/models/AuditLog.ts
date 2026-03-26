@@ -15,6 +15,10 @@ export interface IAuditLog extends Document {
   after?: Record<string, unknown>;
   ipAddress?: string;
   userAgent?: string;
+  /** success | failure | partial — optional for legacy rows */
+  outcome?: string;
+  /** e.g. website, instagram — for publishing / integrations */
+  platform?: string;
   createdAt: Date;
 }
 
@@ -34,12 +38,15 @@ const AuditLogSchema = new Schema(
     after: { type: Schema.Types.Mixed },
     ipAddress: { type: String, trim: true },
     userAgent: { type: String, trim: true, maxlength: 2000 },
+    outcome: { type: String, trim: true, index: true },
+    platform: { type: String, trim: true, index: true },
   },
   { timestamps: { createdAt: true, updatedAt: false } }
 );
 
 AuditLogSchema.index({ createdAt: -1 });
 AuditLogSchema.index({ actionType: 1, createdAt: -1 });
+AuditLogSchema.index({ entityType: 1, createdAt: -1 });
 
 const AuditLog: Model<IAuditLog> =
   mongoose.models.AuditLog || mongoose.model<IAuditLog>("AuditLog", AuditLogSchema);

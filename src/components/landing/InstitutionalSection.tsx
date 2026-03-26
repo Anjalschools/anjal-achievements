@@ -22,7 +22,7 @@ export default function InstitutionalSection() {
     <section className="relative overflow-hidden border-t border-slate-200/80 bg-gray-50 py-20">
       <div className="mx-auto grid max-w-7xl grid-cols-1 items-center gap-12 px-6 lg:grid-cols-2 lg:gap-16 lg:px-10">
         <div className="mx-auto max-w-xl space-y-4 text-start">
-          <div className="inline-flex rounded-full bg-[#dce8ff] px-4 py-2 text-sm font-bold text-[#0a4fd6]">
+          <div className="inline-flex rounded-full bg-[#dce8ff] px-4 py-2 text-sm font-semibold text-[#0a4fd6]">
             For Schools
           </div>
 
@@ -50,7 +50,7 @@ export default function InstitutionalSection() {
 
           <div className="pt-2">
             <Link
-              href="/about"
+              href="/login?from=landing"
               className="inline-flex items-center justify-center rounded-md bg-[#0a4fd6] px-5 py-3 text-sm font-bold text-white transition hover:bg-[#0b44b4]"
             >
               تعرف على المنصة

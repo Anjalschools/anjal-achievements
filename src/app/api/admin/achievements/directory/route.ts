@@ -3,6 +3,7 @@ import connectDB from "@/lib/mongodb";
 import Achievement from "@/models/Achievement";
 import User from "@/models/User";
 import { requireAchievementReviewer } from "@/lib/review-auth";
+import { buildAchievementAccessFilter, mergeWithAchievementScope } from "@/lib/achievement-scope-filter";
 
 export const dynamic = "force-dynamic";
 
@@ -44,6 +45,7 @@ export async function GET(request: NextRequest) {
 
   try {
     await connectDB();
+    const scopeFilter = await buildAchievementAccessFilter(gate.user);
     const sp = request.nextUrl.searchParams;
 
     const q = safe(sp.get("q"));
@@ -125,8 +127,9 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    const mongoFilter =
+    const baseFilter =
       andParts.length === 0 ? {} : andParts.length === 1 ? andParts[0] : { $and: andParts };
+    const mongoFilter = mergeWithAchievementScope(baseFilter, scopeFilter);
 
     const total = await Achievement.countDocuments(mongoFilter);
     const rows = await Achievement.find(mongoFilter)

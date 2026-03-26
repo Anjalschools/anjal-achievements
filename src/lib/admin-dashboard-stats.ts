@@ -13,6 +13,9 @@ import {
   getAchievementAdminFieldKey,
   getAchievementAdminFieldLabel,
 } from "@/lib/achievement-admin-display";
+import type { IUser } from "@/models/User";
+import { mergeWithAchievementScope } from "@/lib/achievement-scope-filter";
+import { countStudentsMatchingScope } from "@/lib/user-scope";
 
 /** Mirrors resolveWorkflowDisplayStatus bucket for donut / distribution (aggregation). */
 const workflowBucketExpr: Record<string, unknown> = {
@@ -146,13 +149,26 @@ export type AdminDashboardPayload = {
     aiReview: { count: number; items: Array<{ id: string; titleAr: string; titleEn: string }> };
     stale: { count: number; items: Array<{ id: string; titleAr: string; titleEn: string }> };
   };
+  meta?: { scopeRestricted: boolean };
 };
 
-export const buildAdminDashboardPayload = async (): Promise<AdminDashboardPayload> => {
+export const buildAdminDashboardPayload = async (
+  achievementScopeFilter?: Record<string, unknown> | null,
+  options?: { scopedUser?: IUser }
+): Promise<AdminDashboardPayload> => {
   await connectDB();
+
+  const S = achievementScopeFilter;
+  const hasScope = !!(S && Object.keys(S).length > 0);
+  const wrap = (f: Record<string, unknown>) => mergeWithAchievementScope(f, S ?? null);
 
   const now = new Date();
   const staleBefore = new Date(now.getTime() - STALE_MS);
+
+  const scopedUser = options?.scopedUser;
+  const totalUsersPromise = hasScope && scopedUser
+    ? countStudentsMatchingScope(scopedUser)
+    : User.countDocuments({});
 
   const [
     totalAchievements,
@@ -169,28 +185,33 @@ export const buildAdminDashboardPayload = async (): Promise<AdminDashboardPayloa
     attachmentMismatch,
     stalePending,
   ] = await Promise.all([
-    Achievement.countDocuments({}),
-    Achievement.countDocuments(buildAdminAchievementListFilter("pending")),
-    Achievement.countDocuments(buildAdminAchievementListFilter("needs_revision")),
-    Achievement.countDocuments(buildAdminAchievementListFilter("pending_re_review")),
-    Achievement.countDocuments(buildAdminAchievementListFilter("featured")),
-    Achievement.countDocuments(approvedOnlyFilter),
-    Achievement.countDocuments(buildAdminAchievementListFilter("rejected")),
-    Achievement.countDocuments(buildAdminAchievementListFilter("ai_flagged")),
-    User.countDocuments({}),
-    Achievement.countDocuments(buildAdminAchievementListFilter("duplicate")),
-    Achievement.countDocuments(buildAdminAchievementListFilter("attachment_ai_unclear")),
-    Achievement.countDocuments(buildAdminAchievementListFilter("attachment_ai_mismatch")),
-    Achievement.countDocuments({
-      $and: [
-        buildAdminAchievementListFilter("pending"),
-        { updatedAt: { $lt: staleBefore } },
-      ],
-    }),
+    Achievement.countDocuments(wrap({})),
+    Achievement.countDocuments(wrap(buildAdminAchievementListFilter("pending"))),
+    Achievement.countDocuments(wrap(buildAdminAchievementListFilter("needs_revision"))),
+    Achievement.countDocuments(wrap(buildAdminAchievementListFilter("pending_re_review"))),
+    Achievement.countDocuments(wrap(buildAdminAchievementListFilter("featured"))),
+    Achievement.countDocuments(wrap(approvedOnlyFilter)),
+    Achievement.countDocuments(wrap(buildAdminAchievementListFilter("rejected"))),
+    Achievement.countDocuments(wrap(buildAdminAchievementListFilter("ai_flagged"))),
+    totalUsersPromise,
+    Achievement.countDocuments(wrap(buildAdminAchievementListFilter("duplicate"))),
+    Achievement.countDocuments(wrap(buildAdminAchievementListFilter("attachment_ai_unclear"))),
+    Achievement.countDocuments(wrap(buildAdminAchievementListFilter("attachment_ai_mismatch"))),
+    Achievement.countDocuments(
+      wrap({
+        $and: [
+          buildAdminAchievementListFilter("pending"),
+          { updatedAt: { $lt: staleBefore } },
+        ],
+      })
+    ),
   ]);
+
+  const scopeMatch = hasScope && S ? [{ $match: S }] : [];
 
   const [byYearAgg, byBucketAgg, byLevelAgg, byFieldRawAgg, byEventStudentRawAgg, usersByRoleAgg] = await Promise.all([
     Achievement.aggregate([
+      ...scopeMatch,
       {
         $addFields: {
           refDate: {
@@ -218,11 +239,13 @@ export const buildAdminDashboardPayload = async (): Promise<AdminDashboardPayloa
       { $sort: { _id: 1 } },
     ]).exec(),
     Achievement.aggregate([
+      ...scopeMatch,
       { $addFields: { wfBucket: workflowBucketExpr } },
       { $group: { _id: "$wfBucket", count: { $sum: 1 } } },
       { $sort: { count: -1 } },
     ]).exec(),
     Achievement.aggregate([
+      ...scopeMatch,
       {
         $group: {
           _id: {
@@ -234,6 +257,7 @@ export const buildAdminDashboardPayload = async (): Promise<AdminDashboardPayloa
       { $sort: { count: -1 } },
     ]).exec(),
     Achievement.aggregate([
+      ...scopeMatch,
       {
         $project: {
           coalesced: {
@@ -264,6 +288,7 @@ export const buildAdminDashboardPayload = async (): Promise<AdminDashboardPayloa
       { $group: { _id: "$norm", count: { $sum: 1 } } },
     ]).exec(),
     Achievement.aggregate([
+      ...scopeMatch,
       {
         $project: {
           userId: 1,
@@ -275,7 +300,9 @@ export const buildAdminDashboardPayload = async (): Promise<AdminDashboardPayloa
         },
       },
     ]).exec(),
-    User.aggregate([{ $group: { _id: "$role", count: { $sum: 1 } } }, { $sort: { count: -1 } }]).exec(),
+    hasScope
+      ? Promise.resolve([] as { _id: string; count: number }[])
+      : User.aggregate([{ $group: { _id: "$role", count: { $sum: 1 } } }, { $sort: { count: -1 } }]).exec(),
   ]);
 
   const byAcademicYearRaw = (byYearAgg as { _id: number; count: number }[]).map((r) => ({
@@ -356,10 +383,15 @@ export const buildAdminDashboardPayload = async (): Promise<AdminDashboardPayloa
   }
   /** All platform roles — always returned (0 if none) for admin dashboard clarity. */
   const USER_ROLE_ORDER = ["student", "judge", "teacher", "schoolAdmin", "admin", "supervisor"] as const;
-  const usersByRole = USER_ROLE_ORDER.map((role) => ({
-    role,
-    count: roleCountMap.get(role) ?? 0,
-  }));
+  const usersByRole = hasScope
+    ? USER_ROLE_ORDER.map((role) => ({
+        role,
+        count: role === "student" ? totalUsers : 0,
+      }))
+    : USER_ROLE_ORDER.map((role) => ({
+        role,
+        count: roleCountMap.get(role) ?? 0,
+      }));
 
   const pendingF = buildAdminAchievementListFilter("pending");
   const resubF = buildAdminAchievementListFilter("pending_re_review");
@@ -369,10 +401,10 @@ export const buildAdminDashboardPayload = async (): Promise<AdminDashboardPayloa
   };
 
   const [pPrev, rPrev, aPrev, sPrev] = await Promise.all([
-    fetchPreview(pendingF, 5),
-    fetchPreview(resubF, 5),
-    fetchPreview(aiF, 5),
-    fetchPreview(staleF, 5),
+    fetchPreview(wrap(pendingF), 5),
+    fetchPreview(wrap(resubF), 5),
+    fetchPreview(wrap(aiF), 5),
+    fetchPreview(wrap(staleF), 5),
   ]);
 
   const toItems = (rows: typeof pPrev) =>
@@ -406,5 +438,6 @@ export const buildAdminDashboardPayload = async (): Promise<AdminDashboardPayloa
       aiReview: { count: aiAlerts, items: toItems(aPrev) },
       stale: { count: stalePending, items: toItems(sPrev) },
     },
+    meta: { scopeRestricted: hasScope },
   };
 };

@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import connectDB from "@/lib/mongodb";
 import mongoose, { Types } from "mongoose";
 import Achievement from "@/models/Achievement";
-import { requireAchievementReviewer } from "@/lib/review-auth";
+import { requireAchievementReviewerForAchievementId } from "@/lib/review-auth";
+import { roleHasCapability } from "@/lib/app-role-scope-matrix";
 import { isApprovedForFeature } from "@/lib/achievementWorkflow";
 import { achievementDisplayTitle, createStudentNotification } from "@/lib/student-notifications";
 import { applyDefaultShowInPublicPortfolioWhenPublished } from "@/lib/achievement-public-portfolio-policy";
@@ -12,12 +13,11 @@ export const dynamic = "force-dynamic";
 type RouteParams = { params: { id: string } };
 
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
-  const gate = await requireAchievementReviewer();
-  if (!gate.ok) return gate.response;
-
   const id = params.id;
-  if (!id || !mongoose.Types.ObjectId.isValid(id)) {
-    return NextResponse.json({ error: "Invalid achievement id" }, { status: 400 });
+  const gate = await requireAchievementReviewerForAchievementId(id);
+  if (!gate.ok) return gate.response;
+  if (!roleHasCapability(String(gate.user.role), "featureAchievements")) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   try {

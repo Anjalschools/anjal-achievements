@@ -22,6 +22,8 @@ export type LogAuditEventInput = {
   after?: Record<string, unknown>;
   actor?: AuditActor;
   request?: NextRequest | null;
+  outcome?: "success" | "failure" | "partial";
+  platform?: string;
 };
 
 const redactDeep = (v: unknown, depth = 0): unknown => {
@@ -72,6 +74,8 @@ export const logAuditEvent = async (input: LogAuditEventInput): Promise<void> =>
       after: input.after ? (redactDeep(input.after) as Record<string, unknown>) : undefined,
       ipAddress: ip,
       userAgent: ua?.slice(0, 2000),
+      outcome: input.outcome,
+      platform: input.platform,
     });
   } catch (e) {
     console.error("[audit-log]", e);

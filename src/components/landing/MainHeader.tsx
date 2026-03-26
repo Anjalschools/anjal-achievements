@@ -1,13 +1,14 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { platformName } from "@/data/landing-content";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
 import { getLocale, initLocale } from "@/lib/i18n";
 import { getTranslation } from "@/locales";
 import PlatformLogo from "@/components/branding/PlatformLogo";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Menu, X } from "lucide-react";
 import HeaderAccountMenu, {
   type HeaderAccountMenuProps,
 } from "@/components/layout/HeaderAccountMenu";
@@ -28,6 +29,21 @@ const MainHeader = ({ variant = "default", userAccount }: MainHeaderProps) => {
   const t = getTranslation(locale);
   const isAuth = variant === "auth";
   const isLoggedIn = Boolean(userAccount);
+  const pathname = usePathname();
+  const [mobileOpen, setMobileOpen] = useState(false);
+
+  const publicNav = useMemo(
+    () => [
+      { href: "/", label: locale === "ar" ? "الرئيسية" : "Home" },
+      { href: "/hall-of-fame", label: locale === "ar" ? "لوحة التميز" : "Hall of Fame" },
+      {
+        href: "/#featured-achievements",
+        label: locale === "ar" ? "إنجازات مميّزة" : "Featured Achievements",
+      },
+      { href: "/contact", label: locale === "ar" ? "اتصل بنا" : "Contact Us" },
+    ],
+    [locale]
+  );
 
   return (
     <header className="border-b border-gray-200 bg-white/95 shadow-sm backdrop-blur">
@@ -48,7 +64,7 @@ const MainHeader = ({ variant = "default", userAccount }: MainHeaderProps) => {
             </div>
 
             <div className="min-w-0">
-              <h1 className="truncate text-lg font-bold leading-tight text-primary sm:text-xl">
+              <h1 className="truncate text-lg font-bold leading-tight tracking-tight text-primary sm:text-xl">
                 {locale === "ar" ? platformName.ar : platformName.en}
               </h1>
               {!isAuth && (
@@ -62,58 +78,22 @@ const MainHeader = ({ variant = "default", userAccount }: MainHeaderProps) => {
           {!isAuth && (
             <>
               <nav className="hidden items-center gap-4 lg:flex xl:gap-6">
-                <Link
-                  href="/achievements"
-                  className="whitespace-nowrap text-sm font-medium text-text transition-colors hover:text-primary"
-                >
-                  {t.header.achievements}
-                </Link>
-
-                <Link
-                  href="/rankings"
-                  className="whitespace-nowrap text-sm font-medium text-text transition-colors hover:text-primary"
-                >
-                  {t.header.rankings}
-                </Link>
-
-                <Link
-                  href="/hall-of-fame"
-                  className="whitespace-nowrap text-sm font-medium text-text transition-colors hover:text-primary"
-                >
-                  {t.header.hallOfFame}
-                </Link>
-
-                <Link
-                  href="/categories"
-                  className="whitespace-nowrap text-sm font-medium text-text transition-colors hover:text-primary"
-                >
-                  {t.header.categories}
-                </Link>
+                {publicNav.map((item) => (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className={`whitespace-nowrap text-sm font-medium transition-colors hover:text-primary ${
+                      pathname === item.href || (item.href === "/" && pathname === "/")
+                        ? "text-primary"
+                        : "text-text"
+                    }`}
+                  >
+                    {item.label}
+                  </Link>
+                ))}
               </nav>
 
               <div className="flex min-w-0 shrink-0 items-center gap-2 sm:gap-3">
-                <div className="relative hidden lg:block xl:w-64">
-                  <input
-                    type="text"
-                    placeholder={t.header.searchPlaceholder}
-                    className="h-10 w-48 rounded-xl border border-gray-300 bg-white pr-10 pl-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20 xl:w-64"
-                  />
-                  <svg
-                    className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                    aria-hidden="true"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-                    />
-                  </svg>
-                </div>
-
                 <LanguageSwitcher />
 
                 {isLoggedIn && userAccount ? (
@@ -130,19 +110,28 @@ const MainHeader = ({ variant = "default", userAccount }: MainHeaderProps) => {
                   <>
                     <Link
                       href="/login"
-                      className="whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium text-text transition-colors hover:text-primary sm:px-4"
+                      className="hidden whitespace-nowrap rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium text-text transition-colors hover:border-primary/40 hover:text-primary sm:inline-flex"
                     >
                       {t.header.login}
                     </Link>
 
                     <Link
                       href="/register"
-                      className="whitespace-nowrap rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-primary-dark sm:px-5"
+                      className="hidden whitespace-nowrap rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-primary-dark sm:inline-flex"
                     >
                       {t.header.joinNow}
                     </Link>
                   </>
                 )}
+
+                <button
+                  type="button"
+                  onClick={() => setMobileOpen((v) => !v)}
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-gray-200 text-text lg:hidden"
+                  aria-label={locale === "ar" ? "فتح القائمة" : "Open menu"}
+                >
+                  {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+                </button>
               </div>
             </>
           )}
@@ -166,6 +155,49 @@ const MainHeader = ({ variant = "default", userAccount }: MainHeaderProps) => {
           )}
         </div>
       </div>
+      {!isAuth && mobileOpen && (
+        <div className="border-t border-gray-100 bg-white px-4 pb-4 pt-3 lg:hidden">
+          <nav className="flex flex-col gap-2">
+            {isLoggedIn && userAccount?.appHome ? (
+              <Link
+                href={userAccount.appHome.href}
+                onClick={() => setMobileOpen(false)}
+                className="rounded-lg border border-primary/20 bg-primary/5 px-3 py-2.5 text-sm font-bold text-primary transition-colors hover:bg-primary/10"
+              >
+                {userAccount.appHome.label}
+              </Link>
+            ) : null}
+            {publicNav.map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                onClick={() => setMobileOpen(false)}
+                className="rounded-lg px-3 py-2 text-sm font-medium text-text transition-colors hover:bg-gray-50 hover:text-primary"
+              >
+                {item.label}
+              </Link>
+            ))}
+            {!isLoggedIn ? (
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                <Link
+                  href="/login"
+                  onClick={() => setMobileOpen(false)}
+                  className="inline-flex items-center justify-center rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium text-text"
+                >
+                  {t.header.login}
+                </Link>
+                <Link
+                  href="/register"
+                  onClick={() => setMobileOpen(false)}
+                  className="inline-flex items-center justify-center rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-white"
+                >
+                  {t.header.joinNow}
+                </Link>
+              </div>
+            ) : null}
+          </nav>
+        </div>
+      )}
     </header>
   );
 };

@@ -2,20 +2,18 @@ import { NextRequest, NextResponse } from "next/server";
 import connectDB from "@/lib/mongodb";
 import mongoose from "mongoose";
 import Achievement from "@/models/Achievement";
-import { requireAchievementReviewer } from "@/lib/review-auth";
+import { requireAchievementReviewerForAchievementId } from "@/lib/review-auth";
+import { actorFromUser, logAuditEvent } from "@/lib/audit-log-service";
+import { pickApprovedSnapshot } from "@/lib/achievement-snapshot";
 
 export const dynamic = "force-dynamic";
 
 type RouteParams = { params: { id: string } };
 
 export async function PATCH(_request: NextRequest, { params }: RouteParams) {
-  const gate = await requireAchievementReviewer();
-  if (!gate.ok) return gate.response;
-
   const id = params.id;
-  if (!id || !mongoose.Types.ObjectId.isValid(id)) {
-    return NextResponse.json({ error: "Invalid achievement id" }, { status: 400 });
-  }
+  const gate = await requireAchievementReviewerForAchievementId(id);
+  if (!gate.ok) return gate.response;
 
   try {
     await connectDB();
@@ -24,10 +22,18 @@ export async function PATCH(_request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: "Achievement not found" }, { status: 404 });
     }
 
+    const before = doc.toObject() as unknown as Record<string, unknown>;
+    const wasApproved = String(doc.get("status") || "") === "approved" || doc.get("approved") === true;
+    const approvedSnapshot = wasApproved ? pickApprovedSnapshot(before) : undefined;
+
     doc.set("pendingReReview", false);
-    doc.set("previousApprovedSnapshot", undefined);
+    // Keep snapshot for audit/comparison only (must NOT be used for display).
+    if (approvedSnapshot && Object.keys(approvedSnapshot).length > 0) {
+      doc.set("previousApprovedSnapshot", approvedSnapshot);
+    }
     doc.set("changedFields", []);
-    doc.set("status", "pending");
+    // After unapprove, allow student edits but force re-review.
+    doc.set("status", "pending_review");
     doc.set("isFeatured", false);
     doc.set("featured", false);
     doc.set("approved", false);
@@ -64,10 +70,38 @@ export async function PATCH(_request: NextRequest, { params }: RouteParams) {
     doc.set("certificateVerificationToken", undefined);
     await doc.save();
 
+    await logAuditEvent({
+      actionType: "achievement_unapproved",
+      entityType: "achievement",
+      entityId: doc._id.toString(),
+      entityTitle: String(doc.get("nameAr") || doc.get("nameEn") || doc.get("achievementName") || doc.get("title") || "")
+        .trim()
+        .slice(0, 200) || undefined,
+      descriptionAr: "إلغاء اعتماد إنجاز وإرجاعه للمراجعة مع إلغاء الشهادة (إن وجدت).",
+      actor: actorFromUser(gate.user as any),
+      before: {
+        status: (before as any).status,
+        approved: (before as any).approved,
+        isFeatured: (before as any).isFeatured,
+        featured: (before as any).featured,
+        certificateIssued: (before as any).certificateIssued,
+      },
+      after: {
+        status: doc.get("status"),
+        approved: doc.get("approved"),
+        isFeatured: doc.get("isFeatured"),
+        featured: doc.get("featured"),
+        certificateIssued: doc.get("certificateIssued"),
+        certificateRevokedAt: doc.get("certificateRevokedAt"),
+      },
+      outcome: "success",
+      platform: "website",
+    });
+
     return NextResponse.json({
       success: true,
       id: doc._id.toString(),
-      status: "pending",
+      status: "pending_review",
       isFeatured: false,
       featured: false,
       approved: false,

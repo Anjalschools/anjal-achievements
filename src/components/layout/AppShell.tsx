@@ -1,32 +1,26 @@
 "use client";
 
 import { ReactNode } from "react";
-import { usePathname } from "next/navigation";
 import AppSidebar from "./AppSidebar";
 import UnifiedHeader from "./UnifiedHeader";
 import UnifiedFooter from "./UnifiedFooter";
 import { getLocale } from "@/lib/i18n";
+import { useAppSession } from "@/contexts/AppSessionContext";
+import { resolveHeaderAppHome } from "@/lib/header-app-home";
 
 type AppShellProps = {
   children: ReactNode;
-  userName?: string;
-  userFullName?: string;
-  userEmail?: string;
-  userAvatar?: string;
 };
 
-const AppShell = ({
-  children,
-  userName,
-  userFullName,
-  userEmail,
-  userAvatar,
-}: AppShellProps) => {
+const AppShell = ({ children }: AppShellProps) => {
   const locale = getLocale();
   const isArabic = locale === "ar";
-  const pathname = usePathname();
-  /** Showcase layout: full width, no sidebar (Hall of Fame only). */
-  const isHallOfFameShowcase = pathname === "/hall-of-fame";
+  const { profile } = useAppSession();
+
+  const userName = profile?.username || "";
+  const userFullName = profile?.fullNameAr || profile?.fullName || "";
+  const userEmail = profile?.email || "";
+  const userAvatar = profile?.profilePhoto;
 
   return (
     <div className="flex min-h-screen min-w-0 flex-col bg-gray-50">
@@ -37,21 +31,18 @@ const AppShell = ({
           userFullName,
           userEmail,
           userAvatar,
+          appHome: resolveHeaderAppHome(profile?.role, locale),
         }}
       />
       <div className="flex min-h-0 min-w-0 flex-1 flex-col lg:flex-row">
-        {!isHallOfFameShowcase ? (
-          <div className="shrink-0 overflow-visible lg:w-0 lg:min-w-0">
-            <AppSidebar />
-          </div>
-        ) : null}
+        <div className="shrink-0 overflow-visible lg:w-0 lg:min-w-0">
+          <AppSidebar />
+        </div>
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
           <main className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
             <div
-              className={`mx-auto w-full px-4 py-6 sm:px-6 lg:px-8 ${
-                isHallOfFameShowcase
-                  ? "max-w-[1680px]"
-                  : `max-w-7xl ${isArabic ? "lg:pr-[280px]" : "lg:pl-[280px]"}`
+              className={`mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8 ${
+                isArabic ? "lg:pr-[280px]" : "lg:pl-[280px]"
               }`}
             >
               {children}

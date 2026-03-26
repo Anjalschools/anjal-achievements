@@ -8,10 +8,10 @@ export async function POST(request: NextRequest) {
     { status: 200 }
   );
 
-  // Clear session cookies
-  response.cookies.delete("userId");
-  response.cookies.delete("userEmail");
-  response.cookies.delete("userFullName");
+  const path = { path: "/" };
+  response.cookies.set("userId", "", { ...path, maxAge: 0 });
+  response.cookies.set("userEmail", "", { ...path, maxAge: 0 });
+  response.cookies.set("userFullName", "", { ...path, maxAge: 0 });
 
   return response;
 }

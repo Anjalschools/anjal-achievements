@@ -723,6 +723,7 @@ AchievementSchema.index({ userId: 1, createdAt: -1 });
 AchievementSchema.index({ featured: 1, approved: 1 });
 AchievementSchema.index({ status: 1, isFeatured: 1, createdAt: -1 });
 AchievementSchema.index({ userId: 1, status: 1, showInPublicPortfolio: 1 });
+AchievementSchema.index({ status: 1, userId: 1, score: -1, achievementYear: -1, createdAt: -1 });
 
 const Achievement: Model<IAchievement> =
   mongoose.models.Achievement ||

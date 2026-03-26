@@ -4,33 +4,75 @@ import { getCurrentDbUser } from "@/lib/auth";
 import User from "@/models/User";
 import { normalizeGrade, getGradeLabel } from "@/constants/grades";
 import { perfElapsed, perfLog, perfNow } from "@/lib/perf-debug";
+import { invalidateSessionUserCache } from "@/lib/auth-session-cache";
+import {
+  mergeNotificationPrefs,
+  mergePrivacyPrefs,
+  newPasswordMeetsPolicy,
+  isValidSaMobile,
+} from "@/lib/user-account-preferences";
+import type { IUser } from "@/models/User";
+import { resolveEffectiveStaffScope, usesOrganizationalScope } from "@/lib/user-scope";
+import {
+  normalizeStudentPortfolioContentFromDoc,
+  parseStudentPortfolioContentInput,
+} from "@/lib/student-portfolio-content";
 
 export const dynamic = "force-dynamic";
+
+const buildOrganizationalAccessPayload = (
+  user: IUser
+): {
+  mode: "full" | "scoped";
+  genders?: string[];
+  sections?: string[];
+  grades?: string[];
+} | null => {
+  const roleStr = String(user.role || "");
+  if (roleStr === "admin" || roleStr === "supervisor") {
+    return { mode: "full" };
+  }
+  if (!usesOrganizationalScope(roleStr)) {
+    return null;
+  }
+  const scope = resolveEffectiveStaffScope(user);
+  if (scope.unrestricted) {
+    return { mode: "full" };
+  }
+  return {
+    mode: "scoped",
+    genders: scope.genders,
+    sections: scope.sections,
+    grades: scope.grades,
+  };
+};
 
 // GET user profile
 export async function GET(request: NextRequest) {
   try {
     await connectDB();
 
-    console.log("[GET /api/user/profile] Fetching current user from session");
-
     const user = await getCurrentDbUser();
 
     if (!user) {
-      console.log("[GET /api/user/profile] No user found in session");
       return NextResponse.json(
         { error: "Unauthorized - Please login" },
         { status: 401 }
       );
     }
 
-    console.log("[GET /api/user/profile] Found user:", user._id.toString());
-
     const u = user as unknown as {
       createdAt?: Date;
       lastLoginAt?: Date;
       status?: string;
     };
+
+    const nu = user as typeof user & {
+      notificationPreferences?: Record<string, boolean>;
+      privacyPreferences?: Record<string, boolean>;
+    };
+
+    const organizationalAccess = buildOrganizationalAccessPayload(user as IUser);
 
     return NextResponse.json({
       id: user._id.toString(),
@@ -53,9 +95,16 @@ export async function GET(request: NextRequest) {
       profilePhoto: user.profilePhoto,
       role: user.role,
       preferredLanguage: user.preferredLanguage,
+      notifications: mergeNotificationPrefs(nu.notificationPreferences),
+      privacy: mergePrivacyPrefs(nu.privacyPreferences),
       accountStatus: u.status || "active",
       createdAt: u.createdAt instanceof Date ? u.createdAt.toISOString() : undefined,
       lastLoginAt: u.lastLoginAt instanceof Date ? u.lastLoginAt.toISOString() : null,
+      organizationalAccess,
+      staffScope: (user as IUser).staffScope ?? null,
+      studentPortfolioContent: normalizeStudentPortfolioContentFromDoc(
+        (user as unknown as { studentPortfolioContent?: unknown }).studentPortfolioContent
+      ),
     });
   } catch (error) {
     console.error("Error fetching user profile:", error);
@@ -81,31 +130,43 @@ export async function PUT(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { 
+    const {
       fullName,
       fullNameAr,
       fullNameEn,
-      phone, 
-      gender, 
-      section, 
-      grade, 
-      guardianName, 
+      phone,
+      gender,
+      section,
+      grade,
+      guardianName,
       guardianPhone,
       guardianNationalId,
       preferredLanguage,
       currentPassword,
       newPassword,
       profilePhoto, // Base64 or URL string
+      notifications,
+      privacy,
+      studentPortfolioContent,
     } = body;
 
     // Ignore immutable fields: email, username, studentId, nationalId
     // These should not be updated through this endpoint
 
-    const updateData: any = {};
+    const updateData: Record<string, unknown> = {};
     if (fullName) updateData.fullName = fullName.trim();
     if (fullNameAr !== undefined) updateData.fullNameAr = fullNameAr ? fullNameAr.trim() : undefined;
     if (fullNameEn !== undefined) updateData.fullNameEn = fullNameEn ? fullNameEn.trim() : undefined;
-    if (phone) updateData.phone = phone.trim();
+    if (phone !== undefined && phone !== null && String(phone).trim() !== "") {
+      const p = String(phone).trim();
+      if (!isValidSaMobile(p)) {
+        return NextResponse.json(
+          { error: "Invalid phone number (use 10 digits starting with 05)" },
+          { status: 400 }
+        );
+      }
+      updateData.phone = p.replace(/\D/g, "");
+    }
     if (gender) updateData.gender = gender;
     if (section) updateData.section = section;
     if (grade) {
@@ -113,16 +174,63 @@ export async function PUT(request: NextRequest) {
       updateData.grade = normalized || grade.trim();
     }
     if (guardianName !== undefined) updateData.guardianName = guardianName ? guardianName.trim() : undefined;
-    if (guardianPhone !== undefined) updateData.guardianPhone = guardianPhone ? guardianPhone.trim() : undefined;
+    if (guardianPhone !== undefined) {
+      if (guardianPhone === null || String(guardianPhone).trim() === "") {
+        updateData.guardianPhone = undefined;
+      } else {
+        const g = String(guardianPhone).trim();
+        if (!isValidSaMobile(g)) {
+          return NextResponse.json(
+            { error: "Invalid guardian phone (use 10 digits starting with 05)" },
+            { status: 400 }
+          );
+        }
+        updateData.guardianPhone = g.replace(/\D/g, "");
+      }
+    }
     if (guardianNationalId !== undefined) updateData.guardianNationalId = guardianNationalId ? guardianNationalId.trim() : undefined;
     if (preferredLanguage) updateData.preferredLanguage = preferredLanguage;
     if (profilePhoto) {
-      // If profilePhoto is a base64 string or URL, save it
       updateData.profilePhoto = profilePhoto;
+    }
+
+    if (notifications && typeof notifications === "object" && !Array.isArray(notifications)) {
+      const cur = (currentUser as { notificationPreferences?: Record<string, boolean> })
+        .notificationPreferences;
+      updateData.notificationPreferences = mergeNotificationPrefs({
+        ...cur,
+        ...(notifications as Record<string, boolean>),
+      });
+    }
+
+    if (privacy && typeof privacy === "object" && !Array.isArray(privacy)) {
+      const curP = (currentUser as { privacyPreferences?: Record<string, boolean> })
+        .privacyPreferences;
+      updateData.privacyPreferences = mergePrivacyPrefs({
+        ...curP,
+        ...(privacy as Record<string, boolean>),
+      });
+    }
+
+    if (studentPortfolioContent !== undefined) {
+      const parsed = parseStudentPortfolioContentInput(studentPortfolioContent);
+      if (!parsed.ok) {
+        return NextResponse.json({ error: parsed.error }, { status: 400 });
+      }
+      updateData.studentPortfolioContent = parsed.value;
     }
 
     // Handle password change if provided
     if (newPassword && currentPassword) {
+      if (!newPasswordMeetsPolicy(String(newPassword))) {
+        return NextResponse.json(
+          {
+            error:
+              "New password must be at least 8 characters and include an uppercase letter and a number",
+          },
+          { status: 400 }
+        );
+      }
       const bcrypt = await import("bcryptjs");
       const secretRow = await User.findById(currentUser._id).select("passwordHash").lean();
       const currentHash =
@@ -153,10 +261,17 @@ export async function PUT(request: NextRequest) {
       );
     }
 
+    invalidateSessionUserCache(currentUser._id?.toString(), currentUser.email);
+
     const uu = user as unknown as {
       createdAt?: Date;
       lastLoginAt?: Date;
       status?: string;
+    };
+
+    const uOut = user as typeof user & {
+      notificationPreferences?: Record<string, boolean>;
+      privacyPreferences?: Record<string, boolean>;
     };
 
     return NextResponse.json({
@@ -180,9 +295,16 @@ export async function PUT(request: NextRequest) {
       profilePhoto: user.profilePhoto,
       role: user.role,
       preferredLanguage: user.preferredLanguage,
+      notifications: mergeNotificationPrefs(uOut.notificationPreferences),
+      privacy: mergePrivacyPrefs(uOut.privacyPreferences),
       accountStatus: uu.status || "active",
       createdAt: uu.createdAt instanceof Date ? uu.createdAt.toISOString() : undefined,
       lastLoginAt: uu.lastLoginAt instanceof Date ? uu.lastLoginAt.toISOString() : null,
+      organizationalAccess: buildOrganizationalAccessPayload(user as IUser),
+      staffScope: (user as IUser).staffScope ?? null,
+      studentPortfolioContent: normalizeStudentPortfolioContentFromDoc(
+        (user as unknown as { studentPortfolioContent?: unknown }).studentPortfolioContent
+      ),
     });
   } catch (error: any) {
     console.error("Error updating user profile:", error);

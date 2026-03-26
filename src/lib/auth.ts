@@ -3,6 +3,7 @@ import connectDB from "@/lib/mongodb";
 import User from "@/models/User";
 import mongoose from "mongoose";
 import { perfElapsed, perfLog, perfNow } from "@/lib/perf-debug";
+import { getCachedDbUser, setCachedDbUser } from "@/lib/auth-session-cache";
 
 export interface SessionUser {
   id: string;
@@ -27,19 +28,37 @@ export async function getCurrentDbUser() {
 
     // Try to find by ID first (lean + field trim — read-only session identity)
     if (userId && mongoose.Types.ObjectId.isValid(userId)) {
+      const ck = `id:${userId}`;
+      const hit = getCachedDbUser(ck);
+      if (hit !== undefined) {
+        perfLog("auth:session:cacheHit", { key: "id" });
+        return hit as unknown as InstanceType<typeof User>;
+      }
       const t1 = perfNow();
       const user = await User.findById(userId).select("-passwordHash").lean();
       perfElapsed("auth:session:userLookupById", t1);
       if (user) {
+        const u = user as unknown as Record<string, unknown>;
+        setCachedDbUser(ck, u);
         return user as unknown as InstanceType<typeof User>;
       }
     }
 
     if (userEmail) {
+      const ek = `email:${userEmail.toLowerCase()}`;
+      const hit = getCachedDbUser(ek);
+      if (hit !== undefined) {
+        perfLog("auth:session:cacheHit", { key: "email" });
+        return hit as unknown as InstanceType<typeof User>;
+      }
       const t2 = perfNow();
       const user = await User.findOne({ email: userEmail.toLowerCase() }).select("-passwordHash").lean();
       perfElapsed("auth:session:userLookupByEmail", t2);
       if (user) {
+        const u = user as unknown as Record<string, unknown>;
+        setCachedDbUser(ek, u);
+        const id = user._id?.toString?.();
+        if (id) setCachedDbUser(`id:${id}`, u);
         return user as unknown as InstanceType<typeof User>;
       }
     }
@@ -57,24 +76,18 @@ export async function getCurrentDbUser() {
  */
 export async function setUserSession(userId: string, email: string, fullName?: string) {
   const cookieStore = await cookies();
-  cookieStore.set("userId", userId, {
-    httpOnly: true,
+  const cookieBase = {
+    path: "/" as const,
     secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    maxAge: 60 * 60 * 24 * 7, // 7 days
-  });
-  cookieStore.set("userEmail", email, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    maxAge: 60 * 60 * 24 * 7, // 7 days
-  });
+    sameSite: "lax" as const,
+    maxAge: 60 * 60 * 24 * 7,
+  };
+  cookieStore.set("userId", userId, { ...cookieBase, httpOnly: true });
+  cookieStore.set("userEmail", email, { ...cookieBase, httpOnly: true });
   if (fullName) {
     cookieStore.set("userFullName", fullName, {
-      httpOnly: false, // Allow client-side access
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      maxAge: 60 * 60 * 24 * 7, // 7 days
+      ...cookieBase,
+      httpOnly: false,
     });
   }
 }
@@ -84,7 +97,8 @@ export async function setUserSession(userId: string, email: string, fullName?: s
  */
 export async function clearUserSession() {
   const cookieStore = await cookies();
-  cookieStore.delete("userId");
-  cookieStore.delete("userEmail");
-  cookieStore.delete("userFullName");
+  const names = ["userId", "userEmail", "userFullName"] as const;
+  for (const name of names) {
+    cookieStore.delete({ name, path: "/" });
+  }
 }

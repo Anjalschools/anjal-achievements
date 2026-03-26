@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import mongoose from "mongoose";
 import { requireAchievementReviewer } from "@/lib/review-auth";
+import { roleHasCapability } from "@/lib/app-role-scope-matrix";
 import connectDB from "@/lib/mongodb";
 import Achievement from "@/models/Achievement";
 import User from "@/models/User";
@@ -29,6 +30,9 @@ export const revalidate = 0;
 export async function POST(request: NextRequest) {
   const gate = await requireAchievementReviewer();
   if (!gate.ok) return gate.response;
+  if (!roleHasCapability(String(gate.user.role), "adminAddAchievement")) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   try {
     await connectDB();

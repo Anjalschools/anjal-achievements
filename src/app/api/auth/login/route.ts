@@ -90,26 +90,27 @@ export async function POST(request: NextRequest) {
       { status: 200 }
     );
 
-    response.cookies.set("userId", String(user._id), {
-      httpOnly: true,
+    const sessionCookieOpts = {
+      path: "/",
       secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      maxAge: 60 * 60 * 24 * 7, // 7 days
+      sameSite: "lax" as const,
+      maxAge: 60 * 60 * 24 * 7,
+    };
+
+    response.cookies.set("userId", String(user._id), {
+      ...sessionCookieOpts,
+      httpOnly: true,
     });
 
     response.cookies.set("userEmail", user.email, {
+      ...sessionCookieOpts,
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      maxAge: 60 * 60 * 24 * 7, // 7 days
     });
 
     if (user.fullName) {
       response.cookies.set("userFullName", user.fullName, {
-        httpOnly: false, // Allow client-side access
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "lax",
-        maxAge: 60 * 60 * 24 * 7, // 7 days
+        ...sessionCookieOpts,
+        httpOnly: false,
       });
     }
 

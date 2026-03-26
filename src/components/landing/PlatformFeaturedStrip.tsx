@@ -59,7 +59,7 @@ const PlatformFeaturedStrip = () => {
                 {isAr ? "من المنصة" : "From the platform"}
               </span>
             </div>
-            <h2 className="text-2xl font-bold text-slate-950 md:text-3xl">
+            <h2 className="text-2xl font-bold leading-tight tracking-tight text-slate-950 md:text-3xl">
               {isAr ? "إنجازات مميّزة معتمدة" : "Approved featured achievements"}
             </h2>
             <p className="mt-2 max-w-2xl text-sm text-slate-600">

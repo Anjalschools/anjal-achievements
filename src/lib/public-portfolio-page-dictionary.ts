@@ -54,6 +54,21 @@ export type PublicPortfolioPageCopy = {
   footerLegal: string;
   footerLastUpdated: string;
   backToHomeFooter: string;
+  profileBioTitle: string;
+  profileSkillsTitle: string;
+  profileSkillsTechnical: string;
+  profileSkillsPersonal: string;
+  profileCoursesTitle: string;
+  profileActivitiesTitle: string;
+  profileContactTitle: string;
+  profileLblProvider: string;
+  profileLblType: string;
+  profileLblTrainingHours: string;
+  profileLblLink: string;
+  profileLblOrganization: string;
+  profileLblDescription: string;
+  profileLblHours: string;
+  profileLblDate: string;
 };
 
 const ar: PublicPortfolioPageCopy = {
@@ -115,6 +130,21 @@ const ar: PublicPortfolioPageCopy = {
     "هذا الملف يُعرض للجمهور بموجب تفويض المدرسة ولا يُعتمد إلا مع رمز الوصول السري.",
   footerLastUpdated: "آخر تحديث للبيانات المعروضة:",
   backToHomeFooter: "العودة للصفحة الرئيسية",
+  profileBioTitle: "نبذة عن الطالب",
+  profileSkillsTitle: "المهارات",
+  profileSkillsTechnical: "المهارات التقنية",
+  profileSkillsPersonal: "المهارات الشخصية",
+  profileCoursesTitle: "الدورات والشهادات",
+  profileActivitiesTitle: "الأنشطة والتطوع",
+  profileContactTitle: "معلومات التواصل",
+  profileLblProvider: "الجهة / المزود",
+  profileLblType: "النوع",
+  profileLblTrainingHours: "الساعات التدريبية",
+  profileLblLink: "الرابط",
+  profileLblOrganization: "الجهة",
+  profileLblDescription: "الوصف",
+  profileLblHours: "الساعات",
+  profileLblDate: "التاريخ",
 };
 
 const en: PublicPortfolioPageCopy = {
@@ -176,6 +206,21 @@ const en: PublicPortfolioPageCopy = {
     "This portfolio is shown to the public under school authorization and should only be relied on together with the secret access token.",
   footerLastUpdated: "Last data update:",
   backToHomeFooter: "Back to home page",
+  profileBioTitle: "About the student",
+  profileSkillsTitle: "Skills",
+  profileSkillsTechnical: "Technical skills",
+  profileSkillsPersonal: "Personal skills",
+  profileCoursesTitle: "Courses & certificates",
+  profileActivitiesTitle: "Activities & volunteering",
+  profileContactTitle: "Contact",
+  profileLblProvider: "Provider",
+  profileLblType: "Type",
+  profileLblTrainingHours: "Training hours",
+  profileLblLink: "Link",
+  profileLblOrganization: "Organization",
+  profileLblDescription: "Description",
+  profileLblHours: "Hours",
+  profileLblDate: "Date",
 };
 
 export const getPublicPortfolioPageCopy = (locale: Locale): PublicPortfolioPageCopy =>

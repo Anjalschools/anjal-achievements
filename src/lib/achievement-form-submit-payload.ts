@@ -78,9 +78,11 @@ export const buildAchievementFormSubmitPayload = async (
   }
 
   if (actualAchievementName) {
-    if (data.achievementName && data.achievementName !== "other") {
+    // Always send achievementName if present (even "other") so server can correctly resolve `finalName`.
+    if (data.achievementName) {
       payload.achievementName = data.achievementName;
-    } else if (data.customAchievementName) {
+    }
+    if (data.customAchievementName) {
       payload.customAchievementName = data.customAchievementName;
     }
   }

@@ -19,6 +19,10 @@ import {
 } from "@/lib/achievementDisplay";
 import { resolveCertificateUiStatus } from "@/lib/certificate-eligibility";
 import { tokenPreviewForLogs } from "@/lib/get-base-url";
+import {
+  buildPublicPortfolioProfileExtras,
+  type PublicPortfolioProfileExtras,
+} from "@/lib/student-portfolio-content";
 
 const MAX_ACHIEVEMENTS = 60;
 
@@ -69,6 +73,8 @@ export type PublicPortfolioSuccess = {
     sectionOrGenderEn: string;
     publicPortfolioPublishedAt: string | null;
     lastUpdatedAt: string | null;
+    /** Student-edited portfolio blocks; null when nothing to show. */
+    portfolioProfile: PublicPortfolioProfileExtras | null;
   };
   stats: {
     totalPublishedAchievements: number;
@@ -110,7 +116,7 @@ const truncate = (s: string, max: number) => {
 };
 
 const USER_PUBLIC_SELECT =
-  "+publicPortfolioToken publicPortfolioEnabled publicPortfolioSlug publicPortfolioPublishedAt fullName fullNameAr fullNameEn profilePhoto gender section grade updatedAt createdAt";
+  "+publicPortfolioToken publicPortfolioEnabled publicPortfolioSlug publicPortfolioPublishedAt fullName fullNameAr fullNameEn profilePhoto gender section grade updatedAt createdAt email phone studentPortfolioContent";
 
 const escapeRegex = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
@@ -470,6 +476,13 @@ export const loadPublicPortfolioPayload = async (
   const publishedAtOut =
     u.publicPortfolioPublishedAt instanceof Date ? u.publicPortfolioPublishedAt.toISOString() : null;
 
+  const ur = u as unknown as Record<string, unknown>;
+  const portfolioProfile = buildPublicPortfolioProfileExtras(
+    ur.studentPortfolioContent as Parameters<typeof buildPublicPortfolioProfileExtras>[0],
+    typeof ur.email === "string" ? ur.email : null,
+    typeof ur.phone === "string" ? ur.phone : null
+  );
+
   logPublicPortfolioResolve({
     inputSlug: requestSlug || "(empty)",
     canonicalSlug: storedSlug,
@@ -503,6 +516,7 @@ export const loadPublicPortfolioPayload = async (
         section === "international" ? "International section" : gender === "female" ? "Female student" : "Male student",
       publicPortfolioPublishedAt: publishedAtOut,
       lastUpdatedAt: updatedAt ? updatedAt.toISOString() : null,
+      portfolioProfile,
     },
     stats,
     achievements,

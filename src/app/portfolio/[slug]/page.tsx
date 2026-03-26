@@ -20,6 +20,7 @@ import {
   pickLocalizedText,
 } from "@/lib/public-portfolio-page-locale";
 import { PublicPortfolioLangSwitch } from "@/components/portfolio/PublicPortfolioLangSwitch";
+import PublicPortfolioProfileBlocks from "@/components/portfolio/PublicPortfolioProfileBlocks";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -436,6 +437,14 @@ export default async function PublicPortfolioPage({ params, searchParams }: Page
             </div>
           </div>
         </section>
+
+        <PublicPortfolioProfileBlocks
+          profile={student.portfolioProfile}
+          copy={copy}
+          lang={lang}
+          dir={dir}
+          textMain={textMain}
+        />
 
         <section className="mt-10">
           <h2 className="mb-4 text-center text-xl font-bold text-slate-900 sm:text-2xl">

@@ -31,7 +31,7 @@ const config: Config = {
         },
       },
       fontFamily: {
-        sans: ["var(--font-cairo)", "system-ui", "sans-serif"],
+        sans: ["var(--font-cairo)", "sans-serif"],
       },
     },
   },

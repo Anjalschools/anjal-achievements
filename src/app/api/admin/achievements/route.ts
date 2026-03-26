@@ -3,6 +3,7 @@ import connectDB from "@/lib/mongodb";
 import Achievement from "@/models/Achievement";
 import User from "@/models/User";
 import { requireAchievementReviewer } from "@/lib/review-auth";
+import { buildAchievementAccessFilter, mergeWithAchievementScope } from "@/lib/achievement-scope-filter";
 import {
   buildAdminAchievementListFilter,
   type AdminAchievementTab,
@@ -54,6 +55,8 @@ export async function GET(request: NextRequest) {
   try {
     await connectDB();
 
+    const scopeFilter = await buildAchievementAccessFilter(gate.user);
+
     const { searchParams } = request.nextUrl;
     const tab = tabFromParam(searchParams.get("tab"));
     const q = String(searchParams.get("q") || "").trim();
@@ -61,7 +64,10 @@ export async function GET(request: NextRequest) {
     const limit = Math.min(50, Math.max(1, parseInt(searchParams.get("limit") || "20", 10) || 20));
     const skip = (page - 1) * limit;
 
-    const baseFilter = buildAdminAchievementListFilter(tab);
+    const baseFilter = mergeWithAchievementScope(
+      buildAdminAchievementListFilter(tab),
+      scopeFilter
+    );
     const andParts: Record<string, unknown>[] = [baseFilter];
 
     if (q) {

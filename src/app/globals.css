@@ -3,10 +3,6 @@
 @tailwind utilities;
 
 @layer base {
-  :root {
-    --font-cairo: "Cairo", system-ui, sans-serif;
-  }
-
   * {
     box-sizing: border-box;
     border-color: #e2e8f0;
@@ -22,22 +18,13 @@
     min-height: 100vh;
     background-color: #f5f7fb;
     color: #0f172a;
-    font-family: var(--font-cairo);
+    font-family: var(--font-cairo), system-ui, sans-serif;
     direction: rtl;
-  }
-
-  h1,
-  h2,
-  h3,
-  h4,
-  h5,
-  h6 {
-    font-weight: 700;
-    line-height: 1.4;
+    line-height: 1.65;
   }
 
   p {
-    line-height: 1.8;
+    line-height: 1.7;
   }
 
   a {

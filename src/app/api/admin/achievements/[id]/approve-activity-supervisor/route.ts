@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import connectDB from "@/lib/mongodb";
 import mongoose from "mongoose";
 import Achievement from "@/models/Achievement";
-import { requireAchievementReviewer } from "@/lib/review-auth";
+import { requireAchievementReviewerForAchievementId } from "@/lib/review-auth";
 import { applyAchievementPlatformApproval } from "@/lib/achievement-approval-core";
 import { tryIssueCertificateForAchievementDoc } from "@/lib/certificate-issue";
 
@@ -14,7 +14,8 @@ type RouteParams = { params: { id: string } };
 const SUPERVISOR_ROLES = new Set(["admin", "teacher", "supervisor"]);
 
 export async function PATCH(_request: NextRequest, { params }: RouteParams) {
-  const gate = await requireAchievementReviewer();
+  const id = params.id;
+  const gate = await requireAchievementReviewerForAchievementId(id);
   if (!gate.ok) return gate.response;
 
   const role = String(gate.user.role || "");
@@ -23,11 +24,6 @@ export async function PATCH(_request: NextRequest, { params }: RouteParams) {
       { error: "Forbidden — activity supervisor approval role required" },
       { status: 403 }
     );
-  }
-
-  const id = params.id;
-  if (!id || !mongoose.Types.ObjectId.isValid(id)) {
-    return NextResponse.json({ error: "Invalid achievement id" }, { status: 400 });
   }
 
   try {

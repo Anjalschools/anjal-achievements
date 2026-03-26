@@ -6,6 +6,7 @@ import Achievement from "@/models/Achievement";
 import { applyAiReviewToDoc, runAchievementAiReview } from "@/lib/achievement-ai-review";
 import { mergeResubmitWorkflowState } from "@/lib/achievement-workflow-state";
 import { createStudentNotification } from "@/lib/student-notifications";
+import { actorFromUser, logAuditEvent } from "@/lib/audit-log-service";
 
 export const dynamic = "force-dynamic";
 
@@ -72,6 +73,24 @@ export async function PATCH(_request: NextRequest, { params }: RouteParams) {
     });
     applyAiReviewToDoc(doc, ai);
     await doc.save();
+
+    await logAuditEvent({
+      actionType: "achievement_resubmitted_for_review",
+      entityType: "achievement",
+      entityId: doc._id.toString(),
+      entityTitle: String(doc.get("nameAr") || doc.get("nameEn") || doc.get("achievementName") || doc.get("title") || "")
+        .trim()
+        .slice(0, 200) || undefined,
+      descriptionAr: "إعادة إرسال الإنجاز للمراجعة بعد تعديل الطالب.",
+      actor: actorFromUser(currentUser as any),
+      metadata: {
+        fromNeedsRevision,
+        nextStatus: doc.get("status"),
+        aiReviewStatus: doc.get("aiReviewStatus"),
+      },
+      outcome: "success",
+      platform: "website",
+    });
 
     if (doc.aiReviewStatus === "flagged") {
       try {

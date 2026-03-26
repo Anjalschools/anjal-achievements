@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { initLocale, getLocale, localeDirections } from "@/lib/i18n";
+import { AppSessionProvider } from "@/contexts/AppSessionContext";
 
 export default function LocaleProvider({
   children,
@@ -12,11 +13,10 @@ export default function LocaleProvider({
     initLocale();
     const locale = getLocale();
     const dir = localeDirections[locale];
-    
-    // Update HTML attributes
+
     document.documentElement.lang = locale;
     document.documentElement.dir = dir;
   }, []);
 
-  return <>{children}</>;
+  return <AppSessionProvider>{children}</AppSessionProvider>;
 }
