@@ -69,10 +69,6 @@ export const resolveWorkflowDisplayStatus = (
     if (st === "approved" || a.approved === true) return "pending_re_review";
   }
 
-  const ver = String(a.verificationStatus || "");
-  if (ver === "verified") return "approved";
-  if (ver === "pending_committee_review") return "pending";
-
   const statusRaw = a.status;
   const hasExplicitStatus = typeof statusRaw === "string" && statusRaw.length > 0;
 
@@ -85,6 +81,10 @@ export const resolveWorkflowDisplayStatus = (
       return a.isFeatured === true ? "featured" : "approved";
     }
   }
+
+  const ver = String(a.verificationStatus || "");
+  if (ver === "verified") return "approved";
+  if (ver === "pending_committee_review") return "pending";
 
   const legacyApproved = raw.approved === true;
   const legacyFeatured = raw.featured === true;

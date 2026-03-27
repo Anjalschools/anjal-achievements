@@ -30,6 +30,7 @@ import SafeLocalImage from "@/components/media/SafeLocalImage";
 import { PUBLIC_IMG } from "@/lib/publicImages";
 import InstitutionalAchievementCard from "@/components/landing/InstitutionalAchievementCard";
 import type { HomeHighlightBlockPayload, HomeHighlightItemPayload } from "@/lib/home-highlights";
+import { DEFAULT_HOME_PAGE_CONTENT, type HomePageContentPayload } from "@/lib/home-page-content";
 
 const HOME_HIGHLIGHTS_STATIC_DEFAULT = DEFAULT_HOME_HIGHLIGHTS;
 
@@ -96,7 +97,12 @@ const HeroSection = () => {
   );
 };
 
-const VisionMissionSection = () => {
+const VisionMissionSection = ({ content }: { content: HomePageContentPayload }) => {
+  const locale = getLocale();
+  const isAr = locale === "ar";
+  const visionText = isAr ? content.visionAr : content.visionEn;
+  const missionText = isAr ? content.missionAr : content.missionEn;
+
   return (
     <section id="vision-mission" className="bg-white py-16">
       <div className="container mx-auto px-4">
@@ -114,8 +120,7 @@ const VisionMissionSection = () => {
                 <h3 className="text-2xl font-bold leading-snug tracking-tight text-primary">الرؤية</h3>
               </div>
               <p className="text-lg leading-relaxed text-slate-700">
-                إبراز تميز طلاب مدارس الأنجال وتوثيق إنجازاتهم في منصة تربوية
-                حديثة تدعم التنافس الإيجابي والتميز الأكاديمي والمهاري.
+                {visionText}
               </p>
             </div>
 
@@ -127,8 +132,7 @@ const VisionMissionSection = () => {
                 <h3 className="text-2xl font-bold leading-snug tracking-tight text-secondary">الرسالة</h3>
               </div>
               <p className="text-lg leading-relaxed text-slate-700">
-                توفير بيئة رقمية موثوقة لتسجيل الإنجازات المعتمدة، وتحفيز الطلاب
-                على المشاركة، وتعزيز فرص التكريم والظهور المشرف محليًا وعالميًا.
+                {missionText}
               </p>
             </div>
           </div>
@@ -265,7 +269,38 @@ const CategoryChipsSection = () => {
   );
 };
 
-const EventAnnouncement = () => {
+const EventAnnouncement = ({ content }: { content: HomePageContentPayload }) => {
+  const locale = getLocale();
+  const isAr = locale === "ar";
+
+  const ceremonyTitle = isAr
+    ? content.ceremonyTitleAr || DEFAULT_HOME_PAGE_CONTENT.ceremonyTitleAr
+    : content.ceremonyTitleEn || DEFAULT_HOME_PAGE_CONTENT.ceremonyTitleEn;
+  const ceremonyDescription = isAr
+    ? content.ceremonyDescriptionAr || DEFAULT_HOME_PAGE_CONTENT.ceremonyDescriptionAr
+    : content.ceremonyDescriptionEn || DEFAULT_HOME_PAGE_CONTENT.ceremonyDescriptionEn;
+  const ceremonySubtitle = isAr
+    ? content.ceremonySubtitleAr || DEFAULT_HOME_PAGE_CONTENT.ceremonySubtitleAr
+    : content.ceremonySubtitleEn || DEFAULT_HOME_PAGE_CONTENT.ceremonySubtitleEn;
+  const ceremonyInvitationText = isAr
+    ? content.ceremonyInvitationAwardsAr || DEFAULT_HOME_PAGE_CONTENT.ceremonyInvitationAwardsAr
+    : content.ceremonyInvitationAwardsEn || DEFAULT_HOME_PAGE_CONTENT.ceremonyInvitationAwardsEn;
+  const ceremonyInvitationIntro = isAr
+    ? content.ceremonyInvitationIntroAr || DEFAULT_HOME_PAGE_CONTENT.ceremonyInvitationIntroAr
+    : content.ceremonyInvitationIntroEn || DEFAULT_HOME_PAGE_CONTENT.ceremonyInvitationIntroEn;
+  const ceremonyInvitationDate = isAr
+    ? content.ceremonyInvitationDateAr || DEFAULT_HOME_PAGE_CONTENT.ceremonyInvitationDateAr
+    : content.ceremonyInvitationDateEn || DEFAULT_HOME_PAGE_CONTENT.ceremonyInvitationDateEn;
+  const ceremonyInvitationVenue = isAr
+    ? content.ceremonyInvitationVenueAr || DEFAULT_HOME_PAGE_CONTENT.ceremonyInvitationVenueAr
+    : content.ceremonyInvitationVenueEn || DEFAULT_HOME_PAGE_CONTENT.ceremonyInvitationVenueEn;
+  const ceremonyInvitationProgram = isAr
+    ? content.ceremonyRecognitionItemsAr
+    : content.ceremonyRecognitionItemsEn;
+  const ceremonyInvitationClosing = isAr
+    ? content.ceremonyInvitationClosingAr || DEFAULT_HOME_PAGE_CONTENT.ceremonyInvitationClosingAr
+    : content.ceremonyInvitationClosingEn || DEFAULT_HOME_PAGE_CONTENT.ceremonyInvitationClosingEn;
+
   return (
     <section id="award-ceremony" className="bg-white py-16">
       <div className="container mx-auto px-4">
@@ -278,57 +313,46 @@ const EventAnnouncement = () => {
               <div className="flex items-center justify-center gap-3">
                 <Trophy className="h-10 w-10 text-[#d4af37]" />
                 <h2 className="text-center text-xl font-bold leading-snug tracking-tight text-white sm:text-2xl md:text-2xl">
-                  حفل تكريم الطلاب والطالبات المحققين أعلى الإنجازات
+                  {ceremonyTitle}
                 </h2>
                 <CalendarDays className="h-10 w-10 text-[#d4af37]" />
               </div>
             </div>
 
             <div className="p-8">
+              <p className="mb-4 text-center text-base font-semibold text-[#071a3d]">{ceremonySubtitle}</p>
               <p className="mb-6 text-center text-lg leading-8 text-slate-800">
-                تدعو مدارس الأنجال الأهلية طلابها إلى رفع إنجازاتهم في المنصة
-                استعدادًا لحفل تكريم الإنجازات الطلابية، والذي سيقام يوم{" "}
-                <span className="font-bold text-[#071a3d]">
-                  الأربعاء 3 / 6 / 2026م
-                </span>{" "}
-                على مسرح مدارس الأنجال.
+                {ceremonyDescription}
+              </p>
+              <p className="mb-6 text-center text-lg leading-8 text-slate-800">
+                {ceremonyInvitationIntro}{" "}
+                <span className="font-bold text-[#071a3d]">{ceremonyInvitationDate}</span> {ceremonyInvitationVenue}
               </p>
 
               <div className="mb-6 rounded-xl bg-slate-50 p-6">
                 <h3 className="mb-4 text-xl font-bold text-[#071a3d]">
-                  ويشمل التكريم:
+                  {isAr ? "ويشمل التكريم:" : "Recognition includes:"}
                 </h3>
-
-                <ul className="space-y-2 text-slate-700">
-                  <li className="flex items-start gap-2">
-                    <Check className="mt-0.5 h-5 w-5 flex-shrink-0 text-[#d4af37]" />
-                    <span>الطلاب المحققين لإنجازات على مستوى المملكة</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <Check className="mt-0.5 h-5 w-5 flex-shrink-0 text-[#d4af37]" />
-                    <span>الطلاب المحققين لإنجازات على مستوى العالم</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <Check className="mt-0.5 h-5 w-5 flex-shrink-0 text-[#d4af37]" />
-                    <span>
-                      الطلاب الحاصلين على 99٪ إلى 100٪ في اختبار القدرات
-                    </span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <Check className="mt-0.5 h-5 w-5 flex-shrink-0 text-[#d4af37]" />
-                    <span>
-                      الطلاب المشاركين في مسابقات على مستوى المملكة أو على مستوى
-                      العالم
-                    </span>
-                  </li>
+                <ul className="space-y-3 text-slate-700">
+                  {ceremonyInvitationProgram.map((item, index) => (
+                    <li
+                      key={`${item}-${index}`}
+                      className="flex items-start gap-2 text-base leading-7 sm:text-lg"
+                      dir={isAr ? "rtl" : "ltr"}
+                    >
+                      <Check className="mt-1 h-5 w-5 shrink-0 text-[#d4af37]" />
+                      <span>{item}</span>
+                    </li>
+                  ))}
                 </ul>
               </div>
 
               <div className="rounded-xl bg-[#071a3d] p-6 text-white">
-                <p className="mb-2 text-lg font-bold">كما سيتم تقديم:</p>
+                <p className="mb-2 text-lg font-bold">{isAr ? "كما سيتم تقديم:" : "Also included:"}</p>
                 <p className="text-lg font-bold text-[#d4af37] sm:text-xl">
-                  3 جوائز قيمة للطلاب المحققين تنوعًا في الإنجازات والحاصلين على أعلى النقاط
+                  {ceremonyInvitationText}
                 </p>
+                <p className="mt-3 text-sm text-white/90">{ceremonyInvitationClosing}</p>
               </div>
             </div>
           </div>
@@ -657,14 +681,35 @@ const TopAchievementsSection = () => {
 };
 
 export default function Home() {
+  const [homePageContent, setHomePageContent] = useState<HomePageContentPayload>(DEFAULT_HOME_PAGE_CONTENT);
+
+  useEffect(() => {
+    let mounted = true;
+    const run = async () => {
+      try {
+        const ceremonyRes = await fetch("/api/public/home-ceremony", { cache: "no-store" });
+        if (!ceremonyRes.ok) return;
+        const ceremonyJson = (await ceremonyRes.json()) as { ok?: boolean; data?: Partial<HomePageContentPayload> };
+        if (!mounted || !ceremonyJson?.ok || !ceremonyJson.data) return;
+        setHomePageContent((prev) => ({ ...prev, ...ceremonyJson.data }));
+      } catch {
+        // Keep defaults silently.
+      }
+    };
+    void run();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
   return (
     <div className="min-h-screen bg-[#f5f7fb] text-slate-900">
       <HeroSection />
-      <VisionMissionSection />
+      <VisionMissionSection content={homePageContent} />
       <QuickActionTiles />
       <WhyShareSection />
       <CategoryChipsSection />
-      <EventAnnouncement />
+      <EventAnnouncement content={homePageContent} />
       <StatisticsBar />
       <ParticipationNewsSection />
       <TopAchievementsSection />

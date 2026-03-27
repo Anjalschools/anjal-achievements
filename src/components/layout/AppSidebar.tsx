@@ -25,6 +25,7 @@ import {
   LayoutGrid,
   ListOrdered,
   PanelsTopLeft,
+  CalendarDays,
   type LucideIcon,
   MessagesSquare,
 } from "lucide-react";
@@ -141,6 +142,11 @@ const AppSidebar = () => {
     icon: PanelsTopLeft,
     label: locale === "ar" ? "إبرازات الصفحة الرئيسية" : "Home highlights",
   };
+  const homeCeremonySettingsItem = {
+    href: "/admin/settings/home-ceremony",
+    icon: CalendarDays,
+    label: locale === "ar" ? "تحرير الصفحة الرئيسية" : "Edit homepage",
+  };
   const notificationsItem = {
     href: "/notifications",
     icon: Bell,
@@ -177,6 +183,7 @@ const AppSidebar = () => {
     { ...reportsItem, capability: "reports" },
     { ...leaderboardItem, capability: "reviewAchievements" },
     { ...homeHighlightsItem, capability: "contactMessages" },
+    { ...homeCeremonySettingsItem, capability: "platformSettings" },
     { ...analyticsItem, capability: "advancedAnalytics" },
     { ...hallOfFameItem, capability: "viewAchievements" },
     { ...achievementsItem, capability: "viewAchievements" },
@@ -242,6 +249,9 @@ const AppSidebar = () => {
     }
     if (href === "/admin/settings/social-integrations") {
       return pathname?.startsWith("/admin/settings/social-integrations");
+    }
+    if (href === "/admin/settings/home-ceremony") {
+      return pathname?.startsWith("/admin/settings/home-ceremony");
     }
     if (href === "/admin/scoring") {
       return pathname === "/admin/scoring" || pathname?.startsWith("/admin/scoring/");

@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import type { ReviewerUser } from "@/lib/review-auth";
 import { applyDefaultShowInPublicPortfolioWhenPublished } from "@/lib/achievement-public-portfolio-policy";
+import { calculateAchievementScore } from "@/lib/achievement-scoring";
 
 export type CertificatePartyStamp = "fromRole" | "principal" | "activitySupervisor" | "judge";
 
@@ -71,6 +72,9 @@ export const applyAchievementPlatformApproval = (
   doc.set("pendingReReview", false);
   doc.set("previousApprovedSnapshot", undefined);
   doc.set("changedFields", []);
+  doc.set("requiresCommitteeReview", false);
+  doc.set("verificationStatus", "verified");
+  doc.set("verificationSummary", "Final administrative approval completed.");
   doc.set("lastAdminReviewedAt", now);
   doc.set("lastEditedByRole", "admin");
   doc.set("status", "approved");
@@ -82,6 +86,22 @@ export const applyAchievementPlatformApproval = (
   doc.set("lockedAt", now);
   doc.set("lockedBy", gate.user._id);
   doc.set("certificateRevokedAt", undefined);
+
+  const scoreResult = calculateAchievementScore({
+    achievementType: String(doc.get("achievementType") || ""),
+    achievementLevel: String(doc.get("achievementLevel") || ""),
+    resultType: String(doc.get("resultType") || ""),
+    achievementName: String(doc.get("achievementName") || ""),
+    medalType: String(doc.get("medalType") || "") || undefined,
+    rank: String(doc.get("rank") || "") || undefined,
+    participationType: String(doc.get("participationType") || "") || undefined,
+    // Final admin approval must release points eligibility.
+    requiresCommitteeReview: false,
+  });
+  if (scoreResult.isEligible && scoreResult.score > 0) {
+    doc.set("score", scoreResult.score);
+    doc.set("scoreBreakdown", scoreResult.scoreBreakdown);
+  }
 
   const uid = gate.user._id as mongoose.Types.ObjectId;
   if (party === "fromRole") {
