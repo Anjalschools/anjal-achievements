@@ -8,6 +8,7 @@ import {
   type AdminUpdateUserInput,
 } from "@/lib/admin-users-service";
 import { isAdminManageableRole } from "@/lib/admin-users-constants";
+import { jsonInternalServerError } from "@/lib/api-safe-response";
 
 export const dynamic = "force-dynamic";
 
@@ -33,7 +34,7 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
     return NextResponse.json({ user });
   } catch (e) {
     console.error("[GET /api/admin/users/[id]]", e);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return jsonInternalServerError(e);
   }
 }
 

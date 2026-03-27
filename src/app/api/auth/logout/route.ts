@@ -8,10 +8,15 @@ export async function POST(request: NextRequest) {
     { status: 200 }
   );
 
-  const path = { path: "/" };
-  response.cookies.set("userId", "", { ...path, maxAge: 0 });
-  response.cookies.set("userEmail", "", { ...path, maxAge: 0 });
-  response.cookies.set("userFullName", "", { ...path, maxAge: 0 });
+  const cookieBase = {
+    path: "/" as const,
+    maxAge: 0,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax" as const,
+  };
+  response.cookies.set("userId", "", { ...cookieBase, httpOnly: true });
+  response.cookies.set("userEmail", "", { ...cookieBase, httpOnly: true });
+  response.cookies.set("userFullName", "", { ...cookieBase, httpOnly: false });
 
   return response;
 }

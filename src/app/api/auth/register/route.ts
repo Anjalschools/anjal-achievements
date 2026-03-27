@@ -5,9 +5,14 @@ import UserConsent from "@/models/UserConsent";
 import bcrypt from "bcryptjs";
 import { normalizeGrade } from "@/constants/grades";
 import { ensureStudentPublicPortfolioReady } from "@/lib/public-portfolio-bootstrap";
+import { queueHomeStatsRefresh } from "@/lib/home-stats-service";
+import { checkRouteRateLimit, rateLimitExceededResponse } from "@/lib/rate-limit";
 
 export async function POST(request: NextRequest) {
   try {
+    if (!(await checkRouteRateLimit(request, "/api/auth/register"))) {
+      return rateLimitExceededResponse();
+    }
     await connectDB();
 
     const formData = await request.formData();
@@ -189,6 +194,8 @@ export async function POST(request: NextRequest) {
       preferredLanguage: user.preferredLanguage,
       createdAt: user.createdAt,
     };
+
+    queueHomeStatsRefresh();
 
     return NextResponse.json(
       {

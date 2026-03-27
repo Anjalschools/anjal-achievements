@@ -1,3 +1,5 @@
+import { sanitizeUserText } from "@/lib/sanitize-html";
+
 /** Student-editable blocks shown on the public achievement portfolio (when enabled). */
 
 export type StudentPortfolioCourse = {
@@ -58,7 +60,7 @@ const parseStringList = (v: unknown): string[] => {
   if (Array.isArray(v)) {
     const out: string[] = [];
     for (const x of v) {
-      const t = trimStr(x, MAX_SKILL_LEN);
+      const t = sanitizeUserText(trimStr(x, MAX_SKILL_LEN));
       if (t && !out.includes(t)) out.push(t);
       if (out.length >= MAX_SKILLS) break;
     }
@@ -67,7 +69,7 @@ const parseStringList = (v: unknown): string[] => {
   if (typeof v === "string") {
     return v
       .split(/[\n\r,،;]+/)
-      .map((s) => s.trim())
+      .map((s) => sanitizeUserText(s.trim()))
       .filter(Boolean)
       .map((s) => (s.length > MAX_SKILL_LEN ? s.slice(0, MAX_SKILL_LEN) : s))
       .filter((s, i, a) => a.indexOf(s) === i)
@@ -79,11 +81,11 @@ const parseStringList = (v: unknown): string[] => {
 const parseCourse = (raw: unknown): StudentPortfolioCourse | null => {
   if (!raw || typeof raw !== "object") return null;
   const o = raw as Record<string, unknown>;
-  const title = trimStr(o.title, MAX_FIELD);
-  const provider = trimStr(o.provider, MAX_FIELD);
-  const type = trimStr(o.type, MAX_FIELD);
-  const date = trimStr(o.date, 80);
-  const url = trimStr(o.url, MAX_URL);
+  const title = sanitizeUserText(trimStr(o.title, MAX_FIELD));
+  const provider = sanitizeUserText(trimStr(o.provider, MAX_FIELD));
+  const type = sanitizeUserText(trimStr(o.type, MAX_FIELD));
+  const date = sanitizeUserText(trimStr(o.date, 80));
+  const url = sanitizeUserText(trimStr(o.url, MAX_URL));
   const trainingHours = parseHours(o.trainingHours);
   if (!title && !provider && !type && !date && !url && trainingHours == null) return null;
   return { title, provider, type, trainingHours, date, url };
@@ -92,11 +94,11 @@ const parseCourse = (raw: unknown): StudentPortfolioCourse | null => {
 const parseActivity = (raw: unknown): StudentPortfolioActivity | null => {
   if (!raw || typeof raw !== "object") return null;
   const o = raw as Record<string, unknown>;
-  const title = trimStr(o.title, MAX_FIELD);
-  const type = trimStr(o.type, MAX_FIELD);
-  const organization = trimStr(o.organization, MAX_FIELD);
-  const description = trimStr(o.description, MAX_DESC);
-  const date = trimStr(o.date, 80);
+  const title = sanitizeUserText(trimStr(o.title, MAX_FIELD));
+  const type = sanitizeUserText(trimStr(o.type, MAX_FIELD));
+  const organization = sanitizeUserText(trimStr(o.organization, MAX_FIELD));
+  const description = sanitizeUserText(trimStr(o.description, MAX_DESC));
+  const date = sanitizeUserText(trimStr(o.date, 80));
   const hours = parseHours(o.hours);
   if (!title && !type && !organization && !description && !date && hours == null) return null;
   return { title, type, organization, description, hours, date };
@@ -115,7 +117,7 @@ export const normalizeStudentPortfolioContentFromDoc = (raw: unknown): StudentPo
   const base = emptyStudentPortfolioContent();
   if (!raw || typeof raw !== "object") return base;
   const d = raw as Record<string, unknown>;
-  const bio = trimStr(d.bio, MAX_BIO);
+  const bio = sanitizeUserText(trimStr(d.bio, MAX_BIO));
   const technicalSkills = parseStringList(d.technicalSkills);
   const personalSkills = parseStringList(d.personalSkills);
   const coursesRaw = Array.isArray(d.courses) ? d.courses : [];

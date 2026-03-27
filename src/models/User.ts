@@ -201,6 +201,7 @@ const UserSchema: Schema = new Schema(
     passwordHash: {
       type: String,
       required: true,
+      select: false,
     },
     profilePhoto: {
       type: String,
@@ -287,6 +288,7 @@ const UserSchema: Schema = new Schema(
 );
 
 UserSchema.index({ publicPortfolioEnabled: 1, publicPortfolioSlug: 1 });
+UserSchema.index({ role: 1 });
 
 const User: Model<IUser> =
   mongoose.models.User || mongoose.model<IUser>("User", UserSchema);

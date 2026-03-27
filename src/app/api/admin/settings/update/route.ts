@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { jsonInternalServerError } from "@/lib/api-safe-response";
 import { requireSettingsWriteGate } from "@/lib/platform-settings-access";
 import {
   getPlatformSettings,
@@ -105,9 +106,9 @@ export async function POST(request: NextRequest) {
     });
   } catch (e) {
     console.error("[POST /api/admin/settings/update]", e);
-    return NextResponse.json(
-      { success: false, message: "فشل الحفظ", messageEn: "Save failed" },
-      { status: 500 }
-    );
+    return jsonInternalServerError(e, {
+      skipErrorKey: true,
+      merge: { success: false, message: "فشل الحفظ", messageEn: "Save failed" },
+    });
   }
 }

@@ -4,6 +4,7 @@ import { getPlatformSettings, mergePlatformSettingsPatch } from "@/lib/platform-
 import { sanitizeBrandingPatch, validatePlatformSettingsPatch } from "@/lib/platform-settings-validation";
 import { logAuditEvent, actorFromUser } from "@/lib/audit-log-service";
 import type { IUser } from "@/models/User";
+import { jsonInternalServerError } from "@/lib/api-safe-response";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -17,7 +18,7 @@ export async function GET() {
     return NextResponse.json({ ok: true, settings });
   } catch (e) {
     console.error("[GET /api/admin/settings]", e);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return jsonInternalServerError(e);
   }
 }
 
@@ -60,6 +61,6 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ ok: true, settings: after });
   } catch (e) {
     console.error("[PATCH /api/admin/settings]", e);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return jsonInternalServerError(e);
   }
 }

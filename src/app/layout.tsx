@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
+import { headers } from "next/headers";
 import "./globals.css";
 import LocaleProvider from "@/components/LocaleProvider";
+import { CSP_NONCE_HEADER } from "@/lib/csp";
 
 const cairo = localFont({
   src: [
@@ -29,8 +31,10 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const nonce = headers().get(CSP_NONCE_HEADER) ?? undefined;
+
   return (
-    <html lang="ar" dir="rtl" suppressHydrationWarning>
+    <html lang="ar" dir="rtl" suppressHydrationWarning nonce={nonce}>
       <body className={`${cairo.variable} antialiased`}>
         <LocaleProvider>{children}</LocaleProvider>
       </body>

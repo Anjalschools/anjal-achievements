@@ -6,6 +6,7 @@ import NewsPost from "@/models/NewsPost";
 import { serializeNewsPost } from "@/lib/news-serialize";
 import { logAuditEvent, actorFromUser } from "@/lib/audit-log-service";
 import type { IUser } from "@/models/User";
+import { jsonInternalServerError } from "@/lib/api-safe-response";
 
 export const dynamic = "force-dynamic";
 
@@ -34,7 +35,7 @@ export async function GET(_request: NextRequest, ctx: { params: Promise<{ id: st
     return NextResponse.json({ ok: true, item: serializeNewsPost(doc as unknown as Record<string, unknown>) });
   } catch (e) {
     console.error("[GET /api/admin/news/[id]]", e);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return jsonInternalServerError(e);
   }
 }
 
@@ -116,6 +117,6 @@ export async function PATCH(request: NextRequest, ctx: { params: Promise<{ id: s
     return NextResponse.json({ ok: true, item: serializeNewsPost(doc.toObject()) });
   } catch (e) {
     console.error("[PATCH /api/admin/news/[id]]", e);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return jsonInternalServerError(e);
   }
 }

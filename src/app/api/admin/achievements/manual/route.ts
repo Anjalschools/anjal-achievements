@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { jsonInternalServerError } from "@/lib/api-safe-response";
 import mongoose from "mongoose";
 import { requireAchievementReviewer } from "@/lib/review-auth";
 import { roleHasCapability } from "@/lib/app-role-scope-matrix";
@@ -23,6 +24,7 @@ import { logAuditEvent, actorFromUser } from "@/lib/audit-log-service";
 import type { IUser } from "@/models/User";
 import { normalizeAttachmentsArray } from "@/lib/achievement-attachments";
 import { applyAiReviewToDoc, runAchievementAiReview } from "@/lib/achievement-ai-review";
+import { queueHomeStatsRefresh } from "@/lib/home-stats-service";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -328,6 +330,8 @@ export async function POST(request: NextRequest) {
       request,
     });
 
+    queueHomeStatsRefresh();
+
     return NextResponse.json({
       ok: true,
       id: String(created._id),
@@ -336,6 +340,6 @@ export async function POST(request: NextRequest) {
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
     console.error("[POST /api/admin/achievements/manual]", e);
-    return NextResponse.json({ error: msg || "Internal server error" }, { status: 500 });
+    return jsonInternalServerError(e, { fallbackMessage: msg || "Internal server error" });
   }
 }

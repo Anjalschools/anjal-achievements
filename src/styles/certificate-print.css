@@ -1,0 +1,322 @@
+/**
+ * Print / PDF layout for the achievement certificate view only.
+ * Scoped by `html.certificate-print-doc` (toggled from certificate page).
+ * Do not import globally outside that route.
+ */
+@page {
+  size: A4 landscape;
+  margin: 0 !important;
+}
+
+@media print {
+  /*
+   * Do NOT use position:fixed on the certificate — Chrome repeats fixed layers on every printed page.
+   * Keep one in-flow 210mm-tall clip; inner card 207mm avoids subpixel "صفحتان".
+   */
+  html.certificate-print-doc * {
+    box-sizing: border-box !important;
+  }
+
+  /*
+   * Page box: zero margins; some UAs still add chrome — @page margin 0 + body flush minimizes top gap.
+   */
+  html.certificate-print-doc,
+  html.certificate-print-doc body {
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 297mm !important;
+    height: 210mm !important;
+    min-height: 210mm !important;
+    max-height: 210mm !important;
+    overflow: hidden !important;
+    background: #fff !important;
+  }
+
+  /* AppShell: collapse min-h-screen and hide chrome (display:none — no phantom layout) */
+  html.certificate-print-doc body > div.min-h-screen {
+    min-height: 0 !important;
+    height: 210mm !important;
+    max-height: 210mm !important;
+    overflow: hidden !important;
+    background: #fff !important;
+    page-break-after: avoid !important;
+    break-after: avoid !important;
+  }
+
+  html.certificate-print-doc body > div.min-h-screen > div.sticky {
+    display: none !important;
+  }
+
+  html.certificate-print-doc body > div.min-h-screen > footer {
+    display: none !important;
+  }
+
+  html.certificate-print-doc body > div.min-h-screen > div.flex-1.flex-col.lg\:flex-row {
+    display: block !important;
+    height: 210mm !important;
+    min-height: 0 !important;
+    max-height: 210mm !important;
+    overflow: hidden !important;
+    flex: none !important;
+    flex-grow: 0 !important;
+  }
+
+  html.certificate-print-doc
+    body
+    > div.min-h-screen
+    > div.flex-1.flex-col.lg\:flex-row
+    > div.shrink-0.overflow-visible {
+    display: none !important;
+  }
+
+  html.certificate-print-doc
+    body
+    > div.min-h-screen
+    > div.flex-1.flex-col.lg\:flex-row
+    > div.flex.min-h-0.flex-1.flex-col {
+    height: 210mm !important;
+    min-height: 0 !important;
+    max-height: 210mm !important;
+    overflow: hidden !important;
+    display: block !important;
+    flex: none !important;
+    flex-grow: 0 !important;
+  }
+
+  html.certificate-print-doc main {
+    height: 210mm !important;
+    min-height: 0 !important;
+    max-height: 210mm !important;
+    overflow: hidden !important;
+    padding: 0 !important;
+    flex: none !important;
+    flex-grow: 0 !important;
+  }
+
+  html.certificate-print-doc main > div.mx-auto.w-full.max-w-7xl {
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    height: 210mm !important;
+    min-height: 0 !important;
+    max-height: 210mm !important;
+    overflow: hidden !important;
+  }
+
+  html.certificate-print-doc .certificate-page-shell {
+    max-width: none !important;
+    margin: 0 !important;
+    margin-top: 0 !important;
+    padding: 0 !important;
+    padding-top: 0 !important;
+    top: 0 !important;
+    height: 210mm !important;
+    min-height: 0 !important;
+    max-height: 210mm !important;
+    overflow: hidden !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  html.certificate-print-doc .certificate-root-wrapper {
+    margin: 0 !important;
+    padding: 0 !important;
+    max-width: none !important;
+    height: 202mm !important;
+    min-height: 0 !important;
+    max-height: 202mm !important;
+    overflow: hidden !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  html.certificate-print-doc .certificate-page-print-host {
+    margin: 0 !important;
+    padding: 0 !important;
+    max-width: none !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    height: 202mm !important;
+    min-height: 0 !important;
+    max-height: 202mm !important;
+    overflow: hidden !important;
+    display: block !important;
+    top: 0 !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  /* Background: exact A4 landscape (297×210mm) — stretch artwork to page box */
+  html.certificate-print-doc .certificate-background {
+    position: absolute !important;
+    inset: 0 !important;
+    z-index: 0 !important;
+  }
+
+  /* Slightly smaller than full bleed — eases single-page print + leaves a thin inner margin on the art */
+  html.certificate-print-doc .certificate-background.certificate-background-image {
+    background-size: 95% 95% !important;
+    background-position: center center !important;
+    background-repeat: no-repeat !important;
+  }
+
+  html.certificate-print-doc .certificate-print-target {
+    display: block !important;
+    position: relative !important;
+    top: 0 !important;
+    width: 100% !important;
+    max-width: 297mm !important;
+    height: 202mm !important;
+    max-height: 202mm !important;
+    margin: 0 auto !important;
+    padding: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    overflow: hidden !important;
+    transform: none !important;
+    page-break-after: avoid !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    print-color-adjust: exact !important;
+    -webkit-print-color-adjust: exact !important;
+  }
+
+  /*
+   * Stack: header | body (auto height) | footer — no 1fr middle + vertical center (that caused huge gap title↔text).
+   * align-content:start packs rows; shorter flow pulls QR up and helps single-page print.
+   */
+  html.certificate-print-doc .certificate-content {
+    position: absolute !important;
+    z-index: 1 !important;
+    inset: 0 !important;
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+    grid-template-rows: auto auto auto !important;
+    align-content: start !important;
+    justify-items: stretch !important;
+    box-sizing: border-box !important;
+    width: 100% !important;
+    height: 100% !important;
+    max-height: 100% !important;
+    overflow: hidden !important;
+    margin: 0 !important;
+    padding-top: 39mm !important;
+    padding-right: 15mm !important;
+    padding-bottom: 7mm !important;
+    padding-left: 15mm !important;
+  }
+
+  html.certificate-print-doc .certificate-print-header {
+    grid-row: 1 !important;
+    align-self: start !important;
+    /* Extra 5mm vs previous: title block lower ~0.5cm; 10mm below = 1cm to bilingual body */
+    margin: 12mm 0 10mm 0 !important;
+    padding: 0 !important;
+  }
+
+  html.certificate-print-doc .certificate-body-host {
+    grid-row: 2 !important;
+    min-height: 0 !important;
+    overflow: hidden !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: flex-start !important;
+    align-items: stretch !important;
+  }
+
+  html.certificate-print-doc .certificate-body-two-col {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) !important;
+    column-gap: 5mm !important;
+    row-gap: 1mm !important;
+    direction: ltr !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    min-height: 0 !important;
+    max-height: 100% !important;
+    overflow: hidden !important;
+    align-content: start !important;
+  }
+
+  html.certificate-print-doc .certificate-body-stack {
+    display: none !important;
+  }
+
+  html.certificate-print-doc .certificate-col-en,
+  html.certificate-print-doc .certificate-col-ar {
+    min-width: 0 !important;
+    min-height: 0 !important;
+    overflow: hidden !important;
+  }
+
+  /* Slightly smaller type so header + bilingual columns + QR fit the inset area on one sheet */
+  html.certificate-print-doc .certificate-col-en {
+    font-size: 8.25pt !important;
+    line-height: 1.28 !important;
+    text-align: left !important;
+    padding-left: 0 !important;
+    padding-right: 4mm !important;
+    box-sizing: border-box !important;
+  }
+
+  html.certificate-print-doc .certificate-col-ar {
+    font-size: 8.85pt !important;
+    line-height: 1.32 !important;
+    text-align: right !important;
+    padding-right: 0 !important;
+    padding-left: 4mm !important;
+    box-sizing: border-box !important;
+  }
+
+  html.certificate-print-doc .certificate-print-header h1 {
+    font-size: 1.48rem !important;
+    line-height: 1.12 !important;
+  }
+
+  html.certificate-print-doc .certificate-print-header p {
+    font-size: 0.65rem !important;
+    line-height: 1.15 !important;
+    margin-top: 2px !important;
+  }
+
+  html.certificate-print-doc .certificate-footer-row {
+    grid-row: 3 !important;
+    align-self: start !important;
+    flex-shrink: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    position: relative !important;
+    display: flex !important;
+    justify-content: center !important;
+    align-items: flex-end !important;
+    width: 100% !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  html.certificate-print-doc .certificate-footer-inner {
+    position: relative !important;
+    left: auto !important;
+    bottom: auto !important;
+    transform: none !important;
+    max-width: 100% !important;
+  }
+
+  html.certificate-print-doc .certificate-qr-img {
+    width: 52px !important;
+    height: 52px !important;
+  }
+
+  html.certificate-print-doc .certificate-footer-inner p,
+  html.certificate-print-doc .certificate-qr-box p {
+    font-size: 0.45rem !important;
+    line-height: 1.15 !important;
+  }
+
+  html.certificate-print-doc .no-print {
+    display: none !important;
+  }
+}

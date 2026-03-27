@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { jsonInternalServerError } from "@/lib/api-safe-response";
 import mongoose from "mongoose";
 import { requireAdminUserManager } from "@/lib/admin-user-management-auth";
 import connectDB from "@/lib/mongodb";
@@ -135,9 +136,8 @@ export async function GET(request: NextRequest) {
     });
   } catch (e) {
     console.error("[GET /api/admin/audit-logs]", e);
-    return NextResponse.json(
-      { success: false, error: "Internal server error", message: "خطأ", messageEn: "Server error" },
-      { status: 500 }
-    );
+    return jsonInternalServerError(e, {
+      merge: { success: false, message: "خطأ", messageEn: "Server error" },
+    });
   }
 }

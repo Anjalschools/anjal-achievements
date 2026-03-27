@@ -8,6 +8,7 @@ import { inferAchievementField } from "@/lib/achievement-field-inference";
 import { clampInferredFieldToAllowlist } from "@/lib/achievement-inferred-field-allowlist";
 import { calculateAchievementScore } from "@/lib/achievement-scoring";
 import { buildStudentAchievementDetailPayload } from "@/lib/achievement-detail-response";
+import { jsonInternalServerError } from "@/lib/api-safe-response";
 
 export const dynamic = "force-dynamic";
 
@@ -28,7 +29,7 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
     return NextResponse.json(buildStudentAchievementDetailPayload(achievement));
   } catch (e) {
     console.error("[GET admin achievement]", e);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return jsonInternalServerError(e);
   }
 }
 

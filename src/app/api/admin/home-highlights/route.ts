@@ -3,6 +3,8 @@ import connectDB from "@/lib/mongodb";
 import HomeHighlight from "@/models/HomeHighlight";
 import { DEFAULT_HOME_HIGHLIGHTS, normalizeHomeHighlightPayload } from "@/lib/home-highlights";
 import { requireHomeHighlightsAdmin } from "@/lib/home-highlights-auth";
+import { invalidateHomeHighlightsPublicCache } from "@/lib/public-endpoints-cache";
+import { jsonInternalServerError } from "@/lib/api-safe-response";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -29,7 +31,7 @@ export async function GET() {
     return NextResponse.json({ ok: true, data });
   } catch (error) {
     console.error("[GET /api/admin/home-highlights]", error);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return jsonInternalServerError(error);
   }
 }
 
@@ -66,10 +68,11 @@ export async function PUT(request: NextRequest) {
       studentShowcaseItems: data.studentShowcaseItems || [],
       isActive: true,
     });
+    invalidateHomeHighlightsPublicCache();
     return NextResponse.json({ ok: true, data: normalizeHomeHighlightPayload(created.toObject()) });
   } catch (error) {
     console.error("[PUT /api/admin/home-highlights]", error);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return jsonInternalServerError(error);
   }
 }
 
@@ -116,10 +119,11 @@ export async function PATCH(request: NextRequest) {
       { upsert: true, new: true }
     ).lean();
 
+    invalidateHomeHighlightsPublicCache();
     return NextResponse.json({ ok: true, data: normalizeHomeHighlightPayload(updated || merged) });
   } catch (error) {
     console.error("[PATCH /api/admin/home-highlights]", error);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return jsonInternalServerError(error);
   }
 }
 

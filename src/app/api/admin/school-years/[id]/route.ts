@@ -6,6 +6,7 @@ import SchoolYear from "@/models/SchoolYear";
 import { archiveSchoolYear, setYearAsCurrent } from "@/lib/school-year-service";
 import { logAuditEvent, actorFromUser } from "@/lib/audit-log-service";
 import type { IUser } from "@/models/User";
+import { jsonInternalServerError } from "@/lib/api-safe-response";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -79,6 +80,6 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     return NextResponse.json({ ok: true, item: doc.toObject() });
   } catch (e) {
     console.error("[PATCH /api/admin/school-years/id]", e);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return jsonInternalServerError(e);
   }
 }

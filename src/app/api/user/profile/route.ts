@@ -232,7 +232,7 @@ export async function PUT(request: NextRequest) {
         );
       }
       const bcrypt = await import("bcryptjs");
-      const secretRow = await User.findById(currentUser._id).select("passwordHash").lean();
+      const secretRow = await User.findById(currentUser._id).select("+passwordHash").lean();
       const currentHash =
         secretRow && typeof (secretRow as { passwordHash?: string }).passwordHash === "string"
           ? (secretRow as { passwordHash: string }).passwordHash

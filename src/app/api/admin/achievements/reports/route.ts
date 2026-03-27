@@ -10,6 +10,7 @@ import {
   buildUrgentReviewQueueStats,
 } from "@/lib/achievement-admin-reports";
 import { parseReportCsvParam } from "@/lib/report-filter-options";
+import { jsonInternalServerError } from "@/lib/api-safe-response";
 
 export const dynamic = "force-dynamic";
 
@@ -88,6 +89,6 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Unknown report type" }, { status: 400 });
   } catch (e) {
     console.error("[GET admin achievements reports]", e);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return jsonInternalServerError(e);
   }
 }

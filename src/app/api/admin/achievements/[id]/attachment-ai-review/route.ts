@@ -5,6 +5,7 @@ import Achievement from "@/models/Achievement";
 import { requireAchievementReviewerForAchievementId } from "@/lib/review-auth";
 import { isAiAssistEnabled } from "@/lib/openai-env";
 import { runAdminAchievementAttachmentAiReview } from "@/lib/achievement-admin-attachment-ai";
+import { jsonInternalServerError } from "@/lib/api-safe-response";
 
 export const dynamic = "force-dynamic";
 
@@ -79,6 +80,6 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
     });
   } catch (e) {
     console.error("[POST attachment-ai-review]", e);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return jsonInternalServerError(e);
   }
 }

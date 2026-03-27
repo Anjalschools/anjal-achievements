@@ -15,6 +15,7 @@ import {
 } from "@/lib/public-portfolio";
 import { getBaseUrl } from "@/lib/get-base-url";
 import { ensureStudentPublicPortfolioReady } from "@/lib/public-portfolio-bootstrap";
+import { queueHomeStatsRefresh } from "@/lib/home-stats-service";
 
 const LIST_FIELDS =
   "fullName fullNameAr fullNameEn username email role status studentId nationalId phone profilePhoto preferredLanguage gender section grade createdAt updatedAt lastLoginAt publicPortfolioEnabled publicPortfolioSlug publicPortfolioPublishedAt";
@@ -238,6 +239,8 @@ export const adminCreateUser = async (input: AdminCreateUserInput): Promise<Admi
     await ensureStudentPublicPortfolioReady(String(doc._id));
   }
 
+  queueHomeStatsRefresh();
+
   const u = await User.findById(doc._id).select(LIST_FIELDS).lean();
   return serializeAdminUserRow(u as unknown as Record<string, unknown>);
 };
@@ -341,6 +344,9 @@ export const adminUpdateUser = async (
   }
 
   await User.updateOne({ _id: id }, { $set });
+  if (input.role !== undefined) {
+    queueHomeStatsRefresh();
+  }
   const u = await User.findById(id).select(LIST_FIELDS).lean();
   if (!u) throw new Error("User not found");
   return serializeAdminUserRow(u as unknown as Record<string, unknown>);
@@ -381,6 +387,7 @@ export const adminDeleteUser = async (id: string, actorId: string): Promise<void
   }
   const r = await User.deleteOne({ _id: id });
   if (r.deletedCount === 0) throw new Error("User not found");
+  queueHomeStatsRefresh();
 };
 
 export type AdminPublicPortfolioUpdateInput = {

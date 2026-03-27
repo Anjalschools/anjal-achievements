@@ -6,6 +6,7 @@ import type { SocialProvider } from "@/models/SocialIntegration";
 import { encryptSecret, isTokenEncryptionConfigured } from "@/lib/token-crypto";
 import { logAuditEvent, actorFromUser } from "@/lib/audit-log-service";
 import type { IUser } from "@/models/User";
+import { jsonInternalServerError } from "@/lib/api-safe-response";
 
 export const dynamic = "force-dynamic";
 
@@ -59,7 +60,7 @@ export async function GET() {
     return NextResponse.json({ ok: true, items });
   } catch (e) {
     console.error("[GET social-integrations]", e);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return jsonInternalServerError(e);
   }
 }
 
@@ -148,7 +149,9 @@ export async function POST(request: NextRequest) {
       const encA = encryptSecret(accessToken);
       const encR = refreshToken ? encryptSecret(refreshToken) : null;
       if (!encA) {
-        return NextResponse.json({ error: "فشل تشفير الرمز" }, { status: 500 });
+        return jsonInternalServerError(new Error("encrypt_failed"), {
+          fallbackMessage: "فشل تشفير الرمز",
+        });
       }
 
       await SocialIntegration.findOneAndUpdate(
@@ -185,6 +188,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Unknown action" }, { status: 400 });
   } catch (e) {
     console.error("[POST social-integrations]", e);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return jsonInternalServerError(e);
   }
 }

@@ -8,6 +8,7 @@ import {
 } from "@/lib/admin-users-service";
 import { isAdminManageableRole } from "@/lib/admin-users-constants";
 import { roleNeedsAcademicFields } from "@/lib/role-academic-fields";
+import { jsonInternalServerError } from "@/lib/api-safe-response";
 
 export const dynamic = "force-dynamic";
 
@@ -43,7 +44,7 @@ export async function GET(request: NextRequest) {
     });
   } catch (e) {
     console.error("[GET /api/admin/users]", e);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return jsonInternalServerError(e);
   }
 }
 

@@ -7,6 +7,7 @@ import { draftSlugForId } from "@/lib/news-service";
 import { serializeNewsPost } from "@/lib/news-serialize";
 import { logAuditEvent, actorFromUser } from "@/lib/audit-log-service";
 import type { IUser } from "@/models/User";
+import { jsonInternalServerError } from "@/lib/api-safe-response";
 
 export const dynamic = "force-dynamic";
 
@@ -37,7 +38,7 @@ export async function GET(request: NextRequest) {
     });
   } catch (e) {
     console.error("[GET /api/admin/news]", e);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return jsonInternalServerError(e);
   }
 }
 
@@ -102,6 +103,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: true, item: serializeNewsPost(doc.toObject()) });
   } catch (e) {
     console.error("[POST /api/admin/news]", e);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return jsonInternalServerError(e);
   }
 }

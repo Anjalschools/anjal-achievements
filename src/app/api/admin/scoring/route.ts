@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { jsonInternalServerError } from "@/lib/api-safe-response";
 import { requireSettingsReadGate, requireSettingsWriteGate } from "@/lib/platform-settings-access";
 import { DEFAULT_SCORING_CONFIG, type ScoringConfig } from "@/constants/default-scoring";
 import { getScoringConfig } from "@/lib/getScoringConfig";
@@ -15,7 +16,7 @@ export async function GET() {
     return NextResponse.json({ ok: true, config });
   } catch (e) {
     console.error("[GET /api/admin/scoring]", e);
-    return NextResponse.json({ ok: false, error: "Internal server error" }, { status: 500 });
+    return jsonInternalServerError(e, { merge: { ok: false } });
   }
 }
 
@@ -38,7 +39,7 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ ok: true, config: merged });
   } catch (e) {
     console.error("[PATCH /api/admin/scoring]", e);
-    return NextResponse.json({ ok: false, error: "Internal server error" }, { status: 500 });
+    return jsonInternalServerError(e, { merge: { ok: false } });
   }
 }
 

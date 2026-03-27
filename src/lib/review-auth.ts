@@ -5,6 +5,7 @@ import { ACHIEVEMENT_REVIEWER_ROLES_LIST } from "@/lib/achievement-reviewer-role
 import { achievementVisibleToStaff } from "@/lib/achievement-scope-filter";
 import { requirePermission } from "@/lib/requirePermission";
 import { PERMISSIONS } from "@/constants/permissions";
+import { warnSecurityEvent } from "@/lib/security-log";
 
 /** Admin, supervisor, school lead, activity lead (teacher), evaluator (judge) */
 export const REVIEWER_ROLES_LIST = ACHIEVEMENT_REVIEWER_ROLES_LIST;
@@ -20,6 +21,7 @@ export type ReviewerGate =
 export async function requireAchievementReviewer(): Promise<ReviewerGate> {
   const user = await getCurrentDbUser();
   if (!user) {
+    warnSecurityEvent("access_denied", { reason: "no_session", context: "achievement_reviewer" });
     return {
       ok: false,
       response: NextResponse.json({ error: "Unauthorized" }, { status: 401 }),
@@ -28,6 +30,7 @@ export async function requireAchievementReviewer(): Promise<ReviewerGate> {
   const role = String(user.role || "");
   const allowedByPermission = await requirePermission(user as any, PERMISSIONS.achievementsReview);
   if (!REVIEWER_ROLES.has(role) && !allowedByPermission) {
+    warnSecurityEvent("access_denied", { reason: "forbidden_reviewer", role });
     return {
       ok: false,
       response: NextResponse.json({ error: "Forbidden" }, { status: 403 }),

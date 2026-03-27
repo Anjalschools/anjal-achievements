@@ -7,6 +7,7 @@ import { getPlatformSettings } from "@/lib/platform-settings-service";
 import { getOpenAiApiKey, getOpenAiModel } from "@/lib/openai-env";
 import { logAuditEvent, actorFromUser } from "@/lib/audit-log-service";
 import type { IUser } from "@/models/User";
+import { jsonInternalServerError } from "@/lib/api-safe-response";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -123,6 +124,6 @@ titleAr, titleEn (يمكن أن يكون فارغًا), bodyAr, bodyEn (يمكن
     return NextResponse.json({ ok: true, result: parsed });
   } catch (e) {
     console.error("[POST /api/admin/ai/generate-news]", e);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return jsonInternalServerError(e);
   }
 }

@@ -1,0 +1,214 @@
+/**
+ * Certificate component presentation — import from achievement + verify certificate routes.
+ * Replaces styled-jsx / inline style attributes for CSP compatibility (style-src cannot combine
+ * nonce + unsafe-inline effectively for inline styles).
+ */
+
+@page {
+  size: A4 landscape;
+  margin: 0;
+}
+
+.certificate-print-target {
+  print-color-adjust: exact;
+  -webkit-print-color-adjust: exact;
+}
+
+.certificate-background-image {
+  background-image: url(/background.jpg);
+  background-size: cover;
+  background-position: center center;
+  background-repeat: no-repeat;
+}
+
+.certificate-body-two-col {
+  direction: ltr;
+  grid-template-columns: 1fr 1fr;
+}
+
+.certificate-col-en {
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 10.5pt;
+  line-height: 1.5;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  hyphens: auto;
+}
+
+.certificate-col-ar {
+  font-family: Tahoma, "Segoe UI", system-ui, sans-serif;
+  font-size: 11pt;
+  line-height: 1.75;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+.certificate-stack-en {
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 10pt;
+  line-height: 1.5;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+.certificate-stack-ar {
+  font-family: Tahoma, "Segoe UI", system-ui, sans-serif;
+  font-size: 10.5pt;
+  line-height: 1.75;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+@media screen {
+  .certificate-root-wrapper {
+    width: 100%;
+    max-width: 297mm;
+    margin-left: auto;
+    margin-right: auto;
+  }
+}
+
+/* Public /verify certificate preview: print-only certificate without html.certificate-print-doc */
+@media print {
+  html:not(.certificate-print-doc) body * {
+    visibility: hidden;
+  }
+  html:not(.certificate-print-doc) .certificate-print-target,
+  html:not(.certificate-print-doc) .certificate-print-target * {
+    visibility: visible;
+  }
+  html:not(.certificate-print-doc) .certificate-print-target {
+    position: fixed !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 297mm !important;
+    height: 202mm !important;
+    max-height: 202mm !important;
+    z-index: 2147483646 !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    overflow: hidden !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    print-color-adjust: exact !important;
+    -webkit-print-color-adjust: exact !important;
+  }
+
+  html:not(.certificate-print-doc) .certificate-background.certificate-background-image {
+    background-size: 95% 95% !important;
+    background-position: center center !important;
+    background-repeat: no-repeat !important;
+  }
+  /* Grid + explicit padding longhands (matches certificate-print.css). */
+  html:not(.certificate-print-doc) .certificate-content {
+    position: absolute !important;
+    inset: 0 !important;
+    z-index: 1 !important;
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+    grid-template-rows: auto auto auto !important;
+    align-content: start !important;
+    justify-items: stretch !important;
+    box-sizing: border-box !important;
+    width: 100% !important;
+    height: 100% !important;
+    max-height: 100% !important;
+    overflow: hidden !important;
+    margin: 0 !important;
+    padding-top: 39mm !important;
+    padding-right: 15mm !important;
+    padding-bottom: 7mm !important;
+    padding-left: 15mm !important;
+  }
+  html:not(.certificate-print-doc) .certificate-print-header {
+    grid-row: 1 !important;
+    align-self: start !important;
+    margin: 12mm 0 10mm 0 !important;
+    padding: 0 !important;
+  }
+  html:not(.certificate-print-doc) .certificate-body-host {
+    grid-row: 2 !important;
+    min-height: 0 !important;
+    overflow: hidden !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: flex-start !important;
+    align-items: stretch !important;
+  }
+  html:not(.certificate-print-doc) .certificate-body-two-col {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) !important;
+    column-gap: 5mm !important;
+    row-gap: 1mm !important;
+    direction: ltr !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    min-height: 0 !important;
+    max-height: 100% !important;
+    overflow: hidden !important;
+    align-content: start !important;
+  }
+  html:not(.certificate-print-doc) .certificate-body-stack {
+    display: none !important;
+  }
+  html:not(.certificate-print-doc) .certificate-footer-row {
+    grid-row: 3 !important;
+    align-self: start !important;
+    flex-shrink: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    position: relative !important;
+    visibility: visible !important;
+    display: flex !important;
+    justify-content: center !important;
+    align-items: flex-end !important;
+    width: 100% !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  html:not(.certificate-print-doc) .certificate-col-en {
+    font-size: 8.25pt !important;
+    line-height: 1.28 !important;
+    text-align: left !important;
+    padding-left: 0 !important;
+    padding-right: 4mm !important;
+    box-sizing: border-box !important;
+  }
+
+  html:not(.certificate-print-doc) .certificate-col-ar {
+    font-size: 8.85pt !important;
+    line-height: 1.32 !important;
+    text-align: right !important;
+    padding-right: 0 !important;
+    padding-left: 4mm !important;
+    box-sizing: border-box !important;
+  }
+
+  html:not(.certificate-print-doc) .certificate-print-header h1 {
+    font-size: 1.48rem !important;
+    line-height: 1.12 !important;
+  }
+
+  html:not(.certificate-print-doc) .certificate-print-header p {
+    font-size: 0.65rem !important;
+    line-height: 1.15 !important;
+    margin-top: 2px !important;
+  }
+
+  html:not(.certificate-print-doc) .certificate-qr-img {
+    width: 52px !important;
+    height: 52px !important;
+  }
+
+  html:not(.certificate-print-doc) .certificate-footer-inner p,
+  html:not(.certificate-print-doc) .certificate-qr-box p {
+    font-size: 0.45rem !important;
+    line-height: 1.15 !important;
+  }
+}

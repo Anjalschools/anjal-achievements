@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAchievementReviewer } from "@/lib/review-auth";
 import connectDB from "@/lib/mongodb";
 import User from "@/models/User";
+import { jsonInternalServerError } from "@/lib/api-safe-response";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -45,6 +46,6 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ ok: true, items });
   } catch (e) {
     console.error("[GET /api/admin/students/search]", e);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return jsonInternalServerError(e);
   }
 }

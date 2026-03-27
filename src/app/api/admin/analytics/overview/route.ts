@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireAchievementReviewer } from "@/lib/review-auth";
 import { roleHasCapability } from "@/lib/app-role-scope-matrix";
 import { buildAdminAnalyticsOverview } from "@/lib/admin-analytics-service";
+import { jsonInternalServerError } from "@/lib/api-safe-response";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -17,6 +18,6 @@ export async function GET() {
     return NextResponse.json({ ok: true, overview });
   } catch (e) {
     console.error("[GET /api/admin/analytics/overview]", e);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return jsonInternalServerError(e);
   }
 }

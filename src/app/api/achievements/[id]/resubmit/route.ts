@@ -7,6 +7,7 @@ import { applyAiReviewToDoc, runAchievementAiReview } from "@/lib/achievement-ai
 import { mergeResubmitWorkflowState } from "@/lib/achievement-workflow-state";
 import { createStudentNotification } from "@/lib/student-notifications";
 import { actorFromUser, logAuditEvent } from "@/lib/audit-log-service";
+import { jsonInternalServerError } from "@/lib/api-safe-response";
 
 export const dynamic = "force-dynamic";
 
@@ -118,6 +119,6 @@ export async function PATCH(_request: NextRequest, { params }: RouteParams) {
     });
   } catch (e) {
     console.error("[PATCH resubmit]", e);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return jsonInternalServerError(e);
   }
 }

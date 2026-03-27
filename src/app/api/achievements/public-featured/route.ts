@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import connectDB from "@/lib/mongodb";
 import Achievement from "@/models/Achievement";
 import { publicFeaturedAchievementsFilter } from "@/lib/achievementWorkflow";
+import { jsonInternalServerError } from "@/lib/api-safe-response";
 
 export const dynamic = "force-dynamic";
 
@@ -55,6 +56,6 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ items });
   } catch (e) {
     console.error("[GET public-featured]", e);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return jsonInternalServerError(e);
   }
 }

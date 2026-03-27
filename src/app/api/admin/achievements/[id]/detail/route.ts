@@ -5,6 +5,7 @@ import Achievement from "@/models/Achievement";
 import { requireAchievementReviewerForAchievementId } from "@/lib/review-auth";
 import { resolveWorkflowDisplayStatus } from "@/lib/achievementWorkflow";
 import { buildDuplicateReviewSummaryForAchievement } from "@/lib/achievement-admin-duplicate-review";
+import { jsonInternalServerError } from "@/lib/api-safe-response";
 
 export const dynamic = "force-dynamic";
 
@@ -80,6 +81,6 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
     });
   } catch (e) {
     console.error("[GET admin achievement detail]", e);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return jsonInternalServerError(e);
   }
 }

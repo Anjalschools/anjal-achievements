@@ -3,8 +3,21 @@ import connectDB from "@/lib/mongodb";
 import User from "@/models/User";
 import bcrypt from "bcryptjs";
 import { perfElapsed, perfLog, perfNow } from "@/lib/perf-debug";
+// Rate limit: must import from this module only (contains diagnostic logs inside checkRateLimit).
+import { checkRateLimit } from "@/lib/rate-limit";
+import { warnSecurityEvent } from "@/lib/security-log";
+import { jsonInternalServerError } from "@/lib/api-safe-response";
 
 export async function POST(request: NextRequest) {
+  const rateLimitResult = await checkRateLimit(request, "/api/auth/login");
+  console.log("[login:rate-limit-result]", {
+    blocked: !!rateLimitResult,
+    status: rateLimitResult?.status ?? null,
+  });
+  if (rateLimitResult) {
+    return rateLimitResult;
+  }
+
   try {
     perfLog("login:start");
     const tDb = perfNow();
@@ -39,10 +52,11 @@ export async function POST(request: NextRequest) {
     }
 
     const tFind = perfNow();
-    const user = await User.findOne(searchCriteria).lean();
+    const user = await User.findOne(searchCriteria).select("+passwordHash").lean();
     perfElapsed("login:userLookup", tFind);
 
     if (!user) {
+      warnSecurityEvent("login_failure", { reason: "unknown_user" });
       return NextResponse.json(
         { error: "Invalid credentials" },
         { status: 401 }
@@ -62,6 +76,7 @@ export async function POST(request: NextRequest) {
     perfElapsed("login:passwordCheck", tPw);
 
     if (!isPasswordValid) {
+      warnSecurityEvent("login_failure", { reason: "bad_password" });
       return NextResponse.json(
         { error: "Invalid credentials" },
         { status: 401 }
@@ -124,9 +139,6 @@ export async function POST(request: NextRequest) {
     return response;
   } catch (error) {
     console.error("Login error:", error);
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    );
+    return jsonInternalServerError(error, { fallbackMessage: "Something went wrong" });
   }
 }

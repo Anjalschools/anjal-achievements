@@ -4,6 +4,7 @@ import Achievement from "@/models/Achievement";
 import User from "@/models/User";
 import { requireAchievementReviewer } from "@/lib/review-auth";
 import { buildAchievementAccessFilter, mergeWithAchievementScope } from "@/lib/achievement-scope-filter";
+import { jsonInternalServerError } from "@/lib/api-safe-response";
 
 export const dynamic = "force-dynamic";
 
@@ -219,7 +220,7 @@ export async function GET(request: NextRequest) {
     });
   } catch (e) {
     console.error("[GET /api/admin/achievements/directory]", e);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return jsonInternalServerError(e);
   }
 }
 

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { jsonInternalServerError } from "@/lib/api-safe-response";
 import { requireAdminUserManager } from "@/lib/admin-user-management-auth";
 import connectDB from "@/lib/mongodb";
 import AuditLog from "@/models/AuditLog";
@@ -66,9 +67,8 @@ export async function GET(request: NextRequest) {
     });
   } catch (e) {
     console.error("[GET /api/admin/audit-logs/stats]", e);
-    return NextResponse.json(
-      { success: false, error: "Internal server error", messageEn: "Server error" },
-      { status: 500 }
-    );
+    return jsonInternalServerError(e, {
+      merge: { success: false, messageEn: "Server error" },
+    });
   }
 }

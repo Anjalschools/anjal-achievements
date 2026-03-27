@@ -123,142 +123,39 @@ const AppreciationCertificate = ({ content: rawContent, verifyPath, certificateI
 
   return (
     <div className="certificate-root-wrapper" dir="ltr" lang="en">
-      <style jsx global>{`
-        @page {
-          size: A4 landscape;
-          margin: 0;
-        }
-
-        @media print {
-          html,
-          body {
-            margin: 0 !important;
-            padding: 0 !important;
-            background: #fff !important;
-            height: auto !important;
-          }
-          body * {
-            visibility: hidden;
-          }
-          .certificate-print-target,
-          .certificate-print-target * {
-            visibility: visible;
-          }
-          .certificate-print-target {
-            position: fixed !important;
-            left: 0 !important;
-            top: 0 !important;
-            width: 297mm !important;
-            height: 210mm !important;
-            max-width: none !important;
-            margin: 0 !important;
-            padding: 0 !important;
-            border-radius: 0 !important;
-            box-shadow: none !important;
-            print-color-adjust: exact !important;
-            -webkit-print-color-adjust: exact !important;
-            page-break-inside: avoid !important;
-            break-inside: avoid !important;
-          }
-          /* Always two columns + footer columns when printing */
-          .certificate-body-two-col {
-            display: grid !important;
-            grid-template-columns: 1fr 1fr !important;
-            direction: ltr !important;
-            overflow: visible !important;
-            max-height: none !important;
-          }
-          .certificate-body-stack {
-            display: none !important;
-          }
-          .certificate-qr-bottom-center {
-            position: fixed !important;
-            left: 50% !important;
-            bottom: 10mm !important;
-            transform: translateX(-50%) !important;
-            z-index: 3 !important;
-            print-color-adjust: exact !important;
-            -webkit-print-color-adjust: exact !important;
-          }
-          .no-print {
-            display: none !important;
-          }
-        }
-
-        .certificate-print-target {
-          print-color-adjust: exact;
-          -webkit-print-color-adjust: exact;
-        }
-
-        /* Screen: fit viewport without changing inner mm logic */
-        @media screen {
-          .certificate-root-wrapper {
-            width: 100%;
-            max-width: 297mm;
-            margin-left: auto;
-            margin-right: auto;
-          }
-        }
-      `}</style>
-
       <div
         className="certificate-print-target certificate-shell relative isolate box-border aspect-[297/210] w-full max-w-[297mm] overflow-hidden rounded-xl shadow-lg print:aspect-auto print:h-[210mm] print:w-[297mm] print:max-w-none print:rounded-none print:shadow-none"
       >
         {/* Background layer — full bleed */}
         <div
-          className="certificate-background pointer-events-none absolute inset-0 z-0 bg-neutral-100"
-          style={{
-            backgroundImage: "url(/background.jpg)",
-            backgroundSize: "cover",
-            backgroundPosition: "center center",
-            backgroundRepeat: "no-repeat",
-          }}
+          className="certificate-background certificate-background-image pointer-events-none absolute inset-0 z-0 bg-neutral-100"
           aria-hidden
         />
 
-        {/* Content layer — safe margins inside printable area */}
-        <div
-          className="certificate-content absolute inset-0 z-[1] box-border flex flex-col"
-          style={{
-            paddingTop: "16%",
-            paddingBottom: "24%",
-            paddingLeft: "5%",
-            paddingRight: "5%",
-          }}
-        >
-          {/* Titles — centered, neutral direction */}
-          <header className="mb-1 shrink-0 text-center" dir="auto">
+        {/* Content layer — flex column: scrollable body + fixed footer (screen); print sized in certificate-print.css */}
+        <div className="certificate-content absolute inset-0 z-[1] box-border flex min-h-0 flex-col pt-[13%] pl-[5%] pr-[5%] pb-2 md:pt-[15%] md:pb-3">
+          <header className="certificate-print-header mb-1 shrink-0 text-center" dir="auto">
             <h1
-              className={`text-[1.58rem] font-black leading-tight text-black md:text-[1.88rem] ${STATIC}`}
+              className={`text-[1.45rem] font-black leading-snug text-black sm:text-[1.58rem] md:text-[1.88rem] ${STATIC}`}
               lang="ar"
             >
               شهادة شكر وتقدير
             </h1>
             <p
-              className={`mt-1 text-[0.72rem] font-bold uppercase tracking-[0.12em] text-black md:text-[0.8rem] ${STATIC}`}
+              className={`mt-1 text-[0.68rem] font-bold uppercase tracking-[0.12em] text-black sm:text-[0.72rem] md:text-[0.8rem] ${STATIC}`}
               lang="en"
             >
               Appreciation certificate
             </p>
           </header>
 
-          {/* Desktop + print: fixed 2-col grid [ EN left | AR right ]. Mobile: stacked preview. */}
-          <div
-            className="certificate-body-two-col hidden min-h-0 flex-1 gap-x-5 gap-y-1 overflow-y-auto overflow-x-hidden md:grid"
-            style={{ direction: "ltr", gridTemplateColumns: "1fr 1fr" }}
-          >
+          <div className="certificate-body-host flex min-h-0 flex-1 flex-col">
+            {/* Desktop + print: fixed 2-col grid [ EN left | AR right ]. Mobile: stacked preview. */}
+            <div className="certificate-body-two-col hidden min-h-0 min-w-0 flex-1 gap-x-5 gap-y-1 overflow-x-hidden overflow-y-auto md:grid">
             <div
               dir="ltr"
               lang="en"
-              className={`certificate-col-en min-h-0 overflow-visible text-left ${STATIC}`}
-              style={{
-                fontFamily: "Georgia, 'Times New Roman', serif",
-                fontSize: "10.5pt",
-                lineHeight: 1.5,
-                wordBreak: "break-word",
-                overflowWrap: "anywhere",
-                hyphens: "auto",
-              }}
+              className={`certificate-col-en min-h-0 min-w-0 overflow-x-hidden overflow-y-auto text-left md:overflow-y-auto print:overflow-y-hidden ${STATIC}`}
             >
               <p className={STATIC}>
                 The Administration of Al-Anjal Private Schools is pleased to extend its sincere appreciation and
@@ -295,14 +192,7 @@ const AppreciationCertificate = ({ content: rawContent, verifyPath, certificateI
             <div
               dir="rtl"
               lang="ar"
-              className={`certificate-col-ar min-h-0 overflow-visible text-right ${STATIC}`}
-              style={{
-                fontFamily: "Tahoma, 'Segoe UI', system-ui, sans-serif",
-                fontSize: "11pt",
-                lineHeight: 1.75,
-                wordBreak: "break-word",
-                overflowWrap: "anywhere",
-              }}
+              className={`certificate-col-ar min-h-0 min-w-0 overflow-x-hidden overflow-y-auto text-right md:overflow-y-auto print:overflow-y-hidden ${STATIC}`}
             >
               <p className={STATIC}>يسر إدارة مدارس الأنجال الأهلية أن تتقدم بخالص الشكر والتقدير</p>
               <p className="mt-2">
@@ -333,20 +223,13 @@ const AppreciationCertificate = ({ content: rawContent, verifyPath, certificateI
               </p>
               <p className="mt-3 font-medium text-neutral-900">سائلين الله له/ها دوام التوفيق والتميز.</p>
             </div>
-          </div>
+            </div>
 
-          <div className="certificate-body-stack flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overflow-x-hidden md:hidden">
+            <div className="certificate-body-stack flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-y-auto overflow-x-hidden md:hidden">
             <div
               dir="ltr"
               lang="en"
-              className={`text-left ${STATIC}`}
-              style={{
-                fontFamily: "Georgia, 'Times New Roman', serif",
-                fontSize: "10pt",
-                lineHeight: 1.5,
-                wordBreak: "break-word",
-                overflowWrap: "anywhere",
-              }}
+              className={`certificate-stack-en min-h-0 min-w-0 overflow-x-hidden text-left ${STATIC}`}
             >
               <p className={STATIC}>
                 The Administration of Al-Anjal Private Schools is pleased to extend its sincere appreciation and
@@ -383,14 +266,7 @@ const AppreciationCertificate = ({ content: rawContent, verifyPath, certificateI
             <div
               dir="rtl"
               lang="ar"
-              className={`text-right ${STATIC}`}
-              style={{
-                fontFamily: "Tahoma, 'Segoe UI', system-ui, sans-serif",
-                fontSize: "10.5pt",
-                lineHeight: 1.75,
-                wordBreak: "break-word",
-                overflowWrap: "anywhere",
-              }}
+              className={`certificate-stack-ar min-h-0 min-w-0 overflow-x-hidden text-right ${STATIC}`}
             >
               <p className={STATIC}>يسر إدارة مدارس الأنجال الأهلية أن تتقدم بخالص الشكر والتقدير</p>
               <p className="mt-2">
@@ -422,53 +298,55 @@ const AppreciationCertificate = ({ content: rawContent, verifyPath, certificateI
               <p className="mt-3 font-medium text-neutral-900">سائلين الله له/ها دوام التوفيق والتميز.</p>
             </div>
           </div>
+          </div>
 
-        </div>
-
-        {/* Bottom-center: compact row [ QR + captions | administration + ID ] */}
-        <div
-          className="certificate-qr-bottom-center pointer-events-none absolute left-1/2 z-[2] flex -translate-x-1/2 justify-center"
-          style={{ bottom: "10mm" }}
-        >
-          <div className="certificate-verification-bottom-center pointer-events-auto flex max-w-[min(100%,18rem)] flex-row items-center gap-3 sm:max-w-[min(100%,22rem)]">
-            <div className="certificate-qr-box flex shrink-0 flex-col items-center">
-              <div className="rounded-md border border-neutral-200/90 bg-white/95 p-1.5 shadow-sm ring-1 ring-black/5">
-                {qrSrc ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={qrSrc}
-                    alt=""
-                    width={72}
-                    height={72}
-                    className="block h-[72px] w-[72px] object-contain"
-                  />
-                ) : (
-                  <div className="h-[72px] w-[72px] rounded bg-white" aria-hidden />
-                )}
+          {/* Footer: in document flow so QR never overlaps title/body on small screens or print */}
+          <div className="certificate-footer-row pointer-events-none shrink-0 pt-1 md:pt-2">
+            <div className="certificate-footer-inner pointer-events-auto mx-auto flex w-full max-w-[min(100%,22rem)] flex-row items-center justify-center gap-2 sm:max-w-[min(100%,24rem)] sm:gap-3">
+              <div className="certificate-qr-box flex shrink-0 flex-col items-center">
+                <div className="rounded-md border border-neutral-200/90 bg-white/95 p-1 shadow-sm ring-1 ring-black/5 sm:p-1.5">
+                  {qrSrc ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={qrSrc}
+                      alt=""
+                      width={72}
+                      height={72}
+                      className="certificate-qr-img block h-[64px] w-[64px] object-contain sm:h-[72px] sm:w-[72px]"
+                    />
+                  ) : (
+                    <div className="h-[64px] w-[64px] rounded bg-white sm:h-[72px] sm:w-[72px]" aria-hidden />
+                  )}
+                </div>
+                <p
+                  className="mt-0.5 max-w-[7rem] text-center text-[0.5rem] leading-snug text-neutral-600"
+                  lang="en"
+                  dir="ltr"
+                >
+                  Official verify
+                </p>
+                <p
+                  className="max-w-[7rem] text-center text-[0.5rem] leading-snug text-neutral-600"
+                  lang="ar"
+                  dir="rtl"
+                >
+                  تحقق رسمي
+                </p>
               </div>
-              <p className="mt-0.5 max-w-[6.5rem] text-center text-[0.5rem] leading-snug text-neutral-600" lang="en">
-                Official verify
-              </p>
-              <p className="max-w-[6.5rem] text-center text-[0.5rem] leading-snug text-neutral-600" lang="ar" dir="rtl">
-                تحقق رسمي
-              </p>
-            </div>
-            <div
-              className="certificate-verification-text min-w-0 shrink leading-tight"
-              dir="rtl"
-            >
-              <p className={`text-[0.65rem] font-semibold ${STATIC}`} lang="ar">
-                إدارة مدارس الأنجال الأهلية
-              </p>
-              <p className="mt-0.5 text-right text-[0.6rem] text-gray-600" lang="en" dir="ltr">
-                Al-Anjal Schools Administration
-              </p>
-              <p className="mt-1 text-right text-[0.55rem] text-gray-500" dir="ltr">
-                ID: {certificateDisplayId}
-              </p>
-              <p className="text-right text-[0.5rem] text-gray-400" dir="ltr">
-                v{content.certificateVersion}
-              </p>
+              <div className="certificate-verification-text min-w-0 shrink leading-tight" dir="rtl">
+                <p className={`text-[0.62rem] font-semibold sm:text-[0.65rem] ${STATIC}`} lang="ar">
+                  إدارة مدارس الأنجال الأهلية
+                </p>
+                <p className="mt-0.5 text-right text-[0.58rem] text-gray-600 sm:text-[0.6rem]" lang="en" dir="ltr">
+                  Al-Anjal Schools Administration
+                </p>
+                <p className="mt-1 text-right text-[0.52rem] text-gray-500 sm:text-[0.55rem]" dir="ltr">
+                  ID: {certificateDisplayId}
+                </p>
+                <p className="text-right text-[0.48rem] text-gray-400 sm:text-[0.5rem]" dir="ltr">
+                  v{content.certificateVersion}
+                </p>
+              </div>
             </div>
           </div>
         </div>

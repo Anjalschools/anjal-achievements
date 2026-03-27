@@ -1,18 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
 import connectDB from "@/lib/mongodb";
 import ContactMessage from "@/models/ContactMessage";
+import { checkRouteRateLimit, rateLimitExceededResponse } from "@/lib/rate-limit";
+import { sanitizeUserText } from "@/lib/sanitize-html";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PHONE_RE = /^(\+966|0)?5\d{8}$/;
 
 export async function POST(request: NextRequest) {
   try {
+    if (!(await checkRouteRateLimit(request, "/api/public/contact"))) {
+      return rateLimitExceededResponse();
+    }
     const body = (await request.json()) as Record<string, unknown>;
-    const fullName = String(body.fullName || "").trim();
+    const fullName = sanitizeUserText(String(body.fullName || "").trim());
     const phone = String(body.phone || "").trim();
     const email = String(body.email || "").trim().toLowerCase();
-    const subject = String(body.subject || "").trim();
-    const message = String(body.message || "").trim();
+    const subject = sanitizeUserText(String(body.subject || "").trim());
+    const message = sanitizeUserText(String(body.message || "").trim());
     const inquiryType = String(body.inquiryType || "general").trim();
 
     if (!fullName || !phone || !email || !subject || !message) {

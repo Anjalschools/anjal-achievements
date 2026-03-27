@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { jsonInternalServerError } from "@/lib/api-safe-response";
 import mongoose from "mongoose";
 import { requireAchievementReviewer } from "@/lib/review-auth";
 import { roleHasCapability } from "@/lib/app-role-scope-matrix";
@@ -88,6 +89,6 @@ export async function PATCH(
     return NextResponse.json({ ok: true, item: updated });
   } catch (error) {
     console.error("[PATCH /api/admin/contact-messages/[id]]", error);
-    return NextResponse.json({ ok: false, error: "Internal server error" }, { status: 500 });
+    return jsonInternalServerError(error, { merge: { ok: false } });
   }
 }

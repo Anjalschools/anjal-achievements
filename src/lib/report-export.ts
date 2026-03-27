@@ -1,5 +1,12 @@
 type ExportRow = Record<string, string | number | null | undefined>;
 
+const escapeHtml = (value: string) =>
+  value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+
 const downloadBlob = (blob: Blob, filename: string) => {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -61,7 +68,8 @@ export const exportRowsToPrintablePdfView = async (
   headerImagePath = "/report-header.png"
 ) => {
   const now = new Date().toLocaleString("ar-SA");
-  const tableHead = headers.map((h) => `<th>${h}</th>`).join("");
+  const safeTitle = escapeHtml(title);
+  const tableHead = headers.map((h) => `<th>${escapeHtml(String(h))}</th>`).join("");
   const tableBody = rows
     .map(
       (r) =>
@@ -72,7 +80,7 @@ export const exportRowsToPrintablePdfView = async (
     .join("");
 
   const html = `<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8" />
-  <title>${title}</title>
+  <title>${safeTitle}</title>
   <style>
     body { font-family: Tahoma, Arial, sans-serif; margin: 24px; color: #0f172a; }
     .header img { max-width: 100%; height: auto; margin-bottom: 12px; }
@@ -85,16 +93,9 @@ export const exportRowsToPrintablePdfView = async (
   </style>
   </head><body>
     <div class="header"><img src="${headerImagePath}" alt="" /></div>
-    <h1>${title}</h1>
-    <div class="meta">تاريخ التصدير: ${now}</div>
+    <h1>${safeTitle}</h1>
+    <div class="meta">تاريخ التصدير: ${escapeHtml(now)}</div>
     <table><thead><tr>${tableHead}</tr></thead><tbody>${tableBody}</tbody></table>
-    <script>
-      const img = document.querySelector('img');
-      const done = () => setTimeout(() => window.print(), 250);
-      if (!img) done();
-      else if (img.complete) done();
-      else img.onload = done;
-    </script>
   </body></html>`;
 
   const iframe = document.createElement("iframe");
@@ -105,14 +106,32 @@ export const exportRowsToPrintablePdfView = async (
   iframe.style.pointerEvents = "none";
   iframe.style.left = "-10000px";
   document.body.appendChild(iframe);
-  const doc = iframe.contentWindow?.document;
-  if (!doc) {
+  const win = iframe.contentWindow;
+  const doc = win?.document;
+  if (!doc || !win) {
     iframe.remove();
     return;
   }
   doc.open();
   doc.write(html);
   doc.close();
+
+  /* No inline <script> in iframe (CSP). Trigger print from parent after img load. */
+  const schedulePrint = () => {
+    setTimeout(() => {
+      win.print();
+    }, 250);
+  };
+  const img = doc.querySelector("img");
+  if (!img) {
+    schedulePrint();
+  } else if (img.complete) {
+    schedulePrint();
+  } else {
+    img.onload = () => schedulePrint();
+    img.onerror = () => schedulePrint();
+  }
+
   setTimeout(() => {
     iframe.remove();
   }, 5000);

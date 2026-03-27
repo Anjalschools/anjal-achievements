@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { jsonInternalServerError } from "@/lib/api-safe-response";
 import { requireSettingsReadGate, isPlatformAdmin } from "@/lib/platform-settings-access";
 import { getPlatformSettings } from "@/lib/platform-settings-service";
 
@@ -36,9 +37,9 @@ export async function GET() {
     });
   } catch (e) {
     console.error("[GET /api/admin/settings/get]", e);
-    return NextResponse.json(
-      { success: false, message: "خطأ في الخادم", messageEn: "Internal server error" },
-      { status: 500 }
-    );
+    return jsonInternalServerError(e, {
+      skipErrorKey: true,
+      merge: { success: false, message: "خطأ في الخادم", messageEn: "Internal server error" },
+    });
   }
 }

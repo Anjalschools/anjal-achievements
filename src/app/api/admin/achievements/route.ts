@@ -22,6 +22,7 @@ import {
   type AdminAiAlertListRowInput,
 } from "@/lib/admin-ai-alert-review-view-model";
 import { extractAttachmentUrl } from "@/lib/achievement-attachments";
+import { jsonInternalServerError } from "@/lib/api-safe-response";
 
 export const dynamic = "force-dynamic";
 
@@ -295,6 +296,6 @@ export async function GET(request: NextRequest) {
     });
   } catch (e) {
     console.error("[GET /api/admin/achievements]", e);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return jsonInternalServerError(e);
   }
 }

@@ -35,7 +35,7 @@ export async function getCurrentDbUser() {
         return hit as unknown as InstanceType<typeof User>;
       }
       const t1 = perfNow();
-      const user = await User.findById(userId).select("-passwordHash").lean();
+      const user = await User.findById(userId).select("-passwordHash -__v").lean();
       perfElapsed("auth:session:userLookupById", t1);
       if (user) {
         const u = user as unknown as Record<string, unknown>;
@@ -52,7 +52,9 @@ export async function getCurrentDbUser() {
         return hit as unknown as InstanceType<typeof User>;
       }
       const t2 = perfNow();
-      const user = await User.findOne({ email: userEmail.toLowerCase() }).select("-passwordHash").lean();
+      const user = await User.findOne({ email: userEmail.toLowerCase() })
+        .select("-passwordHash -__v")
+        .lean();
       perfElapsed("auth:session:userLookupByEmail", t2);
       if (user) {
         const u = user as unknown as Record<string, unknown>;

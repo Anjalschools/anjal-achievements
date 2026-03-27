@@ -1,3 +1,4 @@
+import "@/styles/certificate-component.css";
 import connectDB from "@/lib/mongodb";
 import Achievement from "@/models/Achievement";
 import User from "@/models/User";

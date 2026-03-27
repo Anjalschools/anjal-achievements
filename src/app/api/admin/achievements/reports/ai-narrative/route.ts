@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { jsonInternalServerError } from "@/lib/api-safe-response";
 import { requireAchievementReviewer } from "@/lib/review-auth";
 import { roleHasCapability } from "@/lib/app-role-scope-matrix";
 import { isAiAssistEnabled } from "@/lib/openai-env";
@@ -33,6 +34,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "reportType and stats object required" }, { status: 400 });
   }
 
+  try {
   const statsJson = JSON.stringify(stats).slice(0, 12_000);
 
   const system = `You are an education data analyst for Saudi school management.
@@ -68,4 +70,8 @@ Do not invent numbers; only interpret the provided statistics. If data is thin, 
       recommendationsEn: Array.isArray(p.recommendationsEn) ? p.recommendationsEn : [],
     },
   });
+  } catch (e) {
+    console.error("[POST /api/admin/achievements/reports/ai-narrative]", e);
+    return jsonInternalServerError(e);
+  }
 }

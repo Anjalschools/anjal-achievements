@@ -28,6 +28,8 @@ import {
   normalizeAchievementPayload,
   validateNormalizedPayload,
 } from "@/lib/achievement-payload-normalize";
+import { queueHomeStatsRefresh } from "@/lib/home-stats-service";
+import { jsonInternalServerError } from "@/lib/api-safe-response";
 
 export const dynamic = "force-dynamic";
 
@@ -80,6 +82,7 @@ export async function GET(request: NextRequest) {
     }
 
     const achievements = await Achievement.find(query)
+      .select("-__v")
       .populate("userId", "fullName email")
       .sort({ createdAt: -1 })
       .limit(100);
@@ -202,10 +205,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(formattedAchievements);
   } catch (error) {
     console.error("Error fetching achievements:", error);
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    );
+    return jsonInternalServerError(error);
   }
 }
 
@@ -417,6 +417,8 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    queueHomeStatsRefresh();
+
     // Return success response
     return NextResponse.json(
       {
@@ -449,9 +451,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    );
+    return jsonInternalServerError(error);
   }
 }

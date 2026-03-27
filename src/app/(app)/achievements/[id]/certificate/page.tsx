@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
+import "@/styles/certificate-print.css";
+import "@/styles/certificate-component.css";
 import PageContainer from "@/components/layout/PageContainer";
 import SectionCard from "@/components/layout/SectionCard";
 import AppreciationCertificate, {
@@ -49,13 +51,21 @@ const AchievementCertificatePage = () => {
     load();
   }, [load]);
 
+  useEffect(() => {
+    const root = document.documentElement;
+    root.classList.add("certificate-print-doc");
+    return () => {
+      root.classList.remove("certificate-print-doc");
+    };
+  }, []);
+
   const handlePrint = () => {
     window.print();
   };
 
   if (loading) {
     return (
-      <PageContainer>
+      <PageContainer className="certificate-page-shell">
         <p className="py-12 text-center text-text-light">{isAr ? "جاري التحميل…" : "Loading…"}</p>
       </PageContainer>
     );
@@ -63,7 +73,7 @@ const AchievementCertificatePage = () => {
 
   if (error || !data?.content || !data.verifyPath) {
     return (
-      <PageContainer>
+      <PageContainer className="certificate-page-shell">
         <SectionCard>
           <p className="text-sm text-red-600">
             {error || (isAr ? "تعذر عرض الشهادة" : "Unable to load certificate")}
@@ -80,7 +90,7 @@ const AchievementCertificatePage = () => {
   }
 
   return (
-    <PageContainer>
+    <PageContainer className="certificate-page-shell print:mx-0 print:max-w-none print:px-0 print:py-0">
       <div
         className="no-print mb-6 flex flex-wrap items-center justify-between gap-3 border-b border-slate-200/80 pb-4"
         dir={isAr ? "rtl" : "ltr"}
@@ -107,7 +117,7 @@ const AchievementCertificatePage = () => {
           : "For best results, use Print Preview and save as PDF from your browser."}
       </div>
 
-      <div className="mx-auto flex w-full max-w-5xl justify-center rounded-2xl bg-slate-100/90 px-4 py-8 shadow-inner print:bg-transparent print:p-0 print:shadow-none md:px-8 md:py-10">
+      <div className="certificate-page-print-host mx-auto flex w-full max-w-5xl justify-center rounded-2xl bg-slate-100/90 px-4 py-8 shadow-inner print:bg-transparent print:p-0 print:shadow-none md:px-8 md:py-10">
         <AppreciationCertificate
           content={data.content}
           verifyPath={data.verifyPath}

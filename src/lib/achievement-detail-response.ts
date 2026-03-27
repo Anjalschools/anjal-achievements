@@ -5,6 +5,7 @@ import {
   labelCertificateIssuerRole,
   resolveCertificateUiStatus,
 } from "@/lib/certificate-eligibility";
+import { sanitizeUserText } from "@/lib/sanitize-html";
 import { serializeAttachmentsForStudentApi } from "@/lib/achievement-attachments";
 import { isStudentEditLocked, resolveWorkflowDisplayStatus } from "@/lib/achievementWorkflow";
 
@@ -145,7 +146,7 @@ export const buildStudentAchievementDetailPayload = (
     resubmittedByStudent,
     inferredField: safeField,
     domain: safeField,
-    description: achievement.description || "",
+    description: sanitizeUserText(achievement.description || ""),
     score: achievement.score || 0,
     verificationStatus: achievement.verificationStatus || "unverified",
     evidenceRequiredMode: achievement.evidenceRequiredMode || "provided",

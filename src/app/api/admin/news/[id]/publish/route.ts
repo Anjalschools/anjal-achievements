@@ -10,6 +10,7 @@ import { blockingStrictNewsPublish, evaluatePlatformBlocking } from "@/lib/news-
 import { logAuditEvent, actorFromUser } from "@/lib/audit-log-service";
 import type { IUser } from "@/models/User";
 import { getSocialPublisher } from "@/lib/social-publishers";
+import { jsonInternalServerError } from "@/lib/api-safe-response";
 
 export const dynamic = "force-dynamic";
 
@@ -251,6 +252,6 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
     return NextResponse.json({ ok: true, item: serializeNewsPost(doc.toObject()) });
   } catch (e) {
     console.error("[POST publish]", e);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return jsonInternalServerError(e);
   }
 }

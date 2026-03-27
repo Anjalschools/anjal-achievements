@@ -14,6 +14,7 @@ import {
 } from "@/lib/certificate-content";
 import User from "@/models/User";
 import { isLegacyCertificateRecord } from "@/lib/certificate-eligibility";
+import { jsonInternalServerError } from "@/lib/api-safe-response";
 
 export const dynamic = "force-dynamic";
 
@@ -95,6 +96,6 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
     });
   } catch (error) {
     console.error("[GET achievement certificate]", error);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return jsonInternalServerError(error);
   }
 }

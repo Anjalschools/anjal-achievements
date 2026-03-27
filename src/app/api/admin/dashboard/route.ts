@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireAchievementReviewer } from "@/lib/review-auth";
 import { buildAdminDashboardPayload } from "@/lib/admin-dashboard-stats";
 import { buildAchievementAccessFilter } from "@/lib/achievement-scope-filter";
+import { jsonInternalServerError } from "@/lib/api-safe-response";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +18,6 @@ export async function GET() {
     return NextResponse.json(data);
   } catch (e) {
     console.error("[GET /api/admin/dashboard]", e);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return jsonInternalServerError(e);
   }
 }

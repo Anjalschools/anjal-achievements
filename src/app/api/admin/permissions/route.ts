@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { jsonInternalServerError } from "@/lib/api-safe-response";
 import { requireSettingsReadGate, requireSettingsWriteGate } from "@/lib/platform-settings-access";
 import { getPlatformSettings, mergePlatformSettingsPatch } from "@/lib/platform-settings-service";
 import { ALL_PERMISSIONS, PERMISSION_LABELS, type PermissionKey } from "@/constants/permissions";
@@ -36,7 +37,7 @@ export async function GET() {
     });
   } catch (e) {
     console.error("[GET /api/admin/permissions]", e);
-    return NextResponse.json({ ok: false, error: "Internal server error" }, { status: 500 });
+    return jsonInternalServerError(e, { merge: { ok: false } });
   }
 }
 
@@ -69,7 +70,7 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ ok: true, role, permissions: next, matrix: buildMatrix(overrides) });
   } catch (e) {
     console.error("[PATCH /api/admin/permissions]", e);
-    return NextResponse.json({ ok: false, error: "Internal server error" }, { status: 500 });
+    return jsonInternalServerError(e, { merge: { ok: false } });
   }
 }
 

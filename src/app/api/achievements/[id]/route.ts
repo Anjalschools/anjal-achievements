@@ -26,6 +26,8 @@ import { normalizeAttachmentsArray } from "@/lib/achievement-attachments";
 import { mergeResubmitWorkflowState } from "@/lib/achievement-workflow-state";
 import { perfElapsed, perfLog, perfNow } from "@/lib/perf-debug";
 import { actorFromUser, logAuditEvent } from "@/lib/audit-log-service";
+import { queueHomeStatsRefresh } from "@/lib/home-stats-service";
+import { jsonInternalServerError } from "@/lib/api-safe-response";
 
 export const dynamic = "force-dynamic";
 
@@ -59,7 +61,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     return NextResponse.json(buildStudentAchievementDetailPayload(achievement));
   } catch (error) {
     console.error("Error fetching achievement details:", error);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return jsonInternalServerError(error);
   }
 }
 
@@ -353,7 +355,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 
     const updated = await Achievement.findByIdAndUpdate(params.id, mongoUpdate, { new: true });
     if (!updated) {
-      return NextResponse.json({ error: "Failed to update achievement" }, { status: 500 });
+      return jsonInternalServerError(null, { fallbackMessage: "Failed to update achievement" });
     }
 
     // Audit: student edits after unapprove (certificate revoked without re-approval yet).
@@ -426,7 +428,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     });
   } catch (error) {
     console.error("Error updating achievement:", error);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return jsonInternalServerError(error);
   }
 }
 
@@ -462,10 +464,12 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: "Achievement not found" }, { status: 404 });
     }
 
+    queueHomeStatsRefresh();
+
     return NextResponse.json({ success: true, message: "Achievement deleted successfully" });
   } catch (error) {
     console.error("Error deleting achievement:", error);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return jsonInternalServerError(error);
   }
 }
 

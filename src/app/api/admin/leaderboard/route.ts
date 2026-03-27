@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { jsonInternalServerError } from "@/lib/api-safe-response";
 import { requireAchievementReviewer } from "@/lib/review-auth";
 import { getAdminLeaderboard, type LeaderboardSortKey } from "@/lib/leaderboard-service";
 
@@ -57,6 +58,6 @@ export async function GET(request: NextRequest) {
     });
   } catch (e) {
     console.error("[GET /api/admin/leaderboard]", e);
-    return NextResponse.json({ ok: false, error: "Internal server error" }, { status: 500 });
+    return jsonInternalServerError(e, { merge: { ok: false } });
   }
 }

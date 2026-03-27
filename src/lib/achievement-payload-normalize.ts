@@ -1,4 +1,6 @@
 import { normalizeAttachmentsArray, type AchievementAttachmentObject } from "@/lib/achievement-attachments";
+import { sanitizeMongoShape } from "@/lib/sanitize-input";
+import { sanitizeUserText } from "@/lib/sanitize-html";
 
 export type NormalizedPayload = {
   achievementType: string;
@@ -38,7 +40,8 @@ export type NormalizedPayload = {
   featured: boolean;
 };
 
-export const normalizeAchievementPayload = (body: Record<string, unknown>): NormalizedPayload => {
+export const normalizeAchievementPayload = (rawBody: Record<string, unknown>): NormalizedPayload => {
+  const body = sanitizeMongoShape(rawBody) as Record<string, unknown>;
   const achievementType = String(body.achievementType || "");
   const achievementCategory = String(body.achievementCategory || achievementType || "competition");
   const achievementClassificationRaw = String(body.achievementClassification || "").trim();
@@ -56,10 +59,11 @@ export const normalizeAchievementPayload = (body: Record<string, unknown>): Norm
   const achievementClassification = allowedClass.includes(achievementClassificationRaw)
     ? achievementClassificationRaw
     : "other";
-  let achievementName = String(body.achievementName || "").trim();
-  const nameAr = String(body.nameAr || "").trim() || undefined;
-  const nameEn = String(body.nameEn || "").trim() || undefined;
-  const customAchievementName = String(body.customAchievementName || "").trim() || undefined;
+  let achievementName = sanitizeUserText(String(body.achievementName || "").trim()) || "";
+  const nameAr = sanitizeUserText(String(body.nameAr || "").trim()) || undefined;
+  const nameEn = sanitizeUserText(String(body.nameEn || "").trim()) || undefined;
+  const customAchievementName =
+    sanitizeUserText(String(body.customAchievementName || "").trim()) || undefined;
   let achievementLevel = String(body.achievementLevel || "");
   let participationType = String(body.participationType || "individual");
   let resultType = String(body.resultType || "");
@@ -119,17 +123,17 @@ export const normalizeAchievementPayload = (body: Record<string, unknown>): Norm
     customAchievementName,
     achievementLevel,
     participationType,
-    teamRole: String(body.teamRole || "").trim() || undefined,
+    teamRole: sanitizeUserText(String(body.teamRole || "").trim()) || undefined,
     resultType,
-    resultValue: String(body.resultValue || "").trim() || undefined,
-    medalType: String(body.medalType || "").trim() || undefined,
-    rank: String(body.rank || "").trim() || undefined,
-    nominationText: String(body.nominationText || "").trim() || undefined,
-    specialAwardText: String(body.specialAwardText || "").trim() || undefined,
-    recognitionText: String(body.recognitionText || "").trim() || undefined,
-    otherResultText: String(body.otherResultText || "").trim() || undefined,
-    olympiadField: String(body.olympiadField || "").trim() || undefined,
-    mawhibaAnnualSubject: String(body.mawhibaAnnualSubject || "").trim() || undefined,
+    resultValue: sanitizeUserText(String(body.resultValue || "").trim()) || undefined,
+    medalType: sanitizeUserText(String(body.medalType || "").trim()) || undefined,
+    rank: sanitizeUserText(String(body.rank || "").trim()) || undefined,
+    nominationText: sanitizeUserText(String(body.nominationText || "").trim()) || undefined,
+    specialAwardText: sanitizeUserText(String(body.specialAwardText || "").trim()) || undefined,
+    recognitionText: sanitizeUserText(String(body.recognitionText || "").trim()) || undefined,
+    otherResultText: sanitizeUserText(String(body.otherResultText || "").trim()) || undefined,
+    olympiadField: sanitizeUserText(String(body.olympiadField || "").trim()) || undefined,
+    mawhibaAnnualSubject: sanitizeUserText(String(body.mawhibaAnnualSubject || "").trim()) || undefined,
     giftedDiscoveryScore:
       typeof body.giftedDiscoveryScore === "number"
         ? body.giftedDiscoveryScore
@@ -147,7 +151,7 @@ export const normalizeAchievementPayload = (body: Record<string, unknown>): Norm
       return !isNaN(n) && n > 1900 ? n : new Date().getFullYear();
     })(),
     achievementDate: String(body.achievementDate || "").trim().slice(0, 10) || undefined,
-    description: String(body.description || "").trim() || undefined,
+    description: sanitizeUserText(String(body.description || "").trim()) || undefined,
     image,
     attachments,
     evidenceUrl,

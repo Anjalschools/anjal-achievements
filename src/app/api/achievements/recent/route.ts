@@ -4,6 +4,7 @@ import { getCurrentDbUser } from "@/lib/auth";
 import Achievement from "@/models/Achievement";
 import { resolveWorkflowDisplayStatus } from "@/lib/achievementWorkflow";
 import { achievementOwnerUserIdFilter } from "@/lib/achievement-student-scope";
+import { jsonInternalServerError } from "@/lib/api-safe-response";
 
 export const dynamic = "force-dynamic";
 
@@ -81,9 +82,6 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(formatted);
   } catch (error) {
     console.error("Error fetching recent achievements:", error);
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    );
+    return jsonInternalServerError(error);
   }
 }
