@@ -7,12 +7,12 @@ import {
 import { getDbAchievementTypeLabel, labelAchievementSlugOrKey } from "@/lib/achievement-labels";
 import {
   formatLocalizedResultLine,
-  getAchievementDisplayName,
   getDisplayLabel,
   labelAchievementCategory,
   labelAchievementClassification,
   getAchievementLevelLabel,
 } from "@/lib/achievementDisplay";
+import { resolveAchievementTitle } from "@/lib/achievement-title-resolver";
 
 export type AdminLabelLocale = "ar" | "en";
 
@@ -154,11 +154,11 @@ export const formatDirectoryAchievementTitle = (
     titleAr?: string;
   },
   loc: AdminLabelLocale
-): string => getAchievementDisplayName(row as Record<string, unknown>, loc);
+): string => resolveAchievementTitle(row as Record<string, unknown>, loc);
 
 export const resolveAchievementTitleForAdmin = (raw: Record<string, unknown>, loc: AdminLabelLocale): string => {
-  const title = getAchievementDisplayName(raw, loc);
-  if (title && title !== "إنجاز" && title !== "Achievement") return title;
+  const title = resolveAchievementTitle(raw, loc);
+  if (title && title.trim()) return title;
   const typeLabel = formatAchievementTypeLabel(String(raw.achievementType || ""), loc);
   return typeLabel || (loc === "ar" ? "إنجاز" : "Achievement");
 };

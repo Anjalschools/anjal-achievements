@@ -1,7 +1,7 @@
 import { useState, type MouseEvent } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { Award, Calendar, Pencil, Star, Trash2, ScrollText } from "lucide-react";
+import { Award, Pencil, ScrollText, Trash2 } from "lucide-react";
 import { getLocale } from "@/lib/i18n";
 import {
   normalizeAchievementImage,
@@ -9,17 +9,18 @@ import {
   normalizeApprovalStatus,
 } from "@/lib/achievementNormalize";
 import { isStudentEditLocked, type AchievementWorkflowLike } from "@/lib/achievementWorkflow";
+import { getAchievementScoreDisplay, safeTrim } from "@/lib/achievementDisplay";
+import { resolveAchievementTitle } from "@/lib/achievement-title-resolver";
 import {
-  formatLocalizedResultLine,
-  getAchievementDisplayName,
   getAchievementLevelLabel,
-  getAchievementScoreDisplay,
-  isLikelyTechnicalSlug,
-  resolveAchievementEventSlug,
-  safeTrim,
-} from "@/lib/achievementDisplay";
-import { getAchievementFieldLabel, getAchievementTypeLabel } from "@/lib/achievement-display-labels";
+  getAchievementResultLabel,
+  getAchievementTypeLabel,
+  getParticipationTypeLabel,
+  getResultTypeLabel,
+  getStudentAchievementCardFieldDisplay,
+} from "@/lib/achievement-display-labels";
 import AchievementStatusBadge from "@/components/achievements/AchievementStatusBadge";
+import StudentAchievementDataRows from "@/components/achievements/StudentAchievementDataRows";
 import type { WorkflowDisplayStatus } from "@/lib/achievementWorkflow";
 
 type AchievementCardProps = {
@@ -30,7 +31,8 @@ type AchievementCardProps = {
   nameEn?: string;
   achievementName?: string;
   customAchievementName?: string;
-  description: string;
+  /** Not shown on the card — details page only */
+  description?: string;
   category: string;
   achievementType?: string;
   achievementLevel?: string;
@@ -40,6 +42,8 @@ type AchievementCardProps = {
   medalType?: string;
   rank?: string;
   inferredField?: string;
+  participationType?: string;
+  achievementYear?: number | null;
   date: string;
   image?: string;
   featured?: boolean;
@@ -62,7 +66,7 @@ const AchievementCard = ({
   nameEn,
   achievementName,
   customAchievementName,
-  description,
+  description: _description,
   category: _category,
   achievementType,
   achievementLevel,
@@ -72,7 +76,9 @@ const AchievementCard = ({
   medalType,
   rank,
   inferredField,
-  date,
+  participationType,
+  achievementYear,
+  date: _date,
   image,
   featured = false,
   approved,
@@ -94,8 +100,6 @@ const AchievementCard = ({
     e.stopPropagation();
     onDelete?.(id);
   };
-  const safeDate = date ? new Date(date) : null;
-  const canFormatDate = Boolean(safeDate && !Number.isNaN(safeDate.getTime()));
 
   const rawRec = {
     nameAr,
@@ -110,31 +114,6 @@ const AchievementCard = ({
     approvalStatus,
     pendingReReview,
   };
-  const names = normalizeAchievementNames(rawRec as any);
-  const displayName = getAchievementDisplayName(
-    {
-      titleAr: titleAr || nameAr,
-      nameAr,
-      nameEn,
-      title,
-      achievementName: achievementName || title,
-      customAchievementName,
-    },
-    loc
-  );
-  let secondaryName =
-    loc === "ar"
-      ? names.normalizedNameEn && names.normalizedNameEn !== displayName
-        ? names.normalizedNameEn
-        : ""
-      : names.normalizedNameAr && names.normalizedNameAr !== displayName
-        ? names.normalizedNameAr
-        : "";
-  if (secondaryName && isLikelyTechnicalSlug(secondaryName)) {
-    const hit = resolveAchievementEventSlug(secondaryName);
-    secondaryName = hit ? (loc === "ar" ? hit.en : hit.ar) : "";
-  }
-  if (secondaryName === displayName) secondaryName = "";
 
   const imgUrl =
     normalizeAchievementImage(rawRec as any) ||
@@ -152,17 +131,69 @@ const AchievementCard = ({
 
   const approvalNorm = normalizeApprovalStatus(rawRec as any);
   const isLocked = isStudentEditLocked(rawRec as AchievementWorkflowLike);
-  const displayType = achievementType ? getAchievementTypeLabel(achievementType, loc) : "";
-  const displayResult = formatLocalizedResultLine(resultType, medalType || resultValue, rank, loc);
-  const descriptionSafe = safeTrim(description);
-  const levelLabel = getAchievementLevelLabel(achievementLevel, loc);
+  normalizeAchievementNames(rawRec as any);
+
+  const typeKey = String(achievementType || "").trim();
+  const levelKey = String(achievementLevel || "").trim();
+
+  const cardTitle = resolveAchievementTitle(
+    {
+      titleAr,
+      nameAr,
+      nameEn,
+      title,
+      achievementName,
+      customAchievementName,
+      achievementType,
+    },
+    loc
+  );
+
+  const typeLabel = typeKey ? getAchievementTypeLabel(typeKey, loc) : loc === "ar" ? "غير محدد" : "Not specified";
+  const fieldLabel = getStudentAchievementCardFieldDisplay(inferredField, loc);
+  const resultTypeLabel = getResultTypeLabel(resultType, loc);
+
+  const resultLineRaw = getAchievementResultLabel(
+    {
+      resultType,
+      medalType,
+      rank,
+      resultValue,
+      score,
+    } as Record<string, unknown>,
+    loc
+  );
+  const resultLine =
+    resultLineRaw && resultLineRaw !== "—"
+      ? resultLineRaw
+      : safeTrim(resultValue) || (loc === "ar" ? "غير محدد" : "Not specified");
+
+  const levelLabel = levelKey
+    ? getAchievementLevelLabel(levelKey, loc)
+    : loc === "ar"
+      ? "غير محدد"
+      : "Not specified";
+
+  const participationLabel = getParticipationTypeLabel(participationType, loc);
+  const participationDisplay =
+    loc === "en" && participationLabel === "—" ? "Not specified" : participationLabel;
+
+  const yearLabel =
+    achievementYear != null && Number.isFinite(achievementYear) && achievementYear > 0
+      ? String(achievementYear)
+      : loc === "ar"
+        ? "غير محدد"
+        : "Not specified";
+
   const scoreNumeric = getAchievementScoreDisplay({ score }, loc);
-  const scoreLine =
+  const scoreLabel =
     scoreNumeric !== "—"
-      ? locale === "ar"
+      ? loc === "ar"
         ? `${scoreNumeric} نقطة`
         : `${scoreNumeric} pts`
-      : "—";
+      : loc === "ar"
+        ? "غير محدد"
+        : "Not specified";
 
   const workflowBadgeStatus: WorkflowDisplayStatus =
     approvalNorm === "featured"
@@ -181,12 +212,11 @@ const AchievementCard = ({
     <div
       className={`group overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm transition-all hover:border-primary hover:shadow-md ${className}`}
     >
-      {/* Image */}
-      <div className="relative h-48 w-full overflow-hidden bg-gray-100">
+      <div className="relative h-44 w-full overflow-hidden bg-gray-100 sm:h-48">
         {imgUrl && !imageError ? (
           <Image
             src={imgUrl}
-            alt={displayName}
+            alt={cardTitle}
             fill
             unoptimized={imgUnoptimized}
             sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
@@ -198,7 +228,7 @@ const AchievementCard = ({
             <Award className="h-12 w-12 text-primary/45" />
           </div>
         )}
-        <div className="pointer-events-none absolute right-2 top-2 flex max-w-[55%] flex-col items-end gap-1">
+        <div className="pointer-events-none absolute right-2 top-2 flex max-w-[58%] flex-col items-end gap-1">
           <AchievementStatusBadge status={workflowBadgeStatus} locale={loc} className="max-w-full truncate shadow-sm" />
           {certificateAvailable ? (
             <span className="rounded-full bg-emerald-600/95 px-2 py-0.5 text-[10px] font-bold text-white shadow-sm">
@@ -208,75 +238,31 @@ const AchievementCard = ({
         </div>
       </div>
 
-      {/* Content — order: title → type → date → field → level → score */}
-      <div className="p-6">
-        <h3 className="mb-1 text-lg font-bold text-text line-clamp-2 group-hover:text-primary">
-          {displayName}
+      <div className="p-5 sm:p-6">
+        <h3 className="mb-3 text-lg font-bold leading-snug text-text line-clamp-2 group-hover:text-primary">
+          {cardTitle}
         </h3>
-        {secondaryName ? (
-          <p className="mb-2 text-xs text-text-muted line-clamp-1">{secondaryName}</p>
-        ) : null}
 
-        {displayType ? (
-          <p className="mb-2 text-sm text-text">
-            <span className="font-medium text-text-muted">
-              {locale === "ar" ? "نوع الإنجاز: " : "Achievement type: "}
-            </span>
-            {displayType}
-          </p>
-        ) : null}
-
-        <div className="mb-2 flex items-center gap-2 text-xs text-text-muted">
-          <Calendar className="h-3.5 w-3.5 shrink-0" />
-          <span>
-            {canFormatDate
-              ? safeDate?.toLocaleDateString(locale === "ar" ? "ar-SA" : "en-US", {
-                  day: "2-digit",
-                  month: "long",
-                  year: "numeric",
-                })
-              : locale === "ar"
-                ? "تاريخ غير متوفر"
-                : "Date unavailable"}
-          </span>
-        </div>
-
-        {inferredField ? (
-          <p className="mb-2 text-xs text-text-muted">
-            <span className="font-medium text-text">{locale === "ar" ? "المجال: " : "Field: "}</span>
-            {getAchievementFieldLabel(inferredField, loc)}
-          </p>
-        ) : null}
-
-        <p className="mb-2 text-sm text-text">
-          <span className="font-medium text-text-muted">{locale === "ar" ? "المستوى: " : "Level: "}</span>
-          <span className="font-semibold text-text">{levelLabel}</span>
-        </p>
-
-        <div
-          className={`mb-3 flex items-center gap-2 rounded-xl border border-amber-200/90 bg-gradient-to-r from-amber-50 to-amber-50/70 px-3 py-2.5 ${
-            scoreNumeric === "—" ? "opacity-80" : ""
-          }`}
-        >
-          <Star className={`h-5 w-5 shrink-0 ${scoreNumeric === "—" ? "text-amber-400" : "fill-amber-400 text-amber-500"}`} />
-          <div className="min-w-0 flex-1">
-            <span className="text-[10px] font-semibold uppercase tracking-wide text-amber-800/80">
-              {locale === "ar" ? "النقاط" : "Points"}
-            </span>
-            <p className="text-xl font-extrabold leading-tight text-amber-900">{scoreLine}</p>
-          </div>
-        </div>
-
-        {descriptionSafe ? (
-          <p className="mb-2 line-clamp-2 text-xs text-text-light">{descriptionSafe}</p>
-        ) : null}
-        {displayResult ? (
-          <p className="mb-3 text-xs font-medium text-text-muted">{displayResult}</p>
-        ) : null}
+        <StudentAchievementDataRows
+          locale={loc}
+          levelKey={levelKey}
+          medalType={String(medalType || "")}
+          resultType={String(resultType || "")}
+          content={{
+            typeLabel,
+            fieldLabel,
+            resultTypeLabel,
+            resultLine,
+            levelLabel,
+            participationLabel: participationDisplay,
+            yearLabel,
+            scoreLabel,
+          }}
+        />
 
         {certificateAvailable && certificateIssuedAt ? (
-          <p className="mb-2 text-[10px] font-medium text-emerald-800">
-            {locale === "ar" ? "أُصدرت: " : "Issued: "}
+          <p className="mt-3 text-[10px] font-medium text-emerald-800">
+            {locale === "ar" ? "أُصدرت الشهادة: " : "Certificate issued: "}
             {new Date(certificateIssuedAt).toLocaleDateString(locale === "ar" ? "ar-SA" : "en-GB", {
               day: "numeric",
               month: "short",
@@ -285,7 +271,7 @@ const AchievementCard = ({
           </p>
         ) : null}
 
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-gray-100 pt-4">
           <div className="flex flex-wrap items-center gap-2">
             <Link
               href={`/achievements/${id}`}

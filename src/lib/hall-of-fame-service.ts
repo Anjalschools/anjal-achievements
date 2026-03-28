@@ -5,11 +5,16 @@ import User from "@/models/User";
 import { getGradeLabel } from "@/constants/grades";
 import {
   formatLocalizedResultLine,
-  getAchievementDisplayName,
-  getAchievementLevelLabel,
-  labelAchievementClassification,
-  labelLegacyAchievementType,
+  getAchievementScoreDisplay,
 } from "@/lib/achievementDisplay";
+import {
+  getAchievementLevelLabel,
+  getAchievementTypeLabel,
+  getParticipationTypeLabel,
+  getResultTypeLabel,
+  getStudentAchievementCardFieldDisplay,
+} from "@/lib/achievement-display-labels";
+import { resolveAchievementTitle } from "@/lib/achievement-title-resolver";
 import { getStageByGrade, reportStageLabel } from "@/lib/report-stage-mapping";
 import { hallOfFameApprovedAchievementFilter } from "@/lib/hall-of-fame-approved";
 import {
@@ -52,18 +57,29 @@ export type HallOfFameQuery = {
   pageSize?: number;
 };
 
+/** Mirrors `StudentAchievementSummaryContent` for hall API payload (no import from client modules). */
+export type HallAchievementCardSummary = {
+  typeLabel: string;
+  fieldLabel: string;
+  resultTypeLabel: string;
+  resultLine: string;
+  levelLabel: string;
+  participationLabel: string;
+  yearLabel: string;
+  scoreLabel: string;
+};
+
 export type HallAchievementCard = {
   id: string;
   title: string;
-  categoryLabel: string;
-  levelLabel: string;
   levelTier: HallTier;
-  resultLine: string;
-  participationLabel: string;
   year: number;
   dateLabel: string;
-  description: string;
   section: 1 | 2 | 3 | 4 | 5;
+  summary: HallAchievementCardSummary;
+  levelBadgeKey: string;
+  medalType: string;
+  resultType: string;
 };
 
 export type StudentHallProfilePayload = {
@@ -125,34 +141,69 @@ const buildHallProfilePayloadFromData = (
       : ["school" as HallTier];
   const hi = list.length > 0 ? highestTier(levelTiers) : "school";
 
-  const categoryLabelFor = (a: Record<string, unknown>) => {
-    const cls = safeStr(a.achievementClassification);
-    if (cls) return labelAchievementClassification(cls, locale);
-    return labelLegacyAchievementType(String(a.achievementType || ""), locale);
-  };
-
   const cards: HallAchievementCard[] = list.length
     ? list.map((a) => {
         const id = String(a._id ?? "");
-        const title = getAchievementDisplayName(a, locale);
-        const cat = categoryLabelFor(a);
+        const title = resolveAchievementTitle(a, locale);
         const rawLevel = String(a.achievementLevel || a.level || "");
         const tier = normalizeRawLevelToTier(rawLevel);
         const isParticipationResult = String(a.resultType || "") === "participation";
         const levelTierForUi: HallTier = isParticipationResult ? "participation" : tier;
         const section = getAchievementHallSection(a);
-        const resultLine = formatLocalizedResultLine(
-          String(a.resultType || ""),
+        const typeKey = safeStr(a.achievementType);
+        const typeLabel = typeKey
+          ? getAchievementTypeLabel(typeKey, locale)
+          : locale === "ar"
+            ? "غير محدد"
+            : "Not specified";
+
+        const fieldRaw = safeStr(a.inferredField) || safeStr(a.domain);
+        const fieldLabel = getStudentAchievementCardFieldDisplay(fieldRaw || undefined, locale);
+
+        const rt = String(a.resultType || "");
+        const resultTypeLabel = getResultTypeLabel(rt || undefined, locale);
+
+        const scoreNum = typeof a.score === "number" ? a.score : undefined;
+        let resultLine = formatLocalizedResultLine(
+          rt,
           String(a.medalType || ""),
           String(a.rank || ""),
           locale,
-          typeof a.score === "number" ? a.score : undefined
+          scoreNum
         );
-        const pt = String(a.participationType || "");
-        const participationLabel =
-          pt === "team" ? (locale === "ar" ? "فريق" : "Team") : locale === "ar" ? "فردي" : "Individual";
+        if (!resultLine || resultLine === "—") {
+          const rv = safeStr(a.resultValue);
+          resultLine = rv || (locale === "ar" ? "غير محدد" : "Not specified");
+        }
+
+        const levelLabel = rawLevel
+          ? getAchievementLevelLabel(rawLevel, locale)
+          : locale === "ar"
+            ? "غير محدد"
+            : "Not specified";
+
+        let participationLabel = getParticipationTypeLabel(a.participationType, locale);
+        if (participationLabel === "—") {
+          participationLabel = locale === "ar" ? "غير محدد" : "Not specified";
+        }
 
         const y = Number(a.achievementYear);
+        const year = Number.isFinite(y) ? y : new Date().getFullYear();
+        const yearLabel =
+          Number.isFinite(y) && y > 0
+            ? String(y)
+            : locale === "ar"
+              ? "غير محدد"
+              : "Not specified";
+
+        const scoreNumeric = getAchievementScoreDisplay(a, locale);
+        const scoreLabel =
+          scoreNumeric !== "—"
+            ? locale === "ar"
+              ? `${scoreNumeric} نقطة`
+              : `${scoreNumeric} pts`
+            : "";
+
         const d = a.date instanceof Date ? a.date : a.createdAt instanceof Date ? (a.createdAt as Date) : null;
         const dateLabel = d
           ? d.toLocaleDateString(locale === "ar" ? "ar-SA" : "en-GB", {
@@ -162,20 +213,28 @@ const buildHallProfilePayloadFromData = (
             })
           : "—";
 
-        const desc = safeStr(a.description) || safeStr(a.title) || "";
+        const summary: HallAchievementCardSummary = {
+          typeLabel,
+          fieldLabel,
+          resultTypeLabel,
+          resultLine,
+          levelLabel,
+          participationLabel,
+          yearLabel,
+          scoreLabel,
+        };
 
         return {
           id,
           title,
-          categoryLabel: cat,
-          levelLabel: getAchievementLevelLabel(rawLevel, locale),
           levelTier: levelTierForUi,
-          resultLine,
-          participationLabel,
-          year: Number.isFinite(y) ? y : new Date().getFullYear(),
+          year,
           dateLabel,
-          description: desc.length > 220 ? `${desc.slice(0, 217)}…` : desc,
           section,
+          summary,
+          levelBadgeKey: rawLevel.trim(),
+          medalType: String(a.medalType || ""),
+          resultType: rt,
         };
       })
     : [];

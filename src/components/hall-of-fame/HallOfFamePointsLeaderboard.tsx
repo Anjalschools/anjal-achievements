@@ -20,7 +20,15 @@ import {
   Users,
 } from "lucide-react";
 import { getLocale } from "@/lib/i18n";
-import { getGradeLabel, getSectionLabel } from "@/lib/achievement-display-labels";
+import {
+  getAchievementLevelLabel,
+  getGradeLabel,
+  getSectionLabel,
+} from "@/lib/achievement-display-labels";
+import {
+  LEADERBOARD_ACHIEVEMENT_TIERS,
+  type LeaderboardAchievementTier,
+} from "@/lib/leaderboard-achievement-tiers";
 import { GRADE_OPTIONS } from "@/constants/grades";
 import HallOfFameHeroBackground from "@/components/hall-of-fame/HallOfFameHeroBackground";
 import HallOfFameHeroSparkles from "@/components/hall-of-fame/HallOfFameHeroSparkles";
@@ -54,6 +62,13 @@ const photoSrc = (url: string | null) => {
 
 type StageFilter = "all" | "primary" | "middle" | "secondary";
 
+const TIER_LABEL_LEVEL_KEY: Record<LeaderboardAchievementTier, string> = {
+  school: "school",
+  regional: "province",
+  national: "kingdom",
+  international: "world",
+};
+
 const STAGE_GRADE_VALUES: Record<Exclude<StageFilter, "all">, string[]> = {
   primary: ["g1", "g2", "g3", "g4", "g5", "g6"],
   middle: ["g7", "g8", "g9"],
@@ -76,6 +91,7 @@ const HallOfFamePointsLeaderboard = () => {
   const [grade, setGrade] = useState("all");
   const [section, setSection] = useState<"all" | "arabic" | "international">("all");
   const [year, setYear] = useState("all");
+  const [selectedAchievementTiers, setSelectedAchievementTiers] = useState<LeaderboardAchievementTier[]>([]);
   const [searchQ, setSearchQ] = useState("");
   const [appliedQ, setAppliedQ] = useState("");
   const [page, setPage] = useState(1);
@@ -96,6 +112,12 @@ const HallOfFamePointsLeaderboard = () => {
         else if (stage !== "all") sp.set("stage", stage);
         if (section !== "all") sp.set("section", section);
         if (year !== "all") sp.set("academicYear", year);
+        if (
+          selectedAchievementTiers.length > 0 &&
+          selectedAchievementTiers.length < LEADERBOARD_ACHIEVEMENT_TIERS.length
+        ) {
+          sp.set("achievementTiers", [...selectedAchievementTiers].sort().join(","));
+        }
         if (appliedQ.trim()) sp.set("q", appliedQ.trim());
         sp.set("page", String(page));
         sp.set("limit", String(limit));
@@ -122,11 +144,11 @@ const HallOfFamePointsLeaderboard = () => {
     return () => {
       mounted = false;
     };
-  }, [gender, grade, stage, section, year, page, limit, appliedQ]);
+  }, [gender, grade, stage, section, year, selectedAchievementTiers, page, limit, appliedQ]);
 
   useEffect(() => {
     setPage(1);
-  }, [gender, grade, stage, section, year, appliedQ]);
+  }, [gender, grade, stage, section, year, selectedAchievementTiers, appliedQ]);
 
   useEffect(() => {
     const allowed = new Set(gradeOptionsForStage(stage).map((g) => g.value));
@@ -167,8 +189,8 @@ const HallOfFamePointsLeaderboard = () => {
           ? "عربي"
           : "Arabic"
         : isAr
-          ? "كل المستويات"
-          : "All levels";
+          ? "كل الأقسام"
+          : "All sections";
 
   const gradeSelectOptions = useMemo(() => gradeOptionsForStage(stage), [stage]);
 
@@ -178,9 +200,16 @@ const HallOfFamePointsLeaderboard = () => {
     setGrade("all");
     setSection("all");
     setYear("all");
+    setSelectedAchievementTiers([]);
     setSearchQ("");
     setAppliedQ("");
     setPage(1);
+  };
+
+  const handleToggleAchievementTier = (tier: LeaderboardAchievementTier) => {
+    setSelectedAchievementTiers((prev) =>
+      prev.includes(tier) ? prev.filter((t) => t !== tier) : [...prev, tier]
+    );
   };
 
   const rankBadge = (rank: number) => {
@@ -480,13 +509,13 @@ const HallOfFamePointsLeaderboard = () => {
               </select>
             </label>
             <label className="flex flex-col gap-1 text-xs font-semibold text-slate-600">
-              {isAr ? "أقل مستوى للعرض" : "Track / level"}
+              {isAr ? "القسم" : "Section"}
               <select
                 value={section}
                 onChange={(e) => setSection(e.target.value as "all" | "arabic" | "international")}
                 className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900"
               >
-                <option value="all">{isAr ? "كل المستويات" : "All levels"}</option>
+                <option value="all">{isAr ? "كل الأقسام" : "All sections"}</option>
                 <option value="arabic">{isAr ? "عربي" : "Arabic"}</option>
                 <option value="international">{isAr ? "دولي" : "International"}</option>
               </select>
@@ -531,6 +560,36 @@ const HallOfFamePointsLeaderboard = () => {
               </button>
             </div>
           </div>
+          <fieldset className="mt-4 border-t border-slate-100 pt-4">
+            <legend className="mb-2 text-xs font-semibold text-slate-600">
+              {isAr ? "المستوى" : "Level"}{" "}
+              <span className="font-normal text-slate-400">
+                {isAr ? "(اختر واحداً أو أكثر؛ فارغ = الكل)" : "(pick one or more; none = all)"}
+              </span>
+            </legend>
+            <div className="flex flex-wrap gap-x-4 gap-y-2 sm:gap-x-6">
+              {LEADERBOARD_ACHIEVEMENT_TIERS.map((tier) => {
+                const loc = isAr ? "ar" : "en";
+                const label = getAchievementLevelLabel(TIER_LABEL_LEVEL_KEY[tier], loc);
+                const checked = selectedAchievementTiers.includes(tier);
+                return (
+                  <label
+                    key={tier}
+                    className="inline-flex cursor-pointer items-center gap-2 text-sm font-medium text-slate-800"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => handleToggleAchievementTier(tier)}
+                      className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
+                      aria-label={label}
+                    />
+                    {label}
+                  </label>
+                );
+              })}
+            </div>
+          </fieldset>
           {!loading && total > 0 ? (
             <p className="mt-4 text-end text-xs font-medium text-slate-600 sm:text-sm">
               {isAr

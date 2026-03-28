@@ -2,6 +2,69 @@ import mongoose from "mongoose";
 import connectDB from "@/lib/mongodb";
 import Achievement from "@/models/Achievement";
 import { hallOfFameApprovedAchievementFilter } from "@/lib/hall-of-fame-approved";
+import {
+  LEADERBOARD_ACHIEVEMENT_TIERS,
+  type LeaderboardAchievementTier,
+} from "@/lib/leaderboard-achievement-tiers";
+
+export { LEADERBOARD_ACHIEVEMENT_TIERS, type LeaderboardAchievementTier } from "@/lib/leaderboard-achievement-tiers";
+
+const isLeaderboardAchievementTier = (s: string): s is LeaderboardAchievementTier =>
+  (LEADERBOARD_ACHIEVEMENT_TIERS as readonly string[]).includes(s);
+
+export const parseLeaderboardAchievementTiersParam = (raw: string | null | undefined): LeaderboardAchievementTier[] | undefined => {
+  const t = String(raw ?? "").trim();
+  if (!t) return undefined;
+  const parts = t
+    .split(",")
+    .map((x) => x.trim().toLowerCase())
+    .filter(Boolean);
+  const uniq = [...new Set(parts)].filter(isLeaderboardAchievementTier);
+  if (uniq.length === 0) return undefined;
+  if (uniq.length === LEADERBOARD_ACHIEVEMENT_TIERS.length) return undefined;
+  return uniq;
+};
+
+const escapeRegexForTier = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+const tierToLevelPatterns: Record<LeaderboardAchievementTier, string[]> = {
+  school: ["school"],
+  regional: ["province", "governorate", "district", "regional", "admin", "administration", "local", "local_authority"],
+  national: ["kingdom", "national"],
+  international: ["international", "global", "world"],
+};
+
+/** $match fragment: achievement `achievementLevel` / `level` falls under one of the selected tiers. */
+const buildAchievementTierMatch = (tiers: LeaderboardAchievementTier[]): Record<string, unknown> | null => {
+  if (!tiers.length) return null;
+  const tierBranches: Record<string, unknown>[] = [];
+  for (const tier of tiers) {
+    const variants = tierToLevelPatterns[tier];
+    const ors: Record<string, unknown>[] = [];
+    for (const raw of variants) {
+      ors.push({ achievementLevel: { $regex: new RegExp(`^${escapeRegexForTier(raw)}$`, "i") } });
+      ors.push({ level: { $regex: new RegExp(`^${escapeRegexForTier(raw)}$`, "i") } });
+    }
+    if (tier === "school") {
+      ors.push({
+        $and: [
+          {
+            $or: [
+              { achievementLevel: { $exists: false } },
+              { achievementLevel: null },
+              { achievementLevel: "" },
+            ],
+          },
+          {
+            $or: [{ level: { $exists: false } }, { level: null }, { level: "" }],
+          },
+        ],
+      });
+    }
+    tierBranches.push({ $or: ors });
+  }
+  return tierBranches.length === 1 ? tierBranches[0]! : { $or: tierBranches };
+};
 
 /** Approved achievements for admin ranking (not restricted by Hall of Fame visibility). */
 export const adminApprovedAchievementFilter = (): Record<string, unknown> => ({
@@ -39,6 +102,8 @@ export type LeaderboardFilters = {
   /** When set and `grade` is empty/all, restricts users to grades in this stage (g1–g6, g7–g9, g10–g12). */
   stage?: LeaderboardStage;
   section?: "arabic" | "international";
+  /** When set, only achievements whose level maps to one of these tiers count toward points/count. */
+  achievementTiers?: LeaderboardAchievementTier[];
   academicYear?: string;
   q?: string;
   page?: number;
@@ -129,6 +194,10 @@ const buildAchievementMatch = (filters: LeaderboardFilters): Record<string, unkn
   const yearNum = Number(yearRaw);
   if (yearRaw && Number.isFinite(yearNum)) {
     andParts.push({ achievementYear: yearNum });
+  }
+  const tierMatch = buildAchievementTierMatch(filters.achievementTiers ?? []);
+  if (tierMatch) {
+    andParts.push(tierMatch);
   }
   return { $and: andParts };
 };

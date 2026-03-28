@@ -21,6 +21,8 @@ type Achievement = {
   medalType?: string;
   rank?: string;
   inferredField?: string;
+  participationType?: string;
+  achievementYear?: number | null;
   date: string;
   image?: string;
   featured?: boolean;

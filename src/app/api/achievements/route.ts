@@ -16,7 +16,8 @@ import {
 } from "@/lib/achievement-duplicate";
 import { resolveWorkflowDisplayStatus } from "@/lib/achievementWorkflow";
 import { applyAiReviewToDoc, runAchievementAiReview } from "@/lib/achievement-ai-review";
-import { createStudentNotification } from "@/lib/student-notifications";
+import { achievementDisplayTitle, createStudentNotification } from "@/lib/student-notifications";
+import { notifyReviewersAchievementSubmittedForReview } from "@/lib/reviewer-notifications";
 import { achievementOwnerUserIdFilter } from "@/lib/achievement-student-scope";
 import {
   canStudentViewCertificate,
@@ -416,6 +417,24 @@ export async function POST(request: NextRequest) {
       } catch (notifyErr) {
         console.error("[ai_flag_notice]", notifyErr);
       }
+    }
+
+    try {
+      const studentName =
+        String(currentUser.fullName || (currentUser as { fullNameAr?: string }).fullNameAr || "").trim() ||
+        "طالب";
+      await notifyReviewersAchievementSubmittedForReview({
+        achievementId: achievement._id,
+        studentName,
+        achievementTitle: achievementDisplayTitle({
+          nameAr: achievement.get("nameAr") as string | null | undefined,
+          nameEn: achievement.get("nameEn") as string | null | undefined,
+          achievementName: achievement.get("achievementName") as string | null | undefined,
+          title: achievement.get("title") as string | null | undefined,
+        }),
+      });
+    } catch (revNotifyErr) {
+      console.error("[achievement create reviewer notify]", revNotifyErr);
     }
 
     queueHomeStatsRefresh();

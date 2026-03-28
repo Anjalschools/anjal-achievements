@@ -15,7 +15,10 @@ export const useUnreadNotificationCount = (pollMs = 45000) => {
 
   const load = useCallback(async () => {
     try {
-      const res = await fetch("/api/notifications/unread-count", { cache: "no-store" });
+      const res = await fetch("/api/notifications/unread-count", {
+        cache: "no-store",
+        credentials: "same-origin",
+      });
       if (!res.ok) return;
       const data = await res.json();
       if (typeof data.count === "number") setCount(data.count);

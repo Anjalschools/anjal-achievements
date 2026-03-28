@@ -47,7 +47,7 @@ export const serializeNotification = (doc: INotification | Record<string, unknow
     actionHref = metaHref;
   } else if (type === "certificate_issued" && relatedCertificateToken) {
     actionHref = `/verify/certificate/${relatedCertificateToken}`;
-  } else if (type === "achievement_updated_for_review") {
+  } else if (type === "achievement_updated_for_review" || type === "achievement_submitted_for_review") {
     actionHref = relatedAchievementId
       ? `/admin/achievements/review/${relatedAchievementId}`
       : "/admin/achievements/review";

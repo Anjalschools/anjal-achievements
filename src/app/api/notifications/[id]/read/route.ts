@@ -3,6 +3,7 @@ import mongoose from "mongoose";
 import connectDB from "@/lib/mongodb";
 import { getCurrentDbUser } from "@/lib/auth";
 import Notification from "@/models/Notification";
+import { isNotificationDebug, notificationDebugLog } from "@/lib/notification-debug";
 
 export const dynamic = "force-dynamic";
 
@@ -29,6 +30,14 @@ export async function PATCH(_request: Request, { params }: RouteParams) {
 
     if (!doc) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+
+    if (isNotificationDebug()) {
+      notificationDebugLog("notification_mark_read", {
+        scope: "single",
+        userId: String(user._id),
+        notificationId: id,
+      });
     }
 
     return NextResponse.json({ success: true, id: doc._id.toString() });

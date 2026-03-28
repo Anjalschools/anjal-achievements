@@ -8,6 +8,7 @@ export type NotificationType =
   | "achievement_featured"
   | "certificate_issued"
   | "ai_flag_notice"
+  | "achievement_submitted_for_review"
   | "achievement_updated_for_review"
   | "system";
 
@@ -45,6 +46,7 @@ const NotificationSchema = new Schema(
         "achievement_featured",
         "certificate_issued",
         "ai_flag_notice",
+        "achievement_submitted_for_review",
         "achievement_updated_for_review",
         "system",
       ],

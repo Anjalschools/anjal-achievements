@@ -1,8 +1,12 @@
+import { getAchievementLevelLabel, getAchievementScoreDisplay } from "@/lib/achievementDisplay";
+import { resolveAchievementTitle } from "@/lib/achievement-title-resolver";
 import {
-  getAchievementDisplayName,
-  getAchievementLevelLabel,
-  getAchievementScoreDisplay,
-} from "@/lib/achievementDisplay";
+  getAchievementResultLabel,
+  getAchievementTypeLabel,
+  getParticipationTypeLabel,
+  getResultTypeLabel,
+  getStudentAchievementCardFieldDisplay,
+} from "@/lib/achievement-display-labels";
 import {
   getDashboardAchievementCategoryLine,
   labelCertificateUiStatus,
@@ -14,6 +18,22 @@ import {
   resolveCertificateUiStatus,
   type AchievementCertificateLike,
 } from "@/lib/certificate-eligibility";
+
+const safeTrim = (v: unknown) => String(v ?? "").trim();
+
+export type DashboardAchievementSummary = {
+  levelKey: string;
+  medalType: string;
+  resultType: string;
+  typeLabel: string;
+  fieldLabel: string;
+  resultTypeLabel: string;
+  resultLine: string;
+  levelLabel: string;
+  participationLabel: string;
+  yearLabel: string;
+  scoreLabel: string;
+};
 
 export type DashboardAchievementRow = {
   id: string;
@@ -33,6 +53,7 @@ export type DashboardAchievementRow = {
   certificateAvailable: boolean;
   certificateStatus: ReturnType<typeof resolveCertificateUiStatus>;
   certificateLabel: string;
+  summary: DashboardAchievementSummary;
 };
 
 const toInput = (a: Record<string, unknown>) => ({
@@ -71,13 +92,81 @@ export const formatAchievementForDashboard = (
   const certificateStatus = resolveCertificateUiStatus(certLike);
   const certificateAvailable = canStudentViewCertificate(certLike);
 
-  const level = String(a.achievementLevel || a.level || "").trim();
+  const levelKey = String(a.achievementLevel || a.level || "").trim();
+
+  const displayLoc = loc === "ar" ? "ar" : "en";
+  const achievementType = String(a.achievementType || "").trim();
+  const title = resolveAchievementTitle(a, displayLoc) || (loc === "ar" ? "إنجاز" : "Achievement");
+
+  const inferred = String(a.inferredField || a.domain || "").trim();
+  const fieldLabel = getStudentAchievementCardFieldDisplay(inferred || undefined, displayLoc);
+
+  const resultType = String(a.resultType || "");
+  const resultTypeLabel = getResultTypeLabel(resultType || undefined, displayLoc);
+
+  const resultLineRaw = getAchievementResultLabel(
+    {
+      resultType: a.resultType,
+      medalType: a.medalType,
+      rank: a.rank,
+      resultValue: a.resultValue,
+      score: a.score,
+    } as Record<string, unknown>,
+    displayLoc
+  );
+  const resultLine =
+    resultLineRaw && resultLineRaw !== "—"
+      ? resultLineRaw
+      : safeTrim(a.resultValue) || (loc === "ar" ? "غير محدد" : "Not specified");
+
+  const levelLabelFull = levelKey
+    ? getAchievementLevelLabel(levelKey, displayLoc)
+    : loc === "ar"
+      ? "غير محدد"
+      : "Not specified";
+
+  const part = getParticipationTypeLabel(String(a.participationType || ""), displayLoc);
+  const participationLabel = loc === "en" && part === "—" ? "Not specified" : part;
+
+  const y = typeof a.achievementYear === "number" ? a.achievementYear : null;
+  const yearLabel =
+    y != null && y > 0 ? String(y) : loc === "ar" ? "غير محدد" : "Not specified";
+
+  const scoreNum = getAchievementScoreDisplay(a, loc);
+  const scoreLabel =
+    scoreNum !== "—"
+      ? loc === "ar"
+        ? `${scoreNum} نقطة`
+        : `${scoreNum} pts`
+      : loc === "ar"
+        ? "غير محدد"
+        : "Not specified";
+
+  const typeLabel = achievementType
+    ? getAchievementTypeLabel(achievementType, displayLoc)
+    : loc === "ar"
+      ? "غير محدد"
+      : "Not specified";
+
+  const summary: DashboardAchievementSummary = {
+    levelKey,
+    medalType: String(a.medalType || ""),
+    resultType,
+    typeLabel,
+    fieldLabel,
+    resultTypeLabel,
+    resultLine,
+    levelLabel: levelLabelFull,
+    participationLabel,
+    yearLabel,
+    scoreLabel,
+  };
 
   return {
     id,
-    title: getAchievementDisplayName(toInput(a) as Parameters<typeof getAchievementDisplayName>[0], loc),
+    title,
     categoryLabel: getDashboardAchievementCategoryLine(a, loc),
-    levelLabel: level ? getAchievementLevelLabel(level, loc) : null,
+    levelLabel: levelKey ? getAchievementLevelLabel(levelKey, loc) : null,
     scoreShort: getAchievementScoreDisplay(a, loc),
     date: safeDate && !Number.isNaN(safeDate.getTime()) ? safeDate.toISOString().split("T")[0] : null,
     featured: Boolean(a.featured),
@@ -91,5 +180,6 @@ export const formatAchievementForDashboard = (
     certificateAvailable,
     certificateStatus,
     certificateLabel: labelCertificateUiStatus(certificateStatus, loc),
+    summary,
   };
 };

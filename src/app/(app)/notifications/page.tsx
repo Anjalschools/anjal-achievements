@@ -10,6 +10,7 @@ import { dispatchNotificationsUpdated } from "@/hooks/useUnreadNotificationCount
 import type { NotificationApiItem } from "@/lib/notification-serialize";
 import { isAchievementReviewerRole } from "@/lib/achievement-reviewer-roles";
 import { getNotificationTypeLabel } from "@/lib/achievement-display-labels";
+import { notificationMatchesFilter } from "@/lib/notification-category";
 
 const typeBadgeClass: Record<string, string> = {
   achievement_approved: "bg-emerald-100 text-emerald-900",
@@ -19,22 +20,12 @@ const typeBadgeClass: Record<string, string> = {
   achievement_featured: "bg-yellow-100 text-yellow-950",
   certificate_issued: "bg-sky-100 text-sky-950",
   ai_flag_notice: "bg-violet-100 text-violet-900",
+  achievement_submitted_for_review: "bg-orange-100 text-orange-950",
   achievement_updated_for_review: "bg-orange-100 text-orange-950",
   system: "bg-gray-100 text-gray-800",
 };
 
 type FilterTab = "all" | "unread" | "reviews" | "certificates" | "system";
-
-const isReviewType = (t: string): boolean =>
-  [
-    "achievement_updated_for_review",
-    "ai_flag_notice",
-    "achievement_approved",
-    "achievement_needs_revision",
-    "achievement_rejected",
-    "achievement_featured",
-    "achievement_deleted",
-  ].includes(t);
 
 const NotificationsPage = () => {
   const locale = getLocale();
@@ -94,14 +85,10 @@ const NotificationsPage = () => {
     void load();
   }, [load]);
 
-  const filteredItems = useMemo(() => {
-    if (filter === "all") return items;
-    if (filter === "unread") return items.filter((n) => !n.isRead);
-    if (filter === "reviews") return items.filter((n) => isReviewType(n.type));
-    if (filter === "certificates") return items.filter((n) => n.type === "certificate_issued");
-    if (filter === "system") return items.filter((n) => n.type === "system");
-    return items;
-  }, [items, filter]);
+  const filteredItems = useMemo(
+    () => items.filter((n) => notificationMatchesFilter(n.type, filter, n.isRead)),
+    [items, filter]
+  );
 
   const unread = items.filter((n) => !n.isRead).length;
 

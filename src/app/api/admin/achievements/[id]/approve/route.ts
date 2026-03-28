@@ -9,6 +9,7 @@ import {
 } from "@/lib/achievement-approval-core";
 import { achievementDisplayTitle, createStudentNotification } from "@/lib/student-notifications";
 import { tryIssueCertificateForAchievementDoc } from "@/lib/certificate-issue";
+import { normalizeAchievementAdminMongooseDoc } from "@/lib/achievement-admin-normalize";
 
 export const dynamic = "force-dynamic";
 
@@ -33,9 +34,24 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: "Achievement not found" }, { status: 404 });
     }
 
+    const idStr = doc._id?.toString();
+    const snap = () => ({
+      id: idStr,
+      resultType: doc.get("resultType"),
+      medalType: doc.get("medalType"),
+      rank: doc.get("rank"),
+      participationType: doc.get("participationType"),
+      teamRole: doc.get("teamRole"),
+    });
+
+    console.info("[approve:before-normalize]", snap());
+    normalizeAchievementAdminMongooseDoc(doc);
+    console.info("[approve:after-normalize]", snap());
+
     const now = new Date();
     applyAchievementPlatformApproval(doc, gate, now, body, "fromRole");
 
+    console.info("[approve:before-save]", snap());
     await doc.save();
 
     try {

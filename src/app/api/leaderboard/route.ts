@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getLeaderboard } from "@/lib/leaderboard-service";
+import { getLeaderboard, parseLeaderboardAchievementTiersParam } from "@/lib/leaderboard-service";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -17,6 +17,9 @@ export async function GET(request: NextRequest) {
     const q = sp.get("q") || undefined;
     const page = Number(sp.get("page") || "1");
     const limit = Number(sp.get("limit") || "24");
+    const achievementTiers =
+      parseLeaderboardAchievementTiersParam(sp.get("achievementTiers")) ??
+      parseLeaderboardAchievementTiersParam(sp.get("levels"));
 
     const result = await getLeaderboard({
       q,
@@ -24,6 +27,7 @@ export async function GET(request: NextRequest) {
       section: section === "arabic" || section === "international" ? section : undefined,
       grade: grade || undefined,
       stage,
+      achievementTiers,
       academicYear: academicYear || undefined,
       page,
       limit,

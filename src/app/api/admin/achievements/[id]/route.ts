@@ -10,6 +10,10 @@ import { calculateAchievementScore } from "@/lib/achievement-scoring";
 import { buildStudentAchievementDetailPayload } from "@/lib/achievement-detail-response";
 import { jsonInternalServerError } from "@/lib/api-safe-response";
 import { scheduleAchievementAttachmentAiReviewAfterMutation } from "@/lib/achievement-attachment-ai-review-runner";
+import {
+  ACHIEVEMENT_ADMIN_NORM_KEYS,
+  normalizeAchievementAdminShape,
+} from "@/lib/achievement-admin-normalize";
 
 export const dynamic = "force-dynamic";
 
@@ -117,17 +121,20 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       if (Number.isFinite(y)) $set.achievementYear = y;
     }
 
+    const mergedState = { ...ex, ...$set } as Record<string, unknown>;
+    normalizeAchievementAdminShape(mergedState);
+
     const inferredOverride = clampInferredFieldToAllowlist(body.inferredField);
-    const mergedType = String($set.achievementType ?? ex.achievementType ?? "");
+    const mergedType = String(mergedState.achievementType ?? "");
     const mergedName =
-      String($set.achievementName ?? ex.achievementName ?? ex.title ?? "").trim() ||
+      String(mergedState.achievementName ?? ex.title ?? "").trim() ||
       String(ex.nameAr || ex.nameEn || "");
-    const mergedDesc = String($set.description ?? ex.description ?? "");
-    const mergedOlympiadField = String($set.olympiadField ?? ex.olympiadField ?? "");
+    const mergedDesc = String(mergedState.description ?? "");
+    const mergedOlympiadField = String(mergedState.olympiadField ?? "");
     const mergedMawhibaSubject = String(
       (ex as { mawhibaAnnualSubject?: string }).mawhibaAnnualSubject ?? ""
     );
-    const mergedCustomName = String($set.customAchievementName ?? ex.customAchievementName ?? "");
+    const mergedCustomName = String(mergedState.customAchievementName ?? "");
 
     const fieldInference = inferAchievementField(
       mergedType,
@@ -140,9 +147,9 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     $set.inferredField = resolvedInferred;
     $set.domain = resolvedInferred;
 
-    const achievementLevel = String($set.achievementLevel ?? ex.achievementLevel ?? "");
-    const resultType = String($set.resultType ?? ex.resultType ?? "");
-    const participationType = String($set.participationType ?? ex.participationType ?? "individual");
+    const achievementLevel = String(mergedState.achievementLevel ?? "");
+    const resultType = String(mergedState.resultType ?? "");
+    const participationType = String(mergedState.participationType ?? "individual");
     const evidenceRequiredMode =
       (ex.evidenceRequiredMode as string) === "skipped" ? "skipped" : "provided";
     const requiresCommitteeReview = evidenceRequiredMode === "skipped";
@@ -152,8 +159,8 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       achievementLevel,
       resultType,
       achievementName: mergedName,
-      medalType: String($set.medalType ?? ex.medalType ?? "") || undefined,
-      rank: String($set.rank ?? ex.rank ?? "") || undefined,
+      medalType: String(mergedState.medalType ?? "") || undefined,
+      rank: String(mergedState.rank ?? "") || undefined,
       participationType,
       requiresCommitteeReview,
     });
@@ -167,7 +174,23 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       mergedName;
     if (finalTitle) $set.title = finalTitle;
 
-    const updated = await Achievement.findByIdAndUpdate(id, { $set }, { new: true }).lean();
+    const $unset: Record<string, 1> = {};
+    for (const k of ACHIEVEMENT_ADMIN_NORM_KEYS) {
+      const v = mergedState[k];
+      if (v === undefined || v === null) {
+        delete $set[k];
+        $unset[k] = 1;
+      } else {
+        $set[k] = v;
+      }
+    }
+
+    const updateQuery: { $set: Record<string, unknown>; $unset?: Record<string, 1> } = { $set };
+    if (Object.keys($unset).length > 0) {
+      updateQuery.$unset = $unset;
+    }
+
+    const updated = await Achievement.findByIdAndUpdate(id, updateQuery, { new: true }).lean();
 
     scheduleAchievementAttachmentAiReviewAfterMutation(String(id), "admin_patch");
 

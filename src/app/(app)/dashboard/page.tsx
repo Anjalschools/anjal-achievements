@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import { getLocale } from "@/lib/i18n";
 import AchievementStatusBadge from "@/components/achievements/AchievementStatusBadge";
+import StudentAchievementDataRows from "@/components/achievements/StudentAchievementDataRows";
 import type { WorkflowDisplayStatus } from "@/lib/achievementWorkflow";
 import type { DashboardAchievementRow } from "@/lib/dashboard-achievement-format";
 import type { UserPublicPortfolioPayload } from "@/lib/user-public-portfolio-types";
@@ -329,7 +330,7 @@ const DashboardPage = () => {
                   className="block rounded-lg border border-gray-200 bg-gray-50 p-4 transition-colors hover:border-primary hover:bg-primary/5"
                 >
                   <div className="flex items-start justify-between">
-                    <div className="flex-1">
+                    <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
                         <h3 className="font-semibold text-text">{achievement.title}</h3>
                         {(achievement.featured || achievement.isFeatured) && (
@@ -338,19 +339,26 @@ const DashboardPage = () => {
                           </span>
                         )}
                       </div>
-                      <p className="mt-1 text-sm text-text-light">{achievement.categoryLabel}</p>
-                      {achievement.levelLabel ? (
-                        <p className="mt-1 text-xs font-medium text-text">
-                          {isAr ? "المستوى: " : "Level: "}
-                          {achievement.levelLabel}
-                        </p>
-                      ) : null}
-                      {achievement.scoreShort && achievement.scoreShort !== "—" ? (
-                        <p className="mt-0.5 text-xs font-semibold text-amber-700">
-                          ⭐ {achievement.scoreShort} {isAr ? "نقطة" : "pts"}
-                        </p>
-                      ) : null}
-                      <p className="mt-1 flex flex-wrap items-center gap-2 text-xs text-text-muted">
+                      <div className="mt-2">
+                        <StudentAchievementDataRows
+                          locale={isAr ? "ar" : "en"}
+                          levelKey={achievement.summary.levelKey}
+                          medalType={achievement.summary.medalType}
+                          resultType={achievement.summary.resultType}
+                          content={{
+                            typeLabel: achievement.summary.typeLabel,
+                            fieldLabel: achievement.summary.fieldLabel,
+                            resultTypeLabel: achievement.summary.resultTypeLabel,
+                            resultLine: achievement.summary.resultLine,
+                            levelLabel: achievement.summary.levelLabel,
+                            participationLabel: achievement.summary.participationLabel,
+                            yearLabel: achievement.summary.yearLabel,
+                            scoreLabel: achievement.summary.scoreLabel,
+                          }}
+                          compact
+                        />
+                      </div>
+                      <p className="mt-2 flex flex-wrap items-center gap-2 text-xs text-text-muted">
                         <span>
                           {achievement.date
                             ? new Date(achievement.date).toLocaleDateString(isAr ? "ar-SA" : "en-US", {

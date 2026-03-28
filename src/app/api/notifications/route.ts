@@ -3,6 +3,8 @@ import connectDB from "@/lib/mongodb";
 import { getCurrentDbUser } from "@/lib/auth";
 import Notification from "@/models/Notification";
 import { serializeNotification } from "@/lib/notification-serialize";
+import { getNotificationCategory } from "@/lib/notification-category";
+import { isNotificationDebug, notificationDebugLog } from "@/lib/notification-debug";
 
 export const dynamic = "force-dynamic";
 
@@ -27,6 +29,20 @@ export async function GET(request: NextRequest) {
       .lean();
 
     const items = rows.map((row) => serializeNotification(row as unknown as Record<string, unknown>));
+
+    if (isNotificationDebug()) {
+      const buckets: Record<string, number> = { reviews: 0, certificates: 0, system: 0, general: 0 };
+      for (const row of rows) {
+        const plain = row as { type?: string };
+        const cat = getNotificationCategory(String(plain.type || ""));
+        buckets[cat] = (buckets[cat] ?? 0) + 1;
+      }
+      notificationDebugLog("notifications_query_result", {
+        userId: String(user._id),
+        total: rows.length,
+        notification_category_mapping: buckets,
+      });
+    }
 
     return NextResponse.json({ items, limit });
   } catch (e) {

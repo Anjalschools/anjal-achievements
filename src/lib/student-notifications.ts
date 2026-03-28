@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import Notification from "@/models/Notification";
+import { notificationDebugLog } from "@/lib/notification-debug";
 
 export const STUDENT_NOTIFICATION_TYPES = [
   "achievement_approved",
@@ -48,6 +49,11 @@ export const createStudentNotification = async (
     relatedCertificateToken: input.relatedCertificateToken?.trim().slice(0, 128) || undefined,
     metadata:
       input.metadata && Object.keys(input.metadata).length > 0 ? input.metadata : undefined,
+  });
+  notificationDebugLog("notification_created", {
+    scope: "student",
+    type: input.type,
+    userId: String(input.userId),
   });
 };
 

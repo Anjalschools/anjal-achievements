@@ -830,6 +830,11 @@ const AchievementsPage = () => {
                     medalType: achievement.medalType || "",
                     rank: achievement.rank || "",
                     inferredField: achievement.inferredField || achievement.domain || "",
+                    participationType: safeTrim((achievement as { participationType?: unknown }).participationType),
+                    achievementYear:
+                      typeof (achievement as { achievementYear?: unknown }).achievementYear === "number"
+                        ? ((achievement as { achievementYear: number }).achievementYear as number)
+                        : null,
                     resultValue: achievement.resultValue || "",
                     resultType: achievement.resultType || "",
                     image: achievement.image || "",

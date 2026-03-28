@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import connectDB from "@/lib/mongodb";
 import { getCurrentDbUser } from "@/lib/auth";
 import Notification from "@/models/Notification";
+import { isNotificationDebug, notificationDebugLog } from "@/lib/notification-debug";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +18,10 @@ export async function GET() {
       userId: user._id,
       $or: [{ read: false }, { read: { $exists: false } }],
     });
+
+    if (isNotificationDebug()) {
+      notificationDebugLog("unread_count_result", { userId: String(user._id), count });
+    }
 
     return NextResponse.json({ count });
   } catch (e) {

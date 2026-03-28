@@ -36,6 +36,19 @@ export const getAchievementLevelLabel = (value: unknown, locale: DisplayLabelLoc
 export const getAchievementFieldLabel = (value: unknown, locale: DisplayLabelLocale) =>
   formatAchievementFieldLabel(asStr(value) || undefined, locale);
 
+/** Student cards: treat `other` / «أخرى» as unspecified — never show generic "other" as the field. */
+export const getStudentAchievementCardFieldDisplay = (value: unknown, locale: DisplayLabelLocale): string => {
+  const raw = asStr(value);
+  const rk = raw.toLowerCase().replace(/\s+/g, "_");
+  if (!raw || rk === "other") return locale === "ar" ? "غير محدد" : "Not specified";
+  const lbl = getAchievementFieldLabel(raw, locale);
+  const low = lbl.trim().toLowerCase();
+  if (low === "other" || low === "أخرى" || low === "others" || low === "الأخرى") {
+    return locale === "ar" ? "غير محدد" : "Not specified";
+  }
+  return lbl;
+};
+
 export const getWorkflowStatusLabel = (value: unknown, locale: DisplayLabelLocale) =>
   formatWorkflowStatusLabel(asStr(value) || undefined, locale);
 
@@ -199,6 +212,7 @@ export const getNotificationTypeLabel = (value: unknown, locale: DisplayLabelLoc
     achievement_featured: { ar: "تمييز", en: "Featured" },
     certificate_issued: { ar: "شهادة", en: "Certificate" },
     ai_flag_notice: { ar: "تنبيه مراجعة", en: "Review notice" },
+    achievement_submitted_for_review: { ar: "طابور المراجعة", en: "Review queue" },
     achievement_updated_for_review: { ar: "مراجعة مطلوبة", en: "Review required" },
     system: { ar: "عام", en: "System" },
   };
