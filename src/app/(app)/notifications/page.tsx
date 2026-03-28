@@ -9,6 +9,7 @@ import { Loader2, ExternalLink, Inbox } from "lucide-react";
 import { dispatchNotificationsUpdated } from "@/hooks/useUnreadNotificationCount";
 import type { NotificationApiItem } from "@/lib/notification-serialize";
 import { isAchievementReviewerRole } from "@/lib/achievement-reviewer-roles";
+import { getNotificationTypeLabel } from "@/lib/achievement-display-labels";
 
 const typeBadgeClass: Record<string, string> = {
   achievement_approved: "bg-emerald-100 text-emerald-900",
@@ -20,22 +21,6 @@ const typeBadgeClass: Record<string, string> = {
   ai_flag_notice: "bg-violet-100 text-violet-900",
   achievement_updated_for_review: "bg-orange-100 text-orange-950",
   system: "bg-gray-100 text-gray-800",
-};
-
-const typeLabel = (type: string, ar: boolean): string => {
-  const m: Record<string, { ar: string; en: string }> = {
-    achievement_approved: { ar: "اعتماد", en: "Approved" },
-    achievement_needs_revision: { ar: "تعديل مطلوب", en: "Revision" },
-    achievement_rejected: { ar: "رفض", en: "Rejected" },
-    achievement_deleted: { ar: "حذف", en: "Deleted" },
-    achievement_featured: { ar: "تمييز", en: "Featured" },
-    certificate_issued: { ar: "شهادة", en: "Certificate" },
-    ai_flag_notice: { ar: "تنبيه مراجعة", en: "Review notice" },
-    achievement_updated_for_review: { ar: "مراجعة مطلوبة", en: "Review required" },
-    system: { ar: "عام", en: "System" },
-  };
-  const row = m[type] || { ar: type, en: type };
-  return ar ? row.ar : row.en;
 };
 
 type FilterTab = "all" | "unread" | "reviews" | "certificates" | "system";
@@ -275,7 +260,7 @@ const NotificationsPage = () => {
                     <div className="min-w-0 flex-1">
                       <div className="mb-1 flex flex-wrap items-center gap-2">
                         <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${badge}`}>
-                          {typeLabel(n.type, isAr)}
+                          {getNotificationTypeLabel(n.type, isAr ? "ar" : "en")}
                         </span>
                         {!n.isRead ? (
                           <span className="text-xs font-medium text-primary">{isAr ? "جديد" : "New"}</span>

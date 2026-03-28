@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { KeyboardEvent } from "react";
 import { getLocale } from "@/lib/i18n";
+import { getNewsEditorialStatusLabel } from "@/lib/achievement-display-labels";
 import type { NewsPostApi } from "@/lib/news-serialize";
 import { evaluateNewsQuality, validateNews } from "@/lib/news-quality";
 import {
@@ -71,6 +72,7 @@ const parseApiErrorMessage = (data: Record<string, unknown>): string => {
 const NewsMediaConsole = () => {
   const locale = getLocale();
   const isAr = locale === "ar";
+  const loc = isAr ? "ar" : "en";
   const L = (ar: string, en: string) => (isAr ? ar : en);
 
   const [step, setStep] = useState(0);
@@ -514,7 +516,9 @@ const NewsMediaConsole = () => {
                     }`}
                   >
                     <span className="line-clamp-2">{n.title}</span>
-                    <span className="mt-0.5 block text-[10px] uppercase text-text-light">{n.status}</span>
+                    <span className="mt-0.5 block text-[10px] text-text-light">
+                      {getNewsEditorialStatusLabel(n.status, loc)}
+                    </span>
                   </button>
                 </li>
               ))}
@@ -915,8 +919,8 @@ const NewsMediaConsole = () => {
               {step === 4 ? (
                 <div className="space-y-6">
                   <div className="flex flex-wrap gap-2">
-                    <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-bold uppercase text-text">
-                      {item.status}
+                    <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-bold text-text">
+                      {getNewsEditorialStatusLabel(item.status, loc)}
                     </span>
                   </div>
                   <div className="flex flex-wrap gap-2">

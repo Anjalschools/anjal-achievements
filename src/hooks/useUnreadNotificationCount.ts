@@ -10,7 +10,7 @@ export const dispatchNotificationsUpdated = () => {
   }
 };
 
-export const useUnreadNotificationCount = (pollMs = 90000) => {
+export const useUnreadNotificationCount = (pollMs = 45000) => {
   const [count, setCount] = useState(0);
 
   const load = useCallback(async () => {

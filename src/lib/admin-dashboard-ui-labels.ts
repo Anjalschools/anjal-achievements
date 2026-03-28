@@ -1,16 +1,12 @@
-export const statusBucketLabel = (key: string, isAr: boolean): string => {
-  const m: Record<string, [string, string]> = {
-    pending: ["قيد المراجعة", "Pending review"],
-    needs_revision: ["يحتاج تعديل", "Needs revision"],
-    pending_re_review: ["تم التعديل / إعادة مراجعة", "Resubmitted / re-review"],
-    approved: ["معتمد", "Approved"],
-    featured: ["مميز", "Featured"],
-    rejected: ["مرفوض", "Rejected"],
-  };
-  const pair = m[key];
-  if (pair) return isAr ? pair[0] : pair[1];
-  return key;
-};
+import {
+  getAchievementFieldLabel,
+  getAchievementLevelLabel,
+  getAdminDashboardWorkflowBucketLabel,
+  humanizeRawKeyForDisplay,
+} from "@/lib/achievement-display-labels";
+
+export const statusBucketLabel = (key: string, isAr: boolean): string =>
+  getAdminDashboardWorkflowBucketLabel(key, isAr ? "ar" : "en");
 
 export const statusBucketColor = (key: string): string => {
   const colors: Record<string, string> = {
@@ -25,31 +21,17 @@ export const statusBucketColor = (key: string): string => {
 };
 
 export const levelKeyLabel = (key: string, isAr: boolean): string => {
-  const k = key.toLowerCase();
-  const map: Record<string, [string, string]> = {
-    school: ["المدرسة", "School"],
-    province: ["المحافظة", "Province"],
-    kingdom: ["المملكة", "Kingdom"],
-    international: ["العالم", "International / World"],
-  };
-  const pair = map[k];
-  if (pair) return isAr ? pair[0] : pair[1];
-  return key;
+  const loc = isAr ? "ar" : "en";
+  const lbl = getAchievementLevelLabel(key, loc);
+  if (lbl && lbl !== "—" && lbl.trim() && lbl.toLowerCase() !== String(key).toLowerCase()) return lbl;
+  return humanizeRawKeyForDisplay(key, loc);
 };
 
 export const domainKeyLabel = (key: string, isAr: boolean): string => {
-  const map: Record<string, [string, string]> = {
-    scientific: ["علمي", "Scientific"],
-    technical: ["تقني", "Technical"],
-    cultural: ["ثقافي", "Cultural"],
-    sports: ["رياضي", "Sports"],
-    quran: ["قرآني", "Quranic"],
-    arts: ["فني", "Arts"],
-    other: ["أخرى", "Other"],
-  };
-  const pair = map[key];
-  if (pair) return isAr ? pair[0] : pair[1];
-  return key;
+  const loc = isAr ? "ar" : "en";
+  const lbl = getAchievementFieldLabel(key, loc);
+  if (lbl && lbl !== "—" && lbl.trim() && lbl.toLowerCase() !== String(key).toLowerCase()) return lbl;
+  return humanizeRawKeyForDisplay(key, loc);
 };
 
 export const roleLabel = (role: string, isAr: boolean): string => {
@@ -63,7 +45,7 @@ export const roleLabel = (role: string, isAr: boolean): string => {
   };
   const pair = map[role];
   if (pair) return isAr ? pair[0] : pair[1];
-  return role;
+  return humanizeRawKeyForDisplay(role, isAr ? "ar" : "en");
 };
 
 export const roleAccentClass = (role: string): string => {

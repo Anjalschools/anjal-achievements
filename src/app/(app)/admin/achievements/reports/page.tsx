@@ -537,15 +537,7 @@ const AdminAchievementReportsPage = () => {
                           <td className="max-w-[220px] px-2 py-2 text-xs text-text-light">{row.description}</td>
                           <td className="px-2 py-2 text-xs">
                             <span className={`inline-flex rounded-full px-2 py-1 text-[10px] font-semibold ring-1 ${reportStatusBadgeClass(
-                              row.statusLabel === "معتمد"
-                                ? "approved"
-                                : row.statusLabel === "تحت المراجعة"
-                                  ? "pending_review"
-                                  : row.statusLabel === "يحتاج تعديل"
-                                    ? "needs_revision"
-                                    : row.statusLabel === "مرفوض"
-                                      ? "rejected"
-                                      : ""
+                              row.statusKey
                             )}`}>
                               {row.statusLabel}
                             </span>
@@ -623,8 +615,9 @@ const TopStudentsPanel = ({ isAr, adminStats }: { isAr: boolean; adminStats: Rec
             <li key={i} className="rounded-lg border border-gray-100 bg-gray-50/70 p-2 text-xs">
               <p className="font-bold text-text">{String(s.studentName || "—")}</p>
               <p className="mt-1 text-text-light">
-                {isAr ? "الصف" : "Grade"}: {String(s.grade || "—")} · {isAr ? "المرحلة" : "Stage"}:{" "}
-                {String(s.stageLabelAr || "—")}
+                {isAr ? "الصف" : "Grade"}: {getGradeLabel(String(s.grade || ""), isAr ? "ar" : "en")} ·{" "}
+                {isAr ? "المرحلة" : "Stage"}:{" "}
+                {String((isAr ? s.stageLabelAr : s.stageLabelEn || s.stageLabelAr) || "—")}
               </p>
               <p className="mt-1 text-text-light">
                 {isAr ? "الإجمالي" : "Total"}: {String(s.total || 0)} · {isAr ? "المعتمد" : "Approved"}:{" "}

@@ -25,6 +25,7 @@ import type { IUser } from "@/models/User";
 import { normalizeAttachmentsArray } from "@/lib/achievement-attachments";
 import { applyAiReviewToDoc, runAchievementAiReview } from "@/lib/achievement-ai-review";
 import { queueHomeStatsRefresh } from "@/lib/home-stats-service";
+import { scheduleAchievementAttachmentAiReviewAfterMutation } from "@/lib/achievement-attachment-ai-review-runner";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -331,6 +332,8 @@ export async function POST(request: NextRequest) {
     });
 
     queueHomeStatsRefresh();
+
+    scheduleAchievementAttachmentAiReviewAfterMutation(String(created._id), "admin_manual_create");
 
     return NextResponse.json({
       ok: true,

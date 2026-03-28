@@ -5,7 +5,8 @@ import { getCurrentDbUser } from "@/lib/auth";
 import Achievement from "@/models/Achievement";
 import { applyAiReviewToDoc, runAchievementAiReview } from "@/lib/achievement-ai-review";
 import { mergeResubmitWorkflowState } from "@/lib/achievement-workflow-state";
-import { createStudentNotification } from "@/lib/student-notifications";
+import { achievementDisplayTitle, createStudentNotification } from "@/lib/student-notifications";
+import { notifyReviewersAchievementUpdatedForReview } from "@/lib/reviewer-notifications";
 import { actorFromUser, logAuditEvent } from "@/lib/audit-log-service";
 import { jsonInternalServerError } from "@/lib/api-safe-response";
 
@@ -74,6 +75,24 @@ export async function PATCH(_request: NextRequest, { params }: RouteParams) {
     });
     applyAiReviewToDoc(doc, ai);
     await doc.save();
+
+    try {
+      const studentName =
+        String(currentUser.fullName || (currentUser as { fullNameAr?: string }).fullNameAr || "").trim() ||
+        "طالب";
+      await notifyReviewersAchievementUpdatedForReview({
+        achievementId: doc._id,
+        studentName,
+        achievementTitle: achievementDisplayTitle({
+          nameAr: doc.get("nameAr") as string | null | undefined,
+          nameEn: doc.get("nameEn") as string | null | undefined,
+          achievementName: doc.get("achievementName") as string | null | undefined,
+          title: doc.get("title") as string | null | undefined,
+        }),
+      });
+    } catch (notifyRevErr) {
+      console.error("[resubmit reviewer notify]", notifyRevErr);
+    }
 
     await logAuditEvent({
       actionType: "achievement_resubmitted_for_review",

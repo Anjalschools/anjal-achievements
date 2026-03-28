@@ -20,6 +20,7 @@ import {
   Users,
 } from "lucide-react";
 import { getLocale } from "@/lib/i18n";
+import { getGradeLabel, getSectionLabel } from "@/lib/achievement-display-labels";
 import { GRADE_OPTIONS } from "@/constants/grades";
 import HallOfFameHeroBackground from "@/components/hall-of-fame/HallOfFameHeroBackground";
 import HallOfFameHeroSparkles from "@/components/hall-of-fame/HallOfFameHeroSparkles";
@@ -286,7 +287,7 @@ const HallOfFamePointsLeaderboard = () => {
               {getName(row)}
             </h3>
             <p className={`font-semibold text-slate-600 ${featured ? "text-[10px]" : "text-[11px]"}`}>
-              {row.grade || "—"} · {row.section === "international" ? (isAr ? "دولي" : "Intl") : isAr ? "عربي" : "Ar"}
+              {getGradeLabel(row.grade, isAr ? "ar" : "en")} · {getSectionLabel(row.section, isAr ? "ar" : "en")}
             </p>
             <div
               className={`mt-auto flex items-center justify-between border-t border-slate-100 font-semibold text-slate-700 ${

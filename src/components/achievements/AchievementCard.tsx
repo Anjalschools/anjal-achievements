@@ -15,11 +15,10 @@ import {
   getAchievementLevelLabel,
   getAchievementScoreDisplay,
   isLikelyTechnicalSlug,
-  labelInferredField,
-  labelLegacyAchievementType,
   resolveAchievementEventSlug,
   safeTrim,
 } from "@/lib/achievementDisplay";
+import { getAchievementFieldLabel, getAchievementTypeLabel } from "@/lib/achievement-display-labels";
 import AchievementStatusBadge from "@/components/achievements/AchievementStatusBadge";
 import type { WorkflowDisplayStatus } from "@/lib/achievementWorkflow";
 
@@ -153,7 +152,7 @@ const AchievementCard = ({
 
   const approvalNorm = normalizeApprovalStatus(rawRec as any);
   const isLocked = isStudentEditLocked(rawRec as AchievementWorkflowLike);
-  const displayType = achievementType ? labelLegacyAchievementType(achievementType, loc) : "";
+  const displayType = achievementType ? getAchievementTypeLabel(achievementType, loc) : "";
   const displayResult = formatLocalizedResultLine(resultType, medalType || resultValue, rank, loc);
   const descriptionSafe = safeTrim(description);
   const levelLabel = getAchievementLevelLabel(achievementLevel, loc);
@@ -245,7 +244,7 @@ const AchievementCard = ({
         {inferredField ? (
           <p className="mb-2 text-xs text-text-muted">
             <span className="font-medium text-text">{locale === "ar" ? "المجال: " : "Field: "}</span>
-            {labelInferredField(inferredField, loc)}
+            {getAchievementFieldLabel(inferredField, loc)}
           </p>
         ) : null}
 

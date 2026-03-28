@@ -37,15 +37,22 @@ export const serializeNotification = (doc: INotification | Record<string, unknow
     typeof plain.relatedCertificateToken === "string" ? plain.relatedCertificateToken : null;
   const type = String(plain.type || "");
 
+  const metaHref =
+    meta && typeof meta.actionHref === "string" && meta.actionHref.trim().startsWith("/")
+      ? meta.actionHref.trim()
+      : null;
+
   let actionHref: string | null = null;
-  if (type === "certificate_issued" && relatedCertificateToken) {
+  if (metaHref) {
+    actionHref = metaHref;
+  } else if (type === "certificate_issued" && relatedCertificateToken) {
     actionHref = `/verify/certificate/${relatedCertificateToken}`;
   } else if (type === "achievement_updated_for_review") {
     actionHref = relatedAchievementId
       ? `/admin/achievements/review/${relatedAchievementId}`
       : "/admin/achievements/review";
   } else if (type === "ai_flag_notice" && relatedAchievementId) {
-    actionHref = `/admin/achievements/review/${relatedAchievementId}`;
+    actionHref = `/achievements/${relatedAchievementId}`;
   } else if (relatedAchievementId && type !== "achievement_deleted") {
     actionHref = `/achievements/${relatedAchievementId}`;
   }

@@ -1,6 +1,7 @@
 "use client";
 
 import { GRADE_OPTIONS } from "@/constants/grades";
+import { getGradeLabel } from "@/lib/achievement-display-labels";
 import SectionCard from "@/components/layout/SectionCard";
 
 export type AdminIdentitySearchHit = {
@@ -99,7 +100,7 @@ const AdminAchievementIdentitySection = ({ isAr, state, setState }: Props) => {
                 >
                   <span className="font-semibold text-text">{h.fullName}</span>
                   <span className="mt-0.5 block text-xs text-text-light">
-                    {h.studentId} · {h.grade}
+                    {h.studentId} · {getGradeLabel(h.grade, isAr ? "ar" : "en")}
                   </span>
                 </button>
               </li>

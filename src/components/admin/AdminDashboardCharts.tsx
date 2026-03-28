@@ -8,6 +8,7 @@ import {
   statusBucketColor,
   statusBucketLabel,
 } from "@/lib/admin-dashboard-ui-labels";
+import { humanizeRawKeyForDisplay } from "@/lib/achievement-display-labels";
 
 type Props = {
   data: AdminDashboardPayload;
@@ -419,7 +420,7 @@ const AdminDashboardCharts = memo(({ data, isAr }: Props) => {
             rows={data.byDomain}
             labelFn={(key, ar) => {
               const row = data.byDomain.find((r) => r.key === key);
-              if (!row) return key;
+              if (!row) return humanizeRawKeyForDisplay(key, ar ? "ar" : "en");
               return ar ? row.labelAr : row.labelEn;
             }}
             isAr={isAr}

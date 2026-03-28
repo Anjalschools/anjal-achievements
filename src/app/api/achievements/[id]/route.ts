@@ -28,6 +28,7 @@ import { perfElapsed, perfLog, perfNow } from "@/lib/perf-debug";
 import { actorFromUser, logAuditEvent } from "@/lib/audit-log-service";
 import { queueHomeStatsRefresh } from "@/lib/home-stats-service";
 import { jsonInternalServerError } from "@/lib/api-safe-response";
+import { scheduleAchievementAttachmentAiReviewAfterMutation } from "@/lib/achievement-attachment-ai-review-runner";
 
 export const dynamic = "force-dynamic";
 
@@ -397,6 +398,8 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
         platform: "website",
       });
     }
+
+    scheduleAchievementAttachmentAiReviewAfterMutation(String(updated._id), "achievement_update");
 
     if (enteredReReview && updated) {
       try {

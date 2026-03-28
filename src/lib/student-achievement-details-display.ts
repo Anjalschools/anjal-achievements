@@ -7,11 +7,12 @@ import {
   isNonRenderableAttachmentHref,
 } from "@/lib/achievement-attachments";
 import type { AchievementLabelLocale } from "@/lib/achievement-labels";
+import { labelAchievementSlugOrKey, labelCertificateUiStatus } from "@/lib/achievement-labels";
 import {
-  getDbAchievementTypeLabel,
-  labelAchievementSlugOrKey,
-  labelCertificateUiStatus,
-} from "@/lib/achievement-labels";
+  getAchievementLevelLabel,
+  getAchievementTypeLabel,
+  getResultTypeLabel,
+} from "@/lib/achievement-display-labels";
 import { formatAchievementFieldLabel, formatOrgLabel } from "@/lib/admin-achievement-labels";
 import type { CertificateUiStatus } from "@/lib/certificate-eligibility";
 import { isArabicText } from "@/lib/achievementNormalize";
@@ -21,8 +22,6 @@ import {
   isLikelyTechnicalSlug,
   labelAchievementCategory,
   labelAchievementClassification,
-  labelAchievementLevel,
-  labelResultType,
   safeTrim,
 } from "@/lib/achievementDisplay";
 
@@ -56,7 +55,7 @@ export const studentFormatField = (v: unknown, loc: Loc): string => {
 };
 
 export const studentFormatAchievementType = (v: unknown, loc: Loc): string =>
-  getDbAchievementTypeLabel(v, loc);
+  getAchievementTypeLabel(v, loc);
 
 const isLikelyMongoObjectId = (s: string): boolean => /^[a-f0-9]{24}$/i.test(s);
 
@@ -105,7 +104,7 @@ export const studentFormatAchievementTitle = (raw: Record<string, unknown>, loc:
     return labelAchievementSlugOrKey(slugSource, loc);
   }
 
-  const typeLabel = getDbAchievementTypeLabel(raw.achievementType, loc);
+  const typeLabel = getAchievementTypeLabel(raw.achievementType, loc);
   if (typeLabel !== studentNotSpecified(loc)) return typeLabel;
 
   return loc === "ar" ? "إنجاز غير محدد" : "Unspecified Achievement";
@@ -160,10 +159,7 @@ export const resolveStudentAttachmentHref = (raw: unknown, baseOrigin?: string):
 export const studentFormatLevel = (v: unknown, loc: Loc): string => {
   const s = safeTrim(v);
   if (!s) return studentNotSpecified(loc);
-  const lbl = labelAchievementLevel(s, loc);
-  if (lbl && lbl !== "—" && lbl !== s) return lbl;
-  if (lbl === s && !isLikelyTechnicalSlug(s)) return s;
-  return labelAchievementSlugOrKey(s, loc);
+  return getAchievementLevelLabel(s, loc);
 };
 
 /** Organizer / event host line — never show raw competition slugs when mappable. */
@@ -178,10 +174,7 @@ export const studentFormatOrganizer = (raw: Record<string, unknown>, loc: Loc): 
 export const studentFormatResultTypeLabel = (v: unknown, loc: Loc): string => {
   const s = safeTrim(v);
   if (!s) return studentNotSpecified(loc);
-  const t = labelResultType(s, loc);
-  if (t && t !== "—" && t !== s) return t;
-  if (t === s && !isLikelyTechnicalSlug(s)) return s;
-  return labelAchievementSlugOrKey(s, loc);
+  return getResultTypeLabel(s, loc);
 };
 
 export const studentFormatResultLine = (

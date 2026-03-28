@@ -1,3 +1,4 @@
+import { humanizeRawKeyForDisplay } from "@/lib/achievement-display-labels";
 import { reportStageLabel } from "@/lib/report-stage-mapping";
 import type { ReportStage } from "@/lib/report-stage-mapping";
 import type { AnalyticsRecommendationCategory } from "@/lib/admin-advanced-analytics-types";
@@ -34,7 +35,7 @@ export const labelStatusBucket = (key: string, isAr: boolean): string => {
     other: { ar: "أخرى / غير مصنف", en: "Other / unclassified" },
   };
   const row = m[k];
-  if (!row) return isAr ? "أخرى / غير مصنف" : "Other / unclassified";
+  if (!row) return humanizeRawKeyForDisplay(key, isAr ? "ar" : "en");
   return isAr ? row.ar : row.en;
 };
 

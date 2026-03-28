@@ -112,6 +112,20 @@ export const isApprovedForFeature = (doc: {
   return doc.approved === true;
 };
 
+/** Display-only labels for attachment AI execution (admin UI). */
+export const formatAttachmentAiExecutionLabel = (
+  run: string | null | undefined,
+  loc: "ar" | "en"
+): string => {
+  const s = String(run || "").trim().toLowerCase();
+  if (s === "pending") return loc === "ar" ? "بانتظار الفحص" : "Pending";
+  if (s === "processing") return loc === "ar" ? "جارٍ الفحص" : "Processing";
+  if (s === "completed") return loc === "ar" ? "اكتمل الفحص" : "Completed";
+  if (s === "failed") return loc === "ar" ? "فشل الفحص" : "Failed";
+  if (s === "idle") return loc === "ar" ? "غير مفعّل" : "Idle";
+  return loc === "ar" ? "—" : "—";
+};
+
 export const isStudentEditLocked = (raw: AchievementWorkflowLike): boolean => {
   if (raw.pendingReReview === true) return false;
   const st = String(raw.status ?? "");

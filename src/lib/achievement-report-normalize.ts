@@ -1,3 +1,5 @@
+import { getWorkflowStatusLabel } from "@/lib/achievement-display-labels";
+
 type RawRow = {
   studentName: string;
   grade: string;
@@ -26,6 +28,8 @@ export type NormalizedReportRow = {
   year: string;
   date: string;
   description: string;
+  /** Raw workflow status for styling / filters (not for end-user display). */
+  statusKey: string;
   statusLabel: string;
   certificateStatusLabel: string;
 };
@@ -33,6 +37,7 @@ export type NormalizedReportRow = {
 export const reportStatusBadgeClass = (status: string): string => {
   if (status === "approved") return "bg-emerald-100 text-emerald-900 ring-emerald-200";
   if (status === "pending" || status === "pending_review") return "bg-amber-100 text-amber-900 ring-amber-200";
+  if (status === "pending_re_review") return "bg-amber-100 text-amber-950 ring-amber-200";
   if (status === "needs_revision") return "bg-orange-100 text-orange-900 ring-orange-200";
   if (status === "rejected") return "bg-red-100 text-red-900 ring-red-200";
   return "bg-slate-100 text-slate-800 ring-slate-200";
@@ -60,16 +65,11 @@ export const normalizeAchievementReportRow = (row: RawRow): NormalizedReportRow 
   year: row.year != null ? String(row.year) : "—",
   date: row.dateLabelAr || "—",
   description: row.description || "—",
-  statusLabel:
-    row.status === "approved"
-      ? "معتمد"
-      : row.status === "pending" || row.status === "pending_review"
-        ? "تحت المراجعة"
-        : row.status === "needs_revision"
-          ? "يحتاج تعديل"
-          : row.status === "rejected"
-            ? "مرفوض"
-            : "غير محدد",
+  statusKey: String(row.status || ""),
+  statusLabel: (() => {
+    const w = getWorkflowStatusLabel(row.status, "ar");
+    return w && w !== "—" ? w : "غير محدد";
+  })(),
   certificateStatusLabel: row.certificateIssued ? "صادرة" : "غير صادرة",
 });
 

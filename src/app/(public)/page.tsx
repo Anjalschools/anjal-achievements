@@ -31,6 +31,7 @@ import { PUBLIC_IMG } from "@/lib/publicImages";
 import InstitutionalAchievementCard from "@/components/landing/InstitutionalAchievementCard";
 import type { HomeHighlightBlockPayload, HomeHighlightItemPayload } from "@/lib/home-highlights";
 import { DEFAULT_HOME_PAGE_CONTENT, type HomePageContentPayload } from "@/lib/home-page-content";
+import { getAchievementEventOrSlugLabel, getAchievementTypeLabel } from "@/lib/achievement-display-labels";
 
 const HOME_HIGHLIGHTS_STATIC_DEFAULT = DEFAULT_HOME_HIGHLIGHTS;
 
@@ -613,6 +614,20 @@ const TopAchievementsSection = () => {
     return e || a || l || "—";
   };
 
+  const resolveHighlightBadge = (item: HomeHighlightItemPayload): string => {
+    const loc = isAr ? "ar" : "en";
+    const badgeAr = String(item.badgeAr || "").trim();
+    const badgeEn = String(item.badgeEn || "").trim();
+    const fromBadge = isAr ? badgeAr || badgeEn : badgeEn || badgeAr;
+    if (fromBadge) return fromBadge;
+    const t = String(item.type || "").trim();
+    if (!t) return "—";
+    const typeL = getAchievementTypeLabel(t, loc);
+    const ns = loc === "ar" ? "غير محدد" : "Not specified";
+    if (typeL && typeL !== ns && typeL !== "—") return typeL;
+    return getAchievementEventOrSlugLabel(t, loc);
+  };
+
   useEffect(() => {
     let mounted = true;
     const run = async () => {
@@ -670,7 +685,7 @@ const TopAchievementsSection = () => {
               iconKey={item.iconKey || "star"}
               title={pickBi(item.titleAr, item.titleEn, item.title)}
               description={pickBi(item.descriptionAr, item.descriptionEn, item.description)}
-              badge={pickBi(item.badgeAr, item.badgeEn, item.type || "")}
+              badge={resolveHighlightBadge(item)}
             />
           ))}
           </div>

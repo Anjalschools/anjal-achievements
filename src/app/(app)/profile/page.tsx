@@ -13,6 +13,11 @@ import Image from "next/image";
 import { getLocale } from "@/lib/i18n";
 import { getGradeLabel } from "@/constants/grades";
 import {
+  getGenderLabel,
+  getSectionLabel,
+  getVerificationStatusLabel,
+} from "@/lib/achievement-display-labels";
+import {
   getAchievementDisplayName,
   getAchievementLevelLabel,
   getAchievementScoreDisplay,
@@ -464,7 +469,7 @@ const ProfilePage = () => {
                   {locale === "ar" ? "الجنس" : "Gender"}
                 </p>
                 <p className="text-sm font-semibold text-text">
-                  {userData.gender === "male" ? (locale === "ar" ? "ذكر" : "Male") : userData.gender === "female" ? (locale === "ar" ? "أنثى" : "Female") : "-"}
+                  {userData.gender ? getGenderLabel(userData.gender, loc) : "-"}
                 </p>
               </div>
               <div>
@@ -479,7 +484,9 @@ const ProfilePage = () => {
                 <p className="mb-1 text-xs font-medium text-text-light">
                   {locale === "ar" ? "القسم" : "Section"}
                 </p>
-                <p className="text-sm font-semibold text-text">{userData.section || "-"}</p>
+                <p className="text-sm font-semibold text-text">
+                  {userData.section ? getSectionLabel(userData.section, loc) : "-"}
+                </p>
               </div>
               <div>
                 <p className="mb-1 text-xs font-medium text-text-light">
@@ -685,17 +692,7 @@ const ProfilePage = () => {
                           locale === "ar" ? "ar-SA" : "en-US"
                         )}{" "}
                         •{" "}
-                        {activity.verificationStatus === "pending_committee_review"
-                          ? locale === "ar"
-                            ? "بانتظار اللجنة"
-                            : "Pending committee review"
-                          : activity.verificationStatus === "verified"
-                            ? locale === "ar"
-                              ? "معتمد"
-                              : "Verified"
-                            : locale === "ar"
-                              ? "غير مفحوص"
-                              : "Unverified"}
+                        {getVerificationStatusLabel(activity.verificationStatus, loc)}
                       </p>
                     </div>
                     <ArrowRight className="mt-1 h-4 w-4 shrink-0 text-text-light opacity-0 transition-opacity group-hover:opacity-100" />

@@ -21,7 +21,8 @@ import {
   normalizeApprovalStatus,
   type ApprovalStatusNormalized,
 } from "@/lib/achievementNormalize";
-import { labelApprovalStatus, labelEvidenceMode, labelVerificationStatus } from "@/lib/achievementDisplay";
+import { labelApprovalStatus } from "@/lib/achievementDisplay";
+import { getEvidenceModeLabel, getVerificationStatusLabel } from "@/lib/achievement-display-labels";
 import {
   buildAttachmentRow,
   mergeStudentDetailAttachmentSources,
@@ -419,11 +420,11 @@ const AchievementDetailsPage = () => {
 
   const certStatusLabel = studentFormatCertificateStatus(achievement.certificateStatus, loc);
 
-  const dataStatusLabel = labelEvidenceMode(
+  const dataStatusLabel = getEvidenceModeLabel(
     achievement.evidenceRequiredMode === "skipped" ? "skipped" : "provided",
     loc
   );
-  const verificationLabel = labelVerificationStatus(achievement.verificationStatus, loc);
+  const verificationLabel = getVerificationStatusLabel(achievement.verificationStatus, loc);
 
   const scoreDisplay =
     typeof achievement.score === "number" && Number.isFinite(achievement.score)

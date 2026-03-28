@@ -7,6 +7,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "verify:attachment-review": "tsx scripts/verify-achievement-attachment-review.ts",
+    "debug:attachment-pipeline": "NODE_OPTIONS='--require ./scripts/stub-server-only.cjs' tsx scripts/debug-achievement-attachment-pipeline.ts",
+    "verify:attachment-per-file": "NODE_OPTIONS='--require ./scripts/stub-server-only.cjs' tsx scripts/verify-achievement-per-attachment-review.ts",
     "create-admin": "tsx scripts/create-admin.ts"
   },
   "dependencies": {
@@ -24,6 +27,7 @@
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "sanitize-html": "^2.17.2",
+    "server-only": "^0.0.1",
     "sharp": "^0.34.5",
     "xlsx": "^0.18.5"
   },

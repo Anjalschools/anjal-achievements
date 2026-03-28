@@ -23,6 +23,17 @@ import {
   type AttachmentRow,
 } from "@/lib/student-achievement-details-display";
 import type { AdminAchievementDetailApi } from "@/types/admin-achievement-review";
+import {
+  buildAdminAttachmentAiDecisionColumn,
+  resolveAiReviewRunStatus,
+} from "@/lib/admin-achievement-ai-decision";
+import {
+  getAiReviewDecisionLabel,
+  getAiReviewRunStatusLabel,
+  getGradeLabel,
+  getSectionLabel,
+  getTriStateMatchLabel,
+} from "@/lib/achievement-display-labels";
 import { ExternalLink, FileText, Loader2, Sparkles } from "lucide-react";
 
 const fieldLabelAr = (key: string): string => {
@@ -39,20 +50,6 @@ const fieldLabelAr = (key: string): string => {
     organization: "الجهة المنظمة",
   };
   return m[key] || key;
-};
-
-const triStateLabelAr = (v: string) => {
-  const s = String(v || "").toLowerCase();
-  if (s === "match") return "مطابق";
-  if (s === "mismatch") return "غير مطابق";
-  return "غير واضح";
-};
-
-const triStateLabelEn = (v: string) => {
-  const s = String(v || "").toLowerCase();
-  if (s === "match") return "Match";
-  if (s === "mismatch") return "Mismatch";
-  return "Unclear";
 };
 
 const isPdfAttachmentRow = (r: AttachmentRow): boolean => {
@@ -199,10 +196,27 @@ export const AdminAchievementReviewDetailBody = ({
 
   const adminDup = a.adminDuplicateMarked === true;
   const attRev = a.adminAttachmentAiReview as Record<string, unknown> | undefined;
-  const attOverall =
-    attRev && typeof attRev.overallMatchStatus === "string"
-      ? String(attRev.overallMatchStatus).toLowerCase()
-      : "";
+
+  const attAttachments = Array.isArray(a.attachments) ? (a.attachments as unknown[]) : [];
+  const attachmentUrlsForDecision = attAttachments
+    .map((x) => (typeof x === "string" ? x : (x as { url?: string })?.url))
+    .filter((x): x is string => typeof x === "string" && Boolean(x.trim()));
+  const hasAttachmentEvidence =
+    Boolean(String(a.image || "").trim()) || attachmentUrlsForDecision.length > 0;
+
+  const attachmentAiColumn = buildAdminAttachmentAiDecisionColumn(
+    {
+      adminAttachmentOverall: (a.adminAttachmentOverall as string | null) ?? null,
+      adminAttachmentAiReview: (a.adminAttachmentAiReview as Record<string, unknown> | null) ?? null,
+      image: (a.image as string | null) ?? null,
+      attachments: attachmentUrlsForDecision,
+      attachmentsCount: attachmentUrlsForDecision.length,
+    },
+    loc
+  );
+  const attRun = resolveAiReviewRunStatus({
+    adminAttachmentAiReview: (a.adminAttachmentAiReview as Record<string, unknown> | null) ?? null,
+  });
 
   return (
     <div className="space-y-4">
@@ -216,23 +230,34 @@ export const AdminAchievementReviewDetailBody = ({
             : "Marked duplicate by admin — review similar records for this student."}
         </div>
       ) : null}
-      {attOverall === "mismatch" ? (
+      {hasAttachmentEvidence ? (
         <div
-          className="rounded-xl border border-red-300 bg-red-50 px-3 py-2 text-sm font-semibold text-red-950"
+          className={`rounded-xl border px-3 py-2 text-sm ${
+            attachmentAiColumn.tone === "danger"
+              ? "border-red-300 bg-red-50 text-red-950"
+              : attachmentAiColumn.tone === "success"
+                ? "border-emerald-300 bg-emerald-50 text-emerald-950"
+                : attachmentAiColumn.tone === "warning"
+                  ? "border-amber-300 bg-amber-50 text-amber-950"
+                  : "border-slate-200 bg-slate-50 text-slate-900"
+          }`}
           role="status"
         >
-          {isAr
-            ? "نتيجة تحليل المرفقات (AI): غير مطابقة للسجل — قرار الاعتماد بيد المراجع."
-            : "Attachment AI: mismatch vs record — human reviewer decides approval."}
-        </div>
-      ) : attOverall === "unclear" ? (
-        <div
-          className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-950"
-          role="status"
-        >
-          {isAr
-            ? "نتيجة تحليل المرفقات (AI): غير واضحة — قد تحتاج مستندًا أوضح."
-            : "Attachment AI: unclear — may need clearer evidence."}
+          <p className="font-semibold">
+            {isAr ? "قرار فحص المرفقات: " : "Attachment check: "}
+            {attachmentAiColumn.label}
+          </p>
+          {attRun ? (
+            <p className="mt-1 text-[11px] opacity-90">
+              {isAr ? "حالة التنفيذ: " : "Run status: "}
+              {getAiReviewRunStatusLabel(attRun, loc)}
+            </p>
+          ) : null}
+          {attRev && typeof attRev.aiDecisionReasonAr === "string" && String(attRev.aiDecisionReasonAr).trim() ? (
+            <p className="mt-1 text-[11px] leading-snug opacity-95">
+              {isAr ? String(attRev.aiDecisionReasonAr) : String(attRev.aiDecisionReasonEn || attRev.aiDecisionReasonAr)}
+            </p>
+          ) : null}
         </div>
       ) : null}
       <AchievementStatusBadge status={detail.computed.approvalStatus} locale={loc} />
@@ -308,8 +333,8 @@ export const AdminAchievementReviewDetailBody = ({
           <dl>
             {row(isAr ? "الاسم" : "Name", String(detail.student.fullName || ""))}
             {row("Email", String(detail.student.email || ""))}
-            {row(isAr ? "الصف" : "Grade", String(detail.student.grade || ""))}
-            {row(isAr ? "القسم" : "Section", String(detail.student.section || ""))}
+            {row(isAr ? "الصف" : "Grade", getGradeLabel(detail.student.grade, loc))}
+            {row(isAr ? "القسم" : "Section", getSectionLabel(detail.student.section, loc))}
           </dl>
         </section>
       ) : null}
@@ -368,14 +393,14 @@ export const AdminAchievementReviewDetailBody = ({
               type="button"
               disabled={attachmentAiBusy}
               onClick={onRunAttachmentAi}
-              className="inline-flex items-center gap-2 rounded-lg border border-violet-300 bg-violet-50 px-3 py-1.5 text-xs font-semibold text-violet-950 hover:bg-violet-100 disabled:opacity-50"
+              className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-800 hover:bg-slate-50 disabled:opacity-50"
             >
               {attachmentAiBusy ? (
                 <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
               ) : (
                 <Sparkles className="h-4 w-4" aria-hidden />
               )}
-              {isAr ? "تشغيل / تحديث التحليل" : "Run / refresh analysis"}
+              {isAr ? "إعادة فحص" : "Re-run check"}
             </button>
           ) : (
             <span className="text-[11px] text-text-light">
@@ -385,8 +410,8 @@ export const AdminAchievementReviewDetailBody = ({
         </div>
         <p className="mb-2 text-[11px] text-text-light">
           {isAr
-            ? "تُنفَّذ عند الطلب فقط ولا تغيّر حالة الاعتماد. عند الشك تُعرض «غير واضح»."
-            : "Runs on demand only; does not change approval state. Prefers “unclear” when evidence is weak."}
+            ? "يُشغَّل الفحص تلقائيًا بعد حفظ الإنجاز عند وجود مرفقات. زر «إعادة فحص» اختياري بعد التعديل أو عند الفشل. لا يغيّر الاعتماد النهائي."
+            : "A check runs automatically after save when attachments exist. “Re-run” is optional after edits or failures. Does not change final approval."}
         </p>
         {(() => {
           const ar = a.adminAttachmentAiReview as Record<string, unknown> | undefined;
@@ -402,9 +427,21 @@ export const AdminAchievementReviewDetailBody = ({
           return (
             <div className="space-y-2 text-xs">
               <p className="font-semibold text-slate-900">
-                {isAr ? "الحالة العامة: " : "Overall: "}
-                {isAr ? triStateLabelAr(overall) : triStateLabelEn(overall)}
+                {isAr ? "الحالة العامة (بعد قواعد الحسم): " : "Overall (rule-based): "}
+                {getTriStateMatchLabel(overall, loc)}
               </p>
+              {typeof ar.aiReviewDecision === "string" && String(ar.aiReviewDecision).trim() ? (
+                <p className="text-[11px] text-slate-700">
+                  {isAr ? "القرار الآلي: " : "AI decision: "}
+                  {getAiReviewDecisionLabel(ar.aiReviewDecision, loc)}
+                </p>
+              ) : null}
+              {Array.isArray(ar.aiReviewWarnings) && ar.aiReviewWarnings.length > 0 ? (
+                <p className="text-[11px] text-amber-900">
+                  {isAr ? "تحذيرات: " : "Warnings: "}
+                  {(ar.aiReviewWarnings as string[]).join(", ")}
+                </p>
+              ) : null}
               {at ? (
                 <p className="text-[10px] text-text-light">
                   {isAr ? "آخر تحليل: " : "Last run: "}
@@ -414,31 +451,141 @@ export const AdminAchievementReviewDetailBody = ({
                   })}
                 </p>
               ) : null}
+              {typeof ar.overallAttachmentReviewSummaryAr === "string" &&
+              String(ar.overallAttachmentReviewSummaryAr).trim() ? (
+                <p className="rounded-lg border border-slate-200 bg-white/80 px-2 py-2 text-[11px] text-slate-800">
+                  {isAr ? "ملخص المرفقات: " : "Attachments summary: "}
+                  {String(ar.overallAttachmentReviewSummaryAr)}
+                </p>
+              ) : null}
+              {loc === "en" &&
+              typeof ar.overallAttachmentReviewSummaryEn === "string" &&
+              String(ar.overallAttachmentReviewSummaryEn).trim() ? (
+                <p className="rounded-lg border border-slate-200 bg-white/80 px-2 py-2 text-[11px] text-slate-800">
+                  {String(ar.overallAttachmentReviewSummaryEn)}
+                </p>
+              ) : null}
               {checks ? (
                 <ul className="grid gap-1 sm:grid-cols-2">
                   <li>
                     {isAr ? "الاسم: " : "Name: "}
-                    {isAr ? triStateLabelAr(String(checks.nameCheck)) : triStateLabelEn(String(checks.nameCheck))}
+                    {getTriStateMatchLabel(checks.nameCheck, loc)}
                   </li>
                   <li>
                     {isAr ? "السنة: " : "Year: "}
-                    {isAr ? triStateLabelAr(String(checks.yearCheck)) : triStateLabelEn(String(checks.yearCheck))}
+                    {getTriStateMatchLabel(checks.yearCheck, loc)}
                   </li>
                   <li>
                     {isAr ? "المستوى: " : "Level: "}
-                    {isAr ? triStateLabelAr(String(checks.levelCheck)) : triStateLabelEn(String(checks.levelCheck))}
+                    {getTriStateMatchLabel(checks.levelCheck, loc)}
                   </li>
                   <li>
                     {isAr ? "الإنجاز: " : "Achievement: "}
-                    {isAr
-                      ? triStateLabelAr(String(checks.achievementCheck))
-                      : triStateLabelEn(String(checks.achievementCheck))}
+                    {getTriStateMatchLabel(checks.achievementCheck, loc)}
                   </li>
+                  {checks.resultCheck != null && String(checks.resultCheck).trim() !== "" ? (
+                    <li>
+                      {isAr ? "النتيجة / الميدالية: " : "Result / medal: "}
+                      {getTriStateMatchLabel(checks.resultCheck, loc)}
+                    </li>
+                  ) : null}
                 </ul>
+              ) : null}
+              {Array.isArray(ar.attachmentReviews) && ar.attachmentReviews.length > 0 ? (
+                <div className="space-y-2">
+                  <p className="text-[11px] font-semibold text-slate-800">
+                    {isAr ? "تحليل كل مرفق PDF على حدة" : "Per-PDF attachment analysis"}
+                  </p>
+                  {(ar.attachmentReviews as Record<string, unknown>[]).map((rev, idx) => {
+                    const fn = rev.fileName ? String(rev.fileName) : rev.label ? String(rev.label) : `#${idx + 1}`;
+                    const kind = String(rev.detectedDocumentKind || "");
+                    const kindLabel =
+                      kind === "group_list_document"
+                        ? isAr
+                          ? "قائمة / تعميم"
+                          : "Group list / roster"
+                        : kind === "individual_certificate"
+                          ? isAr
+                            ? "شهادة فردية"
+                            : "Individual certificate"
+                          : isAr
+                            ? "نوع غير مؤكد"
+                            : "Unknown kind";
+                    const oc = rev.checks as Record<string, unknown> | undefined;
+                    const evOne = rev.extractedEvidence as Record<string, unknown> | undefined;
+                    const g = rev.groupDocumentAnalysis as Record<string, unknown> | undefined;
+                    return (
+                      <div
+                        key={`att-${idx}-${fn}`}
+                        className="rounded-lg border border-violet-200/80 bg-violet-50/40 px-3 py-2"
+                      >
+                        <p className="text-[11px] font-bold text-violet-950">
+                          {isAr ? "المرفق" : "Attachment"} {idx + 1}
+                          {fn ? `: ${fn}` : ""}
+                        </p>
+                        <p className="mt-1 text-[10px] text-violet-900/90">
+                          {isAr ? "نوع الوثيقة: " : "Document kind: "}
+                          {kindLabel}
+                        </p>
+                        {oc ? (
+                          <ul className="mt-1 grid gap-0.5 text-[10px] text-slate-800 sm:grid-cols-2">
+                            <li>
+                              {isAr ? "الاسم: " : "Name: "}
+                              {getTriStateMatchLabel(oc.nameCheck, loc)}
+                            </li>
+                            <li>
+                              {isAr ? "السنة: " : "Year: "}
+                              {getTriStateMatchLabel(oc.yearCheck, loc)}
+                            </li>
+                            <li>
+                              {isAr ? "الإنجاز: " : "Achievement: "}
+                              {getTriStateMatchLabel(oc.achievementCheck, loc)}
+                            </li>
+                            <li>
+                              {isAr ? "الحالة العامة: " : "Overall: "}
+                              {getTriStateMatchLabel(rev.overallMatchStatus, loc)}
+                            </li>
+                          </ul>
+                        ) : null}
+                        {evOne && typeof evOne === "object" ? (
+                          <dl className="mt-2 space-y-1 border-t border-violet-100 pt-2 text-[10px] text-slate-800">
+                            {row(
+                              isAr ? "اسم مستخرج" : "Detected name",
+                              String(evOne.detectedStudentName || "").trim() || (isAr ? "غير متوفر" : "Not available")
+                            )}
+                            {row(
+                              isAr ? "السنة" : "Year",
+                              String(evOne.detectedYear || "").trim() || (isAr ? "غير متوفر" : "Not available")
+                            )}
+                            {row(
+                              isAr ? "عنوان الإنجاز" : "Achievement title",
+                              String(evOne.detectedAchievementTitle || "").trim() || (isAr ? "غير متوفر" : "Not available")
+                            )}
+                            {row(
+                              isAr ? "النتيجة" : "Result",
+                              String(evOne.detectedMedalOrResult || "").trim() || (isAr ? "غير متوفر" : "Not available")
+                            )}
+                          </dl>
+                        ) : null}
+                        {g && g.studentFound === true && g.matchedRow && typeof g.matchedRow === "object" ? (
+                          <div className="mt-2 rounded border border-emerald-200 bg-emerald-50/80 px-2 py-1.5 text-[10px] text-emerald-950">
+                            <p className="font-semibold">{isAr ? "صف مطابق في القائمة" : "Matched roster row"}</p>
+                            <p className="mt-1 whitespace-pre-wrap break-words">
+                              {String((g.matchedRow as { rawRow?: string }).rawRow || "")}
+                            </p>
+                          </div>
+                        ) : null}
+                        {typeof rev.summaryAr === "string" && rev.summaryAr.trim() ? (
+                          <p className="mt-2 text-[10px] text-slate-600">{String(rev.summaryAr)}</p>
+                        ) : null}
+                      </div>
+                    );
+                  })}
+                </div>
               ) : null}
               <div className="mt-3 rounded-xl border border-slate-200 bg-white/90 px-3 py-3">
                 <h4 className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-800">
-                  {isAr ? "مستخرج من الملف" : "Extracted from attachment"}
+                  {isAr ? "مستخرج من الملف (مجمّع)" : "Extracted from attachments (combined)"}
                 </h4>
                 {ev && typeof ev === "object" ? (
                   <dl className="space-y-2 text-xs">
@@ -457,6 +604,14 @@ export const AdminAchievementReviewDetailBody = ({
                     {row(
                       isAr ? "عنوان / اسم الإنجاز المستخرج" : "Detected achievement title",
                       String(ev.detectedAchievementTitle || "").trim() || (isAr ? "غير متوفر" : "Not available")
+                    )}
+                    {row(
+                      isAr ? "النتيجة / الميدالية المستخرجة" : "Detected result / medal",
+                      String(ev.detectedMedalOrResult || "").trim() || (isAr ? "غير متوفر" : "Not available")
+                    )}
+                    {row(
+                      isAr ? "جهة الإصدار المستخرجة" : "Detected issuer",
+                      String(ev.detectedIssuer || "").trim() || (isAr ? "غير متوفر" : "Not available")
                     )}
                     {row(
                       isAr ? "ملاحظات (عربي)" : "Notes (Arabic)",

@@ -9,6 +9,7 @@ import { clampInferredFieldToAllowlist } from "@/lib/achievement-inferred-field-
 import { calculateAchievementScore } from "@/lib/achievement-scoring";
 import { buildStudentAchievementDetailPayload } from "@/lib/achievement-detail-response";
 import { jsonInternalServerError } from "@/lib/api-safe-response";
+import { scheduleAchievementAttachmentAiReviewAfterMutation } from "@/lib/achievement-attachment-ai-review-runner";
 
 export const dynamic = "force-dynamic";
 
@@ -167,6 +168,8 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     if (finalTitle) $set.title = finalTitle;
 
     const updated = await Achievement.findByIdAndUpdate(id, { $set }, { new: true }).lean();
+
+    scheduleAchievementAttachmentAiReviewAfterMutation(String(id), "admin_patch");
 
     return NextResponse.json({
       success: true,

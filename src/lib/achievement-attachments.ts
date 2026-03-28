@@ -75,13 +75,28 @@ export const coerceAttachmentForStorage = (raw: unknown): AchievementAttachmentO
     const o = raw as Record<string, unknown>;
     const url = typeof o.url === "string" ? o.url.trim() : "";
     if (!url) return null;
-    const mimeType =
+    const mimeCandidate =
       typeof o.mimeType === "string" && o.mimeType.trim()
         ? o.mimeType.trim()
-        : inferMimeFromUrl(url);
+        : typeof o.contentType === "string" && o.contentType.trim()
+          ? o.contentType.trim()
+          : typeof o.type === "string" && o.type.trim() && o.type.includes("/")
+            ? o.type.trim()
+            : "";
+    const mimeResolved = mimeCandidate || inferMimeFromUrl(url);
     const name =
-      typeof o.name === "string" && o.name.trim() ? o.name.trim() : inferNameFromUrl(url);
-    return { url, mimeType, name };
+      typeof o.name === "string" && o.name.trim()
+        ? o.name.trim()
+        : typeof o.fileName === "string" && o.fileName.trim()
+          ? o.fileName.trim()
+          : typeof o.filename === "string" && o.filename.trim()
+            ? o.filename.trim()
+            : typeof o.originalName === "string" && o.originalName.trim()
+              ? o.originalName.trim()
+              : typeof o.originalFilename === "string" && o.originalFilename.trim()
+                ? o.originalFilename.trim()
+                : inferNameFromUrl(url);
+    return { url, mimeType: mimeResolved, name };
   }
   return null;
 };

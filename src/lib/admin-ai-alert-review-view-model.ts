@@ -184,7 +184,7 @@ export const mapDuplicateColumnToUi = (
 
 const anyCheckMismatch = (checks: Record<string, unknown> | undefined): boolean => {
   if (!checks) return false;
-  for (const k of ["nameCheck", "yearCheck", "levelCheck", "achievementCheck"] as const) {
+  for (const k of ["nameCheck", "yearCheck", "levelCheck", "achievementCheck", "resultCheck"] as const) {
     if (checkRaw(checks, k) === "mismatch") return true;
   }
   return false;
@@ -192,7 +192,7 @@ const anyCheckMismatch = (checks: Record<string, unknown> | undefined): boolean 
 
 const anyCheckUnclear = (checks: Record<string, unknown> | undefined): boolean => {
   if (!checks) return false;
-  for (const k of ["nameCheck", "yearCheck", "levelCheck", "achievementCheck"] as const) {
+  for (const k of ["nameCheck", "yearCheck", "levelCheck", "achievementCheck", "resultCheck"] as const) {
     if (checkRaw(checks, k) === "unclear") return true;
   }
   return false;

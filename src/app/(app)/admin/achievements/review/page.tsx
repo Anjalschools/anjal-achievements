@@ -36,6 +36,7 @@ import {
 import { labelCertificateIssuerRole } from "@/lib/certificate-eligibility";
 import AdminAchievementAiAlertTable from "@/components/admin/AdminAchievementAiAlertTable";
 import { buildAdminAttachmentAiDecisionColumn, shouldShowInAiFlaggedTab } from "@/lib/admin-achievement-ai-decision";
+import { getGradeLabel, getSectionLabel } from "@/lib/achievement-display-labels";
 import { mergeAdminAchievementListRow } from "@/lib/admin-achievement-list-row-merge";
 import {
   compareAdminAchievementListRows,
@@ -166,6 +167,9 @@ const AdminAchievementsReviewPageContent = () => {
             aiReviewStatus: row.aiReviewStatus,
             pendingReReview: row.pendingReReview,
             approvalStatus: row.approvalStatus,
+            image: row.image ?? null,
+            attachments: row.attachments,
+            attachmentsCount: row.attachmentsCount,
           })
         );
       });
@@ -464,6 +468,9 @@ const AdminAchievementsReviewPageContent = () => {
         aiFlags: row.aiFlags,
         aiReviewStatus: row.aiReviewStatus,
         pendingReReview: row.pendingReReview,
+        image: row.image ?? null,
+        attachments: row.attachments,
+        attachmentsCount: row.attachmentsCount,
       },
       loc
     );
@@ -548,9 +555,9 @@ const AdminAchievementsReviewPageContent = () => {
           <p className="text-[10px] text-text-light">{row.student.email}</p>
         </td>
         <td className={`${tdBg}hidden px-2 py-2 align-top text-xs text-text-light md:table-cell`}>
-          {emptyOrDash(row.student.grade, loc)}
+          {getGradeLabel(row.student.grade, loc)}
           {row.student.section ? (
-            <span className="block text-[10px] text-text-light">{row.student.section}</span>
+            <span className="block text-[10px] text-text-light">{getSectionLabel(row.student.section, loc)}</span>
           ) : null}
         </td>
         <td className={`${tdBg}whitespace-nowrap px-2 py-2 align-top text-xs text-text-light`}>

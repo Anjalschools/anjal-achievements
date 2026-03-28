@@ -4,13 +4,25 @@
 
 import "server-only";
 import { PDFParse } from "pdf-parse";
+import { assessPdfExtractedTextReliability } from "@/lib/achievement-attachment-normalization";
+import { debugAttachmentAiSnap } from "@/lib/achievement-attachment-ai-pipeline-debug";
 
 export const MAX_PDF_BYTES_FOR_ACHIEVEMENT_REVIEW = 5 * 1024 * 1024;
-export const PDF_REVIEW_TEXT_FIRST_PAGES = 4;
+/** Enough pages to include typical roster tables (e.g. page 4) while bounding cost. */
+export const PDF_REVIEW_TEXT_FIRST_PAGES = 10;
 export const PDF_REVIEW_RENDER_FIRST_PAGES = 2;
 export const PDF_REVIEW_RENDER_SCALE = 1.2;
 export const PDF_REVIEW_MAX_TEXT_CHARS = 12_000;
 export const PDF_REVIEW_MAX_DATA_URL_CHARS = 1_800_000;
+
+/** Preserve line breaks so certificate / table extraction can use line-based heuristics. */
+export const normalizePdfExtractedTextForReview = (raw: string): string =>
+  String(raw || "")
+    .replace(/\r\n/g, "\n")
+    .replace(/[ \t\f\v\u00a0]+/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim()
+    .slice(0, PDF_REVIEW_MAX_TEXT_CHARS);
 
 const isValidHttpUrl = (s: string): boolean => {
   try {
@@ -35,10 +47,7 @@ export const decodePdfDataUrlToBuffer = (url: string): Buffer | null => {
   }
 };
 
-export const isPdfAttachmentUrl = (u: string): boolean => {
-  const s = u.trim();
-  return /^data:application\/pdf/i.test(s) || /\.pdf(\?|#|$)/i.test(s);
-};
+export { isPdfAttachmentUrl } from "@/lib/achievement-pdf-url-match";
 
 export async function fetchPdfBufferForAchievementReview(
   url: string
@@ -77,10 +86,7 @@ export async function extractPdfTextForAchievementReview(
   const parser = new PDFParse({ data: buffer });
   try {
     const tr = await parser.getText({ first: PDF_REVIEW_TEXT_FIRST_PAGES });
-    const text = String(tr.text || "")
-      .replace(/\s+/g, " ")
-      .trim()
-      .slice(0, PDF_REVIEW_MAX_TEXT_CHARS);
+    const text = normalizePdfExtractedTextForReview(String(tr.text || ""));
     return { text };
   } catch (e) {
     return { text: "", error: e instanceof Error ? e.message : "pdf_text_failed" };
@@ -130,6 +136,8 @@ export type PdfReviewSlice = {
   text: string;
   images: string[];
   hints: string[];
+  textReliability: import("@/lib/achievement-attachment-normalization").PdfTextReliability;
+  lowPdfTextReliability: boolean;
 };
 
 /**
@@ -142,22 +150,33 @@ export async function buildPdfReviewInputs(
   const hints: string[] = [];
   if (buffer.length > MAX_PDF_BYTES_FOR_ACHIEVEMENT_REVIEW) {
     hints.push(`PDF (${label}): file exceeds size limit for server review.`);
-    return { text: "", images: [], hints };
+    const emptyRel = assessPdfExtractedTextReliability("");
+    return { text: "", images: [], hints, textReliability: emptyRel, lowPdfTextReliability: true };
   }
 
   const parser = new PDFParse({ data: buffer });
   try {
     let text = "";
+    let textReliability = assessPdfExtractedTextReliability("");
     try {
       const tr = await parser.getText({ first: PDF_REVIEW_TEXT_FIRST_PAGES });
-      text = String(tr.text || "")
-        .replace(/\s+/g, " ")
-        .trim()
-        .slice(0, PDF_REVIEW_MAX_TEXT_CHARS);
+      const rawText = String(tr.text || "");
+      textReliability = assessPdfExtractedTextReliability(rawText);
+      text = normalizePdfExtractedTextForReview(rawText);
+      debugAttachmentAiSnap("pdf_review.build_slice", {
+        label,
+        rawExtractedPdfTextPreview: String(rawText).slice(0, 2000),
+        rawExtractedPdfTextLength: String(rawText).length,
+        cleanedExtractedPdfTextLength: text.length,
+        cleanedExtractedPdfTextPreview: text.slice(0, 2000),
+        textReliability,
+        lowPdfTextReliability: textReliability.lowTextReliability || !text,
+      });
       if (!text) hints.push(`PDF (${label}): no extractable text in the first pages.`);
     } catch (e) {
       const msg = e instanceof Error ? e.message : "pdf_text_failed";
       hints.push(`PDF (${label}): text extraction failed (${msg}).`);
+      textReliability = assessPdfExtractedTextReliability("");
     }
 
     let images: string[] = [];
@@ -186,7 +205,9 @@ export async function buildPdfReviewInputs(
       hints.push(`PDF (${label}): no usable text or images for AI review.`);
     }
 
-    return { text, images, hints };
+    const lowPdfTextReliability = textReliability.lowTextReliability || !text;
+
+    return { text, images, hints, textReliability, lowPdfTextReliability };
   } finally {
     await parser.destroy().catch(() => {});
   }

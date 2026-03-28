@@ -197,18 +197,38 @@ const AdminAchievementReviewDetailScreen = ({
         method: "POST",
       });
       const j = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
         error?: string;
+        message?: string;
         review?: Record<string, unknown>;
       };
       if (!res.ok) {
         throw new Error(typeof j.error === "string" ? j.error : "AI review failed");
+      }
+      if (j.ok === false) {
+        setError(
+          typeof j.message === "string"
+            ? j.message
+            : typeof j.error === "string"
+              ? j.error
+              : "AI review failed"
+        );
       }
       if (j.review) {
         setDetailPayload((prev) =>
           prev
             ? {
                 ...prev,
-                achievement: { ...prev.achievement, adminAttachmentAiReview: j.review },
+                achievement: {
+                  ...prev.achievement,
+                  adminAttachmentAiReview: j.review,
+                  ...(typeof (j.review as { overallMatchStatus?: string }).overallMatchStatus === "string"
+                    ? {
+                        adminAttachmentOverall: (j.review as { overallMatchStatus: string })
+                          .overallMatchStatus,
+                      }
+                    : {}),
+                },
               }
             : null
         );

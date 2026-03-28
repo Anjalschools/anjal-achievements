@@ -15,6 +15,10 @@ export type AdminAttachmentAiDecisionInput = {
   pendingReReview?: boolean;
   /** When set (e.g. list row), used with signals for queue visibility. */
   approvalStatus?: WorkflowDisplayStatus;
+  /** List row: evidence hints (optional). */
+  image?: string | null;
+  attachments?: string[];
+  attachmentsCount?: number;
 };
 
 const norm = (v: unknown): string => String(v ?? "").trim().toLowerCase();
@@ -28,13 +32,17 @@ const checkRaw = (checks: Record<string, unknown> | undefined, key: string): str
   return null;
 };
 
-const anyCheckMismatchOrUnclear = (checks: Record<string, unknown> | undefined): boolean => {
-  if (!checks) return false;
-  for (const k of ["nameCheck", "yearCheck", "levelCheck", "achievementCheck"] as const) {
-    const r = checkRaw(checks, k);
-    if (r === "mismatch" || r === "unclear") return true;
-  }
-  return false;
+/** Row appears to have files/URLs the AI could analyze (best-effort without full achievement doc). */
+export const rowLikelyHasAttachmentEvidence = (input: AdminAttachmentAiDecisionInput): boolean => {
+  const img = String(input.image ?? "").trim();
+  if (img) return true;
+  const n =
+    typeof input.attachmentsCount === "number"
+      ? input.attachmentsCount
+      : Array.isArray(input.attachments)
+        ? input.attachments.length
+        : 0;
+  return n > 0;
 };
 
 export const resolveAdminAttachmentOverall = (input: AdminAttachmentAiDecisionInput): string | null => {
@@ -48,34 +56,96 @@ export const resolveAdminAttachmentOverall = (input: AdminAttachmentAiDecisionIn
   return null;
 };
 
+export const resolveAiReviewRunStatus = (input: AdminAttachmentAiDecisionInput): string | null => {
+  const ar = input.adminAttachmentAiReview;
+  if (!ar || typeof ar !== "object") return null;
+  const s = norm((ar as { aiReviewRunStatus?: string }).aiReviewRunStatus);
+  if (["idle", "pending", "processing", "completed", "failed"].includes(s)) return s;
+  return null;
+};
+
+export const resolveAiReviewDecision = (input: AdminAttachmentAiDecisionInput): string | null => {
+  const ar = input.adminAttachmentAiReview;
+  if (!ar || typeof ar !== "object") return null;
+  const d = norm((ar as { aiReviewDecision?: string }).aiReviewDecision);
+  if (["accepted", "accepted_with_warning", "unclear", "rejected"].includes(d)) return d;
+  return null;
+};
+
+const legacyFollowUpFromChecks = (checks: Record<string, unknown> | undefined): boolean => {
+  if (!checks) return false;
+  for (const k of ["nameCheck", "yearCheck", "levelCheck", "achievementCheck", "resultCheck"] as const) {
+    const r = checkRaw(checks, k);
+    if (r === "mismatch" || r === "unclear") return true;
+  }
+  return false;
+};
+
 /** True when attachment AI / duplicate / legacy AI signals still warrant admin attention beyond a plain "match". */
 export const needsAttachmentAiFollowUp = (input: AdminAttachmentAiDecisionInput): boolean => {
   if (input.adminDuplicateMarked === true) return true;
   if (norm(input.aiReviewStatus) === "flagged") return true;
   const flags = Array.isArray(input.aiFlags) ? input.aiFlags : [];
   if (flags.includes(DUPLICATE_FLAG) || flags.includes(LEVEL_MISMATCH_FLAG)) return true;
+
+  const decision = resolveAiReviewDecision(input);
+  if (decision === "accepted_with_warning" || decision === "unclear" || decision === "rejected") return true;
+  if (decision === "accepted") return false;
+
   const ar = input.adminAttachmentAiReview;
   if (ar && typeof ar === "object") {
     const checks = (ar as { checks?: Record<string, unknown> }).checks;
-    if (anyCheckMismatchOrUnclear(checks)) return true;
+    if (legacyFollowUpFromChecks(checks)) return true;
   }
   return false;
 };
 
 /**
- * Column copy for admin "All" tab — never raw enums; reflects match + residual risk.
+ * Column copy for admin "All" tab — never raw enums; reflects execution + deterministic decision + legacy fallbacks.
  */
 export const buildAdminAttachmentAiDecisionColumn = (
   input: AdminAttachmentAiDecisionInput,
   loc: "ar" | "en"
 ): { label: string; tone: UiTone } => {
+  const hasEvidence = rowLikelyHasAttachmentEvidence(input);
+  if (!hasEvidence) {
+    return {
+      label: loc === "ar" ? "لا توجد مرفقات للفحص" : "No attachments to scan",
+      tone: "muted",
+    };
+  }
+
+  const run = resolveAiReviewRunStatus(input);
+  if (run === "pending") {
+    return { label: loc === "ar" ? "بانتظار الفحص" : "Pending scan", tone: "warning" };
+  }
+  if (run === "processing") {
+    return { label: loc === "ar" ? "جارٍ الفحص" : "Scanning", tone: "warning" };
+  }
+  if (run === "failed") {
+    return { label: loc === "ar" ? "فشل الفحص" : "Scan failed", tone: "danger" };
+  }
+
+  const decision = resolveAiReviewDecision(input);
   const overall = resolveAdminAttachmentOverall(input);
   const followUp = needsAttachmentAiFollowUp(input);
 
-  if (overall === "mismatch") {
+  if (decision === "accepted") {
+    if (followUp && input.adminDuplicateMarked) {
+      return { label: loc === "ar" ? "يحتاج مراجعة" : "Needs review", tone: "warning" };
+    }
+    return { label: loc === "ar" ? "مطابق" : "Aligned", tone: "success" };
+  }
+  if (decision === "accepted_with_warning") {
+    return {
+      label: loc === "ar" ? "مطابق مع ملاحظة" : "Aligned with note",
+      tone: "warning",
+    };
+  }
+  if (decision === "rejected" || overall === "mismatch") {
     return { label: loc === "ar" ? "غير مطابق" : "Not aligned", tone: "danger" };
   }
-  if (overall === "unclear") {
+  if (decision === "unclear" || overall === "unclear") {
     return { label: loc === "ar" ? "غير واضح" : "Unclear", tone: "warning" };
   }
   if (overall === "match") {
@@ -92,6 +162,8 @@ export const buildAdminAttachmentAiDecisionColumn = (
 
 /** Same OR-signals as `buildAdminAchievementListFilter("ai_flagged")` (without workflow gate). */
 export const achievementMatchesAiQueueSignals = (input: AdminAttachmentAiDecisionInput): boolean => {
+  const decision = resolveAiReviewDecision(input);
+  if (decision === "rejected" || decision === "unclear" || decision === "accepted_with_warning") return true;
   const overall = resolveAdminAttachmentOverall(input);
   if (overall === "mismatch" || overall === "unclear") return true;
   if (norm(input.aiReviewStatus) === "flagged") return true;

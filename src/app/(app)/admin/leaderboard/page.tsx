@@ -6,6 +6,7 @@ import Link from "next/link";
 import PageContainer from "@/components/layout/PageContainer";
 import PageHeader from "@/components/layout/PageHeader";
 import { getLocale } from "@/lib/i18n";
+import { getGenderLabel, getGradeLabel, getSectionLabel } from "@/lib/achievement-display-labels";
 import { ListOrdered, Loader2, Users, Sigma, TrendingUp, Award, ChevronRight, ChevronLeft } from "lucide-react";
 
 type LeaderboardRow = {
@@ -39,16 +40,6 @@ const displayName = (row: LeaderboardRow, isAr: boolean) => {
   return en || legacy || ar || "—";
 };
 
-const genderLabel = (g: string, isAr: boolean) => {
-  if (g === "female") return isAr ? "أنثى" : "Female";
-  return isAr ? "ذكر" : "Male";
-};
-
-const sectionLabel = (s: string, isAr: boolean) => {
-  if (s === "international") return isAr ? "دولي" : "International";
-  return isAr ? "عربي" : "Arabic";
-};
-
 const rankBadgeClass = (rank: number) => {
   if (rank === 1) return "bg-amber-100 text-amber-900 ring-1 ring-amber-300";
   if (rank === 2) return "bg-slate-200 text-slate-800 ring-1 ring-slate-300";
@@ -80,6 +71,7 @@ const emptyFilterFields: FilterFields = {
 export default function AdminLeaderboardPage() {
   const locale = getLocale();
   const isAr = locale === "ar";
+  const loc = isAr ? "ar" : "en";
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -445,9 +437,9 @@ export default function AdminLeaderboardPage() {
                           </div>
                         </td>
                         <td className="px-3 py-3 align-middle font-mono text-xs text-slate-800">{row.studentId}</td>
-                        <td className="px-3 py-3 align-middle">{row.grade || "—"}</td>
-                        <td className="px-3 py-3 align-middle">{genderLabel(row.gender, isAr)}</td>
-                        <td className="px-3 py-3 align-middle">{sectionLabel(row.section, isAr)}</td>
+                        <td className="px-3 py-3 align-middle">{getGradeLabel(row.grade, loc)}</td>
+                        <td className="px-3 py-3 align-middle">{getGenderLabel(row.gender, loc)}</td>
+                        <td className="px-3 py-3 align-middle">{getSectionLabel(row.section, loc)}</td>
                         <td className="px-3 py-3 align-middle tabular-nums font-medium">{row.achievementsCount}</td>
                         <td className="px-3 py-3 align-middle tabular-nums font-bold text-primary">
                           {row.totalPoints.toLocaleString(isAr ? "ar-SA" : "en-US")}
@@ -501,8 +493,8 @@ export default function AdminLeaderboardPage() {
                           {displayName(row, isAr)}
                         </Link>
                         <div className="mt-1 text-xs text-slate-600">
-                          {row.studentId} · {row.grade || "—"} · {genderLabel(row.gender, isAr)} ·{" "}
-                          {sectionLabel(row.section, isAr)}
+                          {row.studentId} · {getGradeLabel(row.grade, loc)} · {getGenderLabel(row.gender, loc)} ·{" "}
+                          {getSectionLabel(row.section, loc)}
                         </div>
                         <div className="mt-2 flex flex-wrap gap-3 text-sm">
                           <span className="font-medium text-slate-700">

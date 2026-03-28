@@ -15,6 +15,14 @@ import {
   labelAchievementCategory,
   safeTrim as displaySafeTrim,
 } from "@/lib/achievementDisplay";
+import {
+  getAchievementEventOrSlugLabel,
+  getAchievementFieldLabel,
+  getAchievementResultLabel,
+  getAchievementTypeLabel,
+  getParticipationTypeLabel,
+  getWorkflowStatusLabel,
+} from "@/lib/achievement-display-labels";
 import { getStageByGrade, reportStageLabel, type ReportStage } from "@/lib/report-stage-mapping";
 import {
   REPORT_CATEGORY_VALUES,
@@ -41,6 +49,17 @@ const topN = (m: CountByKey, n: number): Array<{ key: string; count: number }> =
     .sort((a, b) => b[1] - a[1])
     .slice(0, n)
     .map(([key, count]) => ({ key, count }));
+
+const labelCountMap = (
+  m: CountByKey,
+  label: (k: string, loc: "ar" | "en") => string
+): Array<{ key: string; count: number; labelAr: string; labelEn: string }> =>
+  Object.entries(m).map(([key, count]) => ({
+    key,
+    count,
+    labelAr: key === "—" ? (label("—", "ar") || "غير محدد") : label(key, "ar"),
+    labelEn: key === "—" ? (label("—", "en") || "Not specified") : label(key, "en"),
+  }));
 
 export const buildAllAchievementsReportStats = async (): Promise<Record<string, unknown>> => {
   await connectDB();
@@ -100,7 +119,15 @@ export const buildAllAchievementsReportStats = async (): Promise<Record<string, 
     byLevel,
     byStatus,
     byYear,
-    topAchievementNames: topN(nameCounts, 12),
+    byTypeLabeled: labelCountMap(byType, (k, loc) => getAchievementTypeLabel(k, loc)),
+    byFieldLabeled: labelCountMap(byField, (k, loc) => getAchievementFieldLabel(k, loc)),
+    byLevelLabeled: labelCountMap(byLevel, (k, loc) => getAchievementLevelLabel(k, loc)),
+    byStatusLabeled: labelCountMap(byStatus, (k, loc) => getWorkflowStatusLabel(k, loc)),
+    topAchievementNames: topN(nameCounts, 12).map((x) => ({
+      ...x,
+      labelAr: x.key === "—" ? "غير محدد" : getAchievementEventOrSlugLabel(x.key, "ar"),
+      labelEn: x.key === "—" ? "Not specified" : getAchievementEventOrSlugLabel(x.key, "en"),
+    })),
     reviewSignals: {
       mismatchOrVerificationIssues: mismatchEvidence,
       pendingCommitteeReview: committeePending,
@@ -154,11 +181,21 @@ export const buildStudentAchievementReportStats = async (
     .filter((r) => typeof r.score === "number")
     .sort((a, b) => Number(b.score) - Number(a.score))
     .slice(0, 5)
-    .map((r) => ({
-      title: safeStr(r.achievementName),
-      score: r.score,
-      year: r.achievementYear,
-    }));
+    .map((r) => {
+      const rawTitle = safeStr(r.achievementName);
+      return {
+        title: rawTitle,
+        titleLabelAr: rawTitle ? getAchievementEventOrSlugLabel(rawTitle, "ar") : "غير محدد",
+        titleLabelEn: rawTitle ? getAchievementEventOrSlugLabel(rawTitle, "en") : "Not specified",
+        score: r.score,
+        year: r.achievementYear,
+      };
+    });
+
+  const byTypeS = countBy(list, "achievementType");
+  const byFieldS = countBy(list, "inferredField");
+  const byLevelS = countBy(list, "achievementLevel");
+  const byStatusS = countBy(list, "status");
 
   return {
     scope: "student",
@@ -170,10 +207,14 @@ export const buildStudentAchievementReportStats = async (
       studentId: safeStr(u.studentId),
     },
     totalAchievements: total,
-    byType: countBy(list, "achievementType"),
-    byField: countBy(list, "inferredField"),
-    byLevel: countBy(list, "achievementLevel"),
-    byStatus: countBy(list, "status"),
+    byType: byTypeS,
+    byField: byFieldS,
+    byLevel: byLevelS,
+    byStatus: byStatusS,
+    byTypeLabeled: labelCountMap(byTypeS, (k, loc) => getAchievementTypeLabel(k, loc)),
+    byFieldLabeled: labelCountMap(byFieldS, (k, loc) => getAchievementFieldLabel(k, loc)),
+    byLevelLabeled: labelCountMap(byLevelS, (k, loc) => getAchievementLevelLabel(k, loc)),
+    byStatusLabeled: labelCountMap(byStatusS, (k, loc) => getWorkflowStatusLabel(k, loc)),
     highlights: {
       highLevelKingdomOrIntl: highLevel,
       medalResults: medals,
@@ -213,17 +254,32 @@ export const buildFieldAchievementReportStats = async (
   }
 
   const byResult = countBy(list, "resultType");
+  const byTypeF = countBy(list, "achievementType");
+  const byLevelF = countBy(list, "achievementLevel");
+  const byStatusF = countBy(list, "status");
 
   return {
     scope: "field",
     field: f,
+    fieldLabelAr: getAchievementFieldLabel(f, "ar"),
+    fieldLabelEn: getAchievementFieldLabel(f, "en"),
     totalAchievements: list.length,
     distinctStudents: studentIds.size,
-    byType: countBy(list, "achievementType"),
-    byLevel: countBy(list, "achievementLevel"),
-    byStatus: countBy(list, "status"),
+    byType: byTypeF,
+    byLevel: byLevelF,
+    byStatus: byStatusF,
+    byTypeLabeled: labelCountMap(byTypeF, (k, loc) => getAchievementTypeLabel(k, loc)),
+    byLevelLabeled: labelCountMap(byLevelF, (k, loc) => getAchievementLevelLabel(k, loc)),
+    byStatusLabeled: labelCountMap(byStatusF, (k, loc) => getWorkflowStatusLabel(k, loc)),
     byResultType: byResult,
-    topAchievementNames: topN(nameCounts, 15),
+    byResultTypeLabeled: labelCountMap(byResult, (k, loc) =>
+      getAchievementResultLabel({ resultType: k }, loc)
+    ),
+    topAchievementNames: topN(nameCounts, 15).map((x) => ({
+      ...x,
+      labelAr: x.key === "—" ? "غير محدد" : getAchievementEventOrSlugLabel(x.key, "ar"),
+      labelEn: x.key === "—" ? "Not specified" : getAchievementEventOrSlugLabel(x.key, "en"),
+    })),
   };
 };
 
@@ -259,16 +315,33 @@ export const buildCompetitionAchievementReportStats = async (
       attachBad++;
   }
 
+  const byFieldC = countBy(list, "inferredField");
+  const byLevelC = countBy(list, "achievementLevel");
+  const byStatusC = countBy(list, "status");
+  const byResultC = countBy(list, "resultType");
+  const byMedalC = countBy(list, "medalType");
+
   return {
     scope: "competition",
     competitionKey: key,
+    competitionLabelAr: getAchievementEventOrSlugLabel(key, "ar"),
+    competitionLabelEn: getAchievementEventOrSlugLabel(key, "en"),
     totalRows: list.length,
     distinctStudents: studentIds.size,
-    byField: countBy(list, "inferredField"),
-    byLevel: countBy(list, "achievementLevel"),
-    byStatus: countBy(list, "status"),
-    byResultType: countBy(list, "resultType"),
-    byMedal: countBy(list, "medalType"),
+    byField: byFieldC,
+    byLevel: byLevelC,
+    byStatus: byStatusC,
+    byResultType: byResultC,
+    byMedal: byMedalC,
+    byFieldLabeled: labelCountMap(byFieldC, (k, loc) => getAchievementFieldLabel(k, loc)),
+    byLevelLabeled: labelCountMap(byLevelC, (k, loc) => getAchievementLevelLabel(k, loc)),
+    byStatusLabeled: labelCountMap(byStatusC, (k, loc) => getWorkflowStatusLabel(k, loc)),
+    byResultTypeLabeled: labelCountMap(byResultC, (k, loc) =>
+      getAchievementResultLabel({ resultType: k }, loc)
+    ),
+    byMedalLabeled: labelCountMap(byMedalC, (k, loc) =>
+      getAchievementResultLabel({ resultType: "medal", medalType: k }, loc)
+    ),
     reviewSignals: {
       duplicateFlaggedCount: dup,
       attachmentIssuesCount: attachBad,
@@ -384,27 +457,6 @@ const parseDate = (v: unknown): Date | null => {
   const d = new Date(s);
   if (Number.isNaN(d.getTime())) return null;
   return d;
-};
-
-const participationLabel = (key: unknown, isAr: boolean): string => {
-  const k = String(key || "").trim().toLowerCase();
-  if (k === "individual") return isAr ? "فردي" : "Individual";
-  if (k === "team") return isAr ? "جماعي" : "Team";
-  return isAr ? "غير محدد" : "Not specified";
-};
-
-const statusLabel = (key: unknown, isAr: boolean): string => {
-  const k = String(key || "").trim();
-  const m: Record<string, [string, string]> = {
-    pending: ["قيد المراجعة", "Pending"],
-    pending_review: ["قيد المراجعة", "Pending review"],
-    needs_revision: ["يحتاج تعديل", "Needs revision"],
-    approved: ["معتمد", "Approved"],
-    rejected: ["مرفوض", "Rejected"],
-  };
-  const hit = m[k];
-  if (hit) return isAr ? hit[0] : hit[1];
-  return isAr ? "غير محدد" : "Unknown";
 };
 
 export const buildUnifiedAdminAchievementReports = async (
@@ -545,8 +597,8 @@ export const buildUnifiedAdminAchievementReports = async (
       eventLabelEn,
       levelLabelAr: getAchievementLevelLabel(a.achievementLevel, "ar"),
       levelLabelEn: getAchievementLevelLabel(a.achievementLevel, "en"),
-      participationLabelAr: participationLabel(a.participationType, true),
-      participationLabelEn: participationLabel(a.participationType, false),
+      participationLabelAr: getParticipationTypeLabel(a.participationType, "ar"),
+      participationLabelEn: getParticipationTypeLabel(a.participationType, "en"),
       resultLabelAr: formatLocalizedResultLine(
         String(a.resultType || ""),
         String(a.medalType || ""),
@@ -651,6 +703,7 @@ export const buildUnifiedAdminAchievementReports = async (
         studentName: string;
         grade: string;
         stageLabelAr: string;
+        stageLabelEn: string;
         total: number;
         approved: number;
         certificates: number;
@@ -663,6 +716,7 @@ export const buildUnifiedAdminAchievementReports = async (
         studentName: r.studentName,
         grade: r.grade || "—",
         stageLabelAr: r.stageLabelAr,
+        stageLabelEn: r.stageLabelEn,
         total: 0,
         approved: 0,
         certificates: 0,

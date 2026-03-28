@@ -30,6 +30,7 @@ import {
 } from "@/lib/achievement-payload-normalize";
 import { queueHomeStatsRefresh } from "@/lib/home-stats-service";
 import { jsonInternalServerError } from "@/lib/api-safe-response";
+import { scheduleAchievementAttachmentAiReviewAfterMutation } from "@/lib/achievement-attachment-ai-review-runner";
 
 export const dynamic = "force-dynamic";
 
@@ -418,6 +419,8 @@ export async function POST(request: NextRequest) {
     }
 
     queueHomeStatsRefresh();
+
+    scheduleAchievementAttachmentAiReviewAfterMutation(achievement._id.toString(), "achievement_create");
 
     // Return success response
     return NextResponse.json(
