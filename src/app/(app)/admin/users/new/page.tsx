@@ -9,7 +9,17 @@ import { getLocale } from "@/lib/i18n";
 import { GRADE_OPTIONS } from "@/constants/grades";
 import { ROLE_OPTIONS_FOR_FORM } from "@/lib/admin-users-ui-labels";
 import { roleNeedsAcademicFields } from "@/lib/role-academic-fields";
+import { roleSupportsStaffScopeStorage } from "@/lib/admin-staff-scope-normalize";
+import AdminStaffScopeFields, {
+  type AdminStaffScopeFormValue,
+} from "@/components/admin/users/AdminStaffScopeFields";
 import { ArrowLeft, ArrowRight, Loader2 } from "lucide-react";
+
+const emptyStaffScopeForm = (): AdminStaffScopeFormValue => ({
+  genders: [],
+  sections: [],
+  grades: [],
+});
 
 const AdminUsersNewPage = () => {
   const router = useRouter();
@@ -36,6 +46,7 @@ const AdminUsersNewPage = () => {
   const [section, setSection] = useState<"arabic" | "international">("arabic");
   const [grade, setGrade] = useState("g12");
   const [preferredLanguage, setPreferredLanguage] = useState<"ar" | "en">("ar");
+  const [staffScopeForm, setStaffScopeForm] = useState<AdminStaffScopeFormValue>(emptyStaffScopeForm);
 
   useEffect(() => {
     (async () => {
@@ -47,7 +58,7 @@ const AdminUsersNewPage = () => {
         }
         const j = await res.json();
         const r = String(j.role || "");
-        setAllowed(r === "admin" || r === "supervisor");
+        setAllowed(r === "admin");
       } catch {
         setAllowed(false);
       }
@@ -60,6 +71,10 @@ const AdminUsersNewPage = () => {
     setGrade("g12");
   }, [role]);
 
+  useEffect(() => {
+    if (!roleSupportsStaffScopeStorage(role)) setStaffScopeForm(emptyStaffScopeForm());
+  }, [role]);
+
   const handleSubmit = useCallback(
     async (e: React.FormEvent) => {
       e.preventDefault();
@@ -67,6 +82,17 @@ const AdminUsersNewPage = () => {
       setBusy(true);
       try {
         const academic = roleNeedsAcademicFields(role);
+        const staffPayload =
+          roleSupportsStaffScopeStorage(role) &&
+          (staffScopeForm.genders.length > 0 ||
+            staffScopeForm.sections.length > 0 ||
+            staffScopeForm.grades.length > 0)
+            ? {
+                genders: staffScopeForm.genders,
+                sections: staffScopeForm.sections,
+                grades: staffScopeForm.grades,
+              }
+            : undefined;
         const res = await fetch("/api/admin/users", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -85,6 +111,7 @@ const AdminUsersNewPage = () => {
             gender,
             ...(academic ? { section, grade } : {}),
             preferredLanguage,
+            ...(staffPayload ? { staffScope: staffPayload } : {}),
           }),
         });
         const j = await res.json().catch(() => ({}));
@@ -114,6 +141,7 @@ const AdminUsersNewPage = () => {
       section,
       grade,
       preferredLanguage,
+      staffScopeForm,
       router,
     ]
   );
@@ -265,6 +293,14 @@ const AdminUsersNewPage = () => {
                 ))}
               </select>
             </label>
+          ) : null}
+          {roleSupportsStaffScopeStorage(role) ? (
+            <AdminStaffScopeFields
+              isAr={isAr}
+              value={staffScopeForm}
+              onChange={setStaffScopeForm}
+              disabled={busy}
+            />
           ) : null}
           <label className="block text-xs font-semibold text-text-light">
             {isAr ? "لغة الواجهة" : "UI language"}

@@ -16,7 +16,17 @@ import {
   adminStatusBadgeClass,
   adminStatusLabel,
 } from "@/lib/admin-users-ui-labels";
+import { roleSupportsStaffScopeStorage } from "@/lib/admin-staff-scope-normalize";
+import AdminStaffScopeFields, {
+  type AdminStaffScopeFormValue,
+} from "@/components/admin/users/AdminStaffScopeFields";
 import { ArrowLeft, ArrowRight, Loader2, Trash2 } from "lucide-react";
+
+const emptyStaffScopeForm = (): AdminStaffScopeFormValue => ({
+  genders: [],
+  sections: [],
+  grades: [],
+});
 
 const fmtDateTime = (iso: string | null, isAr: boolean) => {
   if (!iso) return "—";
@@ -66,6 +76,7 @@ const AdminUserEditPage = () => {
   const [portfolioBusy, setPortfolioBusy] = useState(false);
   const [portfolioUrl, setPortfolioUrl] = useState<string | null>(null);
   const [portfolioToken, setPortfolioToken] = useState<string | null>(null);
+  const [staffScopeForm, setStaffScopeForm] = useState<AdminStaffScopeFormValue>(emptyStaffScopeForm);
 
   useEffect(() => {
     (async () => {
@@ -77,7 +88,7 @@ const AdminUserEditPage = () => {
         }
         const j = await res.json();
         const r = String(j.role || "");
-        setAllowed(r === "admin" || r === "supervisor");
+        setAllowed(r === "admin");
         setMeId(String(j.id || j._id || ""));
       } catch {
         setAllowed(false);
@@ -117,6 +128,16 @@ const AdminUserEditPage = () => {
       setGrade(u.grade);
       setProfilePhoto(u.profilePhoto || "");
       setPreferredLanguage(u.preferredLanguage);
+      const ss = u.staffScope;
+      if (ss && (ss.genders?.length || ss.sections?.length || ss.grades?.length)) {
+        setStaffScopeForm({
+          genders: (ss.genders ?? []) as ("male" | "female")[],
+          sections: (ss.sections ?? []) as ("arabic" | "international")[],
+          grades: [...(ss.grades ?? [])],
+        });
+      } else {
+        setStaffScopeForm(emptyStaffScopeForm());
+      }
       if (u.role === "student") {
         try {
           const pr = await fetch(`/api/admin/users/${id}/public-portfolio`, { cache: "no-store" });
@@ -148,30 +169,51 @@ const AdminUserEditPage = () => {
     void load();
   }, [allowed, id, load]);
 
+  useEffect(() => {
+    if (role === "student") setStaffScopeForm(emptyStaffScopeForm());
+  }, [role]);
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!id) return;
     setSaving(true);
     setError(null);
     try {
+      const payload: Record<string, unknown> = {
+        fullNameAr,
+        fullNameEn,
+        email,
+        username,
+        nationalId: nationalId.trim() || null,
+        phone: phone.trim() || null,
+        role,
+        status,
+        gender,
+        section,
+        grade,
+        preferredLanguage,
+        profilePhoto: profilePhoto.trim() || null,
+      };
+      if (roleSupportsStaffScopeStorage(role)) {
+        if (
+          staffScopeForm.genders.length === 0 &&
+          staffScopeForm.sections.length === 0 &&
+          staffScopeForm.grades.length === 0
+        ) {
+          payload.staffScope = null;
+        } else {
+          payload.staffScope = {
+            genders: staffScopeForm.genders,
+            sections: staffScopeForm.sections,
+            grades: staffScopeForm.grades,
+          };
+        }
+      }
+
       const res = await fetch(`/api/admin/users/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          fullNameAr,
-          fullNameEn,
-          email,
-          username,
-          nationalId: nationalId.trim() || null,
-          phone: phone.trim() || null,
-          role,
-          status,
-          gender,
-          section,
-          grade,
-          preferredLanguage,
-          profilePhoto: profilePhoto.trim() || null,
-        }),
+        body: JSON.stringify(payload),
       });
       const j = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(typeof j.error === "string" ? j.error : "Failed");
@@ -601,6 +643,14 @@ const AdminUserEditPage = () => {
               ))}
             </select>
           </label>
+          {roleSupportsStaffScopeStorage(role) ? (
+            <AdminStaffScopeFields
+              isAr={isAr}
+              value={staffScopeForm}
+              onChange={setStaffScopeForm}
+              disabled={saving}
+            />
+          ) : null}
           <label className="block text-xs font-semibold text-text-light">
             {isAr ? "لغة الواجهة" : "UI language"}
             <select

@@ -12,7 +12,7 @@ import {
   isValidSaMobile,
 } from "@/lib/user-account-preferences";
 import type { IUser } from "@/models/User";
-import { resolveEffectiveStaffScope, usesOrganizationalScope } from "@/lib/user-scope";
+import { resolveEffectiveStaffScope } from "@/lib/user-scope";
 import {
   normalizeStudentPortfolioContentFromDoc,
   parseStudentPortfolioContentInput,
@@ -29,16 +29,9 @@ const buildOrganizationalAccessPayload = (
   grades?: string[];
 } | null => {
   const roleStr = String(user.role || "");
-  if (roleStr === "admin" || roleStr === "supervisor") {
-    return { mode: "full" };
-  }
-  if (!usesOrganizationalScope(roleStr)) {
-    return null;
-  }
+  if (roleStr === "student") return null;
   const scope = resolveEffectiveStaffScope(user);
-  if (scope.unrestricted) {
-    return { mode: "full" };
-  }
+  if (scope.unrestricted) return { mode: "full" };
   return {
     mode: "scoped",
     genders: scope.genders,

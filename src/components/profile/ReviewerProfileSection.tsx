@@ -22,6 +22,7 @@ import { getLocale } from "@/lib/i18n";
 import type { AdminDashboardPayload } from "@/lib/admin-dashboard-stats";
 import { adminRoleLabel, adminStatusBadgeClass, adminStatusLabel } from "@/lib/admin-users-ui-labels";
 import { useUnreadNotificationCount } from "@/hooks/useUnreadNotificationCount";
+import { roleHasCapability, type RoleCapabilityKey } from "@/lib/app-role-scope-matrix";
 
 export type ReviewerProfileUserPayload = {
   fullName: string;
@@ -40,7 +41,7 @@ type ReviewerProfileSectionProps = {
   user: ReviewerProfileUserPayload;
   dashboard: AdminDashboardPayload | null;
   dashboardError: string | null;
-  /** Platform admin / supervisor — can open user management. */
+  /** Full platform admin — can open user management (supervisors excluded). */
   canManageUsers: boolean;
 };
 
@@ -82,6 +83,8 @@ const ReviewerProfileSection = ({ user, dashboard, dashboardError, canManageUser
     avatarSrc.startsWith("data:") || avatarSrc.startsWith("http://") || avatarSrc.startsWith("https://");
 
   const stats = dashboard?.stats;
+  const role = user.role;
+  const can = (key: RoleCapabilityKey) => roleHasCapability(role, key);
   const roleLabel = adminRoleLabel(user.role, isAr);
   const statusLabel = adminStatusLabel(user.accountStatus || "active", isAr);
 
@@ -198,31 +201,37 @@ const ReviewerProfileSection = ({ user, dashboard, dashboardError, canManageUser
           value={unreadNotifications}
           icon={Bell}
         />
-        <StatCard
-          title={isAr ? "المستخدمون" : "Users"}
-          value={stats?.totalUsers ?? "—"}
-          icon={Users}
-        />
+        {can("userManagement") ? (
+          <StatCard
+            title={isAr ? "المستخدمون" : "Users"}
+            value={stats?.totalUsers ?? "—"}
+            icon={Users}
+          />
+        ) : null}
       </div>
 
       <SectionCard className="mb-6">
         <h3 className="mb-4 text-lg font-bold text-text">{isAr ? "إجراءات سريعة" : "Quick actions"}</h3>
         <div className="flex flex-wrap gap-3">
-          <Link
-            href="/admin/achievements/review"
-            className="inline-flex items-center gap-2 rounded-xl border border-primary/30 bg-primary/5 px-4 py-2.5 text-sm font-semibold text-primary hover:bg-primary/10"
-          >
-            <ClipboardCheck className="h-4 w-4" />
-            {isAr ? "مراجعة الإنجازات" : "Review achievements"}
-          </Link>
-          <Link
-            href="/admin/achievements/add"
-            className="inline-flex items-center gap-2 rounded-xl border border-primary/30 bg-primary/5 px-4 py-2.5 text-sm font-semibold text-primary hover:bg-primary/10"
-          >
-            <PlusCircle className="h-4 w-4" />
-            {isAr ? "إضافة إنجاز (إداري)" : "Add achievement (admin)"}
-          </Link>
-          {canManageUsers ? (
+          {can("reviewAchievements") ? (
+            <Link
+              href="/admin/achievements/review"
+              className="inline-flex items-center gap-2 rounded-xl border border-primary/30 bg-primary/5 px-4 py-2.5 text-sm font-semibold text-primary hover:bg-primary/10"
+            >
+              <ClipboardCheck className="h-4 w-4" />
+              {isAr ? "مراجعة الإنجازات" : "Review achievements"}
+            </Link>
+          ) : null}
+          {can("adminAddAchievement") ? (
+            <Link
+              href="/admin/achievements/add"
+              className="inline-flex items-center gap-2 rounded-xl border border-primary/30 bg-primary/5 px-4 py-2.5 text-sm font-semibold text-primary hover:bg-primary/10"
+            >
+              <PlusCircle className="h-4 w-4" />
+              {isAr ? "إضافة إنجاز (إداري)" : "Add achievement (admin)"}
+            </Link>
+          ) : null}
+          {canManageUsers && can("userManagement") ? (
             <Link
               href="/admin/users"
               className="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-text hover:bg-gray-50"
@@ -231,20 +240,24 @@ const ReviewerProfileSection = ({ user, dashboard, dashboardError, canManageUser
               {isAr ? "إدارة المستخدمين" : "User management"}
             </Link>
           ) : null}
-          <Link
-            href="/admin/achievements/reports"
-            className="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-text hover:bg-gray-50"
-          >
-            <FileBarChart className="h-4 w-4" />
-            {isAr ? "التقارير" : "Reports"}
-          </Link>
-          <Link
-            href="/admin/analytics"
-            className="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-text hover:bg-gray-50"
-          >
-            <BarChart3 className="h-4 w-4" />
-            {isAr ? "الإحصاءات المتقدمة" : "Analytics"}
-          </Link>
+          {can("reports") ? (
+            <Link
+              href="/admin/achievements/reports"
+              className="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-text hover:bg-gray-50"
+            >
+              <FileBarChart className="h-4 w-4" />
+              {isAr ? "التقارير" : "Reports"}
+            </Link>
+          ) : null}
+          {can("advancedAnalytics") ? (
+            <Link
+              href="/admin/analytics"
+              className="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-text hover:bg-gray-50"
+            >
+              <BarChart3 className="h-4 w-4" />
+              {isAr ? "الإحصاءات المتقدمة" : "Analytics"}
+            </Link>
+          ) : null}
           <Link
             href="/notifications"
             className="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-text hover:bg-gray-50"

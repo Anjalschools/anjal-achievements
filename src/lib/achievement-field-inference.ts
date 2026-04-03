@@ -121,6 +121,14 @@ export function inferAchievementField(
     };
   }
 
+  if (achievementType === "sat" || achievementType === "ielts" || achievementType === "toefl") {
+    return {
+      field: "academic_development",
+      normalizedCategory: "التطوير الأكاديمي واللغوي",
+      sourceType: "other",
+    };
+  }
+
   // COMPETITIONS: Map by competition name
   if (achievementType === "competition" && achievementName) {
     const competitionMap: Record<string, { field: string; category: string }> = {
@@ -163,6 +171,10 @@ export function inferAchievementField(
       space_2101: { field: "space", category: "الفضاء" },
       research_pathway: { field: "scientific_research", category: "البحث العلمي" },
       olympiad_specs: { field: "specifications_quality", category: "المواصفات والجودة" },
+      social_volunteer_programs: {
+        field: "social_work_excellence",
+        category: "الخدمة الاجتماعية والتطوع",
+      },
     };
 
     const mapped = programMap[achievementName];

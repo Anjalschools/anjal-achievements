@@ -182,7 +182,7 @@ const AppSidebar = () => {
     { ...usersItem, capability: "userManagement" },
     { ...reportsItem, capability: "reports" },
     { ...leaderboardItem, capability: "reviewAchievements" },
-    { ...homeHighlightsItem, capability: "contactMessages" },
+    { ...homeHighlightsItem, capability: "homeHighlights" },
     { ...homeCeremonySettingsItem, capability: "platformSettings" },
     { ...analyticsItem, capability: "advancedAnalytics" },
     { ...hallOfFameItem, capability: "viewAchievements" },

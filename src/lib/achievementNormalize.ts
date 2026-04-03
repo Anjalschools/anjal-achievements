@@ -85,6 +85,17 @@ export const inferAchievementCategoryFromLegacyType = (achievementType: string |
   return "competition";
 };
 
+/** Map legacy Qudrat `achievementName` (e.g. "99", "100") to tier slugs used in scoring/UI. */
+export const normalizeLegacyQudratAchievementName = (raw: string | undefined | null): string => {
+  const s = String(raw ?? "").trim();
+  if (!s) return s;
+  const lower = s.toLowerCase();
+  if (/^qudrat_\d{2,3}$/.test(lower)) return lower;
+  const m = s.match(/^(\d{2}|100)$/);
+  if (m) return `qudrat_${m[1]}`;
+  return s;
+};
+
 export const normalizeApprovalStatus = (raw: AchievementLike): ApprovalStatusNormalized => {
   const a = raw as Record<string, unknown>;
   const ex = a.approvalStatus;

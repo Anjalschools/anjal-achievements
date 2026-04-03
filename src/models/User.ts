@@ -45,9 +45,10 @@ export interface IUser extends Document {
     showProfileInAdminPanel?: boolean;
   };
   /**
-   * Optional organizational scope for staff (schoolAdmin / teacher / judge).
-   * When set, achievement/report access is limited to students matching these dimensions.
-   * If omitted, the account’s own gender / section / grade are used as a single assignment.
+   * Optional organizational scope for staff (admin / supervisor / schoolAdmin / teacher / judge).
+   * When set with at least one dimension, access is limited to students matching these dimensions (union within each axis).
+   * Admin/supervisor: omit or leave empty → platform-wide; set → restricted to scope.
+   * schoolAdmin/teacher/judge: omit empty arrays → fallback to the account’s own gender/section/grade.
    */
   staffScope?: {
     genders?: ("male" | "female")[];

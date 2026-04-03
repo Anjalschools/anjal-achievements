@@ -12,7 +12,12 @@ export type AchievementRecordLike = Record<string, unknown> & {
 const normLevel = (r: AchievementRecordLike) =>
   String(r.achievementLevel || r.level || "").toLowerCase();
 
-const uiFeaturedCategories = new Set(["qudrat", "mawhiba", "gifted_screening"]);
+const uiFeaturedCategories = new Set([
+  "qudrat",
+  "mawhiba",
+  "gifted_screening",
+  "standardized_tests",
+]);
 
 export const isFeaturedAchievement = (record: AchievementRecordLike): boolean => {
   const lv = normLevel(record);
@@ -21,6 +26,9 @@ export const isFeaturedAchievement = (record: AchievementRecordLike): boolean =>
   const cat = String(record.achievementCategory || "").toLowerCase();
   if (uiFeaturedCategories.has(cat)) return true;
   const t = String(record.achievementType || "").toLowerCase();
-  if (["qudrat", "mawhiba_annual", "gifted_discovery"].includes(t)) return true;
+  if (
+    ["qudrat", "mawhiba_annual", "gifted_discovery", "sat", "ielts", "toefl"].includes(t)
+  )
+    return true;
   return false;
 };

@@ -13,6 +13,9 @@ export const ACHIEVEMENT_TYPES = [
   { value: "qudrat", ar: "اختبار القدرات", en: "Qudrat Test" },
   { value: "mawhiba_annual", ar: "اختبار موهبة السنوي", en: "Mawhiba Annual Test" },
   { value: "gifted_discovery", ar: "اختبار الكشف عن الموهوبين", en: "Gifted Discovery Test" },
+  { value: "sat", ar: "اختبار SAT", en: "SAT" },
+  { value: "ielts", ar: "اختبار IELTS", en: "IELTS" },
+  { value: "toefl", ar: "اختبار TOEFL", en: "TOEFL" },
   { value: "other", ar: "إنجاز آخر", en: "Other Achievement" },
 ] as const;
 
@@ -88,6 +91,11 @@ export const PROGRAM_OPTIONS = [
   { value: "space_2101", ar: "معسكر الفضاء (Space 2101)", en: "Space Camp (Space 2101)" },
   { value: "research_pathway", ar: "برامج المسار البحثي", en: "Research Pathway Programs" },
   { value: "olympiad_specs", ar: "الأولمبياد الدولي للمواصفات", en: "International Olympiad of Specifications" },
+  {
+    value: "social_volunteer_programs",
+    ar: "برامج الخدمة الاجتماعية والتطوع",
+    en: "Social service and volunteering programs",
+  },
   { value: "other", ar: "آخر", en: "Other" },
 ] as const;
 
@@ -128,7 +136,22 @@ export const EXCELLENCE_PROGRAM_OPTIONS = [
   { value: "other", ar: "آخر", en: "Other" },
 ] as const;
 
-// Qudrat Score Options
+/** Qudrat tiers stored as `achievementName` (e.g. qudrat_99). Includes legacy 98–100 + 95–97. */
+export const QUDRAT_TIER_ALLOWED_VALUES = [
+  "qudrat_95",
+  "qudrat_96",
+  "qudrat_97",
+  "qudrat_98",
+  "qudrat_99",
+  "qudrat_100",
+] as const;
+
+export const QUDRAT_TIER_OPTIONS = QUDRAT_TIER_ALLOWED_VALUES.map((value) => {
+  const n = value.replace("qudrat_", "");
+  return { value, ar: `${n}٪`, en: `${n}%` };
+});
+
+/** @deprecated Prefer QUDRAT_TIER_OPTIONS — kept for any external references */
 export const QUDRAT_SCORE_OPTIONS = [
   { value: "100", ar: "100%", en: "100%" },
   { value: "99", ar: "99%", en: "99%" },
@@ -174,7 +197,7 @@ export function getAchievementNamesByType(type: string): Array<{ value: string; 
     case "excellence_program":
       return EXCELLENCE_PROGRAM_OPTIONS.map((e) => ({ value: e.value, ar: e.ar, en: e.en }));
     case "qudrat":
-      return QUDRAT_SCORE_OPTIONS.map((s) => ({ value: s.value, ar: s.ar, en: s.en }));
+      return QUDRAT_TIER_OPTIONS.map((s) => ({ value: s.value, ar: s.ar, en: s.en }));
     case "mawhiba_annual":
       return MAWHIBA_ANNUAL_RANKS.map((r) => ({ value: r.value, ar: r.ar, en: r.en }));
     case "gifted_discovery":

@@ -9,6 +9,8 @@ import {
 import { isAdminManageableRole } from "@/lib/admin-users-constants";
 import { roleNeedsAcademicFields } from "@/lib/role-academic-fields";
 import { jsonInternalServerError } from "@/lib/api-safe-response";
+import type { IUser } from "@/models/User";
+import { normalizeStaffScopeInput } from "@/lib/admin-staff-scope-normalize";
 
 export const dynamic = "force-dynamic";
 
@@ -74,6 +76,13 @@ export async function POST(request: NextRequest) {
       : undefined;
     const grade = needsAcademic ? String(body.grade || "g12").trim() : undefined;
     const preferredLanguage = body.preferredLanguage === "en" ? "en" : "ar";
+    const staffScopeRaw = body.staffScope;
+    const staffScope =
+      staffScopeRaw === null
+        ? null
+        : staffScopeRaw !== undefined
+          ? normalizeStaffScopeInput(staffScopeRaw)
+          : undefined;
 
     if (!fullNameAr || !email || !username || !studentId || !password) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
@@ -102,6 +111,7 @@ export async function POST(request: NextRequest) {
       gender,
       ...(needsAcademic ? { section, grade } : {}),
       preferredLanguage,
+      ...(staffScope !== undefined ? { staffScope } : {}),
     };
 
     const user = await adminCreateUser(input);

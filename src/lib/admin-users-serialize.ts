@@ -1,4 +1,5 @@
 import { isAdminManageableRole, type AdminManageableRole } from "@/lib/admin-users-constants";
+import type { StaffScopePayload } from "@/lib/user-scope";
 
 export type AdminUserListRow = {
   id: string;
@@ -23,6 +24,8 @@ export type AdminUserListRow = {
   publicPortfolioEnabled?: boolean;
   publicPortfolioSlug?: string;
   publicPortfolioPublishedAt?: string | null;
+  /** Organizational slice for staff; omitted or empty → unrestricted (admin/supervisor) or profile fallback. */
+  staffScope?: StaffScopePayload | null;
 };
 
 export const serializeAdminUserRow = (u: Record<string, unknown>): AdminUserListRow => ({
@@ -56,4 +59,17 @@ export const serializeAdminUserRow = (u: Record<string, unknown>): AdminUserList
     u.publicPortfolioPublishedAt instanceof Date
       ? u.publicPortfolioPublishedAt.toISOString()
       : null,
+  staffScope: (() => {
+    const s = u.staffScope as Record<string, unknown> | undefined | null;
+    if (!s || typeof s !== "object") return undefined;
+    const genders = Array.isArray(s.genders) ? s.genders.map(String).filter(Boolean) : undefined;
+    const sections = Array.isArray(s.sections) ? s.sections.map(String).filter(Boolean) : undefined;
+    const grades = Array.isArray(s.grades) ? s.grades.map(String).filter(Boolean) : undefined;
+    if (!genders?.length && !sections?.length && !grades?.length) return null;
+    return {
+      ...(genders?.length ? { genders: genders as ("male" | "female")[] } : {}),
+      ...(sections?.length ? { sections: sections as ("arabic" | "international")[] } : {}),
+      ...(grades?.length ? { grades } : {}),
+    };
+  })(),
 });

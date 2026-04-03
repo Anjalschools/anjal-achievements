@@ -12,9 +12,6 @@ import { resolveEffectiveStaffScope } from "@/lib/user-scope";
 export const buildAchievementAccessFilter = async (
   user: IUser & { _id?: mongoose.Types.ObjectId }
 ): Promise<Record<string, unknown> | null> => {
-  const role = String(user.role || "");
-  if (role === "admin" || role === "supervisor") return null;
-
   const scope = resolveEffectiveStaffScope(user as IUser & { staffScope?: import("@/lib/user-scope").StaffScopePayload });
   if (scope.unrestricted) return null;
 

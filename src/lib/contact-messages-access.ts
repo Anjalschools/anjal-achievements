@@ -10,9 +10,6 @@ export const allowedInquiryTypesForRole = (role: string): string[] | null => {
 };
 
 export const buildContactMessagesScopeFilter = (user: IUser): Record<string, unknown> => {
-  const role = String(user.role || "");
-  if (role === "admin" || role === "supervisor") return {};
-
   const scope = resolveEffectiveStaffScope(user);
   const andParts: Record<string, unknown>[] = [];
 
@@ -34,7 +31,7 @@ export const buildContactMessagesScopeFilter = (user: IUser): Record<string, unk
     }
   }
 
-  const typeLimits = allowedInquiryTypesForRole(role);
+  const typeLimits = allowedInquiryTypesForRole(String(user.role || ""));
   if (typeLimits?.length) andParts.push({ inquiryType: { $in: typeLimits } });
 
   return andParts.length ? { $and: andParts } : {};

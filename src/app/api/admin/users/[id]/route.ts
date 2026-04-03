@@ -9,6 +9,8 @@ import {
 } from "@/lib/admin-users-service";
 import { isAdminManageableRole } from "@/lib/admin-users-constants";
 import { jsonInternalServerError } from "@/lib/api-safe-response";
+import type { IUser } from "@/models/User";
+import { normalizeStaffScopeInput } from "@/lib/admin-staff-scope-normalize";
 
 export const dynamic = "force-dynamic";
 
@@ -29,7 +31,7 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
   }
 
   try {
-    const user = await getAdminUserById(id);
+    const user = await getAdminUserById(id, gate.user as unknown as IUser);
     if (!user) return NextResponse.json({ error: "Not found" }, { status: 404 });
     return NextResponse.json({ user });
   } catch (e) {
@@ -85,6 +87,14 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     }
     if (body.profilePhoto !== undefined) {
       input.profilePhoto = body.profilePhoto === null ? null : String(body.profilePhoto);
+    }
+    if (body.staffScope !== undefined) {
+      if (body.staffScope === null) {
+        input.staffScope = null;
+      } else {
+        const n = normalizeStaffScopeInput(body.staffScope);
+        if (n !== undefined) input.staffScope = n;
+      }
     }
 
     const user = await adminUpdateUser(id, input, actorId(gate.user));

@@ -306,9 +306,18 @@ export async function POST(request: NextRequest) {
     const achievementData: any = {
       userId: currentUser._id, // Always use session user
       achievementType: normalized.achievementType,
-      achievementCategory: ["competition", "program", "exhibition"].includes(
-        String(normalized.achievementCategory || "")
-      )
+      achievementCategory: [
+        "competition",
+        "program",
+        "exhibition",
+        "olympiad",
+        "excellence_program",
+        "standardized_tests",
+        "qudrat",
+        "mawhiba",
+        "gifted_screening",
+        "other",
+      ].includes(String(normalized.achievementCategory || ""))
         ? normalized.achievementCategory
         : undefined,
       achievementLevel: normalized.achievementLevel,
@@ -343,6 +352,7 @@ export async function POST(request: NextRequest) {
     if (normalized.specialAwardText) achievementData.specialAwardText = normalized.specialAwardText;
     if (normalized.recognitionText) achievementData.recognitionText = normalized.recognitionText;
     if (normalized.otherResultText) achievementData.otherResultText = normalized.otherResultText;
+    if (normalized.resultValue) achievementData.resultValue = normalized.resultValue;
 
     // Set participation-specific fields
     if (normalized.participationType === "team" && normalized.teamRole) achievementData.teamRole = normalized.teamRole;

@@ -72,10 +72,13 @@ export const formatResultLine = (raw: Record<string, unknown>, loc: AdminLabelLo
   const rt = String(raw.resultType || "");
   const medal = String(raw.medalType || "");
   const rank = String(raw.rank || "");
+  const rv = raw.resultValue;
   const scoreVal =
-    typeof raw.resultValue === "number"
-      ? raw.resultValue
-      : Number(raw.resultValue) || undefined;
+    typeof rv === "number" && !Number.isNaN(rv)
+      ? rv
+      : typeof rv === "string" && rv.trim()
+        ? rv.trim()
+        : Number(rv) || undefined;
   return formatLocalizedResultLine(rt, medal, rank, loc, scoreVal);
 };
 

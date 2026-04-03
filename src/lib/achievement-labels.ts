@@ -52,6 +52,9 @@ const ACHIEVEMENT_TYPE_LABELS: Record<string, { ar: string; en: string }> = {
   mawhiba_annual: { ar: "اختبار موهبة السنوي", en: "Mawhiba annual test" },
   gifted_discovery: { ar: "اكتشاف الموهوبين", en: "Gifted discovery" },
   gifted_screening: { ar: "اختبار الكشف عن الموهوبين", en: "Gifted screening" },
+  sat: { ar: "اختبار SAT", en: "SAT" },
+  ielts: { ar: "اختبار IELTS", en: "IELTS" },
+  toefl: { ar: "اختبار TOEFL", en: "TOEFL" },
   other: { ar: "إنجاز مسجل", en: "Recorded achievement" },
 };
 

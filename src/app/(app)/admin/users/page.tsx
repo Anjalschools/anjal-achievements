@@ -94,7 +94,7 @@ const AdminUsersPageInner = () => {
         }
         const j = await res.json();
         const role = String(j.role || "");
-        setAllowed(role === "admin" || role === "supervisor");
+        setAllowed(role === "admin");
       } catch {
         setAllowed(false);
       }

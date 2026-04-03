@@ -25,27 +25,41 @@ export type EffectiveStaffScope =
     };
 
 const SCOPED_ROLES = new Set(["schoolAdmin", "teacher", "judge"]);
+const ADMIN_LIKE_ROLES = new Set(["admin", "supervisor"]);
+
+const hasExplicitStaffScope = (ss: StaffScopePayload | undefined): boolean =>
+  Boolean(
+    ss &&
+      ((ss.genders?.length ?? 0) > 0 ||
+        (ss.sections?.length ?? 0) > 0 ||
+        (ss.grades?.length ?? 0) > 0)
+  );
+
+const scopeFromStaffScopeDoc = (ss: StaffScopePayload): Exclude<EffectiveStaffScope, { unrestricted: true }> => ({
+  unrestricted: false,
+  genders: ss.genders?.map(String),
+  sections: ss.sections?.map(String),
+  grades: ss.grades?.map((g) => normalizeGrade(String(g)) || String(g)),
+});
 
 export const usesOrganizationalScope = (role: string | undefined | null): boolean =>
   SCOPED_ROLES.has(String(role || ""));
 
 export const resolveEffectiveStaffScope = (user: IUser & { staffScope?: StaffScopePayload }): EffectiveStaffScope => {
   const role = String(user.role || "");
-  if (role === "admin" || role === "supervisor") {
-    return { unrestricted: true };
+  const ss = user.staffScope;
+
+  if (ADMIN_LIKE_ROLES.has(role)) {
+    if (!hasExplicitStaffScope(ss)) return { unrestricted: true };
+    return scopeFromStaffScopeDoc(ss!);
   }
+
   if (!usesOrganizationalScope(role)) {
     return { unrestricted: true };
   }
 
-  const ss = user.staffScope;
-  if (ss && (ss.genders?.length || ss.sections?.length || ss.grades?.length)) {
-    return {
-      unrestricted: false,
-      genders: ss.genders?.map(String),
-      sections: ss.sections?.map(String),
-      grades: ss.grades?.map((g) => normalizeGrade(String(g)) || String(g)),
-    };
+  if (hasExplicitStaffScope(ss)) {
+    return scopeFromStaffScopeDoc(ss!);
   }
 
   return {

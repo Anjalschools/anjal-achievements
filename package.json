@@ -10,7 +10,8 @@
     "verify:attachment-review": "tsx scripts/verify-achievement-attachment-review.ts",
     "debug:attachment-pipeline": "NODE_OPTIONS='--require ./scripts/stub-server-only.cjs' tsx scripts/debug-achievement-attachment-pipeline.ts",
     "verify:attachment-per-file": "NODE_OPTIONS='--require ./scripts/stub-server-only.cjs' tsx scripts/verify-achievement-per-attachment-review.ts",
-    "create-admin": "tsx scripts/create-admin.ts"
+    "create-admin": "tsx scripts/create-admin.ts",
+    "make-admin": "tsx scripts/make-admin.ts"
   },
   "dependencies": {
     "@napi-rs/canvas": "^0.1.97",

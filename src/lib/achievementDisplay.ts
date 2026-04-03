@@ -217,6 +217,7 @@ const CAT: Record<string, { ar: string; en: string }> = {
   competition: { ar: "مسابقة", en: "Competition" },
   program: { ar: "برنامج", en: "Program" },
   exhibition: { ar: "معرض", en: "Exhibition" },
+  standardized_tests: { ar: "الاختبارات المعيارية", en: "Standardized tests" },
 };
 
 const CLASS: Record<string, { ar: string; en: string }> = {
@@ -296,6 +297,9 @@ const LEGACY_TYPE: Record<string, { ar: string; en: string }> = {
   qudrat: { ar: "القدرات", en: "Qudrat" },
   mawhiba_annual: { ar: "موهبة السنوي", en: "Mawhiba annual" },
   gifted_discovery: { ar: "اكتشاف الموهوبين", en: "Gifted discovery" },
+  sat: { ar: "اختبار SAT", en: "SAT" },
+  ielts: { ar: "اختبار IELTS", en: "IELTS" },
+  toefl: { ar: "اختبار TOEFL", en: "TOEFL" },
   other: { ar: "أخرى", en: "Other" },
 };
 
@@ -340,7 +344,7 @@ export const formatLocalizedResultLine = (
   medalType: string | undefined,
   rank: string | undefined,
   loc: Loc,
-  scoreValue?: number
+  scoreValue?: number | string
 ): string => {
   const rt = String(resultType || "");
   if (rt === "medal") {
@@ -353,6 +357,10 @@ export const formatLocalizedResultLine = (
     const base = labelResultType("score", loc);
     if (typeof scoreValue === "number" && !Number.isNaN(scoreValue)) {
       return loc === "ar" ? `${base}: ${scoreValue}` : `${base}: ${scoreValue}`;
+    }
+    if (typeof scoreValue === "string" && scoreValue.trim()) {
+      const t = scoreValue.trim();
+      return loc === "ar" ? `${base}: ${t}` : `${base}: ${t}`;
     }
     return base;
   }

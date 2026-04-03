@@ -8,6 +8,7 @@ import PageContainer from "@/components/layout/PageContainer";
 import { getLocale } from "@/lib/i18n";
 import type { AdminDashboardPayload } from "@/lib/admin-dashboard-stats";
 import { roleAccentClass, roleLabel } from "@/lib/admin-dashboard-ui-labels";
+import { roleHasCapability } from "@/lib/app-role-scope-matrix";
 import {
   AlertTriangle,
   BarChart3,
@@ -84,6 +85,7 @@ const AdminDashboardPage = () => {
   const locale = getLocale();
   const isAr = locale === "ar";
   const [allowed, setAllowed] = useState<boolean | null>(null);
+  const [viewerRole, setViewerRole] = useState<string>("");
   const [data, setData] = useState<AdminDashboardPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -98,6 +100,7 @@ const AdminDashboardPage = () => {
         }
         const j = await res.json();
         const role = String(j.role || "");
+        setViewerRole(role);
         setAllowed(["admin", "supervisor", "schoolAdmin", "teacher", "judge"].includes(role));
       } catch {
         setAllowed(false);
@@ -447,27 +450,33 @@ const AdminDashboardPage = () => {
                     titleEn="Review achievements"
                     isAr={isAr}
                   />
-                  <QuickLink
-                    href="/admin/users"
-                    icon={Users}
-                    titleAr="إدارة المستخدمين"
-                    titleEn="User management"
-                    isAr={isAr}
-                  />
-                  <QuickLink
-                    href="/admin/users/new"
-                    icon={UserPlus}
-                    titleAr="إضافة مستخدم جديد"
-                    titleEn="Add new user"
-                    isAr={isAr}
-                  />
-                  <QuickLink
-                    href="/admin/achievements/reports"
-                    icon={FileBarChart}
-                    titleAr="التقارير"
-                    titleEn="Reports"
-                    isAr={isAr}
-                  />
+                  {roleHasCapability(viewerRole, "userManagement") ? (
+                    <>
+                      <QuickLink
+                        href="/admin/users"
+                        icon={Users}
+                        titleAr="إدارة المستخدمين"
+                        titleEn="User management"
+                        isAr={isAr}
+                      />
+                      <QuickLink
+                        href="/admin/users/new"
+                        icon={UserPlus}
+                        titleAr="إضافة مستخدم جديد"
+                        titleEn="Add new user"
+                        isAr={isAr}
+                      />
+                    </>
+                  ) : null}
+                  {roleHasCapability(viewerRole, "reports") ? (
+                    <QuickLink
+                      href="/admin/achievements/reports"
+                      icon={FileBarChart}
+                      titleAr="التقارير"
+                      titleEn="Reports"
+                      isAr={isAr}
+                    />
+                  ) : null}
                   <QuickLink
                     href="/settings"
                     icon={Settings}

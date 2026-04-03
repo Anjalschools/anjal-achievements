@@ -11,6 +11,8 @@ import {
   MAWHIBA_ANNUAL_SUBJECTS,
   OLYMPIAD_FIELDS,
   PARTICIPATION_TYPES,
+  QUDRAT_TIER_ALLOWED_VALUES,
+  getAchievementNamesByType,
 } from "@/constants/achievement-options";
 import {
   UI_CATEGORY_OPTIONS,
@@ -21,6 +23,8 @@ import {
   getAutoLevelForOlympiadNesmoEvent,
   getAutoLockedLevelByCategory,
   getMawhibaAnnualSubjectOptionsForCategory,
+  STANDARDIZED_TEST_TYPE_OPTIONS,
+  resolveAchievementFormUiCategory,
 } from "@/constants/achievement-ui-categories";
 import { inferAchievementField } from "@/lib/achievement-field-inference";
 import { calculateAchievementScore } from "@/lib/achievement-scoring";
@@ -29,6 +33,7 @@ import {
   achievementDateIsoFromRecord,
   inferAchievementCategoryFromLegacyType,
   normalizeAchievementNames,
+  normalizeLegacyQudratAchievementName,
 } from "@/lib/achievementNormalize";
 import {
   labelInferredField,
@@ -72,9 +77,10 @@ const AchievementForm = ({
   const [formData, setFormData] = useState<Record<string, unknown>>({
     achievementType: String(initialData?.achievementType || ""),
     achievementCategory: String(
-      initialData?.achievementCategory ||
-        mapDbAchievementTypeToUiCategory(String(initialData?.achievementType || "")) ||
-        "competition"
+      resolveAchievementFormUiCategory(
+        String(initialData?.achievementType || ""),
+        String(initialData?.achievementCategory || "").trim() || undefined
+      ) || "competition"
     ),
     achievementName: String(initialData?.achievementName || ""),
     customAchievementName: String(initialData?.customAchievementName || ""),
@@ -88,6 +94,9 @@ const AchievementForm = ({
     specialAwardText: String(initialData?.specialAwardText || ""),
     recognitionText: String(initialData?.recognitionText || ""),
     otherResultText: String(initialData?.otherResultText || ""),
+    resultValue: String(
+      (initialData as Record<string, unknown> | undefined)?.resultValue ?? ""
+    ),
     olympiadField: String(initialData?.olympiadField || ""),
     mawhibaAnnualSubject: String(initialData?.mawhibaAnnualSubject || ""),
     giftedDiscoveryScore:
@@ -170,7 +179,15 @@ const AchievementForm = ({
       mapDbAchievementTypeToUiCategory(dbType) ||
       inferAchievementCategoryFromLegacyType(dbType) ||
       "competition";
-    const cat = String(initialData.achievementCategory || "").trim() || mappedUi;
+    const cat = resolveAchievementFormUiCategory(
+      dbType,
+      String(initialData.achievementCategory || "").trim() || undefined
+    );
+
+    let hydratedAchievementName = String(initialData.achievementName || "");
+    if (dbType === "qudrat") {
+      hydratedAchievementName = normalizeLegacyQudratAchievementName(hydratedAchievementName);
+    }
 
     setFormData((prev) => ({
       ...prev,
@@ -179,7 +196,7 @@ const AchievementForm = ({
       achievementClassification: String(
         initialData.achievementClassification || "other"
       ),
-      achievementName: String(initialData.achievementName || ""),
+      achievementName: hydratedAchievementName,
       nameAr:
         names.normalizedNameAr ||
         String(
@@ -207,6 +224,9 @@ const AchievementForm = ({
       specialAwardText: String(initialData.specialAwardText || ""),
       recognitionText: String(initialData.recognitionText || ""),
       otherResultText: String(initialData.otherResultText || ""),
+      resultValue: String(
+        (initialData as Record<string, unknown>).resultValue ?? ""
+      ),
       olympiadField: String(initialData.olympiadField || ""),
       mawhibaAnnualSubject: String(initialData.mawhibaAnnualSubject || ""),
       giftedDiscoveryScore:
@@ -239,16 +259,14 @@ const AchievementForm = ({
     }
 
     const lockedByCategory = getAutoLockedLevelByCategory(cat);
-    const lockedByOlympiad = getAutoLevelForOlympiadNesmoEvent(
-      String(initialData.achievementName || "")
-    );
+    const lockedByOlympiad = getAutoLevelForOlympiadNesmoEvent(hydratedAchievementName);
 
     setAutoLocks((prev) => ({
       ...prev,
       levelLocked: Boolean(lockedByCategory || lockedByOlympiad),
     }));
 
-    const initAchName = String(initialData.achievementName || "");
+    const initAchName = hydratedAchievementName;
     const initCustom = String(initialData.customAchievementName || "");
     const snapFinal =
       initAchName === OLYMPIAD_EVENT_OTHER_VALUE || initAchName === "other"
@@ -284,20 +302,49 @@ const AchievementForm = ({
     achievementType === "olympiad" &&
     getAutoLevelForOlympiadNesmoEvent(achievementName) !== null;
 
+  const standardizedLevelLocked =
+    achievementType === "qudrat" ||
+    achievementType === "mawhiba_annual" ||
+    achievementType === "gifted_discovery" ||
+    achievementType === "sat" ||
+    achievementType === "ielts" ||
+    achievementType === "toefl";
+
   const levelSelectDisabled =
     autoLocks.levelLocked ||
-    uiCategory === "qudrat" ||
-    uiCategory === "gifted_screening" ||
     olympiadNesmoLocked ||
-    achievementType === "mawhiba_annual";
+    standardizedLevelLocked ||
+    (uiCategory === "standardized_tests" && !achievementType);
 
   const availableNames = useMemo(() => {
     if (!uiCategory) return [];
+    if (uiCategory === "standardized_tests") {
+      if (!achievementType) return [];
+      if (achievementType === "qudrat") {
+        const base = getAchievementNamesByType("qudrat").map((item) => ({
+          value: item.value,
+          label: isArabic ? item.ar : item.en,
+        }));
+        const current = String(formData.achievementName || "");
+        if (!current || base.some((o) => o.value === current)) return base;
+        return [...base, { value: current, label: current }];
+      }
+      if (achievementType === "mawhiba_annual") {
+        const base = getAchievementNamesByType("mawhiba_annual").map((item) => ({
+          value: item.value,
+          label: isArabic ? item.ar : item.en,
+        }));
+        const current = String(formData.achievementName || "");
+        if (!current || base.some((o) => o.value === current)) return base;
+        return [...base, { value: current, label: current }];
+      }
+      return [];
+    }
     const base = getEventOptionsForUiCategory(uiCategory, isArabic ? "ar" : "en");
     const current = String(formData.achievementName || "");
     if (!current || base.some((o) => o.value === current)) return base;
     return [...base, { value: current, label: current }];
-  }, [uiCategory, isArabic, formData.achievementName]);
+  }, [uiCategory, isArabic, formData.achievementName, achievementType]);
 
   const clearError = (field: string) => {
     if (!errors[field]) return;
@@ -323,6 +370,7 @@ const AchievementForm = ({
       next.customAchievementName = "";
       next.olympiadField = "";
       next.mawhibaAnnualSubject = "";
+      next.resultValue = "";
       next.giftedDiscoveryScore = undefined;
       next.teamRole = "";
       next.medalType = "";
@@ -352,6 +400,17 @@ const AchievementForm = ({
         next.participationType = "individual";
         next.resultType = "participation";
         next.achievementLevel = "kingdom";
+      }
+
+      if (
+        achievementType === "sat" ||
+        achievementType === "ielts" ||
+        achievementType === "toefl"
+      ) {
+        next.achievementName = achievementType;
+        next.participationType = "individual";
+        next.resultType = "score";
+        next.achievementLevel = "international";
       }
 
       return next;
@@ -390,6 +449,20 @@ const AchievementForm = ({
         levelLocked: false,
         participationLocked: false,
       }));
+    }
+  }, [achievementType, achievementName]);
+
+  useEffect(() => {
+    if (achievementType !== "program") return;
+
+    if (achievementName === "social_volunteer_programs") {
+      setFormData((prev) => ({
+        ...prev,
+        achievementLevel: "province",
+      }));
+      setAutoLocks((prev) => ({ ...prev, levelLocked: true }));
+    } else {
+      setAutoLocks((prev) => ({ ...prev, levelLocked: false }));
     }
   }, [achievementType, achievementName]);
 
@@ -758,7 +831,13 @@ const AchievementForm = ({
       nextErrors.achievementLevel = isArabic ? "المستوى مطلوب" : "Level is required";
     }
 
-    if (achievementType !== "gifted_discovery" && achievementType !== "qudrat") {
+    if (
+      achievementType !== "gifted_discovery" &&
+      achievementType !== "qudrat" &&
+      achievementType !== "sat" &&
+      achievementType !== "ielts" &&
+      achievementType !== "toefl"
+    ) {
       if (!resolvedResult) {
         nextErrors.resultType = isArabic
           ? "نتيجة المشاركة مطلوبة"
@@ -825,10 +904,30 @@ const AchievementForm = ({
 
     if (achievementType === "gifted_discovery") {
       const score = Number(formData.giftedDiscoveryScore || 0);
-      if (!score || score < 1600) {
+      if (!score || score <= 1600) {
         nextErrors.giftedDiscoveryScore = isArabic
-          ? "الدرجة يجب أن تكون 1600 على الأقل"
-          : "Score must be at least 1600";
+          ? "الدرجة يجب أن تكون أعلى من 1600"
+          : "Score must be greater than 1600";
+      }
+    }
+
+    if (achievementType === "qudrat") {
+      if (!(QUDRAT_TIER_ALLOWED_VALUES as readonly string[]).includes(achievementName)) {
+        nextErrors.achievementName = isArabic
+          ? "اختر نسبة واحدة من القائمة (٩٥٪–١٠٠٪)"
+          : "Select one percentage from the list (95%–100%)";
+      }
+    }
+
+    if (
+      achievementType === "sat" ||
+      achievementType === "ielts" ||
+      achievementType === "toefl"
+    ) {
+      if (!String(formData.resultValue || "").trim()) {
+        nextErrors.resultValue = isArabic
+          ? "درجة الاختبار مطلوبة"
+          : "Test score is required";
       }
     }
 
@@ -868,13 +967,19 @@ const AchievementForm = ({
         ? "participation"
         : achievementType === "mawhiba_annual"
           ? "rank"
-          : String(formData.resultType || "");
+          : achievementType === "sat" ||
+              achievementType === "ielts" ||
+              achievementType === "toefl"
+            ? "score"
+            : String(formData.resultType || "");
 
     const payload: Record<string, unknown> = {
       ...formData,
       achievementName: finalAchievementName,
       achievementCategory: String(
-        formData.achievementCategory || achievementType || "competition"
+        uiCategory === "standardized_tests"
+          ? "standardized_tests"
+          : formData.achievementCategory || achievementType || "competition"
       ),
       achievementClassification: String(
         formData.achievementClassification || "other"
@@ -895,7 +1000,15 @@ const AchievementForm = ({
       otherResultText: String(formData.otherResultText || "").trim(),
     };
 
-    delete payload.resultValue;
+    if (
+      achievementType === "sat" ||
+      achievementType === "ielts" ||
+      achievementType === "toefl"
+    ) {
+      payload.resultValue = String(formData.resultValue || "").trim();
+    } else {
+      delete payload.resultValue;
+    }
 
     if (achievementType === "mawhiba_annual") {
       payload.rank =
@@ -906,7 +1019,11 @@ const AchievementForm = ({
   };
 
   const showResultSection =
-    achievementType !== "gifted_discovery" && achievementType !== "qudrat";
+    achievementType !== "gifted_discovery" &&
+    achievementType !== "qudrat" &&
+    achievementType !== "sat" &&
+    achievementType !== "ielts" &&
+    achievementType !== "toefl";
   const hasAutoLockInfo =
     autoLocks.levelLocked || autoLocks.participationLocked || autoLocks.resultLocked;
 
@@ -950,11 +1067,19 @@ const AchievementForm = ({
               onChange={(e) => {
                 const v = e.target.value;
                 handleChange("achievementCategory", v);
-                handleChange("achievementType", mapUiCategoryToDbAchievementType(v));
                 handleChange("achievementName", "");
                 handleChange("customAchievementName", "");
                 handleChange("olympiadField", "");
                 handleChange("mawhibaAnnualSubject", "");
+                handleChange("resultValue", "");
+
+                if (v === "standardized_tests") {
+                  handleChange("achievementType", "");
+                  setAutoLocks((p) => ({ ...p, levelLocked: false }));
+                  return;
+                }
+
+                handleChange("achievementType", mapUiCategoryToDbAchievementType(v));
 
                 const locked = getAutoLockedLevelByCategory(v);
                 if (locked) {
@@ -982,69 +1107,139 @@ const AchievementForm = ({
           </div>
 
           <div>
-            <label className="mb-2 block text-sm font-semibold text-text">
-              {isArabic ? "اسم الفعالية من القائمة" : "Event name from list"} *
-            </label>
+            {uiCategory === "standardized_tests" ? (
+              <div className="space-y-3">
+                <div>
+                  <label className="mb-2 block text-sm font-semibold text-text">
+                    {isArabic ? "نوع الاختبار المعياري" : "Standardized test"} *
+                  </label>
+                  <select
+                    value={achievementType}
+                    onChange={(e) => handleChange("achievementType", e.target.value)}
+                    className={`w-full rounded-xl border ${
+                      errors.achievementType ? "border-red-300" : "border-gray-300"
+                    } bg-white px-4 py-3 text-sm`}
+                  >
+                    <option value="">
+                      {isArabic ? "اختر الاختبار" : "Select test"}
+                    </option>
+                    {STANDARDIZED_TEST_TYPE_OPTIONS.map((o) => (
+                      <option key={o.value} value={o.value}>
+                        {isArabic ? o.ar : o.en}
+                      </option>
+                    ))}
+                  </select>
+                  {errors.achievementType && (
+                    <p className="mt-1 text-xs text-red-600">{errors.achievementType}</p>
+                  )}
+                </div>
 
-            {uiCategory === "other" ? (
-              <input
-                type="text"
-                value={customAchievementName || achievementName}
-                onChange={(e) => {
-                  handleChange("customAchievementName", e.target.value);
-                  handleChange("achievementName", e.target.value);
-                }}
-                className={`w-full rounded-xl border ${
-                  errors.achievementName ? "border-red-300" : "border-gray-300"
-                } bg-white px-4 py-3 text-sm`}
-                placeholder={isArabic ? "اسم الفعالية (يدوي)" : "Event name (manual)"}
-              />
+                {(achievementType === "qudrat" || achievementType === "mawhiba_annual") && (
+                  <div>
+                    <label className="mb-2 block text-sm font-semibold text-text">
+                      {achievementType === "qudrat"
+                        ? isArabic
+                          ? "نتيجة الاختبار (%) *"
+                          : "Test score (%) *"
+                        : isArabic
+                          ? "المركز *"
+                          : "Rank *"}
+                    </label>
+                    <select
+                      value={achievementName}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        handleChange("achievementName", value);
+                        if (achievementType === "mawhiba_annual") {
+                          handleChange("rank", value);
+                        }
+                      }}
+                      className={`w-full rounded-xl border ${
+                        errors.achievementName ? "border-red-300" : "border-gray-300"
+                      } bg-white px-4 py-3 text-sm`}
+                    >
+                      <option value="">
+                        {isArabic ? "اختر القيمة" : "Select value"}
+                      </option>
+                      {availableNames.map((item) => (
+                        <option key={item.value} value={item.value}>
+                          {item.label}
+                        </option>
+                      ))}
+                    </select>
+                    {errors.achievementName && (
+                      <p className="mt-1 text-xs text-red-600">{errors.achievementName}</p>
+                    )}
+                  </div>
+                )}
+              </div>
             ) : (
-              <select
-                value={achievementName}
-                onChange={(e) => {
-                  const value = e.target.value;
-                  handleChange("achievementName", value);
+              <>
+                <label className="mb-2 block text-sm font-semibold text-text">
+                  {isArabic ? "اسم الفعالية من القائمة" : "Event name from list"} *
+                </label>
 
-                  if (achievementType === "olympiad") {
-                    const lvl = getAutoLevelForOlympiadNesmoEvent(value);
+                {uiCategory === "other" ? (
+                  <input
+                    type="text"
+                    value={customAchievementName || achievementName}
+                    onChange={(e) => {
+                      handleChange("customAchievementName", e.target.value);
+                      handleChange("achievementName", e.target.value);
+                    }}
+                    className={`w-full rounded-xl border ${
+                      errors.achievementName ? "border-red-300" : "border-gray-300"
+                    } bg-white px-4 py-3 text-sm`}
+                    placeholder={isArabic ? "اسم الفعالية (يدوي)" : "Event name (manual)"}
+                  />
+                ) : (
+                  <select
+                    value={achievementName}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      handleChange("achievementName", value);
 
-                    if (lvl) {
-                      handleChange("achievementLevel", lvl);
-                      setAutoLocks((p) => ({ ...p, levelLocked: true }));
-                    }
+                      if (achievementType === "olympiad") {
+                        const lvl = getAutoLevelForOlympiadNesmoEvent(value);
 
-                    if (value === OLYMPIAD_EVENT_OTHER_VALUE) {
-                      setAutoLocks((p) => ({ ...p, levelLocked: false }));
-                    } else {
-                      handleChange("customAchievementName", "");
-                    }
-                  } else if (value !== "other") {
-                    handleChange("customAchievementName", "");
-                  }
+                        if (lvl) {
+                          handleChange("achievementLevel", lvl);
+                          setAutoLocks((p) => ({ ...p, levelLocked: true }));
+                        }
 
-                  if (achievementType === "mawhiba_annual") {
-                    handleChange("rank", value);
-                  }
-                }}
-                disabled={achievementType === "gifted_discovery"}
-                className={`w-full rounded-xl border ${
-                  errors.achievementName ? "border-red-300" : "border-gray-300"
-                } bg-white px-4 py-3 text-sm ${
-                  achievementType === "gifted_discovery"
-                    ? "cursor-not-allowed opacity-60"
-                    : ""
-                }`}
-              >
-                <option value="">
-                  {isArabic ? "اختر الاسم" : "Select name"}
-                </option>
-                {availableNames.map((item) => (
-                  <option key={item.value} value={item.value}>
-                    {item.label}
-                  </option>
-                ))}
-              </select>
+                        if (value === OLYMPIAD_EVENT_OTHER_VALUE) {
+                          setAutoLocks((p) => ({ ...p, levelLocked: false }));
+                        } else {
+                          handleChange("customAchievementName", "");
+                        }
+                      } else if (value !== "other") {
+                        handleChange("customAchievementName", "");
+                      }
+
+                      if (achievementType === "mawhiba_annual") {
+                        handleChange("rank", value);
+                      }
+                    }}
+                    disabled={achievementType === "gifted_discovery"}
+                    className={`w-full rounded-xl border ${
+                      errors.achievementName ? "border-red-300" : "border-gray-300"
+                    } bg-white px-4 py-3 text-sm ${
+                      achievementType === "gifted_discovery"
+                        ? "cursor-not-allowed opacity-60"
+                        : ""
+                    }`}
+                  >
+                    <option value="">
+                      {isArabic ? "اختر الاسم" : "Select name"}
+                    </option>
+                    {availableNames.map((item) => (
+                      <option key={item.value} value={item.value}>
+                        {item.label}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </>
             )}
 
             {achievementName === OLYMPIAD_EVENT_OTHER_VALUE && (
@@ -1071,7 +1266,7 @@ const AchievementForm = ({
               />
             )}
 
-            {errors.achievementName && (
+            {uiCategory !== "standardized_tests" && errors.achievementName && (
               <p className="mt-1 text-xs text-red-600">{errors.achievementName}</p>
             )}
             {errors.customAchievementName && (
@@ -1229,13 +1424,13 @@ const AchievementForm = ({
               }
               className={`w-full rounded-xl border ${
                 Number(formData.giftedDiscoveryScore || 0) > 0 &&
-                Number(formData.giftedDiscoveryScore || 0) < 1600
+                Number(formData.giftedDiscoveryScore || 0) <= 1600
                   ? "border-red-500 ring-2 ring-red-200"
                   : errors.giftedDiscoveryScore
                     ? "border-red-300"
                     : "border-gray-300"
               } bg-white px-4 py-3 text-sm`}
-              placeholder={isArabic ? "أدخل الدرجة (>=1600)" : "Enter score (>=1600)"}
+              placeholder={isArabic ? "أدخل الدرجة (أكبر من 1600)" : "Enter score (>1600)"}
             />
             {errors.giftedDiscoveryScore && (
               <p className="mt-1 text-xs text-red-600">
@@ -1251,6 +1446,32 @@ const AchievementForm = ({
               {isArabic ? "الدرجة المختارة" : "Selected score"}
             </p>
             <p className="font-semibold text-text">{finalAchievementName || "-"}</p>
+          </div>
+        )}
+
+        {(achievementType === "sat" ||
+          achievementType === "ielts" ||
+          achievementType === "toefl") && (
+          <div>
+            <label className="mb-2 block text-sm font-semibold text-text">
+              {isArabic ? "درجة الاختبار" : "Test score"} *
+            </label>
+            <input
+              type="text"
+              inputMode="decimal"
+              value={String(formData.resultValue || "")}
+              onChange={(e) => handleChange("resultValue", e.target.value)}
+              className={`w-full rounded-xl border ${
+                errors.resultValue ? "border-red-300" : "border-gray-300"
+              } bg-white px-4 py-3 text-sm`}
+              placeholder={
+                isArabic ? "أدخل الدرجة (مثال: 1500 أو 7.5)" : "Enter score (e.g. 1500 or 7.5)"
+              }
+              aria-invalid={Boolean(errors.resultValue)}
+            />
+            {errors.resultValue && (
+              <p className="mt-1 text-xs text-red-600">{errors.resultValue}</p>
+            )}
           </div>
         )}
 
@@ -1276,12 +1497,18 @@ const AchievementForm = ({
               disabled={
                 autoLocks.participationLocked ||
                 achievementType === "gifted_discovery" ||
-                achievementType === "qudrat"
+                achievementType === "qudrat" ||
+                achievementType === "sat" ||
+                achievementType === "ielts" ||
+                achievementType === "toefl"
               }
               className={`w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm ${
                 autoLocks.participationLocked ||
                 achievementType === "gifted_discovery" ||
-                achievementType === "qudrat"
+                achievementType === "qudrat" ||
+                achievementType === "sat" ||
+                achievementType === "ielts" ||
+                achievementType === "toefl"
                   ? "cursor-not-allowed opacity-60"
                   : ""
               }`}
@@ -1294,7 +1521,10 @@ const AchievementForm = ({
             </select>
             {(autoLocks.participationLocked ||
               achievementType === "gifted_discovery" ||
-              achievementType === "qudrat") && (
+              achievementType === "qudrat" ||
+              achievementType === "sat" ||
+              achievementType === "ielts" ||
+              achievementType === "toefl") && (
               <p className="mt-1 text-xs text-text-light">
                 {isArabic
                   ? "تم تحديد هذه القيمة تلقائيًا حسب نوع الإنجاز"

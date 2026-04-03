@@ -19,8 +19,12 @@ export const REPORT_CATEGORY_VALUES = [
   "qudrat",
   "mawhiba_annual",
   "gifted_discovery",
+  "sat",
+  "ielts",
+  "toefl",
   "mawhiba",
   "gifted_screening",
+  "standardized_tests",
   "other",
 ] as const;
 

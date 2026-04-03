@@ -4,6 +4,8 @@ import connectDB from "@/lib/mongodb";
 import { getCurrentDbUser } from "@/lib/auth";
 import Achievement from "@/models/Achievement";
 import { OLYMPIAD_EVENT_OTHER_VALUE } from "@/constants/achievement-ui-categories";
+import { QUDRAT_TIER_ALLOWED_VALUES } from "@/constants/achievement-options";
+import { normalizeLegacyQudratAchievementName } from "@/lib/achievementNormalize";
 import { inferAchievementField } from "@/lib/achievement-field-inference";
 import { clampInferredFieldToAllowlist } from "@/lib/achievement-inferred-field-allowlist";
 import {
@@ -118,8 +120,54 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       resultType = "rank";
     }
     if (achievementType === "qudrat") {
+      achievementName = normalizeLegacyQudratAchievementName(achievementName);
       achievementLevel = "kingdom";
       resultType = "participation";
+    }
+    if (achievementType === "sat" || achievementType === "ielts" || achievementType === "toefl") {
+      achievementLevel = "international";
+      resultType = "score";
+      if (!String(achievementName || "").trim()) {
+        achievementName = achievementType;
+      }
+    }
+
+    if (achievementType === "gifted_discovery") {
+      const gs = hasOwn("giftedDiscoveryScore")
+        ? body.giftedDiscoveryScore
+        : (existing as { giftedDiscoveryScore?: number }).giftedDiscoveryScore;
+      const n = typeof gs === "number" ? gs : Number(gs);
+      if (!Number.isFinite(n) || n <= 1600) {
+        return NextResponse.json(
+          {
+            error: "Validation failed",
+            errors: ["Gifted discovery score must be greater than 1600"],
+          },
+          { status: 400 }
+        );
+      }
+    }
+
+    if (
+      achievementType === "qudrat" &&
+      !(QUDRAT_TIER_ALLOWED_VALUES as readonly string[]).includes(achievementName)
+    ) {
+      return NextResponse.json(
+        { error: "Validation failed", errors: ["Invalid Qudrat percent tier"] },
+        { status: 400 }
+      );
+    }
+
+    if (
+      (achievementType === "sat" ||
+        achievementType === "ielts" ||
+        achievementType === "toefl") &&
+      !String(body.resultValue ?? (existing as { resultValue?: string }).resultValue ?? "").trim()
+    ) {
+      return NextResponse.json(
+        { error: "Validation failed", errors: ["Test score is required"] },
+        { status: 400 }
+      );
     }
 
     const finalName =

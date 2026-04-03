@@ -2,9 +2,11 @@ import mongoose from "mongoose";
 import Notification from "@/models/Notification";
 import User from "@/models/User";
 import type { NotificationType } from "@/models/Notification";
+import type { IUser } from "@/models/User";
 import { ACHIEVEMENT_REVIEWER_ROLES_LIST } from "@/lib/achievement-reviewer-roles";
 import { PERMISSIONS } from "@/constants/permissions";
 import { notificationDebugLog } from "@/lib/notification-debug";
+import { achievementVisibleToStaff } from "@/lib/achievement-scope-filter";
 
 const toObjectId = (id: mongoose.Types.ObjectId | string): mongoose.Types.ObjectId | null => {
   if (typeof id === "string" && mongoose.Types.ObjectId.isValid(id)) {
@@ -45,6 +47,24 @@ export const getAchievementReviewerRecipientUserIds = async (): Promise<mongoose
   return out;
 };
 
+/** Drop reviewers who cannot see this achievement under organizational staff scope. */
+const filterRecipientIdsByAchievementScope = async (
+  achievementId: mongoose.Types.ObjectId,
+  candidateIds: mongoose.Types.ObjectId[]
+): Promise<mongoose.Types.ObjectId[]> => {
+  if (candidateIds.length === 0) return [];
+  const users = await User.find({ _id: { $in: candidateIds } }).lean();
+  const out: mongoose.Types.ObjectId[] = [];
+  for (const row of users) {
+    const visible = await achievementVisibleToStaff(
+      achievementId.toString(),
+      row as unknown as IUser
+    );
+    if (visible) out.push(row._id as mongoose.Types.ObjectId);
+  }
+  return out;
+};
+
 const notifyReviewers = async (input: {
   type: NotificationType;
   title: string;
@@ -52,9 +72,16 @@ const notifyReviewers = async (input: {
   achievementId: mongoose.Types.ObjectId;
   metadataExtra?: Record<string, unknown>;
 }): Promise<void> => {
-  const recipientIds = await getAchievementReviewerRecipientUserIds();
+  const candidates = await getAchievementReviewerRecipientUserIds();
+  const recipientIds = await filterRecipientIdsByAchievementScope(
+    input.achievementId,
+    candidates
+  );
   if (recipientIds.length === 0) {
-    notificationDebugLog("notification_skipped", { reason: "no_recipients", type: input.type });
+    notificationDebugLog("notification_skipped", {
+      reason: "no_recipients_after_scope",
+      type: input.type,
+    });
     return;
   }
 

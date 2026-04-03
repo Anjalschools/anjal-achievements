@@ -30,7 +30,8 @@ export type RoleCapabilityKey =
   | "schoolYearsAdmin"
   | "newsAdmin"
   | "accessMatrix"
-  | "contactMessages";
+  | "contactMessages"
+  | "homeHighlights";
 
 export type ScopeMode = "none" | "full" | "scoped";
 
@@ -61,6 +62,7 @@ const deny: Record<RoleCapabilityKey, boolean> = {
   newsAdmin: false,
   accessMatrix: false,
   contactMessages: false,
+  homeHighlights: false,
 };
 
 const allStaffCaps: Record<RoleCapabilityKey, boolean> = {
@@ -83,6 +85,7 @@ const allStaffCaps: Record<RoleCapabilityKey, boolean> = {
   newsAdmin: true,
   accessMatrix: true,
   contactMessages: true,
+  homeHighlights: true,
 };
 
 export const APP_ROLE_MATRIX: Record<AppRole, RoleDefinition> = {
@@ -105,8 +108,29 @@ export const APP_ROLE_MATRIX: Record<AppRole, RoleDefinition> = {
   supervisor: {
     labelAr: "مشرف",
     labelEn: "Supervisor",
-    scopeMode: "full",
-    capabilities: allStaffCaps,
+    scopeMode: "scoped",
+    capabilities: {
+      ...deny,
+      staffArea: true,
+      viewAchievements: true,
+      addAchievementAsStudent: true,
+      adminAddAchievement: true,
+      reviewAchievements: true,
+      approveRejectWorkflow: true,
+      featureAchievements: false,
+      userManagement: false,
+      reports: true,
+      advancedAnalytics: false,
+      auditLog: false,
+      platformSettings: false,
+      socialIntegrations: false,
+      aiNews: false,
+      schoolYearsAdmin: false,
+      newsAdmin: false,
+      accessMatrix: false,
+      contactMessages: true,
+      homeHighlights: false,
+    },
   },
   schoolAdmin: {
     labelAr: "مدير المدرسة",
@@ -130,8 +154,9 @@ export const APP_ROLE_MATRIX: Record<AppRole, RoleDefinition> = {
       aiNews: false,
       schoolYearsAdmin: false,
       newsAdmin: false,
-      accessMatrix: true,
+      accessMatrix: false,
       contactMessages: true,
+      homeHighlights: false,
     },
   },
   teacher: {
@@ -156,8 +181,9 @@ export const APP_ROLE_MATRIX: Record<AppRole, RoleDefinition> = {
       aiNews: false,
       schoolYearsAdmin: false,
       newsAdmin: false,
-      accessMatrix: true,
+      accessMatrix: false,
       contactMessages: true,
+      homeHighlights: false,
     },
   },
   judge: {
@@ -182,8 +208,9 @@ export const APP_ROLE_MATRIX: Record<AppRole, RoleDefinition> = {
       aiNews: false,
       schoolYearsAdmin: false,
       newsAdmin: false,
-      accessMatrix: true,
+      accessMatrix: false,
       contactMessages: false,
+      homeHighlights: false,
     },
   },
 };
@@ -227,6 +254,7 @@ export const ROLE_CAPABILITY_LABELS: Record<RoleCapabilityKey, { ar: string; en:
   newsAdmin: { ar: "إدارة الأخبار", en: "News admin" },
   accessMatrix: { ar: "مصفوفة الصلاحيات (داخلية)", en: "Access matrix (internal)" },
   contactMessages: { ar: "رسائل التواصل", en: "Contact messages" },
+  homeHighlights: { ar: "إبرازات الصفحة الرئيسية", en: "Home page highlights" },
 };
 
 export const ROLE_CAPABILITY_AUDIT_ORDER: RoleCapabilityKey[] = [
@@ -248,6 +276,7 @@ export const ROLE_CAPABILITY_AUDIT_ORDER: RoleCapabilityKey[] = [
   "newsAdmin",
   "accessMatrix",
   "contactMessages",
+  "homeHighlights",
 ];
 
 /** Route prefixes under /admin — must stay in sync with AppSidebar + API guards */
@@ -268,7 +297,7 @@ export const ADMIN_ROUTE_REQUIRED_CAPABILITY: Array<{
   { prefix: "/admin/leaderboard", capability: "reviewAchievements" },
   { prefix: "/admin/achievements/review", capability: "reviewAchievements" },
   { prefix: "/admin/school-years", capability: "schoolYearsAdmin" },
-  { prefix: "/admin/home-highlights", capability: "contactMessages" },
+  { prefix: "/admin/home-highlights", capability: "homeHighlights" },
   { prefix: "/admin/contact-messages", capability: "contactMessages" },
   /** Any other /admin/* screen requires at least staff (prevents students from loading admin shell). */
   { prefix: "/admin", capability: "staffArea" },

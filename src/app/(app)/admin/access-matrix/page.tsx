@@ -152,7 +152,9 @@ const AccessMatrixPage = () => {
       return isAr ? "لا يوجد نطاق تنظيمي مُعرَّف لهذا الحساب." : "No organizational scope for this account.";
     }
     if (orgAccess.mode === "full") {
-      return isAr ? "وصول كامل (مسؤول / مشرف)." : "Full access (platform admin / supervisor).";
+      return isAr
+        ? "نطاق تنظيمي واسع حسب إعدادات الحساب (لا يعني بالضرورة صلاحيات مسؤول المنصة الكاملة)."
+        : "Broad organizational scope per account settings (not the same as full platform-admin capabilities).";
     }
     const parts: string[] = [];
     if (orgAccess.genders?.length) {

@@ -2,7 +2,14 @@ import mongoose from "mongoose";
 import bcrypt from "bcryptjs";
 import connectDB from "@/lib/mongodb";
 import User from "@/models/User";
+import type { IUser } from "@/models/User";
 import Achievement from "@/models/Achievement";
+import {
+  normalizeStaffScopeInput,
+  roleSupportsStaffScopeStorage,
+} from "@/lib/admin-staff-scope-normalize";
+import { canActorViewTargetUser, mergeAdminUserListFilter } from "@/lib/admin-user-list-scope";
+import type { StaffScopePayload } from "@/lib/user-scope";
 import { normalizeGrade } from "@/constants/grades";
 import { type AdminManageableRole, isAdminManageableRole } from "@/lib/admin-users-constants";
 import { roleNeedsAcademicFields } from "@/lib/role-academic-fields";
@@ -18,7 +25,7 @@ import { ensureStudentPublicPortfolioReady } from "@/lib/public-portfolio-bootst
 import { queueHomeStatsRefresh } from "@/lib/home-stats-service";
 
 const LIST_FIELDS =
-  "fullName fullNameAr fullNameEn username email role status studentId nationalId phone profilePhoto preferredLanguage gender section grade createdAt updatedAt lastLoginAt publicPortfolioEnabled publicPortfolioSlug publicPortfolioPublishedAt";
+  "fullName fullNameAr fullNameEn username email role status studentId nationalId phone profilePhoto preferredLanguage gender section grade createdAt updatedAt lastLoginAt publicPortfolioEnabled publicPortfolioSlug publicPortfolioPublishedAt staffScope";
 
 const escapeRx = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
@@ -84,9 +91,13 @@ export const computeAdminUserStatsFromFacet = (facet: {
   return out;
 };
 
-export const fetchAdminUserStats = async (): Promise<AdminUserStats> => {
+export const fetchAdminUserStats = async (actor?: IUser): Promise<AdminUserStats> => {
   await connectDB();
+  const vis = actor ? mergeAdminUserListFilter({}, actor) : {};
+  const preMatch: mongoose.PipelineStage[] =
+    actor && Object.keys(vis).length > 0 ? [{ $match: vis }] : [];
   const [row] = await User.aggregate([
+    ...preMatch,
     {
       $facet: {
         total: [{ $count: "c" }],
@@ -130,10 +141,12 @@ export const buildAdminUserListFilter = (q: AdminUserListQuery): Record<string, 
 };
 
 export const listAdminUsers = async (
-  query: AdminUserListQuery
+  query: AdminUserListQuery,
+  actor?: IUser
 ): Promise<{ items: AdminUserListRow[]; total: number }> => {
   await connectDB();
-  const filter = buildAdminUserListFilter(query);
+  const base = buildAdminUserListFilter(query);
+  const filter = actor ? mergeAdminUserListFilter(base, actor) : base;
   const skip = (query.page - 1) * query.limit;
   const [total, rows] = await Promise.all([
     User.countDocuments(filter),
@@ -148,11 +161,13 @@ export const listAdminUsers = async (
   return { items, total };
 };
 
-export const getAdminUserById = async (id: string): Promise<AdminUserListRow | null> => {
+export const getAdminUserById = async (id: string, actor?: IUser): Promise<AdminUserListRow | null> => {
   if (!mongoose.Types.ObjectId.isValid(id)) return null;
   await connectDB();
   const u = await User.findById(id).select(LIST_FIELDS).lean();
   if (!u) return null;
+  const row = u as unknown as IUser;
+  if (actor && !canActorViewTargetUser(actor, row)) return null;
   return serializeAdminUserRow(u as unknown as Record<string, unknown>);
 };
 
@@ -172,6 +187,7 @@ export type AdminCreateUserInput = {
   section?: "arabic" | "international";
   grade?: string;
   preferredLanguage?: "ar" | "en";
+  staffScope?: StaffScopePayload | null;
 };
 
 const validatePhone = (phone?: string): string | undefined => {
@@ -217,6 +233,12 @@ export const adminCreateUser = async (input: AdminCreateUserInput): Promise<Admi
 
   const passwordHash = await bcrypt.hash(input.password, 10);
 
+  let staffScopeCreate: StaffScopePayload | undefined;
+  if (roleSupportsStaffScopeStorage(input.role) && input.staffScope != null) {
+    const n = normalizeStaffScopeInput(input.staffScope);
+    if (n) staffScopeCreate = n;
+  }
+
   const doc = await User.create({
     fullName,
     fullNameAr: fullNameAr || fullName,
@@ -233,6 +255,7 @@ export const adminCreateUser = async (input: AdminCreateUserInput): Promise<Admi
     role: input.role,
     status: input.status,
     preferredLanguage: input.preferredLanguage === "en" ? "en" : "ar",
+    ...(staffScopeCreate ? { staffScope: staffScopeCreate } : {}),
   });
 
   if (input.role === "student") {
@@ -259,6 +282,7 @@ export type AdminUpdateUserInput = {
   grade?: string;
   preferredLanguage?: "ar" | "en";
   profilePhoto?: string | null;
+  staffScope?: StaffScopePayload | null;
 };
 
 export const adminUpdateUser = async (
@@ -338,12 +362,33 @@ export const adminUpdateUser = async (
     $set.profilePhoto = input.profilePhoto && input.profilePhoto.trim() ? input.profilePhoto.trim() : undefined;
   }
 
-  if (Object.keys($set).length === 0) {
+  const $unset: Record<string, 1> = {};
+  const nextRole = String(input.role !== undefined ? input.role : ex.role || "student");
+
+  if (nextRole === "student") {
+    $unset.staffScope = 1;
+  } else if (input.staffScope !== undefined) {
+    if (!roleSupportsStaffScopeStorage(nextRole)) {
+      $unset.staffScope = 1;
+    } else if (input.staffScope === null) {
+      $unset.staffScope = 1;
+    } else {
+      const n = normalizeStaffScopeInput(input.staffScope);
+      if (!n) $unset.staffScope = 1;
+      else $set.staffScope = n;
+    }
+  }
+
+  const updatePayload: mongoose.UpdateQuery<IUser> = {};
+  if (Object.keys($set).length > 0) updatePayload.$set = $set;
+  if (Object.keys($unset).length > 0) updatePayload.$unset = $unset;
+
+  if (!updatePayload.$set && !updatePayload.$unset) {
     const u = await User.findById(id).select(LIST_FIELDS).lean();
     return serializeAdminUserRow(u as unknown as Record<string, unknown>);
   }
 
-  await User.updateOne({ _id: id }, { $set });
+  await User.updateOne({ _id: id }, updatePayload);
   if (input.role !== undefined) {
     queueHomeStatsRefresh();
   }

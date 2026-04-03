@@ -1,6 +1,8 @@
 import { normalizeAttachmentsArray, type AchievementAttachmentObject } from "@/lib/achievement-attachments";
 import { sanitizeMongoShape } from "@/lib/sanitize-input";
 import { sanitizeUserText } from "@/lib/sanitize-html";
+import { QUDRAT_TIER_ALLOWED_VALUES } from "@/constants/achievement-options";
+import { normalizeLegacyQudratAchievementName } from "@/lib/achievementNormalize";
 
 export type NormalizedPayload = {
   achievementType: string;
@@ -87,7 +89,16 @@ export const normalizeAchievementPayload = (rawBody: Record<string, unknown>): N
     resultType = "participation";
     participationType = "individual";
     if (String(body.achievementName || "").trim()) {
-      achievementName = String(body.achievementName || "").trim();
+      achievementName = normalizeLegacyQudratAchievementName(String(body.achievementName || "").trim());
+    }
+  }
+
+  if (achievementType === "sat" || achievementType === "ielts" || achievementType === "toefl") {
+    achievementLevel = "international";
+    resultType = "score";
+    participationType = "individual";
+    if (!achievementName.trim()) {
+      achievementName = achievementType;
     }
   }
 
@@ -190,8 +201,8 @@ export const validateNormalizedPayload = (payload: NormalizedPayload): string[] 
   }
 
   if (payload.achievementType === "gifted_discovery") {
-    if (!payload.giftedDiscoveryScore || payload.giftedDiscoveryScore < 1600) {
-      errors.push("Gifted discovery score must be at least 1600");
+    if (!payload.giftedDiscoveryScore || payload.giftedDiscoveryScore <= 1600) {
+      errors.push("Gifted discovery score must be greater than 1600");
     }
   }
 
@@ -202,9 +213,21 @@ export const validateNormalizedPayload = (payload: NormalizedPayload): string[] 
 
   if (
     payload.achievementType === "qudrat" &&
-    !["qudrat_100", "qudrat_99", "qudrat_98"].includes(payload.achievementName)
+    !(QUDRAT_TIER_ALLOWED_VALUES as readonly string[]).includes(payload.achievementName)
   ) {
-    errors.push("Qudrat achievement name must be qudrat_100, qudrat_99, or qudrat_98");
+    errors.push(
+      "Qudrat tier must be one of: qudrat_95 … qudrat_100"
+    );
+  }
+
+  if (
+    payload.achievementType === "sat" ||
+    payload.achievementType === "ielts" ||
+    payload.achievementType === "toefl"
+  ) {
+    if (!String(payload.resultValue || "").trim()) {
+      errors.push("Test score (result value) is required for SAT / IELTS / TOEFL");
+    }
   }
 
   if (payload.resultType === "medal" && !payload.medalType) errors.push("Medal type is required for medal result");

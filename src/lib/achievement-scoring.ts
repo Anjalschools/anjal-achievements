@@ -198,6 +198,7 @@ export const qudratAchievementNameToMedalType = (
   if (n === "qudrat_100") return "gold";
   if (n === "qudrat_99") return "silver";
   if (n === "qudrat_98") return "bronze";
+  if (n === "qudrat_97" || n === "qudrat_96" || n === "qudrat_95") return "bronze";
   return null;
 };
 
@@ -282,7 +283,7 @@ export function calculateAchievementScore(input: CalculateScoreInput): Achieveme
 
   if (input.achievementType === "qudrat" && !qudratTierMedal) {
     validationErrors.push(
-      "Qudrat tier is required for scoring (100%, 99%, or 98%)"
+      "Qudrat tier is required for scoring (95% through 100%)"
     );
     return {
       score: 0,
