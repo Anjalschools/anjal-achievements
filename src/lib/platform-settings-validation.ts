@@ -30,15 +30,28 @@ const extractIframeSrc = (raw: string): string | null => {
   return m?.[1]?.trim() || null;
 };
 
-const sanitizeMapEmbedInput = (raw: string): string => {
-  const trimmed = raw.trim();
-  if (!trimmed) return "";
-  if (/<iframe/i.test(trimmed)) {
-    const src = extractIframeSrc(trimmed);
-    return src || "";
+/**
+ * Normalizes map embed field: iframe markup, stray `src="…"`, or paste where the URL is
+ * followed by `" width="600"` (common when copying Google's embed snippet without the opening tag).
+ */
+export const normalizeMapEmbedUrl = (raw: string): string => {
+  let t = raw.trim();
+  if (!t) return "";
+  if (/<iframe/i.test(t)) {
+    t = extractIframeSrc(t) || "";
+  } else {
+    const srcAttr = t.match(/^\s*src\s*=\s*["']([^"']+)["']/i);
+    if (srcAttr?.[1]) t = srcAttr[1].trim();
   }
-  return trimmed;
+  if (!t) return "";
+  const q = t.indexOf('"');
+  if (q > 0 && /^https?:\/\//i.test(t)) {
+    t = t.slice(0, q).trim();
+  }
+  return t;
 };
+
+const sanitizeMapEmbedInput = (raw: string): string => normalizeMapEmbedUrl(raw);
 
 const isValidMapEmbedUrl = (raw: string): boolean => {
   const v = raw.trim();
@@ -154,9 +167,9 @@ export const validatePlatformSettingsPatch = (
       return {
         ok: false,
         messageAr:
-          "رابط تضمين الخريطة غير صالح. استخدم Google Maps Embed URL فقط (رابط src وليس iframe كامل).",
+          "رابط تضمين الخريطة غير صالح. استخدم رابط التضمين من Google (https://www.google.com/maps/embed?…). يمكن لصق كود iframe كاملاً؛ يتم استخراج الرابط بأمان.",
         messageEn:
-          "Invalid map embed URL. Use a Google Maps embed src URL only (not a full iframe).",
+          "Invalid map embed URL. Use a Google Maps embed link (https://www.google.com/maps/embed?…). You may paste the full iframe; we extract src safely.",
       };
     }
   }

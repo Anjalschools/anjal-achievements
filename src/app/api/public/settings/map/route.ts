@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getPlatformSettings } from "@/lib/platform-settings-service";
+import { normalizeMapEmbedUrl } from "@/lib/platform-settings-validation";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -8,7 +9,7 @@ export async function GET() {
   try {
     const settings = await getPlatformSettings();
     const branding = (settings.branding || {}) as Record<string, unknown>;
-    const mapEmbedUrl = String(branding.mapEmbedUrl || "").trim();
+    const mapEmbedUrl = normalizeMapEmbedUrl(String(branding.mapEmbedUrl || ""));
     const mapTitleAr = String(branding.mapTitleAr || branding.mapTitle || "").trim();
     const mapTitleEn = String(branding.mapTitleEn || branding.mapTitle || "").trim();
     const mapLocationLabelAr = String(branding.mapLocationLabelAr || branding.contactAddressAr || "").trim();

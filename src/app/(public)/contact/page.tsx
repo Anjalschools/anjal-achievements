@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Loader2, Mail, MapPin, Phone } from "lucide-react";
 import { getLocale } from "@/lib/i18n";
+import { normalizeMapEmbedUrl } from "@/lib/platform-settings-validation";
 
 type InquiryType = "general" | "achievements" | "activities" | "judging" | "technical";
 
@@ -167,7 +168,8 @@ export default function ContactPage() {
     (isAr ? contactSettings?.mapTitleAr : contactSettings?.mapTitleEn)?.trim() ||
     (isAr ? "خريطة مدارس الأنجال" : "Al Anjal map");
   const mapSrc =
-    contactSettings?.mapEmbedUrl?.trim() || "https://www.google.com/maps?q=Riyadh&output=embed";
+    normalizeMapEmbedUrl(contactSettings?.mapEmbedUrl?.trim() || "") ||
+    "https://www.google.com/maps?q=Riyadh&output=embed";
   const mapLocationLabel =
     (isAr ? contactSettings?.mapLocationLabelAr : contactSettings?.mapLocationLabelEn)?.trim() ||
     addressText;

@@ -41,6 +41,15 @@ function buildCoreCspDirectives(nonce: string, options: BuildCspOptions): string
    */
   const styleDirectives = ["'self'", "'unsafe-inline'"];
 
+  /** Google Maps embed (contact page iframe): explicit hosts; paths like /maps are not CSP sources. */
+  const frameSrcDirectives = [
+    "'self'",
+    "https://www.google.com",
+    "https://maps.google.com",
+    "https://maps.gstatic.com",
+    "https://*.googleusercontent.com",
+  ];
+
   return [
     "default-src 'self'",
     `script-src ${scriptDirectives.join(" ")}`,
@@ -48,6 +57,7 @@ function buildCoreCspDirectives(nonce: string, options: BuildCspOptions): string
     "img-src 'self' data: https:",
     "connect-src 'self'",
     "font-src 'self' data: https:",
+    `frame-src ${frameSrcDirectives.join(" ")}`,
     "object-src 'none'",
     "frame-ancestors 'self'",
     "base-uri 'self'",
