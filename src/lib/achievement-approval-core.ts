@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 import type { ReviewerUser } from "@/lib/review-auth";
 import { applyDefaultShowInPublicPortfolioWhenPublished } from "@/lib/achievement-public-portfolio-policy";
 import { calculateAchievementScore } from "@/lib/achievement-scoring";
+import type { ScoringConfig } from "@/constants/default-scoring";
 
 export type CertificatePartyStamp = "fromRole" | "principal" | "activitySupervisor" | "judge";
 
@@ -67,7 +68,8 @@ export const applyAchievementPlatformApproval = (
   gate: { user: ReviewerUser },
   now: Date,
   body: { reviewNote?: string },
-  party: CertificatePartyStamp
+  party: CertificatePartyStamp,
+  options?: { scoringConfig?: ScoringConfig }
 ): void => {
   doc.set("pendingReReview", false);
   doc.set("previousApprovedSnapshot", undefined);
@@ -97,6 +99,7 @@ export const applyAchievementPlatformApproval = (
     participationType: String(doc.get("participationType") || "") || undefined,
     // Final admin approval must release points eligibility.
     requiresCommitteeReview: false,
+    scoringConfig: options?.scoringConfig,
   });
   if (scoreResult.isEligible && scoreResult.score > 0) {
     doc.set("score", scoreResult.score);

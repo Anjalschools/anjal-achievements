@@ -17,6 +17,7 @@ import {
 import {
   getDisplayLabel,
   labelEvidenceMode,
+  labelRank,
   labelResultType,
   labelVerificationStatus,
 } from "@/lib/achievementDisplay";
@@ -88,6 +89,10 @@ export const humanizeRawKeyForDisplay = (value: unknown, locale: DisplayLabelLoc
   const s = asStr(value);
   if (!s) return locale === "ar" ? "غير محدد" : "Not specified";
   const k = normKey(s);
+  if (/^(first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth)$/.test(k)) {
+    const place = labelRank(k, locale);
+    if (place && place !== "—") return place;
+  }
   const ev = getAchievementEventOrSlugLabel(s, locale);
   if (ev && ev !== "—" && normKey(ev) !== k) return ev;
   const d = getDisplayLabel(s, locale);

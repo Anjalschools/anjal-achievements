@@ -4,6 +4,7 @@ import mongoose from "mongoose";
 import Achievement from "@/models/Achievement";
 import { requireAchievementReviewerForAchievementId } from "@/lib/review-auth";
 import { applyAchievementPlatformApproval } from "@/lib/achievement-approval-core";
+import { getScoringConfig } from "@/lib/getScoringConfig";
 import { tryIssueCertificateForAchievementDoc } from "@/lib/certificate-issue";
 
 export const dynamic = "force-dynamic";
@@ -33,7 +34,8 @@ export async function PATCH(_request: NextRequest, { params }: RouteParams) {
     const alreadyApproved = String(doc.status) === "approved";
 
     if (!alreadyApproved) {
-      applyAchievementPlatformApproval(doc, gate, now, {}, "principal");
+      const scoringConfig = await getScoringConfig();
+      applyAchievementPlatformApproval(doc, gate, now, {}, "principal", { scoringConfig });
     } else {
       doc.set("principalApprovedAt", now);
       doc.set("principalApprovedBy", gate.user._id);

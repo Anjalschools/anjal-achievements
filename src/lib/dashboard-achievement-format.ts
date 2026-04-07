@@ -18,6 +18,8 @@ import {
   resolveCertificateUiStatus,
   type AchievementCertificateLike,
 } from "@/lib/certificate-eligibility";
+import type { ScoringConfig } from "@/constants/default-scoring";
+import { resolveAchievementScoreExplanation } from "@/lib/achievement-score-explain";
 
 const safeTrim = (v: unknown) => String(v ?? "").trim();
 
@@ -33,6 +35,7 @@ export type DashboardAchievementSummary = {
   participationLabel: string;
   yearLabel: string;
   scoreLabel: string;
+  scoreExplanation: ReturnType<typeof resolveAchievementScoreExplanation>;
 };
 
 export type DashboardAchievementRow = {
@@ -67,7 +70,8 @@ const toInput = (a: Record<string, unknown>) => ({
 
 export const formatAchievementForDashboard = (
   a: Record<string, unknown>,
-  loc: AchievementLabelLocale
+  loc: AchievementLabelLocale,
+  scoringConfig?: ScoringConfig
 ): DashboardAchievementRow | null => {
   const id = String((a._id as { toString?: () => string } | undefined)?.toString?.() ?? a.id ?? "");
   if (!id || id === "undefined") return null;
@@ -148,6 +152,8 @@ export const formatAchievementForDashboard = (
       ? "غير محدد"
       : "Not specified";
 
+  const scoreExplanation = resolveAchievementScoreExplanation(a, displayLoc, scoringConfig);
+
   const summary: DashboardAchievementSummary = {
     levelKey,
     medalType: String(a.medalType || ""),
@@ -160,6 +166,7 @@ export const formatAchievementForDashboard = (
     participationLabel,
     yearLabel,
     scoreLabel,
+    scoreExplanation,
   };
 
   return {

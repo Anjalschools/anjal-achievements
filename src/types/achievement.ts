@@ -104,18 +104,32 @@ export interface AchievementFieldInference {
   sourceType: "competition" | "program" | "exhibition" | "olympiad" | "excellence_program" | "mawhiba" | "gifted_discovery" | "other";
 }
 
+export type AchievementScoreRoundingMode = "round";
+
+export interface AchievementScoreBreakdown {
+  baseScore: number;
+  levelMultiplier: number;
+  /**
+   * Historical name in DB: team factor when `participationType === "team"`, else 1.
+   * Prefer `teamFactor` in new code; both are set to the same value.
+   */
+  resultMultiplier: number;
+  teamFactor: number;
+  typeBonus: number;
+  bonusPoints: number;
+  /** Value before Math.round (for transparent display). */
+  preRoundedTotal: number;
+  total: number;
+  roundingMode: AchievementScoreRoundingMode;
+  /** e.g. medal:silver:international, rank:third:national, participation:national */
+  matchedRuleKey?: string;
+  normalizedLevel?: "school" | "province" | "national" | "international";
+  effectiveResultType?: string;
+}
+
 export interface AchievementScoreResult {
   score: number;
-  scoreBreakdown: {
-    baseScore: number;
-    levelMultiplier: number;
-    resultMultiplier: number;
-    typeBonus?: number;
-    total: number;
-    /** Set by scoring engine when level/result were normalized */
-    normalizedLevel?: "school" | "province" | "national" | "international";
-    effectiveResultType?: string;
-  };
+  scoreBreakdown: AchievementScoreBreakdown;
   isEligible: boolean;
   validationErrors: string[];
 }

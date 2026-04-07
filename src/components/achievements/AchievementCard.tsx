@@ -1,4 +1,4 @@
-import { useState, type MouseEvent } from "react";
+import { useMemo, useState, type MouseEvent } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { Award, Pencil, ScrollText, Trash2 } from "lucide-react";
@@ -22,6 +22,8 @@ import {
 import AchievementStatusBadge from "@/components/achievements/AchievementStatusBadge";
 import StudentAchievementDataRows from "@/components/achievements/StudentAchievementDataRows";
 import type { WorkflowDisplayStatus } from "@/lib/achievementWorkflow";
+import { useScoringConfig } from "@/hooks/useScoringConfig";
+import { resolveAchievementScoreExplanation } from "@/lib/achievement-score-explain";
 
 type AchievementCardProps = {
   id: string;
@@ -37,6 +39,7 @@ type AchievementCardProps = {
   achievementType?: string;
   achievementLevel?: string;
   score?: number;
+  scoreBreakdown?: unknown;
   resultType?: string;
   resultValue?: string;
   medalType?: string;
@@ -71,6 +74,7 @@ const AchievementCard = ({
   achievementType,
   achievementLevel,
   score,
+  scoreBreakdown,
   resultType,
   resultValue,
   medalType,
@@ -94,6 +98,41 @@ const AchievementCard = ({
   const locale = getLocale();
   const loc = locale === "ar" ? "ar" : "en";
   const [imageError, setImageError] = useState(false);
+  const scoringCfg = useScoringConfig();
+
+  const scoreRecord = useMemo(
+    () =>
+      ({
+        achievementType,
+        achievementLevel,
+        resultType,
+        achievementName: achievementName || title,
+        medalType,
+        rank,
+        participationType,
+        score,
+        scoreBreakdown,
+        requiresCommitteeReview: false,
+      }) as Record<string, unknown>,
+    [
+      achievementType,
+      achievementLevel,
+      resultType,
+      achievementName,
+      title,
+      medalType,
+      rank,
+      participationType,
+      score,
+      scoreBreakdown,
+    ]
+  );
+
+  const scoreExplanation = useMemo(
+    () =>
+      scoringCfg ? resolveAchievementScoreExplanation(scoreRecord, loc, scoringCfg) : null,
+    [scoringCfg, scoreRecord, loc]
+  );
 
   const handleDeleteClick = (e: MouseEvent<HTMLButtonElement>) => {
     e.preventDefault();
@@ -257,6 +296,7 @@ const AchievementCard = ({
             participationLabel: participationDisplay,
             yearLabel,
             scoreLabel,
+            scoreExplanation: scoreExplanation ?? undefined,
           }}
         />
 

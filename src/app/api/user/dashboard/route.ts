@@ -6,6 +6,7 @@ import { achievementOwnerUserIdFilter } from "@/lib/achievement-student-scope";
 import { countsTowardApprovedScore, resolveWorkflowDisplayStatus } from "@/lib/achievementWorkflow";
 import { canStudentViewCertificate } from "@/lib/certificate-eligibility";
 import { formatAchievementForDashboard } from "@/lib/dashboard-achievement-format";
+import { getScoringConfig } from "@/lib/getScoringConfig";
 import type { AchievementLabelLocale } from "@/lib/achievement-labels";
 import { perfElapsed, perfLog, perfNow } from "@/lib/perf-debug";
 
@@ -30,6 +31,7 @@ export async function GET(request: NextRequest) {
     }
 
     const loc = parseLocale(request);
+    const scoringConfig = await getScoringConfig();
 
     const tAch = perfNow();
     const achievements = await Achievement.find(achievementOwnerUserIdFilter(user._id))
@@ -37,7 +39,12 @@ export async function GET(request: NextRequest) {
         [
           "featured",
           "score",
+          "scoreBreakdown",
           "resultType",
+          "medalType",
+          "rank",
+          "participationType",
+          "requiresCommitteeReview",
           "createdAt",
           "date",
           "achievementYear",
@@ -51,6 +58,7 @@ export async function GET(request: NextRequest) {
           "nameAr",
           "nameEn",
           "title",
+          "titleAr",
           "achievementName",
           "customAchievementName",
           "inferredField",
@@ -58,6 +66,7 @@ export async function GET(request: NextRequest) {
           "olympiadMeeting",
           "programName",
           "competitionName",
+          "resultValue",
           "verificationStatus",
           "approvalStatus",
           "pendingReReview",
@@ -122,11 +131,11 @@ export async function GET(request: NextRequest) {
 
     const recentAchievements = sortedForRecent
       .slice(0, 3)
-      .map((a) => formatAchievementForDashboard(a, loc))
+      .map((a) => formatAchievementForDashboard(a, loc, scoringConfig))
       .filter((x): x is NonNullable<typeof x> => Boolean(x));
 
     const last = sortedForRecent[0];
-    const lastFormatted = last ? formatAchievementForDashboard(last, loc) : null;
+    const lastFormatted = last ? formatAchievementForDashboard(last, loc, scoringConfig) : null;
 
     perfLog("page:dashboard:data=ok", { totalAchievements, points });
 

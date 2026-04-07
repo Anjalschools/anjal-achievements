@@ -16,6 +16,7 @@ type Achievement = {
   achievementType?: string;
   achievementLevel?: string;
   score?: number;
+  scoreBreakdown?: unknown;
   resultType?: string;
   resultValue?: string;
   medalType?: string;

@@ -2,6 +2,8 @@
 
 import type { LucideIcon } from "lucide-react";
 import { Brain, Calendar, Globe, Medal, Star, Tag, Trophy, Users } from "lucide-react";
+import type { AchievementScoreExplanation } from "@/lib/achievement-score-explain";
+import AchievementScoreDetail from "@/components/achievements/AchievementScoreDetail";
 
 export const studentAchievementLevelBadgeClass = (levelKey: string): string => {
   const k = String(levelKey || "").trim().toLowerCase();
@@ -43,6 +45,8 @@ export type StudentAchievementSummaryContent = {
   participationLabel: string;
   yearLabel: string;
   scoreLabel: string;
+  /** Optional transparent score breakdown (same shape server- or client-derived). */
+  scoreExplanation?: AchievementScoreExplanation | null;
 };
 
 type DataRowProps = { icon: LucideIcon; label: string; value: string; compact?: boolean };
@@ -174,6 +178,9 @@ const StudentAchievementDataRows = ({
         value={content.scoreLabel}
         compact={compact}
       />
+      {content.scoreExplanation ? (
+        <AchievementScoreDetail locale={locale} explanation={content.scoreExplanation} />
+      ) : null}
     </div>
   );
 };

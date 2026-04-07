@@ -7,6 +7,7 @@ import { achievementDisplayTitle, createStudentNotification } from "@/lib/studen
 import { inferAchievementField } from "@/lib/achievement-field-inference";
 import { clampInferredFieldToAllowlist } from "@/lib/achievement-inferred-field-allowlist";
 import { calculateAchievementScore } from "@/lib/achievement-scoring";
+import { getScoringConfig } from "@/lib/getScoringConfig";
 import { buildStudentAchievementDetailPayload } from "@/lib/achievement-detail-response";
 import { jsonInternalServerError } from "@/lib/api-safe-response";
 import { scheduleAchievementAttachmentAiReviewAfterMutation } from "@/lib/achievement-attachment-ai-review-runner";
@@ -154,6 +155,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       (ex.evidenceRequiredMode as string) === "skipped" ? "skipped" : "provided";
     const requiresCommitteeReview = evidenceRequiredMode === "skipped";
 
+    const scoringConfig = await getScoringConfig();
     const scoreResult = calculateAchievementScore({
       achievementType: mergedType,
       achievementLevel,
@@ -163,6 +165,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       rank: String(mergedState.rank ?? "") || undefined,
       participationType,
       requiresCommitteeReview,
+      scoringConfig,
     });
     $set.score = scoreResult.score;
     $set.scoreBreakdown = scoreResult.scoreBreakdown;

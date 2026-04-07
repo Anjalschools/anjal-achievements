@@ -10,6 +10,7 @@ import {
 import { achievementDisplayTitle, createStudentNotification } from "@/lib/student-notifications";
 import { tryIssueCertificateForAchievementDoc } from "@/lib/certificate-issue";
 import { normalizeAchievementAdminMongooseDoc } from "@/lib/achievement-admin-normalize";
+import { getScoringConfig } from "@/lib/getScoringConfig";
 
 export const dynamic = "force-dynamic";
 
@@ -49,7 +50,8 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     console.info("[approve:after-normalize]", snap());
 
     const now = new Date();
-    applyAchievementPlatformApproval(doc, gate, now, body, "fromRole");
+    const scoringConfig = await getScoringConfig();
+    applyAchievementPlatformApproval(doc, gate, now, body, "fromRole", { scoringConfig });
 
     console.info("[approve:before-save]", snap());
     await doc.save();

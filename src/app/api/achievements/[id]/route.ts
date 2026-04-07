@@ -16,6 +16,7 @@ import {
   resolveComparableAchievementNameForDuplicate,
 } from "@/lib/achievement-duplicate";
 import { calculateAchievementScore } from "@/lib/achievement-scoring";
+import { getScoringConfig } from "@/lib/getScoringConfig";
 import { isStudentDeleteLocked, isStudentEditLocked } from "@/lib/achievementWorkflow";
 import {
   diffSnapshotChangedKeys,
@@ -254,6 +255,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     const inferredFieldOverride = clampInferredFieldToAllowlist(body.inferredField);
     const resolvedInferredField = inferredFieldOverride || fieldInference.field;
 
+    const scoringConfig = await getScoringConfig();
     const scoreResult = calculateAchievementScore({
       achievementType,
       achievementLevel,
@@ -263,6 +265,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       rank: String(body.rank || existing.rank || "") || undefined,
       participationType,
       requiresCommitteeReview,
+      scoringConfig,
     });
 
     const now = new Date();

@@ -1,9 +1,11 @@
 /**
  * Achievement Auto-Scoring — single source of truth.
- * Points scale by (1) normalized level and (2) result kind (participation vs competitive outcomes).
+ * Points: round(basePoints × levelMultiplier × teamFactor + bonus)
+ * Uses platform ScoringConfig when provided; otherwise DEFAULT_SCORING_CONFIG (backward-compatible).
  */
 
-import type { AchievementScoreResult } from "@/types/achievement";
+import type { AchievementScoreBreakdown, AchievementScoreResult } from "@/types/achievement";
+import { DEFAULT_SCORING_CONFIG, type ScoringConfig } from "@/constants/default-scoring";
 
 /** Internal tier order: school < province < national < international */
 export type ScoringLevelKey = "school" | "province" | "national" | "international";
@@ -12,6 +14,19 @@ const LEVEL_ORDER: ScoringLevelKey[] = ["school", "province", "national", "inter
 
 const isScoringLevelKey = (v: string): v is ScoringLevelKey =>
   (LEVEL_ORDER as string[]).includes(v);
+
+const emptyBreakdown = (partial?: Partial<AchievementScoreBreakdown>): AchievementScoreBreakdown => ({
+  baseScore: 0,
+  levelMultiplier: 1,
+  resultMultiplier: 1,
+  teamFactor: 1,
+  typeBonus: 0,
+  bonusPoints: 0,
+  preRoundedTotal: 0,
+  total: 0,
+  roundingMode: "round",
+  ...partial,
+});
 
 /**
  * Maps DB/UI labels (EN/AR/legacy) to the four scoring tiers. Does not mutate stored values.
@@ -66,7 +81,6 @@ export const normalizeAchievementLevelForScoring = (raw: string): ScoringLevelKe
   if (isScoringLevelKey(s)) return s;
   if (aliases[s]) return aliases[s];
 
-  // Fuzzy contains (legacy free text)
   if (/(international|global|world|عالمي|دولي)/i.test(raw)) return "international";
   if (/(kingdom|national|وطني|المملكة|ksa)/i.test(raw)) return "national";
   if (/(province|governorate|district|regional|محافظة|إدارة|ادارة)/i.test(raw)) return "province";
@@ -112,10 +126,6 @@ export const normalizeResultTypeForScoring = (raw: string): string => {
   return map[t] || t;
 };
 
-/**
- * If stored as "participation" but structured fields indicate a competitive outcome, use the stronger kind.
- * (Structured fields only — avoids mis-scoring when free text mentions medals without a subtype.)
- */
 const resolveEffectiveResultType = (input: CalculateScoreInput): string => {
   const t = normalizeResultTypeForScoring(input.resultType);
 
@@ -126,66 +136,6 @@ const resolveEffectiveResultType = (input: CalculateScoreInput): string => {
   if (t === "participation" && hasRank) return "rank";
 
   return t;
-};
-
-/** Participation-only: must differ by level (strictly increasing) */
-const PARTICIPATION: Record<ScoringLevelKey, number> = {
-  school: 4,
-  province: 8,
-  national: 16,
-  international: 32,
-};
-
-const RECOGNITION: Record<ScoringLevelKey, number> = {
-  school: 6,
-  province: 12,
-  national: 24,
-  international: 48,
-};
-
-const OTHER: Record<ScoringLevelKey, number> = {
-  school: 5,
-  province: 10,
-  national: 20,
-  international: 40,
-};
-
-const NOMINATION: Record<ScoringLevelKey, number> = {
-  school: 12,
-  province: 24,
-  national: 48,
-  international: 96,
-};
-
-const SPECIAL_AWARD: Record<ScoringLevelKey, number> = {
-  school: 24,
-  province: 48,
-  national: 96,
-  international: 192,
-};
-
-const MEDAL: {
-  gold: Record<ScoringLevelKey, number>;
-  silver: Record<ScoringLevelKey, number>;
-  bronze: Record<ScoringLevelKey, number>;
-} = {
-  /** School-tier medals stay below international plain participation (32) */
-  gold: { school: 28, province: 64, national: 128, international: 256 },
-  silver: { school: 24, province: 48, national: 96, international: 192 },
-  bronze: { school: 18, province: 36, national: 72, international: 144 },
-};
-
-const RANK: Record<string, Record<ScoringLevelKey, number>> = {
-  first: { school: 40, province: 80, national: 160, international: 320 },
-  second: { school: 32, province: 64, national: 128, international: 256 },
-  third: { school: 24, province: 48, national: 96, international: 192 },
-  fourth: { school: 20, province: 40, national: 80, international: 160 },
-  fifth: { school: 16, province: 32, national: 64, international: 128 },
-  sixth: { school: 14, province: 28, national: 56, international: 112 },
-  seventh: { school: 12, province: 24, national: 48, international: 96 },
-  eighth: { school: 10, province: 20, national: 40, international: 80 },
-  ninth: { school: 8, province: 16, national: 32, international: 64 },
-  tenth: { school: 6, province: 12, national: 24, international: 48 },
 };
 
 /** Qudrat tier keys (form / DB achievementName) → medal tier at national (kingdom) level */
@@ -206,33 +156,117 @@ export interface CalculateScoreInput {
   achievementType: string;
   achievementLevel: string;
   resultType: string;
-  /** Used for Qudrat: qudrat_100 / qudrat_99 / qudrat_98 → kingdom medal-equivalent points */
   achievementName?: string;
   medalType?: string;
   rank?: string;
   participationType?: string;
   requiresCommitteeReview?: boolean;
+  /** When omitted, DEFAULT_SCORING_CONFIG is used (same numeric results as legacy hardcoded tables). */
+  scoringConfig?: ScoringConfig;
 }
+
+type BaseRuleResult = { baseScore: number; matchedRuleKey?: string };
+
+const resolveBaseScore = (
+  cfg: ScoringConfig,
+  effectiveResultType: string,
+  normalizedLevel: ScoringLevelKey,
+  input: CalculateScoreInput,
+  qudratTierMedal: "gold" | "silver" | "bronze" | null,
+  validationErrors: string[]
+): BaseRuleResult => {
+  switch (effectiveResultType) {
+    case "participation":
+      return {
+        baseScore: cfg.participation[normalizedLevel],
+        matchedRuleKey: `participation:${normalizedLevel}`,
+      };
+
+    case "medal": {
+      const mt = String(qudratTierMedal || input.medalType || "")
+        .trim()
+        .toLowerCase();
+      if (!mt) {
+        validationErrors.push("Medal type is required for medal result");
+        return { baseScore: 0 };
+      }
+      const medalRow = cfg.medal[mt as keyof typeof cfg.medal];
+      const levelForMedal: ScoringLevelKey = qudratTierMedal ? "national" : normalizedLevel;
+      if (!medalRow) {
+        validationErrors.push("Invalid medal type");
+        return { baseScore: 0 };
+      }
+      return {
+        baseScore: medalRow[levelForMedal],
+        matchedRuleKey: `medal:${mt}:${levelForMedal}`,
+      };
+    }
+
+    case "rank": {
+      const rk = String(input.rank || "").trim().toLowerCase();
+      if (!rk) {
+        validationErrors.push("Rank is required for rank result");
+        return { baseScore: 0 };
+      }
+      const rankRow = cfg.rank[rk as keyof typeof cfg.rank];
+      if (!rankRow) {
+        validationErrors.push("Invalid rank value");
+        return { baseScore: 0 };
+      }
+      return {
+        baseScore: rankRow[normalizedLevel],
+        matchedRuleKey: `rank:${rk}:${normalizedLevel}`,
+      };
+    }
+
+    case "nomination":
+      return {
+        baseScore: cfg.nomination[normalizedLevel],
+        matchedRuleKey: `nomination:${normalizedLevel}`,
+      };
+
+    case "special_award":
+      return {
+        baseScore: cfg.specialAward[normalizedLevel],
+        matchedRuleKey: `special_award:${normalizedLevel}`,
+      };
+
+    case "recognition":
+      return {
+        baseScore: cfg.recognition[normalizedLevel],
+        matchedRuleKey: `recognition:${normalizedLevel}`,
+      };
+
+    case "other":
+      return {
+        baseScore: cfg.other[normalizedLevel],
+        matchedRuleKey: `other:${normalizedLevel}`,
+      };
+
+    case "score":
+    case "completion":
+      return {
+        baseScore: cfg.participation[normalizedLevel],
+        matchedRuleKey: `participation_as_score:${normalizedLevel}`,
+      };
+
+    default:
+      validationErrors.push(`Unknown result type: ${input.resultType}`);
+      return { baseScore: 0 };
+  }
+};
 
 export function calculateAchievementScore(input: CalculateScoreInput): AchievementScoreResult {
   const validationErrors: string[] = [];
-  let baseScore = 0;
-  let levelMultiplier = 1;
-  let resultMultiplier = 1;
-  const typeBonus = 0;
+  const cfg = input.scoringConfig ?? DEFAULT_SCORING_CONFIG;
 
   if (input.requiresCommitteeReview) {
     return {
       score: 0,
-      scoreBreakdown: {
-        baseScore: 0,
-        levelMultiplier: 1,
-        resultMultiplier: 1,
-        typeBonus: 0,
-        total: 0,
+      scoreBreakdown: emptyBreakdown({
         normalizedLevel: undefined,
         effectiveResultType: undefined,
-      },
+      }),
       isEligible: true,
       validationErrors: [],
     };
@@ -245,14 +279,7 @@ export function calculateAchievementScore(input: CalculateScoreInput): Achieveme
   if (validationErrors.length > 0) {
     return {
       score: 0,
-      scoreBreakdown: {
-        baseScore: 0,
-        levelMultiplier: 1,
-        resultMultiplier: 1,
-        total: 0,
-        normalizedLevel: undefined,
-        effectiveResultType: undefined,
-      },
+      scoreBreakdown: emptyBreakdown(),
       isEligible: false,
       validationErrors,
     };
@@ -263,14 +290,7 @@ export function calculateAchievementScore(input: CalculateScoreInput): Achieveme
     validationErrors.push("Unknown or unsupported achievement level");
     return {
       score: 0,
-      scoreBreakdown: {
-        baseScore: 0,
-        levelMultiplier: 1,
-        resultMultiplier: 1,
-        total: 0,
-        normalizedLevel: undefined,
-        effectiveResultType: undefined,
-      },
+      scoreBreakdown: emptyBreakdown(),
       isEligible: false,
       validationErrors,
     };
@@ -282,20 +302,13 @@ export function calculateAchievementScore(input: CalculateScoreInput): Achieveme
       : null;
 
   if (input.achievementType === "qudrat" && !qudratTierMedal) {
-    validationErrors.push(
-      "Qudrat tier is required for scoring (95% through 100%)"
-    );
+    validationErrors.push("Qudrat tier is required for scoring (95% through 100%)");
     return {
       score: 0,
-      scoreBreakdown: {
-        baseScore: 0,
-        levelMultiplier: 1,
-        resultMultiplier: 1,
-        typeBonus: 0,
-        total: 0,
+      scoreBreakdown: emptyBreakdown({
         normalizedLevel,
         effectiveResultType: undefined,
-      },
+      }),
       isEligible: false,
       validationErrors,
     };
@@ -306,82 +319,42 @@ export function calculateAchievementScore(input: CalculateScoreInput): Achieveme
     effectiveResultType = "medal";
   }
 
-  if (input.participationType === "team") {
-    resultMultiplier = 0.8;
-  }
+  const levelMultiplier = cfg.levelMultipliers[normalizedLevel] ?? 1;
+  const teamFactor = input.participationType === "team" ? cfg.teamResultMultiplier : 1;
+  const typeBonus = Number(cfg.typeBonus) || 0;
 
-  switch (effectiveResultType) {
-    case "participation":
-      baseScore = PARTICIPATION[normalizedLevel];
-      break;
+  const { baseScore, matchedRuleKey } = resolveBaseScore(
+    cfg,
+    effectiveResultType,
+    normalizedLevel,
+    input,
+    qudratTierMedal,
+    validationErrors
+  );
 
-    case "medal": {
-      const mt = String(qudratTierMedal || input.medalType || "")
-        .trim()
-        .toLowerCase();
-      if (!mt) {
-        validationErrors.push("Medal type is required for medal result");
-        break;
-      }
-      const medalRow = MEDAL[mt as keyof typeof MEDAL];
-      const levelForMedal: ScoringLevelKey = qudratTierMedal ? "national" : normalizedLevel;
-      if (medalRow) baseScore = medalRow[levelForMedal];
-      else validationErrors.push("Invalid medal type");
-      break;
-    }
+  const preRoundedTotal = baseScore * levelMultiplier * teamFactor + typeBonus;
+  const score = Math.round(preRoundedTotal);
 
-    case "rank": {
-      const rk = String(input.rank || "").trim().toLowerCase();
-      if (!rk) {
-        validationErrors.push("Rank is required for rank result");
-        break;
-      }
-      const rankRow = RANK[rk];
-      if (rankRow) baseScore = rankRow[normalizedLevel];
-      else validationErrors.push("Invalid rank value");
-      break;
-    }
-
-    case "nomination":
-      baseScore = NOMINATION[normalizedLevel];
-      break;
-
-    case "special_award":
-      baseScore = SPECIAL_AWARD[normalizedLevel];
-      break;
-
-    case "recognition":
-      baseScore = RECOGNITION[normalizedLevel];
-      break;
-
-    case "other":
-      baseScore = OTHER[normalizedLevel];
-      break;
-
-    case "score":
-    case "completion":
-      baseScore = PARTICIPATION[normalizedLevel];
-      break;
-
-    default:
-      validationErrors.push(`Unknown result type: ${input.resultType}`);
-  }
-
-  const score = Math.round(baseScore * levelMultiplier * resultMultiplier + typeBonus);
+  const scoreBreakdown: AchievementScoreBreakdown = {
+    baseScore,
+    levelMultiplier,
+    resultMultiplier: teamFactor,
+    teamFactor,
+    typeBonus,
+    bonusPoints: typeBonus,
+    preRoundedTotal,
+    total: score,
+    roundingMode: "round",
+    matchedRuleKey,
+    normalizedLevel,
+    effectiveResultType,
+  };
 
   const isEligible = validationErrors.length === 0 && score > 0;
 
   return {
     score,
-    scoreBreakdown: {
-      baseScore,
-      levelMultiplier,
-      resultMultiplier,
-      typeBonus,
-      total: score,
-      normalizedLevel,
-      effectiveResultType,
-    },
+    scoreBreakdown,
     isEligible,
     validationErrors,
   };

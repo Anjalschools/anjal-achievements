@@ -10,6 +10,7 @@ import {
   getAchievementTypeLabel,
   humanizeRawKeyForDisplay,
 } from "@/lib/achievement-display-labels";
+import { isDisallowedAchievementTitleToken } from "@/lib/achievement-meta-slugs";
 
 export type AchievementTitleLocale = "ar" | "en";
 
@@ -36,6 +37,7 @@ export const resolveAchievementTitle = (
   const tryTitleField = (raw: unknown): string | null => {
     const s = safeStr(raw);
     if (!s) return null;
+    if (isDisallowedAchievementTitleToken(s)) return null;
 
     if (isLikelyTechnicalSlug(s)) {
       const fromConstants = resolveCataloguedSlug(s);
@@ -91,7 +93,11 @@ export const resolveAchievementTitle = (
       const tlab = getAchievementTypeLabel(typeKey, loc);
       if (tlab && tlab !== "—") return tlab;
     }
-    return humanizeRawKeyForDisplay(safeStr(record.achievementName) || safeStr(record.title), loc);
+    const fbAr = safeStr(record.achievementName) || safeStr(record.title);
+    if (isDisallowedAchievementTitleToken(fbAr)) {
+      return "إنجاز";
+    }
+    return humanizeRawKeyForDisplay(fbAr, loc);
   }
 
   const n1 = tryTitleField(record.nameEn);
@@ -106,5 +112,9 @@ export const resolveAchievementTitle = (
     const tlab = getAchievementTypeLabel(typeKey, loc);
     if (tlab && tlab !== "—") return tlab;
   }
-  return humanizeRawKeyForDisplay(safeStr(record.achievementName) || safeStr(record.title), loc);
+  const fbEn = safeStr(record.achievementName) || safeStr(record.title);
+  if (isDisallowedAchievementTitleToken(fbEn)) {
+    return "Achievement";
+  }
+  return humanizeRawKeyForDisplay(fbEn, loc);
 };

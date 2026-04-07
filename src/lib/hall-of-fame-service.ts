@@ -26,6 +26,9 @@ import {
   normalizeRawLevelToTier,
   type HallTier,
 } from "@/lib/hall-of-fame-level";
+import type { ScoringConfig } from "@/constants/default-scoring";
+import { getScoringConfig } from "@/lib/getScoringConfig";
+import { resolveAchievementScoreExplanation, type AchievementScoreExplanation } from "@/lib/achievement-score-explain";
 
 const safeStr = (v: unknown) => String(v ?? "").trim();
 
@@ -67,6 +70,7 @@ export type HallAchievementCardSummary = {
   participationLabel: string;
   yearLabel: string;
   scoreLabel: string;
+  scoreExplanation?: AchievementScoreExplanation | null;
 };
 
 export type HallAchievementCard = {
@@ -133,7 +137,8 @@ const buildHallProfilePayloadFromData = (
   studentId: string,
   u: Record<string, unknown>,
   list: Record<string, unknown>[],
-  locale: "ar" | "en"
+  locale: "ar" | "en",
+  scoringConfig: ScoringConfig
 ): StudentHallProfilePayload => {
   const levelTiers: HallTier[] =
     list.length > 0
@@ -213,6 +218,8 @@ const buildHallProfilePayloadFromData = (
             })
           : "—";
 
+        const scoreExplanation = resolveAchievementScoreExplanation(a, locale, scoringConfig);
+
         const summary: HallAchievementCardSummary = {
           typeLabel,
           fieldLabel,
@@ -222,6 +229,7 @@ const buildHallProfilePayloadFromData = (
           participationLabel,
           yearLabel,
           scoreLabel,
+          scoreExplanation,
         };
 
         return {
@@ -307,7 +315,8 @@ const buildExternalStudentHallProfile = async (
     gender: safeStr(snap.gender).toLowerCase() === "female" ? "female" : "male",
   };
 
-  return buildHallProfilePayloadFromData(String(profileKey), syntheticUser, list, locale);
+  const scoringConfig = await getScoringConfig();
+  return buildHallProfilePayloadFromData(String(profileKey), syntheticUser, list, locale, scoringConfig);
 };
 
 export const buildHallOfFameStudents = async (q: HallOfFameQuery): Promise<HallOfFameListResult> => {
@@ -510,5 +519,6 @@ export const buildStudentHallProfile = async (
 
   const list = (achievements as unknown as Record<string, unknown>[]) || [];
 
-  return buildHallProfilePayloadFromData(studentId, u, list, locale);
+  const scoringConfig = await getScoringConfig();
+  return buildHallProfilePayloadFromData(studentId, u, list, locale, scoringConfig);
 };

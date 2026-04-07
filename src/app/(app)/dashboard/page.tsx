@@ -354,6 +354,7 @@ const DashboardPage = () => {
                             participationLabel: achievement.summary.participationLabel,
                             yearLabel: achievement.summary.yearLabel,
                             scoreLabel: achievement.summary.scoreLabel,
+                            scoreExplanation: achievement.summary.scoreExplanation ?? undefined,
                           }}
                           compact
                         />

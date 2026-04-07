@@ -269,14 +269,26 @@ const MEDAL: Record<string, { ar: string; en: string }> = {
 };
 
 const RANK: Record<string, { ar: string; en: string }> = {
-  first: { ar: "المركز الأول", en: "First place" },
-  second: { ar: "المركز الثاني", en: "Second place" },
-  third: { ar: "المركز الثالث", en: "Third place" },
-  fourth: { ar: "المركز الرابع", en: "Fourth place" },
-  fifth: { ar: "المركز الخامس", en: "Fifth place" },
-  rank_first: { ar: "المركز الأول", en: "First place" },
-  rank_second: { ar: "المركز الثاني", en: "Second place" },
-  rank_third: { ar: "المركز الثالث", en: "Third place" },
+  first: { ar: "المركز الأول", en: "1st place" },
+  second: { ar: "المركز الثاني", en: "2nd place" },
+  third: { ar: "المركز الثالث", en: "3rd place" },
+  fourth: { ar: "المركز الرابع", en: "4th place" },
+  fifth: { ar: "المركز الخامس", en: "5th place" },
+  sixth: { ar: "المركز السادس", en: "6th place" },
+  seventh: { ar: "المركز السابع", en: "7th place" },
+  eighth: { ar: "المركز الثامن", en: "8th place" },
+  ninth: { ar: "المركز التاسع", en: "9th place" },
+  tenth: { ar: "المركز العاشر", en: "10th place" },
+  rank_first: { ar: "المركز الأول", en: "1st place" },
+  rank_second: { ar: "المركز الثاني", en: "2nd place" },
+  rank_third: { ar: "المركز الثالث", en: "3rd place" },
+  rank_fourth: { ar: "المركز الرابع", en: "4th place" },
+  rank_fifth: { ar: "المركز الخامس", en: "5th place" },
+  rank_sixth: { ar: "المركز السادس", en: "6th place" },
+  rank_seventh: { ar: "المركز السابع", en: "7th place" },
+  rank_eighth: { ar: "المركز الثامن", en: "8th place" },
+  rank_ninth: { ar: "المركز التاسع", en: "9th place" },
+  rank_tenth: { ar: "المركز العاشر", en: "10th place" },
 };
 
 const FIELD: Record<string, { ar: string; en: string }> = {

@@ -28,6 +28,7 @@ import {
 } from "@/constants/achievement-ui-categories";
 import { inferAchievementField } from "@/lib/achievement-field-inference";
 import { calculateAchievementScore } from "@/lib/achievement-scoring";
+import { useScoringConfig } from "@/hooks/useScoringConfig";
 import {
   absorbResultValueIntoSubtypes,
   achievementDateIsoFromRecord,
@@ -73,6 +74,7 @@ const AchievementForm = ({
 }: AchievementFormProps) => {
   const locale = getLocale();
   const isArabic = locale === "ar";
+  const scoringCfg = useScoringConfig();
 
   const [formData, setFormData] = useState<Record<string, unknown>>({
     achievementType: String(initialData?.achievementType || ""),
@@ -709,6 +711,7 @@ const AchievementForm = ({
       rank: String(formData.rank || "") || undefined,
       participationType,
       requiresCommitteeReview,
+      scoringConfig: scoringCfg ?? undefined,
     });
 
     setScorePreview(scoreResult.score);
@@ -722,6 +725,7 @@ const AchievementForm = ({
     evidenceRequiredMode,
     finalAchievementName,
     achievementName,
+    scoringCfg,
   ]);
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {

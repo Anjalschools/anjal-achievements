@@ -13,6 +13,7 @@ import {
 import { OLYMPIAD_EVENT_OTHER_VALUE } from "@/constants/achievement-ui-categories";
 import { inferAchievementField } from "@/lib/achievement-field-inference";
 import { calculateAchievementScore } from "@/lib/achievement-scoring";
+import { getScoringConfig } from "@/lib/getScoringConfig";
 import { clampInferredFieldToAllowlist } from "@/lib/achievement-inferred-field-allowlist";
 import {
   hasStudentAchievementDuplicate,
@@ -152,6 +153,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Validation failed", errors: validationErrors }, { status: 400 });
     }
 
+    const scoringConfig = await getScoringConfig();
     const scoreResult = calculateAchievementScore({
       achievementType: normalized.achievementType,
       achievementLevel: normalized.achievementLevel,
@@ -161,6 +163,7 @@ export async function POST(request: NextRequest) {
       rank: normalized.rank,
       participationType: normalized.participationType,
       requiresCommitteeReview: normalized.requiresCommitteeReview,
+      scoringConfig,
     });
 
     if (!scoreResult.isEligible) {
