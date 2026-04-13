@@ -1,0 +1,56 @@
+/**
+ * Print / save-as-PDF for formal letter (testimonial / recommendation).
+ * Scoped by `html.letter-print-doc` (toggled from the letter document route).
+ */
+@page {
+  size: A4 portrait;
+  margin: 12mm;
+}
+
+@media print {
+  html.letter-print-doc * {
+    box-sizing: border-box !important;
+  }
+
+  html.letter-print-doc,
+  html.letter-print-doc body {
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #fff !important;
+  }
+
+  html.letter-print-doc body > div.min-h-screen {
+    min-height: 0 !important;
+    background: #fff !important;
+  }
+
+  html.letter-print-doc body > div.min-h-screen > div.sticky,
+  html.letter-print-doc body > div.min-h-screen > footer {
+    display: none !important;
+  }
+
+  html.letter-print-doc body > div.min-h-screen > div.flex-1.flex-col.lg\:flex-row {
+    display: block !important;
+  }
+
+  html.letter-print-doc
+    body
+    > div.min-h-screen
+    > div.flex-1.flex-col.lg\:flex-row
+    > div.shrink-0.overflow-visible {
+    display: none !important;
+  }
+
+  html.letter-print-doc .no-print {
+    display: none !important;
+  }
+
+  html.letter-print-doc .letter-print-target {
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    max-width: none !important;
+    width: 100% !important;
+    min-height: 260mm !important;
+    page-break-inside: avoid;
+  }
+}

@@ -100,4 +100,9 @@ export type AdminAchievementDetailApi = {
   computed: { approvalStatus: WorkflowDisplayStatus; pendingReReview: boolean; dateIso: string };
   duplicateReview?: DuplicateReviewPayload | null;
   student: Record<string, string | undefined> | null;
+  /** Same flags as list API `meta` — avoids a separate list fetch on the review detail screen. */
+  meta?: {
+    aiAssistEnabled: boolean;
+    aiReviewUiEnabled: boolean;
+  };
 };

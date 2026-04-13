@@ -52,6 +52,16 @@ const AppSidebar = () => {
     icon: Trophy,
     label: locale === "ar" ? "الإنجازات" : "Achievements",
   };
+  const letterRequestsStudentItem = {
+    href: "/letter-requests",
+    icon: ScrollText,
+    label: locale === "ar" ? "الإفادة وخطاب التوصية" : "Testimonials & letters",
+  };
+  const letterRequestsAdminItem = {
+    href: "/admin/letter-requests",
+    icon: ScrollText,
+    label: locale === "ar" ? "طلبات الخطابات" : "Letter requests",
+  };
   const addAchievementItem = {
     href: "/achievements/new",
     icon: PlusCircle,
@@ -191,6 +201,7 @@ const AppSidebar = () => {
     { ...profileItem, capability: null },
     { ...aiNewsItem, capability: "aiNews" },
     { ...contactMessagesItem, capability: "contactMessages" },
+    { ...letterRequestsAdminItem, capability: "letterRequests" },
     { ...auditLogItem, capability: "auditLog" },
     { ...adminSettingsItem, capability: "platformSettings" },
     { ...scoringSettingsItem, capability: "platformSettings" },
@@ -207,6 +218,7 @@ const AppSidebar = () => {
         studentDashboardItem,
         hallOfFameItem,
         achievementsItem,
+        letterRequestsStudentItem,
         addAchievementItem,
         notificationsItem,
         profileItem,

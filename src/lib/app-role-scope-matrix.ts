@@ -31,7 +31,8 @@ export type RoleCapabilityKey =
   | "newsAdmin"
   | "accessMatrix"
   | "contactMessages"
-  | "homeHighlights";
+  | "homeHighlights"
+  | "letterRequests";
 
 export type ScopeMode = "none" | "full" | "scoped";
 
@@ -63,6 +64,7 @@ const deny: Record<RoleCapabilityKey, boolean> = {
   accessMatrix: false,
   contactMessages: false,
   homeHighlights: false,
+  letterRequests: false,
 };
 
 const allStaffCaps: Record<RoleCapabilityKey, boolean> = {
@@ -86,6 +88,7 @@ const allStaffCaps: Record<RoleCapabilityKey, boolean> = {
   accessMatrix: true,
   contactMessages: true,
   homeHighlights: true,
+  letterRequests: true,
 };
 
 export const APP_ROLE_MATRIX: Record<AppRole, RoleDefinition> = {
@@ -130,6 +133,7 @@ export const APP_ROLE_MATRIX: Record<AppRole, RoleDefinition> = {
       accessMatrix: false,
       contactMessages: true,
       homeHighlights: false,
+      letterRequests: true,
     },
   },
   schoolAdmin: {
@@ -184,6 +188,7 @@ export const APP_ROLE_MATRIX: Record<AppRole, RoleDefinition> = {
       accessMatrix: false,
       contactMessages: true,
       homeHighlights: false,
+      letterRequests: false,
     },
   },
   judge: {
@@ -255,6 +260,7 @@ export const ROLE_CAPABILITY_LABELS: Record<RoleCapabilityKey, { ar: string; en:
   accessMatrix: { ar: "مصفوفة الصلاحيات (داخلية)", en: "Access matrix (internal)" },
   contactMessages: { ar: "رسائل التواصل", en: "Contact messages" },
   homeHighlights: { ar: "إبرازات الصفحة الرئيسية", en: "Home page highlights" },
+  letterRequests: { ar: "طلبات الإفادة وخطاب التوصية", en: "Testimonials & recommendation letters" },
 };
 
 export const ROLE_CAPABILITY_AUDIT_ORDER: RoleCapabilityKey[] = [
@@ -277,6 +283,7 @@ export const ROLE_CAPABILITY_AUDIT_ORDER: RoleCapabilityKey[] = [
   "accessMatrix",
   "contactMessages",
   "homeHighlights",
+  "letterRequests",
 ];
 
 /** Route prefixes under /admin — must stay in sync with AppSidebar + API guards */
@@ -299,6 +306,7 @@ export const ADMIN_ROUTE_REQUIRED_CAPABILITY: Array<{
   { prefix: "/admin/school-years", capability: "schoolYearsAdmin" },
   { prefix: "/admin/home-highlights", capability: "homeHighlights" },
   { prefix: "/admin/contact-messages", capability: "contactMessages" },
+  { prefix: "/admin/letter-requests", capability: "letterRequests" },
   /** Any other /admin/* screen requires at least staff (prevents students from loading admin shell). */
   { prefix: "/admin", capability: "staffArea" },
 ];

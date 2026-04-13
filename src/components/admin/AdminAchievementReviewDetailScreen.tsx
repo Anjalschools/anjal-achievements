@@ -76,6 +76,9 @@ const AdminAchievementReviewDetailScreen = ({
         throw new Error(typeof j.error === "string" ? j.error : "detail failed");
       }
       setDetailPayload(j);
+      if (j.meta && typeof j.meta.aiAssistEnabled === "boolean") {
+        setAiAssistEnabled(j.meta.aiAssistEnabled);
+      }
     } catch {
       setError(isAr ? "تعذر تحميل التفاصيل" : "Could not load details");
       setDetailPayload(null);
@@ -106,21 +109,6 @@ const AdminAchievementReviewDetailScreen = ({
     if (allowed !== true) return;
     void loadDetail();
   }, [allowed, loadDetail]);
-
-  useEffect(() => {
-    (async () => {
-      try {
-        const res = await fetch("/api/admin/achievements?page=1&limit=1&tab=all", { cache: "no-store" });
-        if (!res.ok) return;
-        const data = await res.json();
-        if (data.meta && typeof data.meta.aiAssistEnabled === "boolean") {
-          setAiAssistEnabled(data.meta.aiAssistEnabled);
-        }
-      } catch {
-        /* ignore */
-      }
-    })();
-  }, []);
 
   useEffect(() => {
     if (!detailPayload?.achievement) return;

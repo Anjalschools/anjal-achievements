@@ -6,8 +6,11 @@ import { requireAchievementReviewerForAchievementId } from "@/lib/review-auth";
 import { resolveWorkflowDisplayStatus } from "@/lib/achievementWorkflow";
 import { buildDuplicateReviewSummaryForAchievement } from "@/lib/achievement-admin-duplicate-review";
 import { jsonInternalServerError } from "@/lib/api-safe-response";
+import { isAiAssistEnabled, logOpenAiRuntimeDiagnostics } from "@/lib/openai-env";
+import { isAiReviewUiEnabled } from "@/lib/ai-review-ui";
 
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
 type RouteParams = { params: { id: string } };
 
@@ -78,6 +81,10 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
             username: String(user.username || ""),
           }
         : null,
+      meta: {
+        aiAssistEnabled: isAiAssistEnabled(),
+        aiReviewUiEnabled: isAiReviewUiEnabled(),
+      },
     });
   } catch (e) {
     console.error("[GET admin achievement detail]", e);

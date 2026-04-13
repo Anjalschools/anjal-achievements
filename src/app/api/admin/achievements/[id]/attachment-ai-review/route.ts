@@ -3,7 +3,7 @@ import mongoose from "mongoose";
 import connectDB from "@/lib/mongodb";
 import Achievement from "@/models/Achievement";
 import { requireAchievementReviewerForAchievementId } from "@/lib/review-auth";
-import { isAiAssistEnabled } from "@/lib/openai-env";
+import { isAiAssistEnabled, logOpenAiRuntimeDiagnostics } from "@/lib/openai-env";
 import {
   buildGlobalFallbackAttachmentReview,
   runAdminAchievementAttachmentAiReview,
@@ -12,6 +12,7 @@ import { applyDeterministicAttachmentReviewDecision } from "@/lib/attachment-ai-
 import { computeAiReviewInputSignature } from "@/lib/attachment-ai-review-signature";
 
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
 type RouteParams = { params: { id: string } };
 
@@ -22,6 +23,8 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
 
   const gate = await requireAchievementReviewerForAchievementId(id);
   if (!gate.ok) return gate.response;
+
+  logOpenAiRuntimeDiagnostics("POST /api/admin/achievements/[id]/attachment-ai-review");
 
   if (!isAiAssistEnabled()) {
     return NextResponse.json(

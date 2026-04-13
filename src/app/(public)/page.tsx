@@ -149,7 +149,7 @@ const QuickActionTiles = () => {
       id: "1",
       title: "شارك إنجازك",
       description: "سجّل إنجازك الجديد وشاركه مع المجتمع التعليمي",
-      href: "/submit",
+      href: "/achievements/new",
       icon: Upload,
     },
     {
