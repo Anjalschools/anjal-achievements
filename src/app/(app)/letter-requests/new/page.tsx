@@ -25,6 +25,7 @@ const NewLetterRequestPage = () => {
   const [requestType, setRequestType] = useState<LetterRequestType>("testimonial");
   const [language, setLanguage] = useState<LetterRequestLanguage>("ar");
   const [targetOrganization, setTargetOrganization] = useState("");
+  const [requestedWriterName, setRequestedWriterName] = useState("");
   const [requestBody, setRequestBody] = useState("");
   const [requestedAuthorRole, setRequestedAuthorRole] = useState<LetterRequestedAuthorRole>("school_administration");
   const [requestedSpecialization, setRequestedSpecialization] = useState("");
@@ -49,6 +50,7 @@ const NewLetterRequestPage = () => {
         requestType,
         language,
         targetOrganization: targetOrganization.trim(),
+        requestedWriterName: requestedWriterName.trim(),
         requestBody: requestBody.trim(),
         requestedAuthorRole,
       };
@@ -106,6 +108,27 @@ const NewLetterRequestPage = () => {
                 <option value="en">{isAr ? "الإنجليزية" : "English"}</option>
               </select>
             </div>
+          </div>
+
+          <div className={isAr ? "text-right" : "text-left"}>
+            <label className="mb-1 block text-sm font-semibold text-slate-800">
+              {isAr ? "اسم الشخص المطلوب منه كتابة الخطاب" : "Requested author (who should write the letter)"}
+            </label>
+            <input
+              type="text"
+              required
+              minLength={2}
+              maxLength={200}
+              value={requestedWriterName}
+              onChange={(e) => setRequestedWriterName(e.target.value)}
+              placeholder={isAr ? "مثال: أ. فلان الفلاني" : "e.g. Mr. John Smith"}
+              className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
+            />
+            <p className="mt-1 text-xs text-slate-500">
+              {isAr
+                ? "يُعرض للإدارة فقط؛ لا يُستبدل تلقائياً باسم الموقّع على الخطاب المعتمد."
+                : "Shown to staff only; not the same as the final printed signatory name."}
+            </p>
           </div>
 
           <div className={isAr ? "text-right" : "text-left"}>

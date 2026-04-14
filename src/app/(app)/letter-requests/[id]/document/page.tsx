@@ -30,6 +30,12 @@ type Item = {
   approvedAt?: string;
   requestedAuthorRole: LetterRequestedAuthorRole;
   studentSnapshot?: Snap;
+  signerNameAr?: string;
+  signerNameEn?: string;
+  signerTitleAr?: string;
+  signerTitleEn?: string;
+  signerOrganizationLabelAr?: string;
+  signerOrganizationLabelEn?: string;
 };
 
 const LetterDocumentPage = () => {
@@ -152,6 +158,12 @@ const LetterDocumentPage = () => {
         requestedAuthorRole={item.requestedAuthorRole}
         gradeLine={gradeLine}
         showQr
+        signerNameAr={item.signerNameAr}
+        signerNameEn={item.signerNameEn}
+        signerTitleAr={item.signerTitleAr}
+        signerTitleEn={item.signerTitleEn}
+        signerOrganizationLabelAr={item.signerOrganizationLabelAr}
+        signerOrganizationLabelEn={item.signerOrganizationLabelEn}
       />
       <p className="no-print mt-4 text-center text-xs text-slate-500">
         {isAr

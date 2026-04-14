@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import PageContainer from "@/components/layout/PageContainer";
 import PageHeader from "@/components/layout/PageHeader";
 import SectionCard from "@/components/layout/SectionCard";
@@ -40,12 +40,21 @@ type Item = {
   verifyUrl?: string;
   studentSnapshot?: Record<string, unknown>;
   studentUser?: { fullName?: string; email?: string; studentId?: string } | null;
+  signerNameAr?: string;
+  signerNameEn?: string;
+  signerTitleAr?: string;
+  signerTitleEn?: string;
+  signerOrganizationLabelAr?: string;
+  signerOrganizationLabelEn?: string;
+  /** Who the student asked to write the letter (not final signer). */
+  requestedWriterName?: string;
 };
 
 const specKeys = [...ALLOWED_INFERRED_FIELD_VALUES].filter((k) => k !== "other").sort();
 
 const AdminLetterRequestDetailPage = () => {
   const params = useParams<{ id: string }>();
+  const router = useRouter();
   const locale = getLocale();
   const isAr = locale === "ar";
   const { profile } = useAppSession();
@@ -68,6 +77,13 @@ const AdminLetterRequestDetailPage = () => {
   const [requestedSpecialization, setRequestedSpecialization] = useState("");
   const [aiDraftText, setAiDraftText] = useState("");
   const [finalApprovedText, setFinalApprovedText] = useState("");
+  const [signerNameAr, setSignerNameAr] = useState("");
+  const [signerNameEn, setSignerNameEn] = useState("");
+  const [signerTitleAr, setSignerTitleAr] = useState("");
+  const [signerTitleEn, setSignerTitleEn] = useState("");
+  const [signerOrganizationLabelAr, setSignerOrganizationLabelAr] = useState("");
+  const [signerOrganizationLabelEn, setSignerOrganizationLabelEn] = useState("");
+  const [requestedWriterName, setRequestedWriterName] = useState("");
 
   const load = useCallback(async () => {
     if (!params?.id) return;
@@ -89,6 +105,13 @@ const AdminLetterRequestDetailPage = () => {
       setRequestedSpecialization(it.requestedSpecialization || "");
       setAiDraftText(it.aiDraftText || "");
       setFinalApprovedText(it.finalApprovedText || "");
+      setSignerNameAr(it.signerNameAr || "");
+      setSignerNameEn(it.signerNameEn || "");
+      setSignerTitleAr(it.signerTitleAr || "");
+      setSignerTitleEn(it.signerTitleEn || "");
+      setSignerOrganizationLabelAr(it.signerOrganizationLabelAr || "");
+      setSignerOrganizationLabelEn(it.signerOrganizationLabelEn || "");
+      setRequestedWriterName(it.requestedWriterName || "");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error");
       setItem(null);
@@ -120,6 +143,13 @@ const AdminLetterRequestDetailPage = () => {
           requestedSpecialization: showSpec ? requestedSpecialization : "",
           aiDraftText,
           finalApprovedText,
+          signerNameAr,
+          signerNameEn,
+          signerTitleAr,
+          signerTitleEn,
+          signerOrganizationLabelAr,
+          signerOrganizationLabelEn,
+          requestedWriterName,
         }),
       });
       const j = await res.json().catch(() => ({}));
@@ -177,7 +207,15 @@ const AdminLetterRequestDetailPage = () => {
       const res = await fetch(`/api/admin/letter-requests/${params.id}/approve`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ finalApprovedText: text }),
+        body: JSON.stringify({
+          finalApprovedText: text,
+          signerNameAr,
+          signerNameEn,
+          signerTitleAr,
+          signerTitleEn,
+          signerOrganizationLabelAr,
+          signerOrganizationLabelEn,
+        }),
       });
       const j = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(typeof j.error === "string" ? j.error : "Failed");
@@ -230,6 +268,54 @@ const AdminLetterRequestDetailPage = () => {
       if (!res.ok) throw new Error(typeof j.error === "string" ? j.error : "Failed");
       const rev = j.item as Item;
       setItem((prev) => ({ ...rev, studentUser: prev?.studentUser ?? rev.studentUser }));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Error");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleUnapprove = async (mode: "edit" | "revoke") => {
+    if (!params?.id || !canWorkflow) return;
+    const msg =
+      mode === "edit"
+        ? isAr
+          ? "سيتم إلغاء الاعتماد للسماح بتعديل الخطاب. رابط التحقق الحالي لن يبقى سارياً. المتابعة؟"
+          : "Approval will be revoked so you can edit. The current verify link will stop working. Continue?"
+        : isAr
+          ? "تأكيد إلغاء الاعتماد وإبطال رابط التحقق؟"
+          : "Revoke approval and invalidate the verification link?";
+    if (!window.confirm(msg)) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/admin/letter-requests/${params.id}/unapprove`, { method: "POST" });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(typeof j.error === "string" ? j.error : "Failed");
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Error");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDeleteRequest = async () => {
+    if (!params?.id || !canWorkflow) return;
+    if (
+      !window.confirm(
+        isAr ? "حذف هذا الطلب نهائياً؟ لا يمكن التراجع." : "Delete this request permanently? This cannot be undone."
+      )
+    ) {
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/admin/letter-requests/${params.id}`, { method: "DELETE" });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(typeof j.error === "string" ? j.error : "Failed");
+      router.push("/admin/letter-requests");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error");
     } finally {
@@ -336,6 +422,21 @@ const AdminLetterRequestDetailPage = () => {
           />
         </div>
         <div className={`mt-3 ${isAr ? "text-right" : "text-left"}`}>
+          <label className="mb-1 block text-xs font-semibold">
+            {isAr ? "المطلوب كتابة الخطاب منه (من الطالب)" : "Requested writer (from student)"}
+          </label>
+          <input
+            disabled={item.status === "approved"}
+            className="w-full rounded-lg border border-slate-200 px-2 py-2 text-sm disabled:opacity-60"
+            value={requestedWriterName}
+            onChange={(e) => setRequestedWriterName(e.target.value)}
+            maxLength={200}
+          />
+          <p className="mt-1 text-xs text-slate-500">
+            {isAr ? "منفصل عن اسم الموقّع في الخطاب المعتمد." : "Not the same as the final printed signatory."}
+          </p>
+        </div>
+        <div className={`mt-3 ${isAr ? "text-right" : "text-left"}`}>
           <label className="mb-1 block text-xs font-semibold">{isAr ? "نص الطالب المرجعي" : "Student reference text"}</label>
           <textarea
             disabled={item.status === "approved"}
@@ -377,6 +478,78 @@ const AdminLetterRequestDetailPage = () => {
               </select>
             </div>
           ) : null}
+        </div>
+      </SectionCard>
+
+      <SectionCard className="mb-4">
+        <h3 className="mb-3 text-sm font-bold text-slate-900">{isAr ? "بيانات التوقيع" : "Signatory details"}</h3>
+        <p className="mb-3 text-xs text-slate-600">
+          {isAr
+            ? "يظهر الاسم والمسمى في الخطاب المعتمد والمعاينة وملف PDF. إن تُرك فارغًا يُستخدم وصف الدور الافتراضي."
+            : "Name and title appear on the approved letter, preview, and PDF. If empty, the default role label is used."}
+        </p>
+        <div className={`grid gap-3 sm:grid-cols-2 ${isAr ? "text-right" : "text-left"}`}>
+          <div>
+            <label className="mb-1 block text-xs font-semibold">{isAr ? "اسم الموقّع (عربي)" : "Signer name (Arabic)"}</label>
+            <input
+              disabled={item.status === "approved"}
+              className="w-full rounded-lg border border-slate-200 px-2 py-2 text-sm disabled:opacity-60"
+              value={signerNameAr}
+              onChange={(e) => setSignerNameAr(e.target.value)}
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-semibold">{isAr ? "اسم الموقّع (إنجليزي)" : "Signer name (English)"}</label>
+            <input
+              disabled={item.status === "approved"}
+              className="w-full rounded-lg border border-slate-200 px-2 py-2 text-sm disabled:opacity-60"
+              value={signerNameEn}
+              onChange={(e) => setSignerNameEn(e.target.value)}
+              dir="ltr"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-semibold">{isAr ? "المسمى الوظيفي (عربي)" : "Job title (Arabic)"}</label>
+            <input
+              disabled={item.status === "approved"}
+              className="w-full rounded-lg border border-slate-200 px-2 py-2 text-sm disabled:opacity-60"
+              value={signerTitleAr}
+              onChange={(e) => setSignerTitleAr(e.target.value)}
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-semibold">{isAr ? "المسمى الوظيفي (إنجليزي)" : "Job title (English)"}</label>
+            <input
+              disabled={item.status === "approved"}
+              className="w-full rounded-lg border border-slate-200 px-2 py-2 text-sm disabled:opacity-60"
+              value={signerTitleEn}
+              onChange={(e) => setSignerTitleEn(e.target.value)}
+              dir="ltr"
+            />
+          </div>
+          <div className="sm:col-span-2">
+            <label className="mb-1 block text-xs font-semibold">
+              {isAr ? "تسمية الجهة / الإدارة (عربي) — اختياري" : "Organization label (Arabic) — optional"}
+            </label>
+            <input
+              disabled={item.status === "approved"}
+              className="w-full rounded-lg border border-slate-200 px-2 py-2 text-sm disabled:opacity-60"
+              value={signerOrganizationLabelAr}
+              onChange={(e) => setSignerOrganizationLabelAr(e.target.value)}
+            />
+          </div>
+          <div className="sm:col-span-2">
+            <label className="mb-1 block text-xs font-semibold">
+              {isAr ? "تسمية الجهة (إنجليزي) — اختياري" : "Organization label (English) — optional"}
+            </label>
+            <input
+              disabled={item.status === "approved"}
+              className="w-full rounded-lg border border-slate-200 px-2 py-2 text-sm disabled:opacity-60"
+              value={signerOrganizationLabelEn}
+              onChange={(e) => setSignerOrganizationLabelEn(e.target.value)}
+              dir="ltr"
+            />
+          </div>
         </div>
       </SectionCard>
 
@@ -488,6 +661,42 @@ const AdminLetterRequestDetailPage = () => {
               className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-bold text-amber-900 disabled:opacity-50"
             >
               {isAr ? "طلب تعديل" : "Request revision"}
+            </button>
+            <button
+              type="button"
+              disabled={saving}
+              onClick={handleReject}
+              className="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm font-bold text-red-800 disabled:opacity-50"
+            >
+              {isAr ? "رفض" : "Reject"}
+            </button>
+          </>
+        ) : null}
+        {canWorkflow && item.status === "approved" ? (
+          <>
+            <button
+              type="button"
+              disabled={saving}
+              onClick={() => handleUnapprove("edit")}
+              className="rounded-lg border border-sky-300 bg-sky-50 px-4 py-2 text-sm font-bold text-sky-900 disabled:opacity-50"
+            >
+              {isAr ? "تعديل" : "Edit"}
+            </button>
+            <button
+              type="button"
+              disabled={saving}
+              onClick={() => handleUnapprove("revoke")}
+              className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-bold text-amber-900 disabled:opacity-50"
+            >
+              {isAr ? "إلغاء الاعتماد" : "Revoke approval"}
+            </button>
+            <button
+              type="button"
+              disabled={saving}
+              onClick={handleDeleteRequest}
+              className="rounded-lg border border-slate-400 bg-slate-100 px-4 py-2 text-sm font-bold text-slate-900 disabled:opacity-50"
+            >
+              {isAr ? "حذف" : "Delete"}
             </button>
             <button
               type="button"

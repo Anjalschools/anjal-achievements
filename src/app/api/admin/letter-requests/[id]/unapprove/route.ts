@@ -14,10 +14,10 @@ export const revalidate = 0;
 
 type Ctx = { params: Promise<{ id: string }> };
 
-export async function POST(request: NextRequest, context: Ctx) {
+/** Revoke approval: approved → in_review, clears verify token and approval metadata; keeps letter text. */
+export async function POST(_request: NextRequest, context: Ctx) {
   const gate = await requireLetterRequestStaff();
   if (!gate.ok) return gate.response;
-
   if (!roleHasCapability(gate.user.role, "approveRejectWorkflow")) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
@@ -32,46 +32,34 @@ export async function POST(request: NextRequest, context: Ctx) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  let body: { reason?: string } = {};
-  try {
-    body = (await request.json()) as { reason?: string };
-  } catch {
-    body = {};
-  }
-  const reason = typeof body.reason === "string" ? body.reason.trim() : "";
-  if (!reason || reason.length < 3) {
-    return NextResponse.json({ error: "reason required" }, { status: 400 });
-  }
-
   try {
     await connectDB();
     const doc = await LetterRequest.findById(id).exec();
     if (!doc) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
+    if (doc.status !== "approved") {
+      return NextResponse.json({ error: "Not approved" }, { status: 409 });
+    }
 
     const prev = doc.status;
-    doc.status = "rejected";
-    doc.rejectReason = reason;
+    doc.status = "in_review";
+    doc.approvedAt = undefined;
+    doc.approvedBy = undefined;
     doc.verificationToken = undefined;
-    doc.revisionNote = undefined;
-    if (prev === "approved") {
-      doc.approvedAt = undefined;
-      doc.approvedBy = undefined;
-    }
     await appendLetterStatusHistory(
       doc,
       gate.user as import("@/models/User").IUser,
-      "reject",
+      "unapprove",
       prev,
-      "rejected",
-      reason
+      "in_review",
+      "Approval revoked to allow edits"
     );
     await doc.save();
 
     return NextResponse.json({ ok: true, item: serializeLetterRequest(doc.toObject(), "admin") });
   } catch (e) {
-    console.error("[POST /api/admin/letter-requests/[id]/reject]", e);
+    console.error("[POST /api/admin/letter-requests/[id]/unapprove]", e);
     return jsonInternalServerError(e);
   }
 }

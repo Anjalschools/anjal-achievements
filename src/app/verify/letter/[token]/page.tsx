@@ -204,8 +204,8 @@ export default async function VerifyLetterPage({ params }: PageProps) {
           </footer>
         </div>
 
-        <div className="mt-8 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm" dir={language === "ar" ? "rtl" : "ltr"} lang={language === "ar" ? "ar" : "en"}>
-          <h2 className="mb-3 text-center text-lg font-bold text-slate-900">
+        <div className="mt-8" dir={language === "ar" ? "rtl" : "ltr"} lang={language === "ar" ? "ar" : "en"}>
+          <h2 className="mb-4 text-center text-lg font-bold text-slate-900">
             {language === "ar" ? "نسخة العرض" : "Letter display"}
           </h2>
           <LetterFormalDocument
@@ -220,6 +220,12 @@ export default async function VerifyLetterPage({ params }: PageProps) {
             requestedAuthorRole={requestedAuthorRole}
             gradeLine={gradeLine}
             showQr={false}
+            signerNameAr={typeof d.signerNameAr === "string" ? d.signerNameAr : undefined}
+            signerNameEn={typeof d.signerNameEn === "string" ? d.signerNameEn : undefined}
+            signerTitleAr={typeof d.signerTitleAr === "string" ? d.signerTitleAr : undefined}
+            signerTitleEn={typeof d.signerTitleEn === "string" ? d.signerTitleEn : undefined}
+            signerOrganizationLabelAr={typeof d.signerOrganizationLabelAr === "string" ? d.signerOrganizationLabelAr : undefined}
+            signerOrganizationLabelEn={typeof d.signerOrganizationLabelEn === "string" ? d.signerOrganizationLabelEn : undefined}
           />
         </div>
 

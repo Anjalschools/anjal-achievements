@@ -28,6 +28,7 @@ type Item = {
   language: LetterRequestLanguage;
   targetOrganization: string;
   requestBody: string;
+  requestedWriterName?: string;
   requestedAuthorRole: LetterRequestedAuthorRole;
   requestedSpecialization?: string;
   status: LetterRequestStatus;
@@ -52,6 +53,7 @@ const LetterRequestDetailPage = () => {
   const [saving, setSaving] = useState(false);
 
   const [targetOrganization, setTargetOrganization] = useState("");
+  const [requestedWriterName, setRequestedWriterName] = useState("");
   const [requestBody, setRequestBody] = useState("");
   const [requestType, setRequestType] = useState<LetterRequestType>("testimonial");
   const [language, setLanguage] = useState<LetterRequestLanguage>("ar");
@@ -69,6 +71,7 @@ const LetterRequestDetailPage = () => {
       const it = j.item as Item;
       setItem(it);
       setTargetOrganization(it.targetOrganization);
+      setRequestedWriterName(it.requestedWriterName || "");
       setRequestBody(it.requestBody);
       setRequestType(it.requestType);
       setLanguage(it.language);
@@ -105,6 +108,7 @@ const LetterRequestDetailPage = () => {
     try {
       const body: Record<string, unknown> = {
         targetOrganization: targetOrganization.trim(),
+        requestedWriterName: requestedWriterName.trim(),
         requestBody: requestBody.trim(),
         requestType,
         language,
@@ -269,6 +273,18 @@ const LetterRequestDetailPage = () => {
               />
             </div>
             <div className={isAr ? "text-right" : "text-left"}>
+              <label className="mb-1 block text-xs font-semibold">
+                {isAr ? "اسم الشخص المطلوب منه كتابة الخطاب" : "Requested letter author"}
+              </label>
+              <input
+                className="w-full rounded-lg border border-slate-200 px-2 py-2 text-sm"
+                value={requestedWriterName}
+                onChange={(e) => setRequestedWriterName(e.target.value)}
+                minLength={2}
+                maxLength={200}
+              />
+            </div>
+            <div className={isAr ? "text-right" : "text-left"}>
               <label className="mb-1 block text-xs font-semibold">{isAr ? "النص المرجعي" : "Reference text"}</label>
               <textarea
                 className="w-full rounded-lg border border-slate-200 px-2 py-2 text-sm"
@@ -315,6 +331,7 @@ const LetterRequestDetailPage = () => {
                 onClick={() => {
                   setEditing(false);
                   setTargetOrganization(item.targetOrganization);
+                  setRequestedWriterName(item.requestedWriterName || "");
                   setRequestBody(item.requestBody);
                   setRequestType(item.requestType);
                   setLanguage(item.language);
@@ -352,6 +369,12 @@ const LetterRequestDetailPage = () => {
             <div>
               <dt className="text-xs font-semibold text-slate-500">{isAr ? "اللغة" : "Language"}</dt>
               <dd className="font-medium text-slate-900">{item.language === "ar" ? "العربية" : "English"}</dd>
+            </div>
+            <div>
+              <dt className="text-xs font-semibold text-slate-500">
+                {isAr ? "المطلوب كتابة الخطاب منه" : "Requested writer"}
+              </dt>
+              <dd className="font-medium text-slate-900">{item.requestedWriterName?.trim() || "—"}</dd>
             </div>
             <div>
               <dt className="text-xs font-semibold text-slate-500">{isAr ? "النص المرجعي" : "Reference text"}</dt>

@@ -1,4 +1,7 @@
 import { ALLOWED_INFERRED_FIELD_VALUES } from "@/lib/achievement-inferred-field-allowlist";
+
+/** Re-export for admin PATCH/approve bodies (optional signer fields). */
+export { parseLetterSignerFieldsFromBody } from "@/lib/letter-request-signer-fields";
 import type {
   LetterRequestLanguage,
   LetterRequestType,
@@ -14,6 +17,8 @@ export type ParsedLetterCreateBody = {
   language: LetterRequestLanguage;
   targetOrganization: string;
   requestBody: string;
+  /** Who the student asks to author the letter (not the final printed signer name). */
+  requestedWriterName: string;
   requestedAuthorRole: LetterRequestedAuthorRole;
   requestedSpecialization?: string;
 };
@@ -25,6 +30,7 @@ export const parseLetterCreateBody = (raw: unknown): { ok: true; data: ParsedLet
   const language = o.language;
   const targetOrganization = String(o.targetOrganization ?? "").trim();
   const requestBody = String(o.requestBody ?? "").trim();
+  const requestedWriterName = String(o.requestedWriterName ?? "").trim();
   const requestedAuthorRole = o.requestedAuthorRole;
   const requestedSpecialization = o.requestedSpecialization != null ? String(o.requestedSpecialization).trim() : "";
 
@@ -42,6 +48,9 @@ export const parseLetterCreateBody = (raw: unknown): { ok: true; data: ParsedLet
   }
   if (requestBody.length > 20000) {
     return { ok: false, error: "requestBody too long" };
+  }
+  if (requestedWriterName.length < 2 || requestedWriterName.length > 200) {
+    return { ok: false, error: "requestedWriterName required (2-200 chars)" };
   }
   if (!ROLES_OK.has(requestedAuthorRole as LetterRequestedAuthorRole)) {
     return { ok: false, error: "Invalid requestedAuthorRole" };
@@ -65,6 +74,7 @@ export const parseLetterCreateBody = (raw: unknown): { ok: true; data: ParsedLet
       language: language as LetterRequestLanguage,
       targetOrganization,
       requestBody,
+      requestedWriterName,
       requestedAuthorRole: role,
       requestedSpecialization: spec,
     },
@@ -94,6 +104,9 @@ export const parseLetterStudentPatchBody = (
   if ("requestedSpecialization" in o) {
     const s = String(o.requestedSpecialization ?? "").trim();
     out.requestedSpecialization = s || undefined;
+  }
+  if ("requestedWriterName" in o) {
+    out.requestedWriterName = String(o.requestedWriterName ?? "").trim();
   }
   return { ok: true, data: out };
 };

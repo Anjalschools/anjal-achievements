@@ -86,6 +86,14 @@ export async function PATCH(request: NextRequest, context: Ctx) {
     if (p.requestedSpecialization !== undefined) {
       doc.requestedSpecialization = p.requestedSpecialization || undefined;
     }
+    if (p.requestedWriterName !== undefined) {
+      const w = p.requestedWriterName.trim();
+      if (w.length === 0) doc.requestedWriterName = "";
+      else if (w.length >= 2 && w.length <= 200) doc.requestedWriterName = w;
+      else {
+        return NextResponse.json({ error: "Invalid requestedWriterName" }, { status: 400 });
+      }
+    }
 
     const role = doc.requestedAuthorRole;
     if (role === "school_administration") {

@@ -40,6 +40,8 @@ export interface ILetterRequest extends Document {
   language: LetterRequestLanguage;
   targetOrganization: string;
   requestBody: string;
+  /** Student: who should write the letter (distinct from admin final signer fields). */
+  requestedWriterName?: string;
   requestedAuthorRole: LetterRequestedAuthorRole;
   requestedSpecialization?: string;
   status: LetterRequestStatus;
@@ -54,6 +56,13 @@ export interface ILetterRequest extends Document {
   rejectReason?: string;
   revisionNote?: string;
   statusHistory: LetterStatusHistoryEntry[];
+  /** Admin-entered signer display (optional; empty string = cleared). */
+  signerNameAr?: string;
+  signerNameEn?: string;
+  signerTitleAr?: string;
+  signerTitleEn?: string;
+  signerOrganizationLabelAr?: string;
+  signerOrganizationLabelEn?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -96,6 +105,7 @@ const letterRequestSchema = new Schema<ILetterRequest>(
     language: { type: String, enum: ["ar", "en"], required: true },
     targetOrganization: { type: String, required: true, trim: true },
     requestBody: { type: String, required: true, trim: true },
+    requestedWriterName: { type: String, trim: true },
     requestedAuthorRole: {
       type: String,
       enum: ["teacher", "supervisor", "school_administration"],
@@ -118,6 +128,12 @@ const letterRequestSchema = new Schema<ILetterRequest>(
     rejectReason: { type: String },
     revisionNote: { type: String },
     statusHistory: { type: [statusHistorySchema], default: [] },
+    signerNameAr: { type: String, trim: true },
+    signerNameEn: { type: String, trim: true },
+    signerTitleAr: { type: String, trim: true },
+    signerTitleEn: { type: String, trim: true },
+    signerOrganizationLabelAr: { type: String, trim: true },
+    signerOrganizationLabelEn: { type: String, trim: true },
   },
   { timestamps: true }
 );

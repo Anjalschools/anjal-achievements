@@ -42,6 +42,7 @@ export async function POST(request: NextRequest) {
       language: parsed.data.language,
       targetOrganization: parsed.data.targetOrganization,
       requestBody: parsed.data.requestBody,
+      requestedWriterName: parsed.data.requestedWriterName,
       requestedAuthorRole: parsed.data.requestedAuthorRole,
       requestedSpecialization:
         parsed.data.requestedAuthorRole === "school_administration" ? undefined : parsed.data.requestedSpecialization,

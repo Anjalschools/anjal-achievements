@@ -27,6 +27,12 @@ type Item = {
   approvedAt?: string;
   requestedAuthorRole: LetterRequestedAuthorRole;
   studentSnapshot?: Snap;
+  signerNameAr?: string;
+  signerNameEn?: string;
+  signerTitleAr?: string;
+  signerTitleEn?: string;
+  signerOrganizationLabelAr?: string;
+  signerOrganizationLabelEn?: string;
 };
 
 const AdminLetterPreviewPage = () => {
@@ -199,6 +205,12 @@ const AdminLetterPreviewPage = () => {
         requestedAuthorRole={item.requestedAuthorRole}
         gradeLine={gradeLine}
         showQr={showQr}
+        signerNameAr={item.signerNameAr}
+        signerNameEn={item.signerNameEn}
+        signerTitleAr={item.signerTitleAr}
+        signerTitleEn={item.signerTitleEn}
+        signerOrganizationLabelAr={item.signerOrganizationLabelAr}
+        signerOrganizationLabelEn={item.signerOrganizationLabelEn}
       />
     </PageContainer>
   );

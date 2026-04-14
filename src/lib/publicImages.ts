@@ -23,7 +23,7 @@ export const PUBLIC_IMG = {
   verificationAnjal: "/logoc.png",
   verificationMawhiba: "/logo-mawhiba.png",
   verificationCognia: "/logo-cognia.png",
-  /** خلفية خطاب الإفادة / التوصية المعتمد (ضع الملف في `public/backpage.png`). */
-  letterBackpage: "/backpage.png",
+  /** رأس صفحة خطابات الإفادة / التوصية (`public/report-header.png`). */
+  reportHeader: "/report-header.png",
   pattern: "/pattern.svg",
 } as const;

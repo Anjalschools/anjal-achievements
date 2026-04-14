@@ -5,9 +5,11 @@ import { requireLetterRequestStaff } from "@/lib/letter-request-auth";
 import { letterRequestVisibleToStaff } from "@/lib/letter-request-scope";
 import { appendLetterStatusHistory } from "@/lib/letter-request-service";
 import { serializeLetterRequest } from "@/lib/letter-request-api-serialize";
+import { applySignerFieldsToLetterDoc, parseLetterSignerFieldsFromBody } from "@/lib/letter-request-signer-fields";
 import { ALLOWED_INFERRED_FIELD_VALUES } from "@/lib/achievement-inferred-field-allowlist";
 import { jsonInternalServerError } from "@/lib/api-safe-response";
 import { isAiAssistEnabled } from "@/lib/openai-env";
+import { roleHasCapability } from "@/lib/app-role-scope-matrix";
 import mongoose from "mongoose";
 import User from "@/models/User";
 import type { LetterRequestStatus } from "@/lib/letter-request-types";
@@ -102,6 +104,16 @@ export async function PATCH(request: NextRequest, context: Ctx) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
 
+    if (doc.status === "approved") {
+      return NextResponse.json(
+        {
+          error: "Cannot edit an approved letter. Revoke approval first.",
+          errorAr: "لا يمكن تعديل خطاب معتمد. ألغِ الاعتماد أولاً.",
+        },
+        { status: 409 }
+      );
+    }
+
     const prevStatus = doc.status;
 
     if (typeof o.targetOrganization === "string") {
@@ -111,6 +123,14 @@ export async function PATCH(request: NextRequest, context: Ctx) {
     if (typeof o.requestBody === "string") {
       const t = o.requestBody.trim();
       if (t.length >= 10 && t.length <= 20000) doc.requestBody = t;
+    }
+    if (typeof o.requestedWriterName === "string") {
+      const w = o.requestedWriterName.trim();
+      if (w.length === 0) doc.requestedWriterName = "";
+      else if (w.length >= 2 && w.length <= 200) doc.requestedWriterName = w;
+      else {
+        return NextResponse.json({ error: "Invalid requestedWriterName (2-200 chars or empty)" }, { status: 400 });
+      }
     }
     if (o.requestType === "testimonial" || o.requestType === "recommendation") {
       doc.requestType = o.requestType;
@@ -130,6 +150,11 @@ export async function PATCH(request: NextRequest, context: Ctx) {
     }
     if (typeof o.finalApprovedText === "string") {
       doc.finalApprovedText = o.finalApprovedText;
+    }
+
+    const signerPatch = parseLetterSignerFieldsFromBody(o);
+    if (Object.keys(signerPatch).length > 0) {
+      applySignerFieldsToLetterDoc(doc as unknown as Record<string, unknown>, signerPatch);
     }
 
     if (doc.requestedAuthorRole === "school_administration") {
@@ -169,4 +194,33 @@ export async function PATCH(request: NextRequest, context: Ctx) {
     console.error("[PATCH /api/admin/letter-requests/[id]]", e);
     return jsonInternalServerError(e);
     }
+}
+
+export async function DELETE(_request: NextRequest, context: Ctx) {
+  const gate = await requireLetterRequestStaff();
+  if (!gate.ok) return gate.response;
+  if (!roleHasCapability(gate.user.role, "approveRejectWorkflow")) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+  const { id } = await context.params;
+  if (!mongoose.Types.ObjectId.isValid(id)) {
+    return NextResponse.json({ error: "Invalid id" }, { status: 400 });
+  }
+
+  const allowed = await letterRequestVisibleToStaff(id, gate.user as import("@/models/User").IUser);
+  if (!allowed) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+
+  try {
+    await connectDB();
+    const res = await LetterRequest.findByIdAndDelete(id).exec();
+    if (!res) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+    return NextResponse.json({ ok: true });
+  } catch (e) {
+    console.error("[DELETE /api/admin/letter-requests/[id]]", e);
+    return jsonInternalServerError(e);
+  }
 }

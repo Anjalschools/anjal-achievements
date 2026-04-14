@@ -9,6 +9,7 @@ export type LetterRequestPublicJson = {
   language: string;
   targetOrganization: string;
   requestBody: string;
+  requestedWriterName?: string;
   requestedAuthorRole: string;
   requestedSpecialization?: string;
   status: string;
@@ -23,6 +24,18 @@ export type LetterRequestPublicJson = {
   createdAt: string;
   updatedAt: string;
   statusHistory?: Array<Record<string, unknown>>;
+  signerNameAr?: string;
+  signerNameEn?: string;
+  signerTitleAr?: string;
+  signerTitleEn?: string;
+  signerOrganizationLabelAr?: string;
+  signerOrganizationLabelEn?: string;
+};
+
+const optSignerStr = (v: unknown): string | undefined => {
+  if (typeof v !== "string") return undefined;
+  const t = v.trim();
+  return t.length > 0 ? t : undefined;
 };
 
 const toIso = (d: Date | undefined | null): string | undefined =>
@@ -44,6 +57,7 @@ export const serializeLetterRequest = (
     language: String(d.language),
     targetOrganization: String(d.targetOrganization || ""),
     requestBody: String(d.requestBody || ""),
+    requestedWriterName: optSignerStr(d.requestedWriterName),
     requestedAuthorRole: String(d.requestedAuthorRole),
     requestedSpecialization: typeof d.requestedSpecialization === "string" ? d.requestedSpecialization : undefined,
     status: String(d.status),
@@ -51,7 +65,17 @@ export const serializeLetterRequest = (
     updatedAt: toIso(d.updatedAt as Date) || "",
   };
 
+  const attachSigner = () => {
+    base.signerNameAr = optSignerStr(d.signerNameAr);
+    base.signerNameEn = optSignerStr(d.signerNameEn);
+    base.signerTitleAr = optSignerStr(d.signerTitleAr);
+    base.signerTitleEn = optSignerStr(d.signerTitleEn);
+    base.signerOrganizationLabelAr = optSignerStr(d.signerOrganizationLabelAr);
+    base.signerOrganizationLabelEn = optSignerStr(d.signerOrganizationLabelEn);
+  };
+
   if (mode === "admin") {
+    attachSigner();
     base.aiDraftText = typeof d.aiDraftText === "string" ? d.aiDraftText : undefined;
     base.finalApprovedText = typeof d.finalApprovedText === "string" ? d.finalApprovedText : undefined;
     base.reviewedAt = toIso(d.reviewedAt as Date);
@@ -68,6 +92,7 @@ export const serializeLetterRequest = (
     }
   } else {
     if (String(d.status) === "approved") {
+      attachSigner();
       base.finalApprovedText = typeof d.finalApprovedText === "string" ? d.finalApprovedText : undefined;
       const token = typeof d.verificationToken === "string" ? d.verificationToken : "";
       if (token) {

@@ -5,6 +5,7 @@ import { requireLetterRequestStaff } from "@/lib/letter-request-auth";
 import { letterRequestVisibleToStaff } from "@/lib/letter-request-scope";
 import { newVerificationToken, appendLetterStatusHistory } from "@/lib/letter-request-service";
 import { serializeLetterRequest } from "@/lib/letter-request-api-serialize";
+import { applySignerFieldsToLetterDoc, parseLetterSignerFieldsFromBody } from "@/lib/letter-request-signer-fields";
 import { roleHasCapability } from "@/lib/app-role-scope-matrix";
 import { jsonInternalServerError } from "@/lib/api-safe-response";
 import mongoose from "mongoose";
@@ -32,9 +33,9 @@ export async function POST(request: NextRequest, context: Ctx) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  let body: { finalApprovedText?: string } = {};
+  let body: Record<string, unknown> = {};
   try {
-    body = (await request.json()) as { finalApprovedText?: string };
+    body = (await request.json()) as Record<string, unknown>;
   } catch {
     body = {};
   }
@@ -55,6 +56,10 @@ export async function POST(request: NextRequest, context: Ctx) {
 
     const prev = doc.status;
     doc.finalApprovedText = text;
+    const signerPatch = parseLetterSignerFieldsFromBody(body);
+    if (Object.keys(signerPatch).length > 0) {
+      applySignerFieldsToLetterDoc(doc as unknown as Record<string, unknown>, signerPatch);
+    }
     doc.status = "approved";
     doc.approvedAt = new Date();
     doc.approvedBy = gate.user._id as mongoose.Types.ObjectId;
