@@ -25,6 +25,7 @@ import {
   Newspaper,
 } from "lucide-react";
 import Link from "next/link";
+import AuthGuardLink from "@/components/auth/AuthGuardLink";
 import PlatformLogo from "@/components/branding/PlatformLogo";
 import SafeLocalImage from "@/components/media/SafeLocalImage";
 import { PUBLIC_IMG } from "@/lib/publicImages";
@@ -174,26 +175,31 @@ const QuickActionTiles = () => {
         <div className="grid gap-6 md:grid-cols-3">
           {updatedActions.map((action) => {
             const IconComponent = action.icon;
+            const isShareTile = action.href === "/achievements/new";
+            const tileClass =
+              "group block rounded-xl border border-gray-100 bg-white p-8 shadow-md transition-all duration-300 hover:border-primary hover:shadow-xl";
 
-            return (
-              <a
-                key={action.id}
-                href={action.href}
-                className="group rounded-xl border border-gray-100 bg-white p-8 shadow-md transition-all duration-300 hover:border-primary hover:shadow-xl"
-              >
-                <div className="space-y-4">
-                  <div className="flex h-16 w-16 items-center justify-center rounded-lg bg-primary/10 transition-colors group-hover:bg-primary">
-                    <IconComponent className="h-8 w-8 text-primary transition-colors group-hover:text-white" />
-                  </div>
-
-                  <h3 className="text-xl font-bold leading-snug tracking-tight text-text transition-colors group-hover:text-primary">
-                    {action.title}
-                  </h3>
-
-                  <p className="font-normal leading-relaxed text-text-light">
-                    {action.description}
-                  </p>
+            const inner = (
+              <div className="space-y-4">
+                <div className="flex h-16 w-16 items-center justify-center rounded-lg bg-primary/10 transition-colors group-hover:bg-primary">
+                  <IconComponent className="h-8 w-8 text-primary transition-colors group-hover:text-white" />
                 </div>
+
+                <h3 className="text-xl font-bold leading-snug tracking-tight text-text transition-colors group-hover:text-primary">
+                  {action.title}
+                </h3>
+
+                <p className="font-normal leading-relaxed text-text-light">{action.description}</p>
+              </div>
+            );
+
+            return isShareTile ? (
+              <AuthGuardLink key={action.id} href={action.href} className={tileClass}>
+                {inner}
+              </AuthGuardLink>
+            ) : (
+              <a key={action.id} href={action.href} className={tileClass}>
+                {inner}
               </a>
             );
           })}

@@ -34,6 +34,8 @@ import { getLocale } from "@/lib/i18n";
 import { isReviewerNavRole } from "@/lib/app-navigation-roles";
 import { useAppSession } from "@/contexts/AppSessionContext";
 import { roleHasCapability, type RoleCapabilityKey } from "@/lib/app-role-scope-matrix";
+import AuthGuardLink from "@/components/auth/AuthGuardLink";
+import { isAuthGuardHref } from "@/lib/requireAuthRedirect";
 
 const AppSidebar = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -326,17 +328,24 @@ const AppSidebar = () => {
                 "badgeCount" in item && typeof item.badgeCount === "number" && item.badgeCount > 0
                   ? item.badgeCount
                   : 0;
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  onClick={() => setIsOpen(false)}
-                  className={`flex items-center gap-3 rounded-lg px-4 py-3 text-sm font-medium transition-colors ${
-                    active
-                      ? "bg-primary/10 text-primary"
-                      : "text-text-light hover:bg-gray-100 hover:text-text"
-                  }`}
-                >
+              const navCls = `flex items-center gap-3 rounded-lg px-4 py-3 text-sm font-medium transition-colors ${
+                active
+                  ? "bg-primary/10 text-primary"
+                  : "text-text-light hover:bg-gray-100 hover:text-text"
+              }`;
+              const close = () => setIsOpen(false);
+              return isAuthGuardHref(item.href) ? (
+                <AuthGuardLink key={item.href} href={item.href} onClick={close} className={navCls}>
+                  <Icon className="h-5 w-5 shrink-0" />
+                  <span className="min-w-0 flex-1">{item.label}</span>
+                  {badge > 0 ? (
+                    <span className="shrink-0 rounded-full bg-primary px-2 py-0.5 text-[10px] font-bold text-white">
+                      {badge > 99 ? "99+" : badge}
+                    </span>
+                  ) : null}
+                </AuthGuardLink>
+              ) : (
+                <Link key={item.href} href={item.href} onClick={close} className={navCls}>
                   <Icon className="h-5 w-5 shrink-0" />
                   <span className="min-w-0 flex-1">{item.label}</span>
                   {badge > 0 ? (

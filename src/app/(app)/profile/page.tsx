@@ -9,6 +9,7 @@ import StudentPublicPortfolioCard from "@/components/profile/StudentPublicPortfo
 import type { UserPublicPortfolioPayload } from "@/lib/user-public-portfolio-types";
 import { Edit, Trophy, Award, Calendar, User, PlusCircle, ArrowRight, Phone, Mail, Star } from "lucide-react";
 import Link from "next/link";
+import AuthGuardLink from "@/components/auth/AuthGuardLink";
 import Image from "next/image";
 import { getLocale } from "@/lib/i18n";
 import { getGradeLabel } from "@/constants/grades";
@@ -725,13 +726,13 @@ const ProfilePage = () => {
             </p>
           </div>
           <div className="flex shrink-0 gap-3">
-            <Link
+            <AuthGuardLink
               href="/achievements/new"
               className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-primary-dark"
             >
               <PlusCircle className="h-4 w-4" />
               <span>{locale === "ar" ? "إضافة إنجاز" : "Add Achievement"}</span>
-            </Link>
+            </AuthGuardLink>
             <Link
               href="/achievements"
               className="inline-flex items-center gap-2 rounded-xl border border-gray-300 bg-white px-5 py-2.5 text-sm font-medium text-text transition-colors hover:bg-gray-50"

@@ -6,6 +6,7 @@ import { Eye, EyeOff, LogIn, Mail, User, Lock } from "lucide-react";
 import PlatformLogo from "@/components/branding/PlatformLogo";
 import { initLocale } from "@/lib/i18n";
 import { getDefaultRouteByRole } from "@/lib/auth-default-route";
+import { sanitizeInternalCallbackPath } from "@/lib/requireAuthRedirect";
 import { getTranslation } from "@/locales";
 
 type Locale = "ar" | "en";
@@ -79,7 +80,11 @@ export default function LoginPage() {
       }
 
       const role = typeof data.user?.role === "string" ? data.user.role : "";
-      window.location.href = getDefaultRouteByRole(role);
+      const params = new URLSearchParams(
+        typeof window !== "undefined" ? window.location.search : ""
+      );
+      const next = sanitizeInternalCallbackPath(params.get("callbackUrl"));
+      window.location.href = next ?? getDefaultRouteByRole(role);
     } catch {
       setError(locale === "ar" ? "تعذر تسجيل الدخول حاليًا." : "Unable to sign in right now.");
     } finally {

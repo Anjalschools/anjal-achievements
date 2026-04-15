@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import AuthGuardLink from "@/components/auth/AuthGuardLink";
 import PageContainer from "@/components/layout/PageContainer";
 import PageHeader from "@/components/layout/PageHeader";
 import SectionCard from "@/components/layout/SectionCard";
@@ -63,13 +64,13 @@ const LetterRequestsListPage = () => {
         }
       />
       <div className="mb-4 flex justify-end">
-        <Link
+        <AuthGuardLink
           href="/letter-requests/new"
           className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:opacity-95"
         >
           <PlusCircle className="h-4 w-4" aria-hidden />
           {isAr ? "طلب جديد" : "New request"}
-        </Link>
+        </AuthGuardLink>
       </div>
 
       <SectionCard>

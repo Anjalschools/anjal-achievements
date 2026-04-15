@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
+import AuthGuardLink from "@/components/auth/AuthGuardLink";
 import Image from "next/image";
 import {
   ArrowLeft,
@@ -583,12 +584,12 @@ const AchievementDetailsPage = () => {
 
         {showStudentFollowUp ? (
           <div className="flex flex-wrap gap-2">
-            <Link
+            <AuthGuardLink
               href={`/achievements/new?edit=${achievement.id}`}
               className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:opacity-95"
             >
               {locale === "ar" ? "تعديل الإنجاز" : "Edit achievement"}
-            </Link>
+            </AuthGuardLink>
             <button
               type="button"
               disabled={resubmitBusy}

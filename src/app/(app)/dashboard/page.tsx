@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import AuthGuardLink from "@/components/auth/AuthGuardLink";
 import PageContainer from "@/components/layout/PageContainer";
 import PageHeader from "@/components/layout/PageHeader";
 import SectionCard from "@/components/layout/SectionCard";
@@ -208,13 +209,13 @@ const DashboardPage = () => {
         }
         actions={
           <>
-            <Link
+            <AuthGuardLink
               href="/achievements/new"
               className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-primary-dark"
             >
               <PlusCircle className="h-4 w-4" />
               <span>{isAr ? "إضافة إنجاز" : "Add achievement"}</span>
-            </Link>
+            </AuthGuardLink>
             <Link
               href="/achievements"
               className="inline-flex items-center gap-2 rounded-xl border border-primary/30 bg-white px-4 py-2.5 text-sm font-semibold text-primary transition-colors hover:bg-primary/5"
@@ -396,13 +397,13 @@ const DashboardPage = () => {
               title={isAr ? "لا توجد إنجازات بعد" : "No achievements yet"}
               description={isAr ? "ابدأ بإضافة إنجازك الأول" : "Start by adding your first achievement"}
               action={
-                <Link
+                <AuthGuardLink
                   href="/achievements/new"
                   className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-primary-dark"
                 >
                   <PlusCircle className="h-4 w-4" />
                   <span>{isAr ? "إضافة إنجاز" : "Add achievement"}</span>
-                </Link>
+                </AuthGuardLink>
               }
             />
           ) : (
@@ -422,7 +423,7 @@ const DashboardPage = () => {
             {isAr ? "إجراءات سريعة" : "Quick actions"}
           </h2>
           <div className="space-y-3">
-            <Link
+            <AuthGuardLink
               href="/achievements/new"
               className="flex items-center gap-3 rounded-lg border border-gray-200 bg-white p-4 transition-colors hover:border-primary hover:bg-primary/5"
             >
@@ -435,7 +436,7 @@ const DashboardPage = () => {
                   {isAr ? "سجّل إنجازًا جديدًا مع الإثبات والتفاصيل" : "Record a new achievement with details"}
                 </p>
               </div>
-            </Link>
+            </AuthGuardLink>
 
             <Link
               href="/achievements"

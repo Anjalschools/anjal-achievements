@@ -17,6 +17,7 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import Link from "next/link";
+import AuthGuardLink from "@/components/auth/AuthGuardLink";
 import { getLocale } from "@/lib/i18n";
 import { safeString, safeTrim } from "@/lib/achievementDisplay";
 import {
@@ -482,13 +483,13 @@ const AchievementsPage = () => {
               <span>{isAr ? "لوحة المراجعة" : "Review board"}</span>
             </Link>
           ) : (
-            <Link
+            <AuthGuardLink
               href="/achievements/new"
               className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-primary-dark"
             >
               <PlusCircle className="h-4 w-4" />
               <span>{locale === "ar" ? "إضافة إنجاز" : "Add Achievement"}</span>
-            </Link>
+            </AuthGuardLink>
           )
         }
       />

@@ -1,6 +1,9 @@
+"use client";
+
 import { useMemo, useState, type MouseEvent } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import AuthGuardLink from "@/components/auth/AuthGuardLink";
 import { Award, Pencil, ScrollText, Trash2 } from "lucide-react";
 import { getLocale } from "@/lib/i18n";
 import {
@@ -331,13 +334,13 @@ const AchievementCard = ({
           </div>
           {!isLocked && (
             <div className="flex items-center gap-2">
-              <Link
+              <AuthGuardLink
                 href={`/achievements/new?edit=${id}`}
                 className="inline-flex items-center gap-1 rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50"
               >
                 <Pencil className="h-3.5 w-3.5" />
                 {locale === "ar" ? "تعديل" : "Edit"}
-              </Link>
+              </AuthGuardLink>
               <button
                 type="button"
                 onClick={handleDeleteClick}
