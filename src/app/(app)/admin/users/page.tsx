@@ -63,6 +63,7 @@ const AdminUsersPageInner = () => {
   const [qInput, setQInput] = useState(searchParams.get("q") || "");
   const [roleFilter, setRoleFilter] = useState(searchParams.get("role") || "all");
   const [statusFilter, setStatusFilter] = useState(searchParams.get("status") || "all");
+  const [mawhibaFilter, setMawhibaFilter] = useState(searchParams.get("mawhiba") || "all");
   const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10) || 1);
 
   const [menuOpen, setMenuOpen] = useState<string | null>(null);
@@ -102,19 +103,21 @@ const AdminUsersPageInner = () => {
   }, []);
 
   const pushQuery = useCallback(
-    (next: { q?: string; role?: string; status?: string; page?: number }) => {
+    (next: { q?: string; role?: string; status?: string; mawhiba?: string; page?: number }) => {
       const p = new URLSearchParams();
       const q = next.q ?? qInput.trim();
       const role = next.role ?? roleFilter;
       const status = next.status ?? statusFilter;
+      const mawhiba = next.mawhiba ?? mawhibaFilter;
       const pg = next.page ?? page;
       if (q) p.set("q", q);
       if (role && role !== "all") p.set("role", role);
       if (status && status !== "all") p.set("status", status);
+      if (mawhiba && mawhiba !== "all") p.set("mawhiba", mawhiba);
       if (pg > 1) p.set("page", String(pg));
       router.replace(`/admin/users${p.toString() ? `?${p}` : ""}`);
     },
-    [qInput, roleFilter, statusFilter, page, router]
+    [qInput, roleFilter, statusFilter, mawhibaFilter, page, router]
   );
 
   const load = useCallback(async () => {
@@ -125,10 +128,12 @@ const AdminUsersPageInner = () => {
       const q = searchParams.get("q")?.trim() || "";
       const role = searchParams.get("role") || "all";
       const status = searchParams.get("status") || "all";
+      const mawhiba = searchParams.get("mawhiba") || "all";
       const pg = Math.max(1, parseInt(searchParams.get("page") || "1", 10) || 1);
       if (q) p.set("q", q);
       if (role !== "all") p.set("role", role);
       if (status !== "all") p.set("status", status);
+      if (mawhiba !== "all" && (mawhiba === "yes" || mawhiba === "no")) p.set("mawhiba", mawhiba);
       p.set("page", String(pg));
       p.set("limit", "20");
 
@@ -161,6 +166,7 @@ const AdminUsersPageInner = () => {
     setQInput(searchParams.get("q") || "");
     setRoleFilter(searchParams.get("role") || "all");
     setStatusFilter(searchParams.get("status") || "all");
+    setMawhibaFilter(searchParams.get("mawhiba") || "all");
   }, [searchParams]);
 
   const stats = data?.stats;
@@ -192,7 +198,7 @@ const AdminUsersPageInner = () => {
   };
 
   const handleApplyFilters = () => {
-    pushQuery({ q: qInput.trim(), role: roleFilter, status: statusFilter, page: 1 });
+    pushQuery({ q: qInput.trim(), role: roleFilter, status: statusFilter, mawhiba: mawhibaFilter, page: 1 });
   };
 
   const toggleStatus = async (row: AdminUserListRow) => {
@@ -344,6 +350,19 @@ const AdminUsersPageInner = () => {
                 <option value="active">{isAr ? "نشط" : "Active"}</option>
                 <option value="inactive">{isAr ? "غير نشط" : "Inactive"}</option>
                 <option value="suspended">{isAr ? "موقوف" : "Suspended"}</option>
+              </select>
+            </label>
+            <label className="min-w-[160px] text-xs font-semibold text-text-light">
+              {isAr ? "فصول موهبة" : "Mawhiba classes"}
+              <select
+                value={mawhibaFilter}
+                onChange={(e) => setMawhibaFilter(e.target.value)}
+                className="mt-1 w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm"
+                title={isAr ? "يؤثر على الطلاب ضمن اختيار الدور؛ الموظفون يبقون ظاهرين عند «الكل»." : "Affects students under role filter; staff remain visible when set to All."}
+              >
+                <option value="all">{isAr ? "الكل (طلاب)" : "All"}</option>
+                <option value="yes">{isAr ? "طلاب موهبة" : "Mawhiba students"}</option>
+                <option value="no">{isAr ? "غير موهبة" : "Non‑Mawhiba"}</option>
               </select>
             </label>
             <div className="flex flex-wrap gap-2">

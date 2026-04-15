@@ -48,6 +48,7 @@ type AdminReportRow = {
   status: string;
   certificateIssued: boolean;
   description: string;
+  isMawhibaStudent?: boolean;
 };
 
 type UnifiedPayload = {
@@ -69,6 +70,7 @@ const AdminAchievementReportsPage = () => {
   const [f, setF] = useState({
     academicYear: "2025-2026م",
     gender: "all",
+    mawhiba: "all",
     stage: "all",
     grade: "all",
     /** empty = الكل */
@@ -116,6 +118,7 @@ const AdminAchievementReportsPage = () => {
         view: "unified",
         academicYear: f.academicYear,
         gender: f.gender,
+        mawhiba: f.mawhiba,
         stage: f.stage,
         grade: f.grade,
         achievementName: f.achievementName,
@@ -278,6 +281,7 @@ const AdminAchievementReportsPage = () => {
                   setF({
                     academicYear: "2025-2026م",
                     gender: "all",
+                    mawhiba: "all",
                     stage: "all",
                     grade: "all",
                     categories: [],
@@ -325,6 +329,18 @@ const AdminAchievementReportsPage = () => {
               <option value="all">{isAr ? "الكل" : "All"}</option>
               <option value="male">{isAr ? "طلاب" : "Boys"}</option>
               <option value="female">{isAr ? "طالبات" : "Girls"}</option>
+            </select>
+          </label>
+          <label className="flex flex-col text-xs font-semibold text-text-light">
+            {isAr ? "فصول موهبة" : "Mawhiba classes"}
+            <select
+              value={f.mawhiba}
+              onChange={(e) => setF((p) => ({ ...p, mawhiba: e.target.value }))}
+              className="mt-1 rounded-lg border border-gray-300 px-3 py-2 text-sm text-text"
+            >
+              <option value="all">{isAr ? "الكل" : "All"}</option>
+              <option value="yes">{isAr ? "طلاب موهبة" : "Mawhiba students"}</option>
+              <option value="no">{isAr ? "غير موهبة" : "Non‑Mawhiba"}</option>
             </select>
           </label>
           <label className="flex flex-col text-xs font-semibold text-text-light">
@@ -579,6 +595,7 @@ const MetricCard = ({ label, value }: { label: string; value: number }) => (
 
 const StatsPanel = ({ isAr, stats }: { isAr: boolean; stats: Record<string, unknown> | null }) => {
   const byGender = (stats?.byGender || {}) as Record<string, number>;
+  const byMawhiba = (stats?.byMawhiba || {}) as Record<string, number>;
   if (!stats) {
     return (
       <section className="rounded-2xl border border-gray-200 bg-white p-4">
@@ -597,6 +614,22 @@ const StatsPanel = ({ isAr, stats }: { isAr: boolean; stats: Record<string, unkn
         <MetricCardSmall label={isAr ? "الطالبات المشاركات" : "Girls participants"} value={byGender.participantsGirls || 0} />
         <MetricCardSmall label={isAr ? "شهادات الطلاب" : "Boys certificates"} value={byGender.certificatesBoys || 0} />
         <MetricCardSmall label={isAr ? "شهادات الطالبات" : "Girls certificates"} value={byGender.certificatesGirls || 0} />
+        <MetricCardSmall
+          label={isAr ? "إنجازات موهبة" : "Mawhiba achievements"}
+          value={byMawhiba.achievementsMawhiba || 0}
+        />
+        <MetricCardSmall
+          label={isAr ? "إنجازات غير موهبة" : "Non‑Mawhiba achievements"}
+          value={byMawhiba.achievementsNonMawhiba || 0}
+        />
+        <MetricCardSmall
+          label={isAr ? "طلاب موهبة (فريدون)" : "Mawhiba students (distinct)"}
+          value={byMawhiba.participantsMawhiba || 0}
+        />
+        <MetricCardSmall
+          label={isAr ? "طلاب غير موهبة (فريدون)" : "Non‑Mawhiba students (distinct)"}
+          value={byMawhiba.participantsNonMawhiba || 0}
+        />
       </div>
     </section>
   );

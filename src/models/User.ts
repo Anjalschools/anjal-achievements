@@ -21,6 +21,8 @@ export interface IUser extends Document {
   gender: "male" | "female";
   section: "arabic" | "international";
   grade: string;
+  /** Student: enrolled in Mawhiba (gifted) program classes. Omitted/false for legacy accounts. */
+  isMawhibaStudent?: boolean;
   role: "student" | "admin" | "teacher" | "supervisor" | "judge" | "schoolAdmin";
   status: "active" | "inactive" | "suspended";
   preferredLanguage: "ar" | "en";
@@ -220,6 +222,10 @@ const UserSchema: Schema = new Schema(
     grade: {
       type: String,
       required: true,
+    },
+    isMawhibaStudent: {
+      type: Boolean,
+      default: false,
     },
     role: {
       type: String,

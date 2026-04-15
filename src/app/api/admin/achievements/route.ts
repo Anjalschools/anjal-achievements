@@ -71,6 +71,28 @@ export async function GET(request: NextRequest) {
     );
     const andParts: Record<string, unknown>[] = [baseFilter];
 
+    const mawhiba = String(searchParams.get("mawhiba") || "").trim();
+    if (mawhiba === "yes" || mawhiba === "no") {
+      const userQ =
+        mawhiba === "yes" ? { isMawhibaStudent: true } : { isMawhibaStudent: { $ne: true } };
+      const mUsers = await User.find(userQ).select("_id").lean();
+      const mIds = mUsers.map((u) => u._id);
+      if (mIds.length === 0) {
+        return NextResponse.json({
+          items: [],
+          total: 0,
+          page,
+          limit,
+          tab,
+          meta: {
+            aiReviewUiEnabled: isAiReviewUiEnabled(),
+            aiAssistEnabled: isAiAssistEnabled(),
+          },
+        });
+      }
+      andParts.push({ userId: { $in: mIds } });
+    }
+
     if (q) {
       const esc = q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
       const rx = new RegExp(esc, "i");
@@ -114,7 +136,7 @@ export async function GET(request: NextRequest) {
 
     const populatedRows = await Achievement.populate(rows, {
       path: "userId",
-      select: "fullName email grade section",
+      select: "fullName email grade section isMawhibaStudent",
     });
 
     type BuiltItem = Record<string, unknown>;

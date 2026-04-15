@@ -112,6 +112,7 @@ const AchievementsPage = () => {
   const [adminField, setAdminField] = useState("all");
   const [adminLevel, setAdminLevel] = useState("all");
   const [adminGender, setAdminGender] = useState("all");
+  const [adminMawhiba, setAdminMawhiba] = useState("all");
   const [adminGrade, setAdminGrade] = useState("all");
   const [adminSection, setAdminSection] = useState("all");
   const [adminYear, setAdminYear] = useState("all");
@@ -193,6 +194,7 @@ const AchievementsPage = () => {
         if (adminField !== "all") sp.set("field", adminField);
         if (adminLevel !== "all") sp.set("level", adminLevel);
         if (adminGender !== "all") sp.set("gender", adminGender);
+        if (adminMawhiba !== "all") sp.set("mawhiba", adminMawhiba);
         if (adminGrade !== "all") sp.set("grade", adminGrade);
         if (adminSection !== "all") sp.set("section", adminSection);
         if (adminYear !== "all") sp.set("year", adminYear);
@@ -236,6 +238,7 @@ const AchievementsPage = () => {
       adminFeaturedOnly,
       adminField,
       adminGender,
+      adminMawhiba,
       adminGrade,
       adminLevel,
       adminSection,
@@ -264,6 +267,7 @@ const AchievementsPage = () => {
     adminField,
     adminLevel,
     adminGender,
+    adminMawhiba,
     adminGrade,
     adminSection,
     adminYear,
@@ -412,6 +416,7 @@ const AchievementsPage = () => {
       adminField !== "all" ||
       adminLevel !== "all" ||
       adminGender !== "all" ||
+      adminMawhiba !== "all" ||
       adminGrade !== "all" ||
       adminSection !== "all" ||
       adminYear !== "all" ||
@@ -425,6 +430,7 @@ const AchievementsPage = () => {
       adminFeaturedOnly,
       adminField,
       adminGender,
+      adminMawhiba,
       adminGrade,
       adminLevel,
       adminQ,
@@ -443,6 +449,7 @@ const AchievementsPage = () => {
     setAdminField("all");
     setAdminLevel("all");
     setAdminGender("all");
+    setAdminMawhiba("all");
     setAdminGrade("all");
     setAdminSection("all");
     setAdminYear("all");
@@ -565,6 +572,15 @@ const AchievementsPage = () => {
                   <option value="all">{isAr ? "كل الأنواع (الطالب)" : "All genders"}</option>
                   <option value="male">{isAr ? "طالب" : "Male"}</option>
                   <option value="female">{isAr ? "طالبة" : "Female"}</option>
+                </select>
+                <select
+                  value={adminMawhiba}
+                  onChange={(e) => setAdminMawhiba(e.target.value)}
+                  className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm"
+                >
+                  <option value="all">{isAr ? "موهبة: الكل" : "Mawhiba: all"}</option>
+                  <option value="yes">{isAr ? "طلاب موهبة" : "Mawhiba students"}</option>
+                  <option value="no">{isAr ? "غير موهبة" : "Non‑Mawhiba"}</option>
                 </select>
                 <select value={adminGrade} onChange={(e) => setAdminGrade(e.target.value)} className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm">
                   <option value="all">{isAr ? "كل الصفوف" : "All grades"}</option>

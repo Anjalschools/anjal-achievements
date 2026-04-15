@@ -37,6 +37,8 @@ export default function RegisterPage() {
   const [gender, setGender] = useState<"male" | "female" | "">("");
   const [section, setSection] = useState<"arabic" | "international" | "">("");
   const [grade, setGrade] = useState("");
+  /** Default "no" (non‑Mawhiba); user may switch to "yes". */
+  const [isMawhibaStudent, setIsMawhibaStudent] = useState(false);
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
 
@@ -260,6 +262,7 @@ export default function RegisterPage() {
       formData.append("gender", gender);
       formData.append("section", section);
       formData.append("grade", grade);
+      formData.append("isMawhibaStudent", isMawhibaStudent ? "true" : "false");
       formData.append("email", email);
       formData.append("phone", phone);
       formData.append("guardianName", guardianName);
@@ -641,6 +644,34 @@ export default function RegisterPage() {
                         </option>
                       ))}
                     </select>
+                  </div>
+                </div>
+
+                <div className="sm:col-span-2">
+                  <label className="mb-2 block text-sm font-semibold text-slate-700">
+                    {t.register.mawhibaQuestion}
+                  </label>
+                  <div className="flex gap-3">
+                    <label className="flex flex-1 cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-white p-3 transition hover:border-sky-300">
+                      <input
+                        type="radio"
+                        name="isMawhibaStudent"
+                        checked={isMawhibaStudent === true}
+                        onChange={() => setIsMawhibaStudent(true)}
+                        className="h-4 w-4 text-sky-600 focus:ring-sky-500"
+                      />
+                      <span className="text-sm font-medium text-slate-700">{t.register.mawhibaYes}</span>
+                    </label>
+                    <label className="flex flex-1 cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-white p-3 transition hover:border-sky-300">
+                      <input
+                        type="radio"
+                        name="isMawhibaStudent"
+                        checked={isMawhibaStudent === false}
+                        onChange={() => setIsMawhibaStudent(false)}
+                        className="h-4 w-4 text-sky-600 focus:ring-sky-500"
+                      />
+                      <span className="text-sm font-medium text-slate-700">{t.register.mawhibaNo}</span>
+                    </label>
                   </div>
                 </div>
 

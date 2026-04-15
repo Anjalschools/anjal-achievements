@@ -30,6 +30,7 @@ export async function GET(request: NextRequest) {
       const payload = await buildUnifiedAdminAchievementReports({
         academicYear: String(searchParams.get("academicYear") || "").trim() || undefined,
         gender: String(searchParams.get("gender") || "").trim() || undefined,
+        mawhiba: String(searchParams.get("mawhiba") || "").trim() || undefined,
         stage: String(searchParams.get("stage") || "").trim() || undefined,
         grade: String(searchParams.get("grade") || "").trim() || undefined,
         categories: parseReportCsvParam(searchParams.get("category")),

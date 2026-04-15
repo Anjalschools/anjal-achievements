@@ -25,7 +25,7 @@ import { ensureStudentPublicPortfolioReady } from "@/lib/public-portfolio-bootst
 import { queueHomeStatsRefresh } from "@/lib/home-stats-service";
 
 const LIST_FIELDS =
-  "fullName fullNameAr fullNameEn username email role status studentId nationalId phone profilePhoto preferredLanguage gender section grade createdAt updatedAt lastLoginAt publicPortfolioEnabled publicPortfolioSlug publicPortfolioPublishedAt staffScope";
+  "fullName fullNameAr fullNameEn username email role status studentId nationalId phone profilePhoto preferredLanguage gender section grade isMawhibaStudent createdAt updatedAt lastLoginAt publicPortfolioEnabled publicPortfolioSlug publicPortfolioPublishedAt staffScope";
 
 const escapeRx = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
@@ -35,6 +35,8 @@ export type AdminUserListQuery = {
   q: string;
   role: string;
   status: string;
+  /** all | yes | no — Mawhiba class students (students only meaningful; with role=all, non-students stay visible). */
+  mawhiba: string;
 };
 
 export type AdminUserStats = {
@@ -135,6 +137,17 @@ export const buildAdminUserListFilter = (q: AdminUserListQuery): Record<string, 
       ],
     });
   }
+  const mh = q.mawhiba?.trim();
+  if (mh === "yes") {
+    parts.push({
+      $or: [{ role: { $ne: "student" } }, { isMawhibaStudent: true }],
+    });
+  } else if (mh === "no") {
+    parts.push({
+      $or: [{ role: { $ne: "student" } }, { isMawhibaStudent: { $ne: true } }],
+    });
+  }
+
   if (parts.length === 0) return {};
   if (parts.length === 1) return parts[0];
   return { $and: parts };
@@ -186,6 +199,8 @@ export type AdminCreateUserInput = {
   /** Required for `student`; omitted for staff — server applies schema defaults. */
   section?: "arabic" | "international";
   grade?: string;
+  /** For `student` accounts only; ignored for staff. */
+  isMawhibaStudent?: boolean;
   preferredLanguage?: "ar" | "en";
   staffScope?: StaffScopePayload | null;
 };
@@ -239,6 +254,9 @@ export const adminCreateUser = async (input: AdminCreateUserInput): Promise<Admi
     if (n) staffScopeCreate = n;
   }
 
+  const isMawhibaStudent =
+    input.role === "student" ? input.isMawhibaStudent === true : false;
+
   const doc = await User.create({
     fullName,
     fullNameAr: fullNameAr || fullName,
@@ -252,6 +270,7 @@ export const adminCreateUser = async (input: AdminCreateUserInput): Promise<Admi
     gender: input.gender,
     section,
     grade,
+    isMawhibaStudent,
     role: input.role,
     status: input.status,
     preferredLanguage: input.preferredLanguage === "en" ? "en" : "ar",
@@ -280,6 +299,7 @@ export type AdminUpdateUserInput = {
   gender?: "male" | "female";
   section?: "arabic" | "international";
   grade?: string;
+  isMawhibaStudent?: boolean;
   preferredLanguage?: "ar" | "en";
   profilePhoto?: string | null;
   staffScope?: StaffScopePayload | null;
@@ -356,6 +376,9 @@ export const adminUpdateUser = async (
   if (input.section !== undefined) $set.section = input.section;
   if (input.grade !== undefined) {
     $set.grade = normalizeGrade(input.grade) || input.grade.trim();
+  }
+  if (input.isMawhibaStudent !== undefined) {
+    $set.isMawhibaStudent = input.isMawhibaStudent === true;
   }
   if (input.preferredLanguage !== undefined) $set.preferredLanguage = input.preferredLanguage;
   if (input.profilePhoto !== undefined) {

@@ -36,6 +36,9 @@ export async function POST(request: NextRequest) {
     const termsAgreed = formData.get("termsAgreed") === "true";
     const notificationsAgreed = formData.get("notificationsAgreed") === "true";
     const profilePhoto = formData.get("profilePhoto") as File | null;
+    const isMawhibaStudentRaw = formData.get("isMawhibaStudent");
+    /** Explicit `true` only when sent as "true"; missing/legacy payloads default to false. */
+    const isMawhibaStudent = isMawhibaStudentRaw === "true";
 
     // Validation - Required fields
     if (!fullName || !email || !username || !studentId || !password) {
@@ -163,6 +166,7 @@ export async function POST(request: NextRequest) {
       gender,
       section,
       grade: normalizedGrade,
+      isMawhibaStudent,
       guardianName: guardianName ? guardianName.trim() : undefined,
       guardianPhone: guardianPhone ? guardianPhone.trim() : undefined,
       guardianNationalId: guardianId ? guardianId.trim() : undefined,

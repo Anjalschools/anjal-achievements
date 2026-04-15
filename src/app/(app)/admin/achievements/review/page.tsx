@@ -57,6 +57,7 @@ const AdminAchievementsReviewPageContent = () => {
   const [tab, setTab] = useState<Tab>("all");
   const [q, setQ] = useState("");
   const [debouncedQ, setDebouncedQ] = useState("");
+  const [mawhiba, setMawhiba] = useState<"all" | "yes" | "no">("all");
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [items, setItems] = useState<Row[]>([]);
@@ -120,6 +121,7 @@ const AdminAchievementsReviewPageContent = () => {
         limit: "20",
       });
       if (debouncedQ) params.set("q", debouncedQ);
+      if (mawhiba !== "all") params.set("mawhiba", mawhiba);
       const res = await fetch(`/api/admin/achievements?${params}`, { cache: "no-store" });
       if (res.status === 401) {
         router.push("/login");
@@ -148,7 +150,7 @@ const AdminAchievementsReviewPageContent = () => {
     } finally {
       setLoading(false);
     }
-  }, [tab, page, debouncedQ, router]);
+  }, [tab, page, debouncedQ, mawhiba, router]);
 
   const applyListPatch = useCallback(
     (id: string, patch: Record<string, unknown>) => {
@@ -744,6 +746,19 @@ const AdminAchievementsReviewPageContent = () => {
               className="min-w-[200px] flex-1 rounded-xl border border-gray-300 bg-white px-4 py-2.5 text-sm sm:max-w-md"
               aria-label={isAr ? "بحث" : "Search"}
             />
+            <select
+              value={mawhiba}
+              onChange={(e) => {
+                setMawhiba(e.target.value as "all" | "yes" | "no");
+                setPage(1);
+              }}
+              className="rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-sm"
+              aria-label={isAr ? "فلتر موهبة" : "Mawhiba filter"}
+            >
+              <option value="all">{isAr ? "موهبة: الكل" : "Mawhiba: all"}</option>
+              <option value="yes">{isAr ? "طلاب موهبة" : "Mawhiba"}</option>
+              <option value="no">{isAr ? "غير موهبة" : "Non‑Mawhiba"}</option>
+            </select>
             <button
               type="button"
               onClick={() => fetchList()}

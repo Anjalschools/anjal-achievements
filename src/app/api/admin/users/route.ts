@@ -31,10 +31,12 @@ export async function GET(request: NextRequest) {
     const q = String(searchParams.get("q") || "").trim();
     const role = String(searchParams.get("role") || "all");
     const status = String(searchParams.get("status") || "all");
+    const mawhibaRaw = String(searchParams.get("mawhiba") || "all").trim();
+    const mawhiba = mawhibaRaw === "yes" || mawhibaRaw === "no" ? mawhibaRaw : "all";
 
     const [stats, { items, total }] = await Promise.all([
       fetchAdminUserStats(),
-      listAdminUsers({ page, limit, q, role, status }),
+      listAdminUsers({ page, limit, q, role, status, mawhiba }),
     ]);
 
     return NextResponse.json({
@@ -110,6 +112,7 @@ export async function POST(request: NextRequest) {
       status: statusRaw,
       gender,
       ...(needsAcademic ? { section, grade } : {}),
+      ...(roleRaw === "student" ? { isMawhibaStudent: body.isMawhibaStudent === true } : {}),
       preferredLanguage,
       ...(staffScope !== undefined ? { staffScope } : {}),
     };

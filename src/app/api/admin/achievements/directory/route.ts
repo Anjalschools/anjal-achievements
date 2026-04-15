@@ -57,6 +57,7 @@ export async function GET(request: NextRequest) {
     const gender = safe(sp.get("gender"));
     const grade = safe(sp.get("grade"));
     const section = safe(sp.get("section"));
+    const mawhiba = safe(sp.get("mawhiba"));
     const entryType = safe(sp.get("entryType"));
     const year = safe(sp.get("year"));
     const featured = parseBool(sp.get("featured"));
@@ -81,6 +82,8 @@ export async function GET(request: NextRequest) {
     if (gender && gender !== "all") userFilterParts.push({ gender });
     if (grade && grade !== "all") userFilterParts.push({ grade });
     if (section && section !== "all") userFilterParts.push({ section });
+    if (mawhiba === "yes") userFilterParts.push({ isMawhibaStudent: true });
+    if (mawhiba === "no") userFilterParts.push({ isMawhibaStudent: { $ne: true } });
 
     let userIdsFromFilter: unknown[] | null = null;
     if (userFilterParts.length > 0) {
@@ -141,7 +144,7 @@ export async function GET(request: NextRequest) {
 
     const populatedRows = await Achievement.populate(rows, {
       path: "userId",
-      select: "fullName username studentId gender grade section",
+      select: "fullName username studentId gender grade section isMawhibaStudent",
     });
 
     const textSort = sort === "student_asc" || sort === "achievement_asc";

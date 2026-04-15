@@ -96,6 +96,9 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         if (n !== undefined) input.staffScope = n;
       }
     }
+    if (body.isMawhibaStudent !== undefined) {
+      input.isMawhibaStudent = body.isMawhibaStudent === true;
+    }
 
     const user = await adminUpdateUser(id, input, actorId(gate.user));
     return NextResponse.json({ user });

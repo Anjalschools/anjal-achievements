@@ -18,6 +18,8 @@ export type AdminUserListRow = {
   gender: "male" | "female";
   section: "arabic" | "international";
   grade: string;
+  /** Mawhiba (gifted) class student; false if unset in DB (legacy). */
+  isMawhibaStudent: boolean;
   createdAt: string | null;
   updatedAt: string | null;
   lastLoginAt: string | null;
@@ -47,6 +49,7 @@ export const serializeAdminUserRow = (u: Record<string, unknown>): AdminUserList
   gender: u.gender === "female" ? "female" : "male",
   section: u.section === "international" ? "international" : "arabic",
   grade: typeof u.grade === "string" && u.grade.trim() ? u.grade.trim() : "g12",
+  isMawhibaStudent: u.isMawhibaStudent === true,
   createdAt: u.createdAt instanceof Date ? u.createdAt.toISOString() : null,
   updatedAt: u.updatedAt instanceof Date ? u.updatedAt.toISOString() : null,
   lastLoginAt: u.lastLoginAt instanceof Date ? u.lastLoginAt.toISOString() : null,

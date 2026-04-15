@@ -45,6 +45,7 @@ const AdminUsersNewPage = () => {
   const [gender, setGender] = useState<"male" | "female">("male");
   const [section, setSection] = useState<"arabic" | "international">("arabic");
   const [grade, setGrade] = useState("g12");
+  const [isMawhibaStudent, setIsMawhibaStudent] = useState(false);
   const [preferredLanguage, setPreferredLanguage] = useState<"ar" | "en">("ar");
   const [staffScopeForm, setStaffScopeForm] = useState<AdminStaffScopeFormValue>(emptyStaffScopeForm);
 
@@ -109,7 +110,7 @@ const AdminUsersNewPage = () => {
             role,
             status,
             gender,
-            ...(academic ? { section, grade } : {}),
+            ...(academic ? { section, grade, isMawhibaStudent } : {}),
             preferredLanguage,
             ...(staffPayload ? { staffScope: staffPayload } : {}),
           }),
@@ -140,6 +141,7 @@ const AdminUsersNewPage = () => {
       gender,
       section,
       grade,
+      isMawhibaStudent,
       preferredLanguage,
       staffScopeForm,
       router,
@@ -291,6 +293,19 @@ const AdminUsersNewPage = () => {
                     {isAr ? g.ar : g.en}
                   </option>
                 ))}
+              </select>
+            </label>
+          ) : null}
+          {roleNeedsAcademicFields(role) ? (
+            <label className="block text-xs font-semibold text-text-light">
+              {isAr ? "هل الطالب من فصول موهبة؟" : "Mawhiba (gifted) class student?"}
+              <select
+                className={inputCls}
+                value={isMawhibaStudent ? "yes" : "no"}
+                onChange={(e) => setIsMawhibaStudent(e.target.value === "yes")}
+              >
+                <option value="no">{isAr ? "لا" : "No"}</option>
+                <option value="yes">{isAr ? "نعم" : "Yes"}</option>
               </select>
             </label>
           ) : null}

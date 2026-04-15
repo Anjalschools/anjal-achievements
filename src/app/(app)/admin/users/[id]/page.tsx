@@ -66,6 +66,7 @@ const AdminUserEditPage = () => {
   const [gender, setGender] = useState<"male" | "female">("male");
   const [section, setSection] = useState<"arabic" | "international">("arabic");
   const [grade, setGrade] = useState("g12");
+  const [isMawhibaStudent, setIsMawhibaStudent] = useState(false);
   const [preferredLanguage, setPreferredLanguage] = useState<"ar" | "en">("ar");
   const [profilePhoto, setProfilePhoto] = useState("");
 
@@ -126,6 +127,7 @@ const AdminUserEditPage = () => {
       setGender(u.gender);
       setSection(u.section);
       setGrade(u.grade);
+      setIsMawhibaStudent(u.isMawhibaStudent === true);
       setProfilePhoto(u.profilePhoto || "");
       setPreferredLanguage(u.preferredLanguage);
       const ss = u.staffScope;
@@ -194,6 +196,7 @@ const AdminUserEditPage = () => {
         preferredLanguage,
         profilePhoto: profilePhoto.trim() || null,
       };
+      if (role === "student") payload.isMawhibaStudent = isMawhibaStudent;
       if (roleSupportsStaffScopeStorage(role)) {
         if (
           staffScopeForm.genders.length === 0 &&
@@ -643,6 +646,19 @@ const AdminUserEditPage = () => {
               ))}
             </select>
           </label>
+          {role === "student" ? (
+            <label className="block text-xs font-semibold text-text-light">
+              {isAr ? "هل الطالب من فصول موهبة؟" : "Mawhiba (gifted) class student?"}
+              <select
+                className={inputCls}
+                value={isMawhibaStudent ? "yes" : "no"}
+                onChange={(e) => setIsMawhibaStudent(e.target.value === "yes")}
+              >
+                <option value="no">{isAr ? "لا" : "No"}</option>
+                <option value="yes">{isAr ? "نعم" : "Yes"}</option>
+              </select>
+            </label>
+          ) : null}
           {roleSupportsStaffScopeStorage(role) ? (
             <AdminStaffScopeFields
               isAr={isAr}

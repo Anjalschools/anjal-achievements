@@ -145,7 +145,7 @@ export const buildStudentAchievementReportStats = async (
   const uid = new mongoose.Types.ObjectId(userId);
 
   const user = await User.findById(uid)
-    .select("fullName fullNameAr fullNameEn email grade section studentId")
+    .select("fullName fullNameAr fullNameEn email grade section studentId isMawhibaStudent")
     .lean();
   if (!user) return null;
 
@@ -205,6 +205,7 @@ export const buildStudentAchievementReportStats = async (
       grade: safeStr(u.grade),
       section: safeStr(u.section),
       studentId: safeStr(u.studentId),
+      isMawhibaStudent: u.isMawhibaStudent === true,
     },
     totalAchievements: total,
     byType: byTypeS,
@@ -373,6 +374,8 @@ export const buildUrgentReviewQueueStats = async (): Promise<Record<string, unkn
 export type AdminReportFilters = {
   academicYear?: string;
   gender?: string;
+  /** all | yes | no — Mawhiba (gifted) class students vs others. */
+  mawhiba?: string;
   stage?: string;
   grade?: string;
   /** @deprecated prefer `categories` */
@@ -430,6 +433,7 @@ export type AdminReportRow = {
   studentName: string;
   gender: string;
   grade: string;
+  isMawhibaStudent: boolean;
   stage: ReportStage;
   stageLabelAr: string;
   stageLabelEn: string;
@@ -534,7 +538,7 @@ export const buildUnifiedAdminAchievementReports = async (
   const users =
     userIds.length > 0
       ? ((await User.find({ _id: { $in: userIds } })
-          .select("fullName fullNameAr fullNameEn gender grade studentId")
+          .select("fullName fullNameAr fullNameEn gender grade studentId isMawhibaStudent")
           .lean()) as unknown as Record<string, unknown>[])
       : [];
   const userMap = new Map<string, Record<string, unknown>>();
@@ -543,7 +547,13 @@ export const buildUnifiedAdminAchievementReports = async (
   const resolveStudent = (
     a: Record<string, unknown>,
     u: Record<string, unknown>
-  ): { studentId: string; studentName: string; gender: string; grade: string } => {
+  ): {
+    studentId: string;
+    studentName: string;
+    gender: string;
+    grade: string;
+    isMawhibaStudent: boolean;
+  } => {
     const uid = String(a.userId || "");
     if (uid && u && Object.keys(u).length > 0) {
       return {
@@ -555,6 +565,7 @@ export const buildUnifiedAdminAchievementReports = async (
           "—",
         gender: String(u.gender || "").trim().toLowerCase(),
         grade: String(u.grade || "").trim(),
+        isMawhibaStudent: u.isMawhibaStudent === true,
       };
     }
     const snap = (a.studentSnapshot || {}) as Record<string, unknown>;
@@ -566,6 +577,7 @@ export const buildUnifiedAdminAchievementReports = async (
         "—",
       gender: String(snap.gender || "male").trim().toLowerCase() === "female" ? "female" : "male",
       grade: String(snap.grade || "").trim(),
+      isMawhibaStudent: snap.isMawhibaStudent === true,
     };
   };
 
@@ -576,6 +588,7 @@ export const buildUnifiedAdminAchievementReports = async (
     const rs = resolveStudent(a, u);
     const gender = rs.gender;
     const grade = rs.grade;
+    const isMawhibaStudent = rs.isMawhibaStudent;
     const stage = getStageByGrade(grade);
     const refDate = (a.date as Date) || (a.createdAt as Date) || null;
     const eventLabelAr = getAchievementDisplayName(a, "ar");
@@ -588,6 +601,7 @@ export const buildUnifiedAdminAchievementReports = async (
       studentName: rs.studentName,
       gender,
       grade,
+      isMawhibaStudent,
       stage,
       stageLabelAr: reportStageLabel(stage, true),
       stageLabelEn: reportStageLabel(stage, false),
@@ -626,8 +640,11 @@ export const buildUnifiedAdminAchievementReports = async (
     rows.push(row);
   }
 
+  const mh = String(filters.mawhiba || "all").trim();
   const filtered = rows.filter((r) => {
     if (filters.gender && filters.gender !== "all" && r.gender !== filters.gender) return false;
+    if (mh === "yes" && !r.isMawhibaStudent) return false;
+    if (mh === "no" && r.isMawhibaStudent) return false;
     if (filters.stage && filters.stage !== "all" && r.stage !== filters.stage) return false;
     if (filters.grade && filters.grade !== "all" && r.grade !== filters.grade) return false;
     if (filters.certificateStatus && filters.certificateStatus !== "all") {
@@ -636,6 +653,17 @@ export const buildUnifiedAdminAchievementReports = async (
     }
     return true;
   });
+
+  const byMawhiba = {
+    mawhiba: filtered.filter((r) => r.isMawhibaStudent).length,
+    nonMawhiba: filtered.filter((r) => !r.isMawhibaStudent).length,
+  };
+  const studentsMawhiba = new Set(
+    filtered.filter((r) => r.isMawhibaStudent).map((r) => r.studentId)
+  ).size;
+  const studentsNonMawhiba = new Set(
+    filtered.filter((r) => !r.isMawhibaStudent).map((r) => r.studentId)
+  ).size;
 
   const byGender = {
     male: filtered.filter((r) => r.gender === "male").length,
@@ -766,6 +794,12 @@ export const buildUnifiedAdminAchievementReports = async (
   return {
     rows: filtered,
     stats: {
+      byMawhiba: {
+        achievementsMawhiba: byMawhiba.mawhiba,
+        achievementsNonMawhiba: byMawhiba.nonMawhiba,
+        participantsMawhiba: studentsMawhiba,
+        participantsNonMawhiba: studentsNonMawhiba,
+      },
       byGender: {
         achievementsBoys: byGender.male,
         achievementsGirls: byGender.female,
