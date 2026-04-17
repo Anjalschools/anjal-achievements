@@ -83,6 +83,8 @@ export interface IAchievement extends Document {
   level?: string;
   position?: number;
   image?: string;
+  /** Optional Cloudinary public_id for hosted cover images. */
+  imagePublicId?: string;
   attachments?: AchievementAttachmentStored[];
   certificateNumber?: string;
   
@@ -463,6 +465,10 @@ const AchievementSchema: Schema = new Schema(
     },
     image: {
       type: String,
+    },
+    imagePublicId: {
+      type: String,
+      trim: true,
     },
     attachments: {
       type: [Schema.Types.Mixed],

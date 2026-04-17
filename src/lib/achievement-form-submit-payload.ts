@@ -1,50 +1,123 @@
 /**
  * Builds the JSON body for POST/PUT /api/achievements from the same shape
  * `AchievementForm` passes to `onSubmit`. Used by student and admin manual flows.
+ *
+ * Images: new `File` values are uploaded via POST /api/uploads/image (Cloudinary);
+ * stored in MongoDB as URL strings only, not base64.
+ *
+ * Attachments: new `File` values are uploaded via POST /api/uploads/attachment (R2).
+ * Legacy string URLs and existing object descriptors are forwarded as-is (no base64).
+ *
+ * TODO: optional future metadata (checksum, virus-scan status, version id) on attachment objects.
  */
-export const buildAchievementFormSubmitPayload = async (
-  data: Record<string, unknown>
-): Promise<Record<string, unknown>> => {
-  let imageBase64: string | undefined = undefined;
-  if (data.image instanceof File) {
-    imageBase64 = await new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        if (typeof reader.result === "string") {
-          resolve(reader.result);
-        } else {
-          reject(new Error("Failed to convert image to base64"));
-        }
-      };
-      reader.onerror = reject;
-      reader.readAsDataURL(data.image as File);
-    });
-  } else if (typeof data.image === "string") {
-    imageBase64 = data.image;
-  }
 
-  const attachmentsBase64: string[] = [];
-  if (data.attachments && Array.isArray(data.attachments)) {
-    for (const file of data.attachments) {
-      if (file instanceof File) {
-        const base64 = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onloadend = () => {
-            if (typeof reader.result === "string") {
-              resolve(reader.result);
-            } else {
-              reject(new Error("Failed to convert attachment to base64"));
-            }
-          };
-          reader.onerror = reject;
-          reader.readAsDataURL(file);
-        });
-        attachmentsBase64.push(base64);
-      } else if (typeof file === "string") {
-        attachmentsBase64.push(file);
+const uploadAchievementImageClient = async (
+  file: File
+): Promise<{ url: string; publicId: string }> => {
+  const formData = new FormData();
+  formData.append("file", file);
+  const res = await fetch("/api/uploads/image", {
+    method: "POST",
+    body: formData,
+    credentials: "include",
+  });
+  const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+  if (!res.ok) {
+    const msg = typeof data.error === "string" ? data.error : "Image upload failed";
+    throw new Error(msg);
+  }
+  if (data.ok !== true || typeof data.url !== "string" || !String(data.url).trim()) {
+    throw new Error("Invalid image upload response");
+  }
+  const publicId = typeof data.publicId === "string" ? data.publicId.trim() : "";
+  return { url: String(data.url).trim(), publicId };
+};
+
+const uploadAchievementAttachmentClient = async (
+  file: File
+): Promise<{
+  url: string;
+  key: string;
+  fileName: string;
+  mimeType: string;
+  size: number;
+  provider: string;
+}> => {
+  const formData = new FormData();
+  formData.append("file", file);
+  const res = await fetch("/api/uploads/attachment", {
+    method: "POST",
+    body: formData,
+    credentials: "include",
+  });
+  const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+  if (!res.ok) {
+    const msg = typeof data.error === "string" ? data.error : "Attachment upload failed";
+    throw new Error(msg);
+  }
+  if (data.ok !== true || typeof data.url !== "string" || !String(data.url).trim()) {
+    throw new Error("Invalid attachment upload response");
+  }
+  return {
+    url: String(data.url).trim(),
+    key: typeof data.key === "string" ? data.key : "",
+    fileName: typeof data.fileName === "string" && data.fileName.trim() ? data.fileName : file.name,
+    mimeType: typeof data.mimeType === "string" && data.mimeType.trim() ? data.mimeType : file.type || "application/octet-stream",
+    size: typeof data.size === "number" && Number.isFinite(data.size) ? data.size : file.size,
+    provider: typeof data.provider === "string" && data.provider.trim() ? data.provider : "r2",
+  };
+};
+
+type StorableAttachment = string | Record<string, unknown>;
+
+const buildStorableAttachments = async (
+  raw: unknown
+): Promise<StorableAttachment[] | undefined> => {
+  if (!raw || !Array.isArray(raw)) return undefined;
+  const out: StorableAttachment[] = [];
+  for (const item of raw) {
+    if (item instanceof File) {
+      const up = await uploadAchievementAttachmentClient(item);
+      out.push({
+        url: up.url,
+        key: up.key,
+        name: up.fileName,
+        mimeType: up.mimeType,
+        size: up.size,
+        provider: up.provider,
+      });
+    } else if (typeof item === "string" && item.trim()) {
+      out.push(item.trim());
+    } else if (item && typeof item === "object") {
+      const o = item as Record<string, unknown>;
+      if (typeof o.url === "string" && o.url.trim()) {
+        out.push({ ...o });
       }
     }
   }
+  return out.length > 0 ? out : undefined;
+};
+
+export const buildAchievementFormSubmitPayload = async (
+  data: Record<string, unknown>
+): Promise<Record<string, unknown>> => {
+  let imageUrl: string | undefined;
+  let imagePublicId: string | undefined;
+
+  if (data.image instanceof File) {
+    const uploaded = await uploadAchievementImageClient(data.image);
+    imageUrl = uploaded.url;
+    if (uploaded.publicId) {
+      imagePublicId = uploaded.publicId;
+    }
+  } else if (typeof data.image === "string" && data.image.trim()) {
+    imageUrl = data.image.trim();
+    if (typeof data.imagePublicId === "string" && data.imagePublicId.trim()) {
+      imagePublicId = data.imagePublicId.trim();
+    }
+  }
+
+  const storableAttachments = await buildStorableAttachments(data.attachments);
 
   let actualAchievementName: string | undefined = undefined;
   if (data.achievementName && data.achievementName !== "other") {
@@ -149,8 +222,9 @@ export const buildAchievementFormSubmitPayload = async (
   }
 
   if (data.description) payload.description = data.description;
-  if (imageBase64) payload.image = imageBase64;
-  if (attachmentsBase64.length > 0) payload.attachments = attachmentsBase64;
+  if (imageUrl) payload.image = imageUrl;
+  if (imagePublicId) payload.imagePublicId = imagePublicId;
+  if (storableAttachments) payload.attachments = storableAttachments;
   if (data.evidenceUrl) payload.evidenceUrl = data.evidenceUrl;
   if (data.evidenceFileName) payload.evidenceFileName = data.evidenceFileName;
 

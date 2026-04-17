@@ -30,6 +30,8 @@ export type NormalizedPayload = {
   achievementClassification?: string;
   description?: string;
   image?: string;
+  /** Cloudinary public_id when image is hosted on Cloudinary (optional). */
+  imagePublicId?: string;
   attachments?: AchievementAttachmentObject[];
   evidenceUrl?: string;
   evidenceFileName?: string;
@@ -105,6 +107,7 @@ export const normalizeAchievementPayload = (rawBody: Record<string, unknown>): N
   const evidenceUrl = String(body.evidenceUrl || "").trim() || undefined;
   const evidenceFileName = String(body.evidenceFileName || "").trim() || undefined;
   const image = String(body.image || "").trim() || undefined;
+  const imagePublicId = String(body.imagePublicId || "").trim() || undefined;
   const attachments = Array.isArray(body.attachments)
     ? normalizeAttachmentsArray(body.attachments)
     : undefined;
@@ -164,6 +167,7 @@ export const normalizeAchievementPayload = (rawBody: Record<string, unknown>): N
     achievementDate: String(body.achievementDate || "").trim().slice(0, 10) || undefined,
     description: sanitizeUserText(String(body.description || "").trim()) || undefined,
     image,
+    imagePublicId,
     attachments,
     evidenceUrl,
     evidenceFileName,

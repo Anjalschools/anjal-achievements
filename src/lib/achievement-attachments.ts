@@ -9,6 +9,10 @@ export type AchievementAttachmentObject = {
   url: string;
   mimeType: string;
   name: string;
+  /** R2 object key when stored on Cloudflare R2. */
+  key?: string;
+  size?: number;
+  provider?: string;
 };
 
 const DATA_URL_MIME = /^data:([^;]+);/i;
@@ -96,7 +100,20 @@ export const coerceAttachmentForStorage = (raw: unknown): AchievementAttachmentO
               : typeof o.originalFilename === "string" && o.originalFilename.trim()
                 ? o.originalFilename.trim()
                 : inferNameFromUrl(url);
-    return { url, mimeType: mimeResolved, name };
+    const out: AchievementAttachmentObject = { url, mimeType: mimeResolved, name };
+    const key = typeof o.key === "string" && o.key.trim() ? o.key.trim() : undefined;
+    if (key) out.key = key;
+    const provider = typeof o.provider === "string" && o.provider.trim() ? o.provider.trim() : undefined;
+    if (provider) out.provider = provider;
+    const sizeRaw = o.size;
+    const size =
+      typeof sizeRaw === "number" && Number.isFinite(sizeRaw) && sizeRaw >= 0
+        ? sizeRaw
+        : typeof sizeRaw === "string" && /^\d+$/.test(sizeRaw.trim())
+          ? Number(sizeRaw.trim())
+          : undefined;
+    if (size !== undefined) out.size = size;
+    return out;
   }
   return null;
 };

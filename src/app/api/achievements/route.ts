@@ -380,6 +380,7 @@ export async function POST(request: NextRequest) {
     // Legacy fields (for backward compatibility)
     if (normalized.description) achievementData.description = normalized.description;
     if (normalized.image) achievementData.image = normalized.image;
+    if (normalized.imagePublicId) achievementData.imagePublicId = normalized.imagePublicId;
     if (normalized.attachments) achievementData.attachments = normalized.attachments;
     if (typeof body.certificateNumber === "string" && body.certificateNumber.trim()) {
       achievementData.certificateNumber = body.certificateNumber.trim();

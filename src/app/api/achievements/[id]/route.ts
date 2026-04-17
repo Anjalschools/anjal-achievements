@@ -202,6 +202,9 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     const evidenceUrl = String(body.evidenceUrl || existing.evidenceUrl || "").trim();
     const evidenceFileName = String(body.evidenceFileName || existing.evidenceFileName || "").trim();
     const image = String(body.image || existing.image || "").trim();
+    const imagePublicId = hasOwn("imagePublicId")
+      ? String(body.imagePublicId || "").trim() || undefined
+      : (existing.imagePublicId as string | undefined);
     const attachments = Array.isArray(body.attachments)
       ? normalizeAttachmentsArray(body.attachments)
       : normalizeAttachmentsArray(existing.attachments || []);
@@ -298,6 +301,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       achievementYear: achievementYearNext,
       description: String(body.description || existing.description || "").trim() || undefined,
       image: image || undefined,
+      imagePublicId,
       attachments,
       evidenceUrl: evidenceUrl || undefined,
       evidenceFileName: evidenceFileName || undefined,

@@ -45,6 +45,7 @@ export const buildStudentAchievementDetailPayload = (
     featured?: boolean;
     approved?: boolean;
     image?: string | null;
+    imagePublicId?: string | null;
     evidenceUrl?: string;
     evidenceFileName?: string;
     organization?: string;
@@ -157,6 +158,7 @@ export const buildStudentAchievementDetailPayload = (
     featured: achievement.featured || false,
     approved: achievement.approved || false,
     image: achievement.image || null,
+    imagePublicId: (achievementAny.imagePublicId as string | undefined) || null,
     evidenceUrl: achievement.evidenceUrl || "",
     evidenceFileName: achievement.evidenceFileName || "",
     date: safeDate ? safeDate.toISOString().split("T")[0] : "",

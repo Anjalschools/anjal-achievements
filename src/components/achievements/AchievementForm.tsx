@@ -66,6 +66,19 @@ type AutoLocks = {
 const AUTO_RULE_COMPETITIONS = ["bebras", "kangaroo", "kaust_math", "arabic_reading"];
 const AUTO_LEVEL_COMPETITIONS = ["bebras", "kangaroo"];
 
+/** Prefer rich `attachmentItems` from GET /api/achievements/[id] so edit preserves metadata + URLs. */
+const hydrateAttachmentsFromInitial = (
+  data: Partial<Record<string, unknown>> | undefined
+): unknown[] => {
+  if (!data) return [];
+  const raw = data as Record<string, unknown>;
+  const items = raw.attachmentItems;
+  if (Array.isArray(items) && items.length > 0) return [...items];
+  const att = raw.attachments;
+  if (Array.isArray(att) && att.length > 0) return [...att];
+  return [];
+};
+
 const AchievementForm = ({
   onSubmit,
   isSubmitting = false,
@@ -117,9 +130,11 @@ const AchievementForm = ({
     ),
     description: String(initialData?.description || ""),
     image: initialData?.image || null,
-    attachments: Array.isArray(initialData?.attachments)
-      ? initialData.attachments
-      : [],
+    imagePublicId:
+      typeof (initialData as Record<string, unknown> | undefined)?.imagePublicId === "string"
+        ? String((initialData as Record<string, unknown>).imagePublicId).trim() || null
+        : null,
+    attachments: hydrateAttachmentsFromInitial(initialData),
     evidenceUrl: String(initialData?.evidenceUrl || ""),
     evidenceFileName: String(initialData?.evidenceFileName || ""),
     evidenceRequiredMode: String(initialData?.evidenceRequiredMode || "provided"),
@@ -242,9 +257,11 @@ const AchievementForm = ({
       achievementDate: achievementDateIsoFromRecord(raw),
       description: String(initialData.description || ""),
       image: initialData.image || null,
-      attachments: Array.isArray(initialData.attachments)
-        ? initialData.attachments
-        : [],
+      imagePublicId:
+        typeof (initialData as Record<string, unknown>).imagePublicId === "string"
+          ? String((initialData as Record<string, unknown>).imagePublicId).trim() || null
+          : null,
+      attachments: hydrateAttachmentsFromInitial(initialData),
       evidenceUrl: String(initialData.evidenceUrl || ""),
       evidenceFileName: String(initialData.evidenceFileName || ""),
       evidenceRequiredMode: String(initialData.evidenceRequiredMode || "provided"),
@@ -743,11 +760,13 @@ const AchievementForm = ({
     }
 
     handleChange("image", file);
+    handleChange("imagePublicId", null);
     setImagePreview(URL.createObjectURL(file));
   };
 
   const removeImage = () => {
     handleChange("image", null);
+    handleChange("imagePublicId", null);
     setImagePreview(null);
     if (imageInputRef.current) imageInputRef.current.value = "";
   };
@@ -767,17 +786,34 @@ const AchievementForm = ({
     }
 
     const current = Array.isArray(formData.attachments)
-      ? (formData.attachments as File[])
+      ? (formData.attachments as unknown[])
       : [];
     handleChange("attachments", [...current, ...valid]);
   };
 
   const removeAttachment = (index: number) => {
     const current = Array.isArray(formData.attachments)
-      ? (formData.attachments as File[])
+      ? (formData.attachments as unknown[])
       : [];
     const next = current.filter((_, i) => i !== index);
     handleChange("attachments", next);
+  };
+
+  const getAttachmentListLabel = (item: unknown): string => {
+    if (item instanceof File) return item.name;
+    if (typeof item === "string") {
+      const s = item.trim();
+      if (!s) return "";
+      return s.length > 72 ? `${s.slice(0, 72)}…` : s;
+    }
+    if (item && typeof item === "object") {
+      const o = item as Record<string, unknown>;
+      const n = String(o.name || o.fileName || "").trim();
+      if (n) return n.length > 80 ? `${n.slice(0, 80)}…` : n;
+      const u = String(o.url || "").trim();
+      return u.length > 72 ? `${u.slice(0, 72)}…` : u;
+    }
+    return "";
   };
 
   const validate = (): boolean => {
@@ -1870,12 +1906,12 @@ const AchievementForm = ({
 
           {Array.isArray(formData.attachments) && formData.attachments.length > 0 && (
             <div className="mt-2 space-y-2">
-              {(formData.attachments as File[]).map((file, index) => (
+              {(formData.attachments as unknown[]).map((item, index) => (
                 <div
                   key={index}
                   className="flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50 p-2 text-sm"
                 >
-                  <span className="truncate">{file.name}</span>
+                  <span className="truncate">{getAttachmentListLabel(item)}</span>
                   <button
                     type="button"
                     onClick={() => removeAttachment(index)}

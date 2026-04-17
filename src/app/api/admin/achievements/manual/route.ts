@@ -271,6 +271,7 @@ export async function POST(request: NextRequest) {
     }
     if (normalized.description) achievementData.description = normalized.description;
     if (typeof body.image === "string") achievementData.image = body.image;
+    if (normalized.imagePublicId) achievementData.imagePublicId = normalized.imagePublicId;
     if (attachments) achievementData.attachments = attachments;
     if (typeof body.certificateNumber === "string" && body.certificateNumber.trim()) {
       achievementData.certificateNumber = body.certificateNumber.trim();
