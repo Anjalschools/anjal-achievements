@@ -37,6 +37,7 @@ import {
   useHallOfFameHeroParticles,
 } from "@/components/hall-of-fame/HallOfFameHeroInteractiveParticles";
 import PlatformLogo from "@/components/branding/PlatformLogo";
+import { getStudentAvatar } from "@/lib/student-avatar";
 
 export type LeaderboardRow = {
   userId: string;
@@ -50,14 +51,6 @@ export type LeaderboardRow = {
   grade: string;
   gender: "male" | "female";
   section: "arabic" | "international";
-};
-
-const photoSrc = (url: string | null) => {
-  const u = (url || "").trim();
-  if (!u) return null;
-  if (u.startsWith("http://") || u.startsWith("https://") || u.startsWith("data:")) return u;
-  if (u.startsWith("/")) return u;
-  return `/${u}`;
 };
 
 type StageFilter = "all" | "primary" | "middle" | "secondary";
@@ -220,29 +213,38 @@ const HallOfFamePointsLeaderboard = () => {
     return "bg-primary/12 text-primary border border-primary/20";
   };
 
-  const StudentCard = ({
-    row,
-    featured,
-  }: {
-    row: LeaderboardRow;
-    featured?: boolean;
-  }) => {
-    const src = photoSrc(row.profilePhoto);
+  const StudentCard = ({ row, featured }: { row: LeaderboardRow; featured?: boolean }) => {
+    const name = getName(row);
+    const avatar = useMemo(
+      () =>
+        getStudentAvatar({
+          profilePhoto: row.profilePhoto,
+          gender: row.gender,
+        }),
+      [row.profilePhoto, row.gender]
+    );
+    const [imgSrc, setImgSrc] = useState(avatar.src);
+    useEffect(() => {
+      setImgSrc(avatar.src);
+    }, [avatar.src]);
+
     const href = `/students/${row.userId}`;
     const unopt =
-      src?.startsWith("http://") || src?.startsWith("https://") || src?.startsWith("data:") || false;
+      imgSrc.startsWith("http://") || imgSrc.startsWith("https://") || imgSrc.startsWith("data:");
+
+    const imgShell = featured
+      ? "aspect-[4/5] max-h-[228px] min-h-[180px] sm:max-h-[240px]"
+      : "aspect-[4/5] min-h-[200px] sm:min-h-[220px]";
 
     return (
       <article
-        className={`group relative flex h-full flex-col overflow-hidden border bg-white shadow-[0_6px_24px_-10px_rgba(15,23,42,0.16)] transition duration-300 ease-out will-change-transform hover:-translate-y-1 hover:scale-[1.02] hover:shadow-[0_18px_44px_-16px_rgba(30,58,138,0.32)] ${
-          featured ? "rounded-xl" : "rounded-2xl"
-        } ${
+        className={`group relative flex h-full min-h-[400px] flex-col overflow-hidden rounded-2xl border bg-white shadow-[0_8px_28px_-12px_rgba(15,23,42,0.12)] ring-1 ring-slate-900/[0.035] transition duration-300 ease-out will-change-transform hover:-translate-y-0.5 hover:shadow-[0_16px_36px_-16px_rgba(30,58,138,0.2)] ${
           featured
             ? row.rank === 1
-              ? "border-amber-400/60 ring-1 ring-amber-400/20"
+              ? "border-amber-300/75 ring-amber-400/12"
               : row.rank === 2
-                ? "border-slate-300/80 ring-1 ring-slate-300/15"
-                : "border-orange-300/70 ring-1 ring-orange-300/15"
+                ? "border-slate-300/85 ring-slate-400/10"
+                : "border-orange-200/95 ring-orange-300/12"
             : "border-slate-200/90"
         }`}
       >
@@ -271,64 +273,59 @@ const HallOfFamePointsLeaderboard = () => {
                 : `#${row.rank}`}
         </div>
 
-        <Link href={href} className="flex flex-1 flex-col">
-          <div
-            className={`relative w-full overflow-hidden bg-gradient-to-br from-slate-100 via-white to-slate-200 ${
-              featured ? "aspect-[3/4] max-h-[200px] sm:max-h-[220px]" : "aspect-[4/5]"
-            }`}
-          >
-            {src ? (
-              <Image
-                src={src}
-                alt=""
-                fill
-                className="object-cover object-[center_22%] transition duration-500 group-hover:scale-[1.04]"
-                sizes={featured ? "(max-width:768px) 100vw, 28vw" : "(max-width:768px) 50vw, 20vw"}
-                unoptimized={unopt}
-              />
-            ) : (
-              <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-primary/[0.12] to-indigo-50">
-                <span className={`font-black text-primary ${featured ? "text-2xl" : "text-3xl"}`}>
-                  {getName(row).charAt(0)}
-                </span>
-              </div>
-            )}
-            <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/55 via-black/10 to-transparent" />
-            <div className="absolute bottom-1.5 start-1.5 end-1.5 flex items-end justify-between gap-1.5">
+        <Link href={href} className="flex min-h-0 flex-1 flex-col">
+          <div className={`relative w-full shrink-0 overflow-hidden bg-slate-50 ${imgShell}`}>
+            <Image
+              src={imgSrc}
+              alt={name}
+              fill
+              className="object-cover object-[center_22%] transition duration-500 group-hover:scale-[1.03]"
+              sizes={featured ? "(max-width:768px) 100vw, 28vw" : "(max-width:768px) 50vw, 20vw"}
+              unoptimized={unopt}
+              onError={() => setImgSrc(avatar.fallbackOnError)}
+            />
+            <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/50 via-black/8 to-transparent" />
+            <div className="absolute bottom-2 start-2 end-2 flex items-end justify-between gap-2">
               <span
-                className={`rounded-full bg-white/95 font-bold text-primary shadow ${
-                  featured ? "px-1.5 py-0.5 text-[9px]" : "px-2 py-0.5 text-[10px]"
+                className={`rounded-full bg-white/95 font-bold text-primary shadow-sm ring-1 ring-white/60 ${
+                  featured ? "px-2 py-0.5 text-[9px]" : "px-2.5 py-0.5 text-[10px]"
                 }`}
               >
                 {row.totalPoints.toLocaleString(isAr ? "ar-SA" : "en-US")}{" "}
                 {isAr ? "نقطة" : "pts"}
               </span>
-              <Trophy className={`text-amber-200 drop-shadow ${featured ? "h-3.5 w-3.5" : "h-4 w-4"}`} aria-hidden />
+              <Trophy className={`shrink-0 text-amber-200 drop-shadow ${featured ? "h-3.5 w-3.5" : "h-4 w-4"}`} aria-hidden />
             </div>
           </div>
 
-          <div className={`flex flex-1 flex-col ${featured ? "gap-0.5 p-2" : "gap-1 p-3"}`}>
+          <div className={`flex min-h-[100px] flex-1 flex-col ${featured ? "gap-1 p-2.5" : "gap-1.5 p-3"}`}>
             <h3
               className={`line-clamp-2 font-extrabold leading-snug text-slate-900 ${
-                featured ? "text-xs" : "text-sm"
+                featured ? "text-[13px]" : "text-sm"
               }`}
             >
-              {getName(row)}
+              {name}
             </h3>
             <p className={`font-semibold text-slate-600 ${featured ? "text-[10px]" : "text-[11px]"}`}>
               {getGradeLabel(row.grade, isAr ? "ar" : "en")} · {getSectionLabel(row.section, isAr ? "ar" : "en")}
             </p>
             <div
-              className={`mt-auto flex items-center justify-between border-t border-slate-100 font-semibold text-slate-700 ${
-                featured ? "pt-1.5 text-[9px]" : "pt-2 text-[10px]"
+              className={`mt-auto flex items-center justify-between gap-2 border-t border-slate-100/95 pt-2 font-semibold text-slate-700 ${
+                featured ? "text-[9px]" : "text-[10px]"
               }`}
             >
-              <span className="inline-flex items-center gap-0.5">
+              <span className="inline-flex min-w-0 items-center gap-0.5">
                 <Star className={`shrink-0 text-primary ${featured ? "h-3 w-3" : "h-3.5 w-3.5"}`} aria-hidden />
-                {isAr ? "إنجازات معتمدة" : "Approved"}:{" "}
-                <span className="font-black tabular-nums text-slate-900">{row.achievementsCount}</span>
+                <span className="truncate">
+                  {isAr ? "إنجازات معتمدة" : "Approved"}:{" "}
+                  <span className="font-black tabular-nums text-slate-900">{row.achievementsCount}</span>
+                </span>
               </span>
-              <span className="text-primary">{isAr ? "التفاصيل" : "Details"}</span>
+              <span className="inline-flex shrink-0 items-center gap-0.5 font-bold text-primary">
+                {isAr ? "التفاصيل" : "Details"}
+                <ChevronRight className="h-2.5 w-2.5 opacity-80 rtl:hidden" aria-hidden />
+                <ChevronLeft className="hidden h-2.5 w-2.5 opacity-80 rtl:inline" aria-hidden />
+              </span>
             </div>
           </div>
         </Link>
@@ -608,15 +605,22 @@ const HallOfFamePointsLeaderboard = () => {
 
       {/* Top 3 — mobile: rank order; desktop: #2 | #1 | #3 podium */}
       <section className="mx-auto mt-10 max-w-7xl px-4 sm:px-6 lg:px-10">
-        <h2 className="mb-5 text-lg font-bold text-slate-900">
-          {isFirstPage
-            ? isAr
-              ? "الطلاب المتميزون"
-              : "Outstanding students"
-            : isAr
-              ? "الترتيب"
-              : "Rankings"}
-        </h2>
+        <div className="mb-6 flex flex-col gap-1 border-b border-slate-200/80 pb-4 sm:flex-row sm:items-end sm:justify-between">
+          <h2 className="text-xl font-extrabold tracking-tight text-slate-900 sm:text-2xl">
+            {isFirstPage
+              ? isAr
+                ? "الطلاب المتميزون"
+                : "Outstanding students"
+              : isAr
+                ? "الترتيب"
+                : "Rankings"}
+          </h2>
+          {isFirstPage && !loading && items.length > 0 ? (
+            <p className="text-xs font-medium text-slate-500 sm:text-sm">
+              {isAr ? "أبرز ثلاثة طلاب ثم بقية الترتيب" : "Top three spotlight, then full rankings"}
+            </p>
+          ) : null}
+        </div>
         {loading ? (
           <div className="flex items-center justify-center gap-2 py-16 text-slate-600">
             <Loader2 className="h-6 w-6 animate-spin" aria-hidden />
@@ -628,7 +632,7 @@ const HallOfFamePointsLeaderboard = () => {
           </div>
         ) : isFirstPage && topThree.length > 0 ? (
           <>
-            <div className="flex flex-col gap-3 lg:hidden">
+            <div className="flex flex-col gap-4 lg:hidden">
               {rank1 ? <StudentCard key={rank1.userId} row={rank1} featured /> : null}
               {rank2 ? <StudentCard key={rank2.userId} row={rank2} featured /> : null}
               {rank3 ? <StudentCard key={rank3.userId} row={rank3} featured /> : null}
@@ -654,7 +658,7 @@ const HallOfFamePointsLeaderboard = () => {
             </div>
           </>
         ) : !isFirstPage ? (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 sm:gap-6 lg:grid-cols-4">
             {rest.map((row) => (
               <StudentCard key={row.userId} row={row} />
             ))}
@@ -664,9 +668,15 @@ const HallOfFamePointsLeaderboard = () => {
 
       {/* Rest grid (page 1 only) */}
       {!loading && isFirstPage && rest.length > 0 ? (
-        <section className="mx-auto mt-10 max-w-7xl px-4 pb-6 sm:px-6 lg:px-10">
-          <h3 className="mb-4 text-sm font-bold text-slate-800">{isAr ? "بقية الترتيب" : "More ranked students"}</h3>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <section className="mx-auto mt-12 max-w-7xl px-4 pb-8 sm:px-6 lg:px-10">
+          <h3
+            className={`mb-5 font-extrabold text-slate-800 ${
+              isAr ? "text-base sm:text-lg" : "text-sm uppercase tracking-wide text-slate-600 sm:text-base sm:normal-case sm:tracking-tight"
+            }`}
+          >
+            {isAr ? "بقية الترتيب" : "More ranked students"}
+          </h3>
+          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 sm:gap-6 lg:grid-cols-4">
             {rest.map((row) => (
               <StudentCard key={row.userId} row={row} />
             ))}
