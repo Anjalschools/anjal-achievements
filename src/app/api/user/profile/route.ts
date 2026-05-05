@@ -245,7 +245,7 @@ export async function PUT(request: NextRequest) {
     const user = await User.findByIdAndUpdate(
       currentUser._id,
       { $set: updateData },
-      { new: true, runValidators: true }
+      { returnDocument: "after", runValidators: true }
     ).select("-passwordHash");
 
     if (!user) {

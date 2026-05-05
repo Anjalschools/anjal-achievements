@@ -409,7 +409,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       }
     }
 
-    const updated = await Achievement.findByIdAndUpdate(params.id, mongoUpdate, { new: true });
+    const updated = await Achievement.findByIdAndUpdate(params.id, mongoUpdate, { returnDocument: "after" });
     if (!updated) {
       return jsonInternalServerError(null, { fallbackMessage: "Failed to update achievement" });
     }

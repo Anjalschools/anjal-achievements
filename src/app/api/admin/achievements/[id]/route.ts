@@ -193,7 +193,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       updateQuery.$unset = $unset;
     }
 
-    const updated = await Achievement.findByIdAndUpdate(id, updateQuery, { new: true }).lean();
+    const updated = await Achievement.findByIdAndUpdate(id, updateQuery, { returnDocument: "after" }).lean();
 
     scheduleAchievementAttachmentAiReviewAfterMutation(String(id), "admin_patch");
 

@@ -70,7 +70,7 @@ export async function PATCH(
       return NextResponse.json({ ok: false, error: "No updates supplied" }, { status: 400 });
     }
 
-    const updated = await ContactMessage.findByIdAndUpdate(id, { $set: update }, { new: true }).lean();
+    const updated = await ContactMessage.findByIdAndUpdate(id, { $set: update }, { returnDocument: "after" }).lean();
     if (reply) {
       await logAuditEvent({
         actionType: "contact_message_replied",

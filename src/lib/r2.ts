@@ -1,48 +1,23 @@
 import "server-only";
 import { randomBytes } from "crypto";
 import { extname } from "path";
-import { S3Client, PutObjectCommand, type S3ClientConfig } from "@aws-sdk/client-s3";
+import {
+  buildR2PublicUrlFromResolved,
+  createOrGetR2S3Client,
+  isR2S3ConfigValid,
+  validateR2S3CredentialsOrThrow,
+} from "./storage/r2-config";
 
-/** `R2_ACCOUNT_ID` may exist in env for ops/docs; this module uses `R2_ENDPOINT` as the full S3 API base URL. */
+export { validateR2S3CredentialsOrThrow, isR2S3ConfigValid } from "./storage/r2-config";
 
-const REQUIRED_ENV = [
-  "R2_ENDPOINT",
-  "R2_ACCESS_KEY_ID",
-  "R2_SECRET_ACCESS_KEY",
-  "R2_BUCKET_NAME",
-  "R2_PUBLIC_BASE_URL",
-] as const;
-
-export const isR2Configured = (): boolean =>
-  REQUIRED_ENV.every((key) => Boolean(process.env[key]?.trim()));
+/** @deprecated Use isR2S3ConfigValid — kept for call-site compatibility */
+export const isR2Configured = (): boolean => isR2S3ConfigValid();
 
 export const assertR2Env = (): void => {
-  const missing = REQUIRED_ENV.filter((key) => !process.env[key]?.trim());
-  if (missing.length > 0) {
-    throw new Error(
-      `[R2] Missing environment variables: ${missing.join(", ")}. Configure them for attachment uploads.`
-    );
-  }
+  validateR2S3CredentialsOrThrow();
 };
 
-let client: S3Client | null = null;
-
-export const getR2Client = (): S3Client => {
-  assertR2Env();
-  if (!client) {
-    const cfg: S3ClientConfig = {
-      region: "auto",
-      endpoint: process.env.R2_ENDPOINT!.trim(),
-      credentials: {
-        accessKeyId: process.env.R2_ACCESS_KEY_ID!.trim(),
-        secretAccessKey: process.env.R2_SECRET_ACCESS_KEY!.trim(),
-      },
-      forcePathStyle: true,
-    };
-    client = new S3Client(cfg);
-  }
-  return client;
-};
+export const getR2Client = () => createOrGetR2S3Client().client;
 
 const safeFileExtension = (originalName: string): string => {
   const raw = extname(originalName || "").slice(0, 24).toLowerCase();
@@ -63,10 +38,8 @@ export const buildAchievementAttachmentR2Key = (originalFilename: string): strin
 
 /** Public URL for a stored object key (R2 public bucket / custom domain). */
 export const buildR2PublicObjectUrl = (key: string): string => {
-  assertR2Env();
-  const base = process.env.R2_PUBLIC_BASE_URL!.trim().replace(/\/+$/, "");
-  const k = key.trim().replace(/^\/+/, "");
-  return `${base}/${k}`;
+  const { settings } = createOrGetR2S3Client();
+  return buildR2PublicUrlFromResolved(settings, key);
 };
 
-export const getR2BucketName = (): string => process.env.R2_BUCKET_NAME!.trim();
+export const getR2BucketName = (): string => createOrGetR2S3Client().settings.bucket;

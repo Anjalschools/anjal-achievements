@@ -12,7 +12,11 @@
     "verify:attachment-per-file": "NODE_OPTIONS='--require ./scripts/stub-server-only.cjs' tsx scripts/verify-achievement-per-attachment-review.ts",
     "verify:achievement-scoring": "tsx scripts/verify-achievement-scoring.ts",
     "create-admin": "tsx scripts/create-admin.ts",
-    "make-admin": "tsx scripts/make-admin.ts"
+    "make-admin": "tsx scripts/make-admin.ts",
+    "migrate:achievement-media:dry": "tsx scripts/migrate-achievement-legacy-media.ts --dry-run --mode=all",
+    "migrate:achievement-media": "tsx scripts/migrate-achievement-legacy-media.ts --apply --mode=all",
+    "verify:r2-env": "tsx scripts/verify-r2-env.ts",
+    "verify:achievement-media-migration": "tsx scripts/verify-achievement-media-migration.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1031.0",
@@ -26,6 +30,7 @@
     "lucide-react": "^0.344.0",
     "mongoose": "^9.3.1",
     "next": "14.2.5",
+    "nodemailer": "^8.0.7",
     "pdf-parse": "^2.4.5",
     "qrcode": "^1.5.4",
     "react": "^18.3.1",
@@ -37,6 +42,7 @@
   },
   "devDependencies": {
     "@types/node": "^20.14.10",
+    "@types/nodemailer": "^8.0.0",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
     "@types/sanitize-html": "^2.16.1",

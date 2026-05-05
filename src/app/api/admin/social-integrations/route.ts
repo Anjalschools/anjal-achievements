@@ -167,7 +167,7 @@ export async function POST(request: NextRequest) {
           },
           $setOnInsert: { provider, scopes: [] },
         },
-        { upsert: true, new: true }
+        { upsert: true, returnDocument: "after" }
       );
 
       await logAuditEvent({

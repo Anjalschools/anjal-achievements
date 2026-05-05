@@ -116,7 +116,7 @@ export async function PATCH(request: NextRequest) {
           isActive: true,
         },
       },
-      { upsert: true, new: true }
+      { upsert: true, returnDocument: "after" }
     ).lean();
 
     invalidateHomeHighlightsPublicCache();

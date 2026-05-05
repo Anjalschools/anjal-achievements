@@ -59,7 +59,7 @@ export const updateHomeStats = async (): Promise<void> => {
         fieldsCount: snapshot.fieldsCount,
       },
     },
-    { upsert: true, new: true }
+    { upsert: true, returnDocument: "after" }
   ).lean();
 
   invalidateHomeStatsCache();

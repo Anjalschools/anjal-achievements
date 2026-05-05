@@ -25,7 +25,7 @@ export async function PATCH(_request: Request, { params }: RouteParams) {
     const doc = await Notification.findOneAndUpdate(
       { _id: id, userId: user._id },
       { $set: { read: true } },
-      { new: true }
+      { returnDocument: "after" }
     );
 
     if (!doc) {
