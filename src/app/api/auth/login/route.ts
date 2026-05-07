@@ -1,28 +1,45 @@
 import { NextRequest, NextResponse } from "next/server";
-import connectDB from "@/lib/mongodb";
+import connectDB, { logDbReadyState, pingMongo } from "@/lib/mongodb";
 import User from "@/models/User";
 import bcrypt from "bcryptjs";
 import { perfElapsed, perfLog, perfNow } from "@/lib/perf-debug";
 // Rate limit: must import from this module only (contains diagnostic logs inside checkRateLimit).
 import { checkRateLimit } from "@/lib/rate-limit";
 import { warnSecurityEvent } from "@/lib/security-log";
-import { jsonInternalServerError } from "@/lib/api-safe-response";
+
+const loginSafeDiag = () => ({
+  hasNextAuthSecret: Boolean(process.env.NEXTAUTH_SECRET?.trim()),
+  hasMongoUri: Boolean(process.env.MONGODB_URI?.trim()),
+  nodeEnv: process.env.NODE_ENV ?? "(unset)",
+  nextAuthUrl: process.env.NEXTAUTH_URL?.trim()
+    ? process.env.NEXTAUTH_URL!.trim().replace(/\/$/, "")
+    : "(unset)",
+});
 
 export async function POST(request: NextRequest) {
-  const rateLimitResult = await checkRateLimit(request, "/api/auth/login");
-  console.log("[login:rate-limit-result]", {
-    blocked: !!rateLimitResult,
-    status: rateLimitResult?.status ?? null,
-  });
-  if (rateLimitResult) {
-    return rateLimitResult;
-  }
-
   try {
+    const rateLimitResult = await checkRateLimit(request, "/api/auth/login");
+    console.log("[login:rate-limit-result]", {
+      blocked: !!rateLimitResult,
+      status: rateLimitResult?.status ?? null,
+    });
+    if (rateLimitResult) {
+      return rateLimitResult;
+    }
+
     perfLog("login:start");
     const tDb = perfNow();
     await connectDB();
     perfElapsed("login:dbConnect", tDb);
+    logDbReadyState("login");
+
+    const pingOk = await pingMongo();
+    if (!pingOk) {
+      return NextResponse.json(
+        { ok: false, code: "DB_UNAVAILABLE", message: "Database unavailable" },
+        { status: 503 }
+      );
+    }
 
     const body = await request.json();
     const { identifier, password } = body;
@@ -35,19 +52,17 @@ export async function POST(request: NextRequest) {
     }
 
     // Determine search criteria based on identifier
-    let searchCriteria: any;
+    let searchCriteria: {
+      email?: string;
+      $or?: Array<{ username: string } | { studentId: string }>;
+    };
 
     if (identifier.includes("@")) {
-      // If identifier contains @, search by email (lowercase)
       searchCriteria = { email: identifier.toLowerCase().trim() };
     } else {
-      // Otherwise, search by username or studentId
       const trimmedIdentifier = identifier.trim();
       searchCriteria = {
-        $or: [
-          { username: trimmedIdentifier },
-          { studentId: trimmedIdentifier },
-        ],
+        $or: [{ username: trimmedIdentifier }, { studentId: trimmedIdentifier }],
       };
     }
 
@@ -57,17 +72,11 @@ export async function POST(request: NextRequest) {
 
     if (!user) {
       warnSecurityEvent("login_failure", { reason: "unknown_user" });
-      return NextResponse.json(
-        { error: "Invalid credentials" },
-        { status: 401 }
-      );
+      return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
     }
 
     if (user.status !== "active") {
-      return NextResponse.json(
-        { error: "Account is not active" },
-        { status: 403 }
-      );
+      return NextResponse.json({ error: "Account is not active" }, { status: 403 });
     }
 
     const tPw = perfNow();
@@ -77,13 +86,9 @@ export async function POST(request: NextRequest) {
 
     if (!isPasswordValid) {
       warnSecurityEvent("login_failure", { reason: "bad_password" });
-      return NextResponse.json(
-        { error: "Invalid credentials" },
-        { status: 401 }
-      );
+      return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
     }
 
-    const tCookie = perfNow();
     const userResponse = {
       id: String(user._id),
       fullName: user.fullName,
@@ -112,21 +117,33 @@ export async function POST(request: NextRequest) {
       maxAge: 60 * 60 * 24 * 7,
     };
 
-    response.cookies.set("userId", String(user._id), {
-      ...sessionCookieOpts,
-      httpOnly: true,
-    });
-
-    response.cookies.set("userEmail", user.email, {
-      ...sessionCookieOpts,
-      httpOnly: true,
-    });
-
-    if (user.fullName) {
-      response.cookies.set("userFullName", user.fullName, {
+    const tCookie = perfNow();
+    try {
+      response.cookies.set("userId", String(user._id), {
         ...sessionCookieOpts,
-        httpOnly: false,
+        httpOnly: true,
       });
+
+      response.cookies.set("userEmail", user.email, {
+        ...sessionCookieOpts,
+        httpOnly: true,
+      });
+
+      if (user.fullName) {
+        response.cookies.set("userFullName", user.fullName, {
+          ...sessionCookieOpts,
+          httpOnly: false,
+        });
+      }
+
+      console.log("[jwt:create]", { success: true, userId: String(user._id) });
+    } catch (cookieErr) {
+      const e = cookieErr instanceof Error ? cookieErr : new Error(String(cookieErr));
+      console.error("[jwt:create:failed]", {
+        message: e.message,
+        userId: String(user._id),
+      });
+      throw cookieErr;
     }
 
     perfElapsed("login:sessionCookies", tCookie);
@@ -138,7 +155,15 @@ export async function POST(request: NextRequest) {
 
     return response;
   } catch (error) {
-    console.error("Login error:", error);
-    return jsonInternalServerError(error, { fallbackMessage: "Something went wrong" });
+    const err = error instanceof Error ? error : new Error(String(error));
+    console.error("[login:error]", {
+      message: err.message,
+      stack: err.stack,
+      ...loginSafeDiag(),
+    });
+    return NextResponse.json(
+      { ok: false, code: "LOGIN_INTERNAL_ERROR", message: "Login failed" },
+      { status: 500 }
+    );
   }
 }

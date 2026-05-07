@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import connectDB from "@/lib/mongodb";
+import connectDB, { logDbReadyState, pingMongo } from "@/lib/mongodb";
 import { getCurrentDbUser } from "@/lib/auth";
 import User from "@/models/User";
 import { normalizeGrade, getGradeLabel } from "@/constants/grades";
@@ -44,6 +44,14 @@ const buildOrganizationalAccessPayload = (
 export async function GET(request: NextRequest) {
   try {
     await connectDB();
+    logDbReadyState("profileGET");
+    const pingOk = await pingMongo();
+    if (!pingOk) {
+      return NextResponse.json(
+        { ok: false, code: "DB_UNAVAILABLE", message: "Database unavailable" },
+        { status: 503 }
+      );
+    }
 
     const user = await getCurrentDbUser();
 
@@ -101,7 +109,13 @@ export async function GET(request: NextRequest) {
       ),
     });
   } catch (error) {
-    console.error("Error fetching user profile:", error);
+    const err = error instanceof Error ? error : new Error(String(error));
+    console.error("[profile:GET:error]", {
+      message: err.message,
+      stack: err.stack,
+      hasMongoUri: Boolean(process.env.MONGODB_URI?.trim()),
+      nodeEnv: process.env.NODE_ENV ?? "(unset)",
+    });
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
@@ -113,6 +127,14 @@ export async function GET(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   try {
     await connectDB();
+    logDbReadyState("profilePUT");
+    const pingPutOk = await pingMongo();
+    if (!pingPutOk) {
+      return NextResponse.json(
+        { ok: false, code: "DB_UNAVAILABLE", message: "Database unavailable" },
+        { status: 503 }
+      );
+    }
 
     const currentUser = await getCurrentDbUser();
 
