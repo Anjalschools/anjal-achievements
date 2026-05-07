@@ -120,6 +120,10 @@ I confirm that this consent is given voluntarily, and I commit to all policies a
     signIn: "Sign In",
     backHome: "Back to Home",
     requiredFullName: "Please enter your full name.",
+    invalidArabicQuadName:
+      "The Arabic full name must include at least four separate parts (e.g. first, father, grandfather, family).",
+    invalidEnglishQuadName:
+      "The English full name must include at least four separate words (e.g. first, middle, last names).",
     requiredStudentId: "Please enter student national ID (10 digits).",
     invalidStudentId: "National ID must be 10 digits.",
     requiredUsername: "Please enter username.",

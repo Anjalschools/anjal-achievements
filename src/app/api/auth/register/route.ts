@@ -7,6 +7,11 @@ import { normalizeGrade } from "@/constants/grades";
 import { ensureStudentPublicPortfolioReady } from "@/lib/public-portfolio-bootstrap";
 import { queueHomeStatsRefresh } from "@/lib/home-stats-service";
 import { checkRouteRateLimit, rateLimitExceededResponse } from "@/lib/rate-limit";
+import {
+  normalizeFullName,
+  isValidArabicFullName,
+  isValidEnglishFullName,
+} from "@/lib/validation/fullName";
 
 export async function POST(request: NextRequest) {
   try {
@@ -44,6 +49,40 @@ export async function POST(request: NextRequest) {
     if (!fullName || !email || !username || !studentId || !password) {
       return NextResponse.json(
         { error: "Missing required fields" },
+        { status: 400 }
+      );
+    }
+
+    const fullNameArStr = String(fullNameAr ?? fullName ?? "").trim();
+    const fullNameEnStr = String(fullNameEn ?? "").trim();
+    if (!fullNameArStr || !fullNameEnStr) {
+      return NextResponse.json(
+        { ok: false, error: "Arabic and English full names are required", code: "MISSING_NAMES" },
+        { status: 400 }
+      );
+    }
+
+    const normalizedFullNameAr = normalizeFullName(fullNameArStr);
+    const normalizedFullNameEn = normalizeFullName(fullNameEnStr);
+
+    if (!isValidArabicFullName(normalizedFullNameAr)) {
+      return NextResponse.json(
+        {
+          ok: false,
+          code: "INVALID_FULL_NAME_AR",
+          message: "Arabic full name must contain at least 4 parts",
+        },
+        { status: 400 }
+      );
+    }
+
+    if (!isValidEnglishFullName(normalizedFullNameEn)) {
+      return NextResponse.json(
+        {
+          ok: false,
+          code: "INVALID_FULL_NAME_EN",
+          message: "English full name must contain at least 4 parts",
+        },
         { status: 400 }
       );
     }
@@ -109,9 +148,7 @@ export async function POST(request: NextRequest) {
     const normalizedStudentId = studentId.trim();
     const normalizedNationalId = nationalId ? nationalId.trim() : undefined;
     const normalizedPhone = phone ? phone.trim() : undefined;
-    const normalizedFullName = fullName.trim();
-    const normalizedFullNameAr = fullNameAr ? fullNameAr.trim() : normalizedFullName;
-    const normalizedFullNameEn = fullNameEn ? fullNameEn.trim() : undefined;
+    const normalizedFullName = normalizedFullNameAr;
     const normalizedGrade = normalizeGrade(grade) || grade;
 
     // Check for existing user

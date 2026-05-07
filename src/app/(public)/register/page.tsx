@@ -19,6 +19,11 @@ import { initLocale } from "@/lib/i18n";
 import { getTranslation } from "@/locales";
 import { GRADE_OPTIONS } from "@/constants/grades";
 import { AlertCircle } from "lucide-react";
+import {
+  normalizeFullName,
+  isValidArabicFullName,
+  isValidEnglishFullName,
+} from "@/lib/validation/fullName";
 
 type Locale = "ar" | "en";
 
@@ -100,6 +105,11 @@ export default function RegisterPage() {
   const validateEmail = (emailValue: string) =>
     /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailValue);
 
+  const arNameInvalidWhileTyping =
+    fullNameAr.trim().length > 0 && !isValidArabicFullName(fullNameAr);
+  const enNameInvalidWhileTyping =
+    fullNameEn.trim().length > 0 && !isValidEnglishFullName(fullNameEn);
+
   const focusRef = (r: React.RefObject<HTMLElement | null>) => {
     requestAnimationFrame(() => {
       const el = r.current;
@@ -120,14 +130,26 @@ export default function RegisterPage() {
       return;
     }
 
+    if (!isValidArabicFullName(fullNameAr)) {
+      setError(t.register.invalidArabicQuadName);
+      focusRef(fullNameArRef);
+      return;
+    }
+
     if (!fullNameEn.trim()) {
       setError(isArabic ? "اسم الطالب بالإنجليزية مطلوب" : "Student name in English is required");
       focusRef(fullNameEnRef);
       return;
     }
 
-    // Use Arabic name as fullName for backward compatibility
-    const normalizedFullName = fullNameAr.trim();
+    if (!isValidEnglishFullName(fullNameEn)) {
+      setError(t.register.invalidEnglishQuadName);
+      focusRef(fullNameEnRef);
+      return;
+    }
+
+    const normalizedAr = normalizeFullName(fullNameAr);
+    const normalizedEn = normalizeFullName(fullNameEn);
 
     if (!studentId.trim()) {
       setError(t.register.requiredStudentId);
@@ -254,9 +276,9 @@ export default function RegisterPage() {
 
       const formData = new FormData();
       if (profilePhoto) formData.append("profilePhoto", profilePhoto);
-      formData.append("fullName", normalizedFullName);
-      formData.append("fullNameAr", fullNameAr.trim());
-      formData.append("fullNameEn", fullNameEn.trim());
+      formData.append("fullName", normalizedAr);
+      formData.append("fullNameAr", normalizedAr);
+      formData.append("fullNameEn", normalizedEn);
       formData.append("studentId", studentId);
       formData.append("username", username);
       formData.append("gender", gender);
@@ -281,6 +303,17 @@ export default function RegisterPage() {
       const data = await response.json();
 
       if (!response.ok) {
+        const code = typeof data.code === "string" ? data.code : "";
+        if (code === "INVALID_FULL_NAME_AR") {
+          setError(t.register.invalidArabicQuadName);
+          focusRef(fullNameArRef);
+          return;
+        }
+        if (code === "INVALID_FULL_NAME_EN") {
+          setError(t.register.invalidEnglishQuadName);
+          focusRef(fullNameEnRef);
+          return;
+        }
         setError(data.error || t.register.registrationError);
         return;
       }
@@ -443,11 +476,18 @@ export default function RegisterPage() {
                       value={fullNameAr}
                       onChange={(e) => setFullNameAr(e.target.value)}
                       placeholder={isArabic ? "أدخل اسم الطالب بالعربية" : "Enter student name in Arabic"}
-                      className={`h-12 w-full rounded-2xl border border-slate-200 bg-white text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-sky-500 focus:ring-4 focus:ring-sky-100 ${
-                        isArabic ? "pr-11 pl-4" : "pl-11 pr-4"
-                      }`}
+                      className={`h-12 w-full rounded-2xl border bg-white text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:ring-4 focus:ring-sky-100 ${
+                        arNameInvalidWhileTyping
+                          ? "border-rose-500 focus:border-rose-500"
+                          : "border-slate-200 focus:border-sky-500"
+                      } ${isArabic ? "pr-11 pl-4" : "pl-11 pr-4"}`}
                     />
                   </div>
+                  {arNameInvalidWhileTyping ? (
+                    <p className="mt-1.5 text-xs font-medium text-rose-600" role="status">
+                      {t.register.invalidArabicQuadName}
+                    </p>
+                  ) : null}
                 </div>
 
                 <div>
@@ -471,11 +511,18 @@ export default function RegisterPage() {
                       value={fullNameEn}
                       onChange={(e) => setFullNameEn(e.target.value)}
                       placeholder={isArabic ? "Enter student name in English" : "Enter student name in English"}
-                      className={`h-12 w-full rounded-2xl border border-slate-200 bg-white text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-sky-500 focus:ring-4 focus:ring-sky-100 ${
-                        isArabic ? "pr-11 pl-4" : "pl-11 pr-4"
-                      }`}
+                      className={`h-12 w-full rounded-2xl border bg-white text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:ring-4 focus:ring-sky-100 ${
+                        enNameInvalidWhileTyping
+                          ? "border-rose-500 focus:border-rose-500"
+                          : "border-slate-200 focus:border-sky-500"
+                      } ${isArabic ? "pr-11 pl-4" : "pl-11 pr-4"}`}
                     />
                   </div>
+                  {enNameInvalidWhileTyping ? (
+                    <p className="mt-1.5 text-xs font-medium text-rose-600" role="status">
+                      {t.register.invalidEnglishQuadName}
+                    </p>
+                  ) : null}
                 </div>
 
                 <div>
