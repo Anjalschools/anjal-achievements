@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import PageContainer from "@/components/layout/PageContainer";
@@ -27,6 +27,12 @@ import {
   Trash2,
   UserPlus,
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 type ListResponse = {
   items: AdminUserListRow[];
@@ -66,9 +72,6 @@ const AdminUsersPageInner = () => {
   const [mawhibaFilter, setMawhibaFilter] = useState(searchParams.get("mawhiba") || "all");
   const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10) || 1);
 
-  const [menuOpen, setMenuOpen] = useState<string | null>(null);
-  const menuRef = useRef<HTMLTableCellElement>(null);
-
   const [pwOpen, setPwOpen] = useState(false);
   const [pwUser, setPwUser] = useState<AdminUserListRow | null>(null);
 
@@ -76,14 +79,6 @@ const AdminUsersPageInner = () => {
   const [deleteBusy, setDeleteBusy] = useState(false);
 
   const [toast, setToast] = useState<string | null>(null);
-
-  useEffect(() => {
-    const onDoc = (e: MouseEvent) => {
-      if (!menuRef.current?.contains(e.target as Node)) setMenuOpen(null);
-    };
-    document.addEventListener("click", onDoc);
-    return () => document.removeEventListener("click", onDoc);
-  }, []);
 
   useEffect(() => {
     (async () => {
@@ -202,7 +197,6 @@ const AdminUsersPageInner = () => {
   };
 
   const toggleStatus = async (row: AdminUserListRow) => {
-    setMenuOpen(null);
     const next = row.status === "active" ? "suspended" : "active";
     try {
       const res = await fetch(`/api/admin/users/${row.id}/status`, {
@@ -440,74 +434,59 @@ const AdminUsersPageInner = () => {
                       </td>
                       <td className="px-3 py-3 text-text-light">{fmtDate(row.createdAt, isAr)}</td>
                       <td className="px-3 py-3 text-text-light">{fmtDate(row.lastLoginAt, isAr)}</td>
-                      <td ref={menuOpen === row.id ? menuRef : null} className="relative px-2 py-3 text-center">
-                        <div>
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setMenuOpen((v) => (v === row.id ? null : row.id));
-                            }}
-                            className="rounded-lg p-2 text-text hover:bg-gray-100"
-                            aria-label={isAr ? "قائمة الإجراءات" : "Actions menu"}
-                            aria-expanded={menuOpen === row.id}
-                          >
-                            <MoreVertical className="h-4 w-4" />
-                          </button>
-                          {menuOpen === row.id ? (
-                            <div
-                              className={`absolute z-50 mt-1 min-w-[200px] rounded-xl border border-gray-200 bg-white py-1 shadow-lg ${
-                                isAr ? "left-2" : "right-2"
-                              }`}
-                              role="menu"
+                      <td className="px-2 py-3 text-center">
+                        <DropdownMenu modal={false}>
+                          <DropdownMenuTrigger asChild>
+                            <button
+                              type="button"
+                              className="rounded-lg p-2 text-text hover:bg-gray-100"
+                              aria-label={isAr ? "قائمة الإجراءات" : "Actions menu"}
                             >
+                              <MoreVertical className="h-4 w-4" aria-hidden />
+                            </button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent
+                            menuDirection={isAr ? "rtl" : "ltr"}
+                            side="bottom"
+                            align={isAr ? "start" : "end"}
+                            collisionPadding={16}
+                          >
+                            <DropdownMenuItem asChild>
                               <Link
                                 href={`/admin/users/${row.id}`}
-                                className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-50"
-                                onClick={() => setMenuOpen(null)}
+                                className="flex cursor-pointer items-center gap-2"
                               >
-                                <Eye className="h-4 w-4" aria-hidden />
+                                <Eye className="h-4 w-4 shrink-0" aria-hidden />
                                 {isAr ? "عرض / تعديل" : "View / edit"}
                               </Link>
-                              <button
-                                type="button"
-                                className="flex w-full items-center gap-2 px-3 py-2 text-start text-sm hover:bg-gray-50"
-                                onClick={() => {
-                                  setPwUser(row);
-                                  setPwOpen(true);
-                                  setMenuOpen(null);
-                                }}
-                              >
-                                <Pencil className="h-4 w-4" aria-hidden />
-                                {isAr ? "تغيير كلمة المرور" : "Change password"}
-                              </button>
-                              <button
-                                type="button"
-                                className="flex w-full items-center gap-2 px-3 py-2 text-start text-sm hover:bg-gray-50"
-                                onClick={() => void toggleStatus(row)}
-                              >
-                                {row.status === "active"
-                                  ? isAr
-                                    ? "تعطيل / إيقاف"
-                                    : "Suspend"
-                                  : isAr
-                                    ? "تفعيل"
-                                    : "Activate"}
-                              </button>
-                              <button
-                                type="button"
-                                className="flex w-full items-center gap-2 px-3 py-2 text-start text-sm text-red-700 hover:bg-red-50"
-                                onClick={() => {
-                                  setDeleteTarget(row);
-                                  setMenuOpen(null);
-                                }}
-                              >
-                                <Trash2 className="h-4 w-4" aria-hidden />
-                                {isAr ? "حذف" : "Delete"}
-                              </button>
-                            </div>
-                          ) : null}
-                        </div>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onSelect={() => {
+                                setPwUser(row);
+                                setPwOpen(true);
+                              }}
+                            >
+                              <Pencil className="h-4 w-4 shrink-0" aria-hidden />
+                              {isAr ? "تغيير كلمة المرور" : "Change password"}
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onSelect={() => void toggleStatus(row)}>
+                              {row.status === "active"
+                                ? isAr
+                                  ? "تعطيل / إيقاف"
+                                  : "Suspend"
+                                : isAr
+                                  ? "تفعيل"
+                                  : "Activate"}
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              className="text-red-700 focus:bg-red-50"
+                              onSelect={() => setDeleteTarget(row)}
+                            >
+                              <Trash2 className="h-4 w-4 shrink-0" aria-hidden />
+                              {isAr ? "حذف" : "Delete"}
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </td>
                     </tr>
                   ))}

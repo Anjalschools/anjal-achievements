@@ -21,6 +21,7 @@
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1031.0",
     "@napi-rs/canvas": "^0.1.97",
+    "@radix-ui/react-dropdown-menu": "^2.1.16",
     "@types/qrcode": "^1.5.6",
     "@upstash/ratelimit": "^2.0.8",
     "@upstash/redis": "^1.37.0",
