@@ -189,7 +189,7 @@ export async function POST(request: NextRequest) {
     //   profilePhotoUrl = await uploadImage(profilePhoto);
     // }
 
-    // Create user
+    // Create user — accountType / alumniProfile omitted (defaults to student via getAccountType)
     const user = await User.create({
       fullName: normalizedFullName,
       fullNameAr: normalizedFullNameAr,

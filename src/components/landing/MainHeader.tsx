@@ -35,6 +35,7 @@ const MainHeader = ({ variant = "default", userAccount }: MainHeaderProps) => {
   const publicNav = useMemo(
     () => [
       { href: "/", label: locale === "ar" ? "الرئيسية" : "Home" },
+      { href: "/alumni", label: locale === "ar" ? "خريجي الأنجال" : "Alumni" },
       { href: "/hall-of-fame", label: locale === "ar" ? "لوحة التميز" : "Hall of Fame" },
       {
         href: "/#featured-achievements",
@@ -83,7 +84,9 @@ const MainHeader = ({ variant = "default", userAccount }: MainHeaderProps) => {
                     key={item.href}
                     href={item.href}
                     className={`whitespace-nowrap text-sm font-medium transition-colors hover:text-primary ${
-                      pathname === item.href || (item.href === "/" && pathname === "/")
+                      pathname === item.href ||
+                      (item.href === "/" && pathname === "/") ||
+                      (item.href === "/alumni" && pathname.startsWith("/alumni"))
                         ? "text-primary"
                         : "text-text"
                     }`}

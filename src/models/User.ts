@@ -1,5 +1,33 @@
 import mongoose, { Schema, Document, Model } from "mongoose";
 
+/** Optional alumni extension (Phase 1 — all sub-fields optional). */
+export type AlumniServices = {
+  mentoring?: boolean;
+  internships?: boolean;
+  jobs?: boolean;
+  workshops?: boolean;
+  judging?: boolean;
+  sponsorship?: boolean;
+};
+
+export type AlumniProfile = {
+  graduationYear?: number;
+  universityName?: string;
+  major?: string;
+  degree?: string;
+  studyCountry?: string;
+  currentCompany?: string;
+  currentPosition?: string;
+  industry?: string;
+  linkedinUrl?: string;
+  city?: string;
+  country?: string;
+  bio?: string;
+  isFeaturedAlumni?: boolean;
+  isVerifiedAlumni?: boolean;
+  alumniServices?: AlumniServices;
+};
+
 export interface IUser extends Document {
   fullName: string; // Keep for backward compatibility
   fullNameAr?: string; // Arabic name
@@ -85,6 +113,10 @@ export interface IUser extends Document {
       showPhone?: boolean;
     };
   };
+  /** Student vs alumni classification; omitted → student (see {@link getAccountType}). */
+  accountType?: "student" | "alumni";
+  /** Optional alumni résumé / visibility fields (Phase 1). */
+  alumniProfile?: AlumniProfile;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -124,6 +156,39 @@ const StudentPortfolioContentSchema = new Schema(
       showEmail: { type: Boolean, default: false },
       showPhone: { type: Boolean, default: false },
     },
+  },
+  { _id: false }
+);
+
+const AlumniServicesSchema = new Schema(
+  {
+    mentoring: { type: Boolean },
+    internships: { type: Boolean },
+    jobs: { type: Boolean },
+    workshops: { type: Boolean },
+    judging: { type: Boolean },
+    sponsorship: { type: Boolean },
+  },
+  { _id: false }
+);
+
+const AlumniProfileSchema = new Schema(
+  {
+    graduationYear: { type: Number, min: 1950, max: 2100 },
+    universityName: { type: String, trim: true, maxlength: 200 },
+    major: { type: String, trim: true, maxlength: 200 },
+    degree: { type: String, trim: true, maxlength: 120 },
+    studyCountry: { type: String, trim: true, maxlength: 120 },
+    currentCompany: { type: String, trim: true, maxlength: 200 },
+    currentPosition: { type: String, trim: true, maxlength: 200 },
+    industry: { type: String, trim: true, maxlength: 120 },
+    linkedinUrl: { type: String, trim: true, maxlength: 500 },
+    city: { type: String, trim: true, maxlength: 120 },
+    country: { type: String, trim: true, maxlength: 120 },
+    bio: { type: String, trim: true, maxlength: 4000 },
+    isFeaturedAlumni: { type: Boolean },
+    isVerifiedAlumni: { type: Boolean },
+    alumniServices: { type: AlumniServicesSchema, default: undefined },
   },
   { _id: false }
 );
@@ -288,6 +353,15 @@ const UserSchema: Schema = new Schema(
       type: StudentPortfolioContentSchema,
       default: undefined,
     },
+    accountType: {
+      type: String,
+      enum: ["student", "alumni"],
+      required: false,
+    },
+    alumniProfile: {
+      type: AlumniProfileSchema,
+      default: undefined,
+    },
   },
   {
     timestamps: true,
@@ -296,6 +370,10 @@ const UserSchema: Schema = new Schema(
 
 UserSchema.index({ publicPortfolioEnabled: 1, publicPortfolioSlug: 1 });
 UserSchema.index({ role: 1 });
+UserSchema.index({ accountType: 1 }, { sparse: true });
+UserSchema.index({ "alumniProfile.isFeaturedAlumni": 1 }, { sparse: true });
+UserSchema.index({ "alumniProfile.universityName": 1 }, { sparse: true });
+UserSchema.index({ "alumniProfile.industry": 1 }, { sparse: true });
 
 const User: Model<IUser> =
   mongoose.models.User || mongoose.model<IUser>("User", UserSchema);

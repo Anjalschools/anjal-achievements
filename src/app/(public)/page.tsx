@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import InstitutionalSection from "@/components/landing/InstitutionalSection";
 import PlatformFeaturedStrip from "@/components/landing/PlatformFeaturedStrip";
 import {
   categories,
@@ -18,6 +17,9 @@ import {
   Users,
   FileText,
   Target,
+  GraduationCap,
+  HandHeart,
+  Briefcase,
   Star,
   Globe,
   Eye,
@@ -121,9 +123,7 @@ const VisionMissionSection = ({ content }: { content: HomePageContentPayload }) 
                 </div>
                 <h3 className="text-2xl font-bold leading-snug tracking-tight text-primary">الرؤية</h3>
               </div>
-              <p className="text-lg leading-relaxed text-slate-700">
-                {visionText}
-              </p>
+              <p className="text-lg leading-relaxed text-slate-700">{visionText}</p>
             </div>
 
             <div className="rounded-2xl border border-secondary/20 bg-gradient-to-br from-secondary/10 to-secondary/5 p-8">
@@ -133,9 +133,262 @@ const VisionMissionSection = ({ content }: { content: HomePageContentPayload }) 
                 </div>
                 <h3 className="text-2xl font-bold leading-snug tracking-tight text-secondary">الرسالة</h3>
               </div>
-              <p className="text-lg leading-relaxed text-slate-700">
-                {missionText}
+              <p className="text-lg leading-relaxed text-slate-700">{missionText}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+};
+
+const formatHomeStatNumber = (n: number) =>
+  n.toLocaleString("en-US", { maximumFractionDigits: 0 });
+
+const StatisticsBar = () => {
+  const [statsData, setStatsData] = useState({
+    studentsCount: 0,
+    achievementsCount: 0,
+    fieldsCount: 0,
+    awardsCount: 50,
+  });
+  const [alumniStatsData, setAlumniStatsData] = useState({
+    totalAlumni: 0,
+    universities: 0,
+    countries: 0,
+    companies: 0,
+    mentorshipAvailable: 0,
+  });
+
+  useEffect(() => {
+    let mounted = true;
+    const run = async () => {
+      try {
+        const [homeRes, alumniRes] = await Promise.all([
+          fetch("/api/public/home-stats", { cache: "no-store" }),
+          fetch("/api/public/alumni-summary", { cache: "no-store" }),
+        ]);
+
+        if (homeRes.ok) {
+          const json = (await homeRes.json()) as {
+            ok?: boolean;
+            data?: {
+              studentsCount?: number;
+              achievementsCount?: number;
+              fieldsCount?: number;
+              awardsCount?: number;
+            };
+          };
+          if (mounted && json?.ok && json.data) {
+            setStatsData({
+              studentsCount: Number(json.data.studentsCount || 0),
+              achievementsCount: Number(json.data.achievementsCount || 0),
+              fieldsCount: Number(json.data.fieldsCount || 0),
+              awardsCount: 50,
+            });
+          }
+        }
+
+        if (alumniRes.ok) {
+          const alumniJson = (await alumniRes.json()) as {
+            ok?: boolean;
+            stats?: {
+              totalAlumni?: number;
+              universities?: number;
+              countries?: number;
+              companies?: number;
+              mentorshipAvailable?: number;
+            };
+          };
+          if (mounted && alumniJson?.ok && alumniJson.stats) {
+            setAlumniStatsData({
+              totalAlumni: Number(alumniJson.stats.totalAlumni || 0),
+              universities: Number(alumniJson.stats.universities || 0),
+              countries: Number(alumniJson.stats.countries || 0),
+              companies: Number(alumniJson.stats.companies || 0),
+              mentorshipAvailable: Number(alumniJson.stats.mentorshipAvailable || 0),
+            });
+          }
+        }
+      } catch {
+        // Keep zeros on failure.
+      }
+    };
+    void run();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const stats = [
+    { value: formatHomeStatNumber(statsData.studentsCount), label: "عدد الطلاب المسجلين", icon: Users },
+    { value: "50+", label: "عدد الجوائز المقدمة", icon: AwardIcon },
+    { value: formatHomeStatNumber(statsData.achievementsCount), label: "عدد الإنجازات", icon: FileText },
+    { value: formatHomeStatNumber(statsData.fieldsCount), label: "عدد مجالات الإنجاز المسجلة", icon: Target },
+  ];
+  const alumniStats = [
+    { value: formatHomeStatNumber(alumniStatsData.totalAlumni), label: "عدد الخريجين", icon: Users },
+    { value: formatHomeStatNumber(alumniStatsData.universities), label: "الجامعات", icon: GraduationCap },
+    { value: formatHomeStatNumber(alumniStatsData.countries), label: "الدول", icon: Globe },
+    { value: formatHomeStatNumber(alumniStatsData.companies), label: "الشركات العالمية", icon: Briefcase },
+    { value: formatHomeStatNumber(alumniStatsData.mentorshipAvailable), label: "الخريجون المشاركون بالإرشاد والتوجيه", icon: HandHeart },
+  ];
+
+  return (
+    <section className="border-y border-gray-200 bg-background-soft py-12">
+      <div className="container mx-auto px-4">
+        <div className="grid grid-cols-2 gap-6 md:grid-cols-4">
+          {stats.map((stat) => {
+            const IconComponent = stat.icon;
+            return (
+              <div key={stat.label} className="text-center">
+                <div className="mb-3 flex justify-center">
+                  <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
+                    <IconComponent className="h-8 w-8 text-primary" />
+                  </div>
+                </div>
+
+                <div
+                  dir={stat.label === "عدد الجوائز المقدمة" ? "ltr" : undefined}
+                  className="mb-2 text-3xl font-extrabold tabular-nums tracking-tight text-primary md:text-4xl"
+                >
+                  {stat.value}
+                </div>
+                <div className="text-sm font-medium text-slate-600 md:text-base">{stat.label}</div>
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="mt-10 border-t border-slate-200 pt-8">
+          <div className="mb-6 text-center">
+            <h3 className="text-xl font-bold tracking-tight text-slate-900 md:text-2xl">
+              أرقام تعكس أثر خريجي الأنجال
+            </h3>
+            <p className="mt-2 text-sm text-slate-600 md:text-base">
+              من الجامعات إلى الشركات العالمية… خريجونا يواصلون صناعة التميز.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
+            {alumniStats.map((stat) => {
+              const IconComponent = stat.icon;
+              return (
+                <div key={stat.label} className="text-center transition-colors hover:text-primary">
+                  <div className="mb-3 flex justify-center">
+                    <div className="flex h-14 w-14 items-center justify-center rounded-full bg-primary/10">
+                      <IconComponent className="h-7 w-7 text-primary" />
+                    </div>
+                  </div>
+                  <div className="mb-1 text-3xl font-extrabold tabular-nums tracking-tight text-primary">
+                    {stat.value}
+                  </div>
+                  <div className="mx-auto max-w-[11rem] text-sm font-medium leading-relaxed text-slate-600">
+                    {stat.label}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+};
+
+const AlumniImpactSection = () => {
+  const locale = getLocale();
+  const isAr = locale === "ar";
+  const impactPoints = isAr
+    ? [
+        { title: "شبكة علمية", body: "تواصل معرفي ممتد بين التخصصات والجامعات.", icon: Globe },
+        { title: "فرص وإرشاد", body: "إرشاد أكاديمي ومهني يعزز جاهزية الطلاب.", icon: Users },
+        { title: "قصص ملهمة", body: "نماذج نجاح تعكس روح العزيمة والطموح.", icon: Star },
+        { title: "عطاء مستدام", body: "شراكات ومبادرات تصنع أثرًا تعليميًا ممتدًا.", icon: HandHeart },
+      ]
+    : [
+        { title: "Academic network", body: "Sustained knowledge exchange across majors and universities.", icon: Globe },
+        { title: "Guidance pathways", body: "Academic and career mentoring for student readiness.", icon: Users },
+        { title: "Inspiring stories", body: "Success narratives that reflect ambition and resilience.", icon: Star },
+        { title: "Sustainable impact", body: "Partnerships and initiatives with lasting educational value.", icon: HandHeart },
+      ];
+
+  return (
+    <section className="bg-white py-12 sm:py-14">
+      <div className="container mx-auto px-4">
+        <div className="mx-auto max-w-6xl">
+          <div className="mb-6 border-b border-slate-200 pb-4 text-center">
+            <h2 className="text-2xl font-extrabold leading-tight tracking-tight text-slate-950 md:text-3xl">
+              {isAr ? "مجتمع خريجي الأنجال — أثر المدرسة في صناعة التميز" : "Al-Anjal Alumni Community — Institutional Impact"}
+            </h2>
+            <p className="mt-2 text-sm text-slate-600 md:text-base">
+              {isAr
+                ? "قسم مؤسسي يعرض أثر خريجي مدارس الأنجال في الجامعات وسوق العمل والمجالات القيادية."
+                : "An institutional section showcasing alumni impact across universities, careers, and leadership."}
+            </p>
+          </div>
+
+          <div className="grid items-stretch gap-5 rounded-3xl border border-slate-200 bg-slate-50 p-4 shadow-sm lg:grid-cols-[1.05fr_1fr]">
+            <div className="relative overflow-hidden rounded-2xl ring-1 ring-slate-200/70">
+              <div className="relative aspect-[16/10] w-full">
+                <SafeLocalImage
+                  src={PUBLIC_IMG.faceSchools}
+                  alt={isAr ? "مجتمع خريجي الأنجال" : "Al-Anjal alumni community"}
+                  fill
+                  objectFit="cover"
+                  className="object-cover"
+                  fallback={<div className="absolute inset-0 bg-slate-200" aria-hidden />}
+                />
+                <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-[#071a3d]/90 to-transparent p-4 text-white">
+                  <p className="text-sm font-bold">{isAr ? "من مقاعد الأنجال إلى الجامعات ومنصات القيادة" : "From Al-Anjal classrooms to universities and leadership"}</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 bg-white p-5">
+              <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/5 px-3 py-1 text-xs font-bold text-primary">
+                <GraduationCap className="h-3.5 w-3.5" aria-hidden />
+                {isAr ? "خريجو الأنجال" : "Al-Anjal alumni"}
+              </div>
+              <p className="text-sm leading-relaxed text-slate-600 md:text-base">
+                {isAr
+                  ? "مجتمع يربط خريجي مدارس الأنجال ببعضهم وبمدرستهم، ويترجم أثر المدرسة إلى مبادرات نوعية تدعم الأجيال القادمة."
+                  : "A community connecting Al-Anjal alumni with each other and their school, translating school impact into meaningful initiatives."}
               </p>
+
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                {impactPoints.map((point) => {
+                  const Icon = point.icon;
+                  return (
+                    <div key={point.title} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                      <div className="flex items-start gap-3">
+                        <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10">
+                          <Icon className="h-4 w-4 text-primary" aria-hidden />
+                        </div>
+                        <div>
+                          <p className="text-sm font-bold text-slate-900">{point.title}</p>
+                          <p className="mt-0.5 text-xs leading-relaxed text-slate-600">{point.body}</p>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="mt-5 flex flex-wrap gap-3">
+                <Link
+                  href="/alumni"
+                  className="inline-flex items-center justify-center rounded-lg border border-primary/25 bg-white px-5 py-2.5 text-sm font-bold text-primary transition hover:bg-primary/5"
+                >
+                  {isAr ? "تعرّف على المجتمع" : "Explore community"}
+                </Link>
+                <Link
+                  href="/alumni/join"
+                  className="inline-flex items-center justify-center rounded-lg bg-primary px-5 py-2.5 text-sm font-bold text-white transition hover:bg-primary-dark"
+                >
+                  {isAr ? "سجّل كخريج جديد" : "Register as alumni"}
+                </Link>
+              </div>
             </div>
           </div>
         </div>
@@ -184,11 +437,9 @@ const QuickActionTiles = () => {
                 <div className="flex h-16 w-16 items-center justify-center rounded-lg bg-primary/10 transition-colors group-hover:bg-primary">
                   <IconComponent className="h-8 w-8 text-primary transition-colors group-hover:text-white" />
                 </div>
-
                 <h3 className="text-xl font-bold leading-snug tracking-tight text-text transition-colors group-hover:text-primary">
                   {action.title}
                 </h3>
-
                 <p className="font-normal leading-relaxed text-text-light">{action.description}</p>
               </div>
             );
@@ -235,9 +486,7 @@ const WhyShareSection = () => {
                 <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-primary/10">
                   <Check className="h-6 w-6 text-primary" />
                 </div>
-                <p className="pt-1 text-lg font-medium leading-relaxed text-text">
-                  {benefit}
-                </p>
+                <p className="pt-1 text-lg font-medium leading-relaxed text-text">{benefit}</p>
               </div>
             ))}
           </div>
@@ -259,7 +508,6 @@ const CategoryChipsSection = () => {
             استكشف الإنجازات المتميزة عبر مختلف المجالات التعليمية والتربوية
           </p>
         </div>
-
         <div className="flex flex-wrap justify-center gap-4">
           {categories.map((category) => (
             <a
@@ -363,90 +611,6 @@ const EventAnnouncement = ({ content }: { content: HomePageContentPayload }) => 
               </div>
             </div>
           </div>
-        </div>
-      </div>
-    </section>
-  );
-};
-
-const formatHomeStatNumber = (n: number) =>
-  n.toLocaleString("en-US", { maximumFractionDigits: 0 });
-
-const StatisticsBar = () => {
-  const [statsData, setStatsData] = useState({
-    studentsCount: 0,
-    achievementsCount: 0,
-    fieldsCount: 0,
-    awardsCount: 50,
-  });
-
-  useEffect(() => {
-    let mounted = true;
-    const run = async () => {
-      try {
-        const res = await fetch("/api/public/home-stats", { cache: "no-store" });
-        if (!res.ok) return;
-        const json = (await res.json()) as {
-          ok?: boolean;
-          data?: {
-            studentsCount?: number;
-            achievementsCount?: number;
-            fieldsCount?: number;
-            awardsCount?: number;
-          };
-        };
-        if (!mounted || !json?.ok || !json.data) return;
-        setStatsData({
-          studentsCount: Number(json.data.studentsCount || 0),
-          achievementsCount: Number(json.data.achievementsCount || 0),
-          fieldsCount: Number(json.data.fieldsCount || 0),
-          awardsCount: 50,
-        });
-      } catch {
-        // Keep zeros on failure.
-      }
-    };
-    void run();
-    return () => {
-      mounted = false;
-    };
-  }, []);
-
-  const stats = [
-    { value: formatHomeStatNumber(statsData.studentsCount), label: "عدد الطلاب المسجلين", icon: Users },
-    { value: "50+", label: "عدد الجوائز المقدمة", icon: AwardIcon },
-    { value: formatHomeStatNumber(statsData.achievementsCount), label: "عدد الإنجازات", icon: FileText },
-    { value: formatHomeStatNumber(statsData.fieldsCount), label: "عدد مجالات الإنجاز المسجلة", icon: Target },
-  ];
-
-  return (
-    <section className="border-y border-gray-200 bg-background-soft py-12">
-      <div className="container mx-auto px-4">
-        <div className="grid grid-cols-2 gap-6 md:grid-cols-4">
-          {stats.map((stat) => {
-            const IconComponent = stat.icon;
-
-            return (
-              <div key={stat.label} className="text-center">
-                <div className="mb-3 flex justify-center">
-                  <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
-                    <IconComponent className="h-8 w-8 text-primary" />
-                  </div>
-                </div>
-
-                <div
-                  dir={stat.label === "عدد الجوائز المقدمة" ? "ltr" : undefined}
-                  className="mb-2 text-3xl font-extrabold tabular-nums tracking-tight text-primary md:text-4xl"
-                >
-                  {stat.value}
-                </div>
-
-                <div className="text-sm font-medium text-slate-600 md:text-base">
-                  {stat.label}
-                </div>
-              </div>
-            );
-          })}
         </div>
       </div>
     </section>
@@ -735,7 +899,7 @@ export default function Home() {
       <ParticipationNewsSection />
       <TopAchievementsSection />
       <PlatformFeaturedStrip />
-      <InstitutionalSection />
+      <AlumniImpactSection />
     </div>
   );
 }

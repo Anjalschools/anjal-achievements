@@ -17,6 +17,7 @@ import {
   UserCog,
   FileBarChart,
   Star,
+  Briefcase,
   SlidersHorizontal,
   ScrollText,
   LineChart,
@@ -26,6 +27,7 @@ import {
   ListOrdered,
   PanelsTopLeft,
   CalendarDays,
+  GraduationCap,
   type LucideIcon,
   MessagesSquare,
 } from "lucide-react";
@@ -63,6 +65,21 @@ const AppSidebar = () => {
     href: "/admin/letter-requests",
     icon: ScrollText,
     label: locale === "ar" ? "طلبات الخطابات" : "Letter requests",
+  };
+  const alumniOnboardingAdminItem = {
+    href: "/admin/alumni/onboarding-requests",
+    icon: GraduationCap,
+    label: locale === "ar" ? "طلبات الخريجين" : "Alumni requests",
+  };
+  const alumniStoriesAdminItem = {
+    href: "/admin/alumni/stories",
+    icon: PanelsTopLeft,
+    label: locale === "ar" ? "قصص الخريجين" : "Alumni stories",
+  };
+  const alumniOpportunitiesAdminItem = {
+    href: "/admin/alumni/opportunities",
+    icon: Briefcase,
+    label: locale === "ar" ? "فرص الخريجين" : "Alumni opportunities",
   };
   const addAchievementItem = {
     href: "/achievements/new",
@@ -204,6 +221,9 @@ const AppSidebar = () => {
     { ...aiNewsItem, capability: "aiNews" },
     { ...contactMessagesItem, capability: "contactMessages" },
     { ...letterRequestsAdminItem, capability: "letterRequests" },
+    { ...alumniOnboardingAdminItem, capability: "userManagement" },
+    { ...alumniStoriesAdminItem, capability: "userManagement" },
+    { ...alumniOpportunitiesAdminItem, capability: "userManagement" },
     { ...auditLogItem, capability: "auditLog" },
     { ...adminSettingsItem, capability: "platformSettings" },
     { ...scoringSettingsItem, capability: "platformSettings" },
@@ -275,6 +295,15 @@ const AppSidebar = () => {
     }
     if (href === "/admin/contact-messages") {
       return pathname === "/admin/contact-messages" || pathname?.startsWith("/admin/contact-messages/");
+    }
+    if (href === "/admin/alumni/onboarding-requests") {
+      return pathname === "/admin/alumni/onboarding-requests" || pathname?.startsWith("/admin/alumni/onboarding-requests/");
+    }
+    if (href === "/admin/alumni/stories") {
+      return pathname === "/admin/alumni/stories" || pathname?.startsWith("/admin/alumni/stories/");
+    }
+    if (href === "/admin/alumni/opportunities") {
+      return pathname === "/admin/alumni/opportunities" || pathname?.startsWith("/admin/alumni/opportunities/");
     }
     if (href === "/admin/home-highlights") {
       return pathname === "/admin/home-highlights" || pathname?.startsWith("/admin/home-highlights/");
