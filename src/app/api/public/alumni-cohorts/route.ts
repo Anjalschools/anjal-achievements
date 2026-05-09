@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import connectDB from "@/lib/mongodb";
 import User from "@/models/User";
 import AlumniCohort from "@/models/AlumniCohort";
+import { blockIneligibleStudentOnPublicCommunityApi } from "@/lib/alumni/public-community-session-guard";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 120;
@@ -12,6 +13,8 @@ const ALUMNI_MATCH = {
 
 export async function GET() {
   try {
+    const blocked = await blockIneligibleStudentOnPublicCommunityApi();
+    if (blocked) return blocked;
     await connectDB();
     const [fromUsers, cohortDocs] = await Promise.all([
       User.aggregate<{ _id: number; count: number }>([

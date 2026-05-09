@@ -47,6 +47,7 @@ import { roleHasCapability, type RoleCapabilityKey } from "@/lib/app-role-scope-
 import AuthGuardLink from "@/components/auth/AuthGuardLink";
 import { isAuthGuardHref } from "@/lib/requireAuthRedirect";
 import { isEligibleForAcademicAdvisor } from "@/lib/alumni/isEligibleForAcademicAdvisor";
+import { canAccessAlumniCommunity } from "@/lib/alumni/canAccessAlumniCommunity";
 
 const AppSidebar = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -329,6 +330,14 @@ const AppSidebar = () => {
       role: profile?.role,
     });
 
+  const showAlumniCommunityNav =
+    !isReviewer &&
+    canAccessAlumniCommunity({
+      accountType: profile?.accountType,
+      grade: profile?.grade,
+      role: profile?.role,
+    });
+
   const navItems = isReviewer
     ? staffNavCandidates
         .filter((row) => row.capability === null || can(row.capability))
@@ -340,7 +349,7 @@ const AppSidebar = () => {
           : []),
         ...(showAcademicAdvisorNav ? [alumniAssistantNavItem] : []),
         hallOfFameItem,
-        alumniDiscoverySearchItem,
+        ...(showAlumniCommunityNav ? [alumniDiscoverySearchItem] : []),
         achievementsItem,
         letterRequestsStudentItem,
         addAchievementItem,

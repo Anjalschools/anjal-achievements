@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import mongoose from "mongoose";
 import connectDB from "@/lib/mongodb";
 import User from "@/models/User";
+import { blockIneligibleStudentOnPublicCommunityApi } from "@/lib/alumni/public-community-session-guard";
 import { getAccountType } from "@/lib/account-type";
 import { redactAlumniProfileForPublic } from "@/lib/alumni/privacy";
 
@@ -12,6 +13,8 @@ export const revalidate = 60;
 
 export async function GET(_request: Request, { params }: RouteParams) {
   try {
+    const blocked = await blockIneligibleStudentOnPublicCommunityApi();
+    if (blocked) return blocked;
     const id = String(params.id || "");
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return NextResponse.json({ error: "INVALID_ID" }, { status: 400 });

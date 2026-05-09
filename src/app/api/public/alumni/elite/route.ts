@@ -1,11 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import connectDB from "@/lib/mongodb";
 import User from "@/models/User";
+import { blockIneligibleStudentOnPublicCommunityApi } from "@/lib/alumni/public-community-session-guard";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
   try {
+    const blocked = await blockIneligibleStudentOnPublicCommunityApi();
+    if (blocked) return blocked;
     const sp = request.nextUrl.searchParams;
     const limit = Math.min(48, Math.max(1, Number(sp.get("limit")) || 16));
 

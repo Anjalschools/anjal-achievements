@@ -5,12 +5,15 @@ import AlumniOpportunity from "@/models/AlumniOpportunity";
 import { buildViewerMatchProfile } from "@/lib/alumni/matching/viewer-profile";
 import { rankCohortPeers, type CohortPeer } from "@/lib/alumni/matching/cohort-matching";
 import { getCurrentDbUser } from "@/lib/auth";
+import { blockIneligibleStudentOnPublicCommunityApi } from "@/lib/alumni/public-community-session-guard";
 import { rankOpportunities, type OpportunityCandidate } from "@/lib/alumni/matching/opportunity-matching";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request, ctx: { params: Promise<{ year: string }> }) {
   try {
+    const blocked = await blockIneligibleStudentOnPublicCommunityApi();
+    if (blocked) return blocked;
     const { year } = await ctx.params;
     const y = Number(year);
     if (!Number.isFinite(y)) return NextResponse.json({ error: "INVALID_YEAR" }, { status: 400 });

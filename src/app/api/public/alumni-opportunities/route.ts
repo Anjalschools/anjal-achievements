@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import connectDB from "@/lib/mongodb";
 import AlumniOpportunity from "@/models/AlumniOpportunity";
+import { blockIneligibleStudentOnPublicCommunityApi } from "@/lib/alumni/public-community-session-guard";
 import type { AlumniOpportunityType } from "@/models/AlumniOpportunity";
 
 export const dynamic = "force-dynamic";
@@ -17,6 +18,8 @@ const TYPES = new Set<AlumniOpportunityType>([
 
 export async function GET(request: NextRequest) {
   try {
+    const blocked = await blockIneligibleStudentOnPublicCommunityApi();
+    if (blocked) return blocked;
     const sp = request.nextUrl.searchParams;
     const type = String(sp.get("type") || "").trim() as AlumniOpportunityType;
     const remote = sp.get("remote");

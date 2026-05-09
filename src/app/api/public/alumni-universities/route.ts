@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import connectDB from "@/lib/mongodb";
 import User from "@/models/User";
+import { blockIneligibleStudentOnPublicCommunityApi } from "@/lib/alumni/public-community-session-guard";
 import {
   getAlumniUniversitiesCached,
   setAlumniUniversitiesCached,
@@ -29,6 +30,8 @@ const ALUMNI_SCOPE_FILTER = {
 
 export async function GET() {
   try {
+    const blocked = await blockIneligibleStudentOnPublicCommunityApi();
+    if (blocked) return blocked;
     const hit = getAlumniUniversitiesCached();
     if (hit) {
       return NextResponse.json(hit, JSON_HEADERS);

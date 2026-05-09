@@ -3,6 +3,7 @@ import mongoose from "mongoose";
 import connectDB from "@/lib/mongodb";
 import AlumniMentorshipRequest from "@/models/AlumniMentorshipRequest";
 import { requireSessionUser } from "@/lib/alumni/require-alumni";
+import { requireAlumniCommunityForAuthedUser } from "@/lib/alumni/require-alumni-community-access";
 import { sanitizeMongoShape } from "@/lib/sanitize-input";
 import { sanitizeUserText } from "@/lib/sanitize-html";
 
@@ -13,6 +14,8 @@ type RouteParams = { params: Promise<{ id: string }> };
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
   const gate = await requireSessionUser();
   if (!gate.ok) return gate.response;
+  const denied = requireAlumniCommunityForAuthedUser(gate.user);
+  if (denied) return denied;
   try {
     const { id } = await params;
     if (!mongoose.Types.ObjectId.isValid(id)) {

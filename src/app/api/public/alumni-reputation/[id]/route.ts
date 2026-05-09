@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import mongoose from "mongoose";
 import connectDB from "@/lib/mongodb";
 import User from "@/models/User";
+import { blockIneligibleStudentOnPublicCommunityApi } from "@/lib/alumni/public-community-session-guard";
 import AlumniReputation from "@/models/AlumniReputation";
 import { getAccountType } from "@/lib/account-type";
 import { effectivePrivacy } from "@/lib/alumni/privacy";
@@ -20,6 +21,8 @@ export async function GET(_request: Request, { params }: RouteParams) {
   const oid = new mongoose.Types.ObjectId(id);
 
   try {
+    const blocked = await blockIneligibleStudentOnPublicCommunityApi();
+    if (blocked) return blocked;
     await connectDB();
     const row = await User.findById(oid).select("accountType alumniProfile").lean();
     if (!row || getAccountType(row as any) !== "alumni") {

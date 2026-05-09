@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import type { PipelineStage } from "mongoose";
 import connectDB from "@/lib/mongodb";
 import User from "@/models/User";
+import { blockIneligibleStudentOnPublicCommunityApi } from "@/lib/alumni/public-community-session-guard";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 120;
@@ -15,6 +16,8 @@ const ALUMNI_MATCH = {
 
 export async function GET(request: NextRequest) {
   try {
+    const blocked = await blockIneligibleStudentOnPublicCommunityApi();
+    if (blocked) return blocked;
     const q = String(request.nextUrl.searchParams.get("q") || "").trim();
     await connectDB();
 

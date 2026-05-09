@@ -2,12 +2,15 @@ import { NextResponse } from "next/server";
 import connectDB from "@/lib/mongodb";
 import User from "@/models/User";
 import { effectivePrivacy, isMentorDiscoverable } from "@/lib/alumni/privacy";
+import { blockIneligibleStudentOnPublicCommunityApi } from "@/lib/alumni/public-community-session-guard";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 60;
 
 export async function GET() {
   try {
+    const blocked = await blockIneligibleStudentOnPublicCommunityApi();
+    if (blocked) return blocked;
     await connectDB();
     const rows = await User.find({
       accountType: "alumni",

@@ -1,11 +1,14 @@
 import { NextResponse } from "next/server";
 import connectDB from "@/lib/mongodb";
 import User from "@/models/User";
+import { blockIneligibleStudentOnPublicCommunityApi } from "@/lib/alumni/public-community-session-guard";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(_request: Request, { params }: { params: Promise<{ year: string }> }) {
   try {
+    const blocked = await blockIneligibleStudentOnPublicCommunityApi();
+    if (blocked) return blocked;
     const { year } = await params;
     const y = Number(year);
     if (!Number.isFinite(y)) return NextResponse.json({ error: "INVALID_YEAR" }, { status: 400 });

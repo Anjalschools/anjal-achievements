@@ -3,10 +3,13 @@ import connectDB from "@/lib/mongodb";
 import { parseSearchRequest } from "@/lib/search/search-params";
 import { searchMentors } from "@/lib/search/global-search";
 import { semanticSearchOverlay } from "@/lib/search/semantic/semantic-search";
+import { requireAlumniCommunityAccess } from "@/lib/alumni/require-alumni-community-access";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
+  const access = await requireAlumniCommunityAccess();
+  if (!access.ok) return access.response;
   try {
     await connectDB();
     const { nq, pag } = parseSearchRequest(request.nextUrl.searchParams);

@@ -3,6 +3,7 @@ import mongoose from "mongoose";
 import connectDB from "@/lib/mongodb";
 import User from "@/models/User";
 import { requireSessionUser } from "@/lib/alumni/require-alumni";
+import { requireAlumniCommunityForAuthedUser } from "@/lib/alumni/require-alumni-community-access";
 import { buildViewerMatchProfile } from "@/lib/alumni/matching/viewer-profile";
 import { scoreMentor, type MentorCandidate } from "@/lib/alumni/matching/mentor-matching";
 
@@ -11,6 +12,8 @@ export const dynamic = "force-dynamic";
 export async function GET(request: NextRequest) {
   const gate = await requireSessionUser();
   if (!gate.ok) return gate.response;
+  const denied = requireAlumniCommunityForAuthedUser(gate.user);
+  if (denied) return denied;
 
   try {
     await connectDB();

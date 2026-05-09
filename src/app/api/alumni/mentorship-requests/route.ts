@@ -4,6 +4,7 @@ import connectDB from "@/lib/mongodb";
 import User from "@/models/User";
 import AlumniMentorshipRequest from "@/models/AlumniMentorshipRequest";
 import { requireSessionUser } from "@/lib/alumni/require-alumni";
+import { requireAlumniCommunityForAuthedUser } from "@/lib/alumni/require-alumni-community-access";
 import { sanitizeMongoShape } from "@/lib/sanitize-input";
 import { sanitizeUserText } from "@/lib/sanitize-html";
 
@@ -20,6 +21,8 @@ const mentorOffersMentoring = async (mentorId: mongoose.Types.ObjectId): Promise
 export async function GET() {
   const gate = await requireSessionUser();
   if (!gate.ok) return gate.response;
+  const denied = requireAlumniCommunityForAuthedUser(gate.user);
+  if (denied) return denied;
   try {
     await connectDB();
     const uid = new mongoose.Types.ObjectId(String(gate.user._id));
@@ -55,6 +58,8 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   const gate = await requireSessionUser();
   if (!gate.ok) return gate.response;
+  const denied = requireAlumniCommunityForAuthedUser(gate.user);
+  if (denied) return denied;
   try {
     const body = sanitizeMongoShape((await request.json()) as Record<string, unknown>);
     const mentorIdRaw = String(body.mentorId || "");

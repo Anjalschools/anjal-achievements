@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import connectDB from "@/lib/mongodb";
 import AlumniStory from "@/models/AlumniStory";
+import { blockIneligibleStudentOnPublicCommunityApi } from "@/lib/alumni/public-community-session-guard";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 60;
@@ -13,6 +14,8 @@ const JSON_HEADERS = {
 
 export async function GET(request: NextRequest) {
   try {
+    const blocked = await blockIneligibleStudentOnPublicCommunityApi();
+    if (blocked) return blocked;
     const sp = request.nextUrl.searchParams;
     const page = Math.max(1, parseInt(sp.get("page") || "1", 10) || 1);
     const limit = Math.min(20, Math.max(1, parseInt(sp.get("limit") || "9", 10) || 9));

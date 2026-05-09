@@ -6,6 +6,7 @@ import { initLocale, getLocale } from "@/lib/i18n";
 import type { SearchHit } from "@/lib/search/global-search";
 import { escapeRegExp } from "@/lib/search/query-normalizer";
 import { smartSearchSuggestions } from "@/lib/search/semantic/semantic-search";
+import { AlumniCommunityAccessGate } from "@/components/alumni/AlumniCommunityAccessGate";
 
 const RECENT_KEY = "alumni-unified-search-recent-v1";
 
@@ -119,7 +120,7 @@ const SkeletonList = () => (
   </div>
 );
 
-export default function UnifiedSearchPage() {
+function UnifiedSearchPageInner() {
   const [locale, setLocale] = useState<"ar" | "en">("ar");
   const [tab, setTab] = useState<TabId>("global");
   const [q, setQ] = useState("");
@@ -389,5 +390,13 @@ export default function UnifiedSearchPage() {
         </section>
       </div>
     </div>
+  );
+}
+
+export default function UnifiedSearchPage() {
+  return (
+    <AlumniCommunityAccessGate>
+      <UnifiedSearchPageInner />
+    </AlumniCommunityAccessGate>
   );
 }

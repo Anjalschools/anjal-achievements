@@ -3,6 +3,8 @@ import mongoose from "mongoose";
 import connectDB from "@/lib/mongodb";
 import AlumniContactRequest from "@/models/AlumniContactRequest";
 import { getCurrentDbUser } from "@/lib/auth";
+import type { AuthedUser } from "@/lib/auth-guard";
+import { requireAlumniCommunityForAuthedUser } from "@/lib/alumni/require-alumni-community-access";
 import { checkRouteRateLimit, rateLimitExceededResponse } from "@/lib/rate-limit";
 import { sanitizeMongoShape } from "@/lib/sanitize-input";
 import { sanitizeUserText } from "@/lib/sanitize-html";
@@ -29,6 +31,10 @@ export async function POST(request: NextRequest) {
     }
 
     const currentUser = await getCurrentDbUser();
+    if (currentUser?._id) {
+      const denied = requireAlumniCommunityForAuthedUser(currentUser as AuthedUser);
+      if (denied) return denied;
+    }
 
     await connectDB();
     await AlumniContactRequest.create({

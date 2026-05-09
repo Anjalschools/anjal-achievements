@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import connectDB from "@/lib/mongodb";
 import AlumniStory from "@/models/AlumniStory";
+import { blockIneligibleStudentOnPublicCommunityApi } from "@/lib/alumni/public-community-session-guard";
 
 type RouteParams = { params: { slug: string } };
 
@@ -9,6 +10,8 @@ export const revalidate = 60;
 
 export async function GET(_request: Request, { params }: RouteParams) {
   try {
+    const blocked = await blockIneligibleStudentOnPublicCommunityApi();
+    if (blocked) return blocked;
     const slug = String(params.slug || "").trim().toLowerCase();
     if (!slug) return NextResponse.json({ error: "INVALID_SLUG" }, { status: 400 });
 
