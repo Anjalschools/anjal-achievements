@@ -1,0 +1,19 @@
+{
+  "name": "منصة تميز الأنجال",
+  "short_name": "الأنجال",
+  "description": "منصة إنجازات ومجتمع خريجي مدارس الأنجال.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#071a3d",
+  "theme_color": "#0b3b8c",
+  "lang": "ar",
+  "dir": "rtl",
+  "icons": [
+    {
+      "src": "/logow.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

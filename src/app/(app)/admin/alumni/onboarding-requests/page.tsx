@@ -267,7 +267,12 @@ const AlumniOnboardingAdminPage = () => {
               <p><span className="font-bold">{isAr ? "سنة التخرج: " : "Graduation year: "}</span>{selected.graduationYear}</p>
               <p><span className="font-bold">{isAr ? "الجامعة: " : "University: "}</span>{selected.universityName || "—"}</p>
               <p><span className="font-bold">{isAr ? "التخصص: " : "Major: "}</span>{selected.major || "—"}</p>
-              <p><span className="font-bold">{isAr ? "الدرجة: " : "Degree: "}</span>{selected.degree || "—"}</p>
+              <p>
+                <span className="font-bold">{isAr ? "الدرجة: " : "Degree: "}</span>
+                {selected.degree === "أخرى" && selected.customDegree
+                  ? `أخرى — ${selected.customDegree}`
+                  : selected.degree || "—"}
+              </p>
               <p><span className="font-bold">{isAr ? "الوظيفة: " : "Position: "}</span>{selected.currentPosition || "—"}</p>
               <p><span className="font-bold">{isAr ? "الشركة: " : "Company: "}</span>{selected.currentCompany || "—"}</p>
               <p><span className="font-bold">{isAr ? "القطاع: " : "Industry: "}</span>{selected.industry || "—"}</p>

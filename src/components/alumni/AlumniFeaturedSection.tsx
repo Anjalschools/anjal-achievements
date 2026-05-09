@@ -41,10 +41,10 @@ const AlumniFeaturedSectionInner = ({ locale, featured }: AlumniFeaturedSectionP
   const isAr = locale === "ar";
 
   return (
-    <section id="featured-alumni" className="scroll-mt-24 border-b border-slate-200 bg-white py-16 sm:py-20">
+    <section id="featured-alumni" className="scroll-mt-24 border-b border-slate-200 bg-white py-12 sm:py-14">
       <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
         <h2 className="text-center text-2xl font-black text-slate-900 sm:text-3xl">{titles.featured}</h2>
-        <div className="mt-12 grid gap-6 md:grid-cols-3">
+        <div className="mt-8 grid gap-4 md:grid-cols-3">
           {cards.map((a) => (
             <FeaturedAlumniCard
               key={a.id}

@@ -6,12 +6,18 @@ import { getCurrentDbUser } from "@/lib/auth";
 import { checkRouteRateLimit, rateLimitExceededResponse } from "@/lib/rate-limit";
 import { sanitizeUserText } from "@/lib/sanitize-html";
 import { sanitizeMongoShape } from "@/lib/sanitize-input";
-import type { AlumniOnboardingRequestInput } from "@/lib/alumni/onboarding-types";
+import {
+  ALUMNI_ONBOARDING_DEGREE_OPTIONS,
+  type AlumniOnboardingRequestInput,
+} from "@/lib/alumni/onboarding-types";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const LINKEDIN_URL_RE = /^https?:\/\/(www\.)?linkedin\.com\/.+/i;
-const MIN_GRAD_YEAR = 1950;
+const MIN_GRAD_YEAR = 1985;
 const MAX_GRAD_YEAR = new Date().getFullYear() + 2;
+
+const DEGREE_SET = new Set<string>(ALUMNI_ONBOARDING_DEGREE_OPTIONS);
+const DEGREE_OTHER = "أخرى";
 
 const normalizeOptionalText = (value: unknown): string | undefined => {
   const clean = sanitizeUserText(typeof value === "string" ? value : String(value ?? ""));
@@ -46,6 +52,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "INVALID_LINKEDIN_URL" }, { status: 400 });
     }
 
+    const degreeRaw = normalizeOptionalText(input.degree);
+    if (!degreeRaw || !DEGREE_SET.has(degreeRaw)) {
+      return NextResponse.json({ error: "INVALID_DEGREE" }, { status: 400 });
+    }
+    let customDegree = normalizeOptionalText(input.customDegree);
+    if (degreeRaw === DEGREE_OTHER) {
+      if (!customDegree) {
+        return NextResponse.json({ error: "CUSTOM_DEGREE_REQUIRED" }, { status: 400 });
+      }
+    } else {
+      customDegree = undefined;
+    }
+
     const authUser = await getCurrentDbUser();
     const userId =
       authUser?._id && mongoose.Types.ObjectId.isValid(String(authUser._id))
@@ -78,7 +97,8 @@ export async function POST(request: NextRequest) {
       graduationYear,
       universityName: normalizeOptionalText(input.universityName),
       major: normalizeOptionalText(input.major),
-      degree: normalizeOptionalText(input.degree),
+      degree: degreeRaw,
+      customDegree,
       studyCountry: normalizeOptionalText(input.studyCountry),
       currentCompany: normalizeOptionalText(input.currentCompany),
       currentPosition: normalizeOptionalText(input.currentPosition),

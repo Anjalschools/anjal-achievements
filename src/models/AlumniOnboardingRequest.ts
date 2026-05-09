@@ -18,6 +18,8 @@ export interface IAlumniOnboardingRequest extends Document {
   universityName?: string;
   major?: string;
   degree?: string;
+  /** When degree is "أخرى", free-text label (optional on legacy rows). */
+  customDegree?: string;
   studyCountry?: string;
   currentCompany?: string;
   currentPosition?: string;
@@ -57,6 +59,7 @@ const AlumniOnboardingRequestSchema = new Schema<IAlumniOnboardingRequest>(
     universityName: { type: String, trim: true, maxlength: 200 },
     major: { type: String, trim: true, maxlength: 200 },
     degree: { type: String, trim: true, maxlength: 120 },
+    customDegree: { type: String, trim: true, maxlength: 200 },
     studyCountry: { type: String, trim: true, maxlength: 120 },
     currentCompany: { type: String, trim: true, maxlength: 200 },
     currentPosition: { type: String, trim: true, maxlength: 200 },

@@ -52,6 +52,7 @@ function buildCoreCspDirectives(nonce: string, options: BuildCspOptions): string
 
   return [
     "default-src 'self'",
+    "worker-src 'self'",
     `script-src ${scriptDirectives.join(" ")}`,
     `style-src ${styleDirectives.join(" ")}`,
     "img-src 'self' data: https:",

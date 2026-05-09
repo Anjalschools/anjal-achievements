@@ -1,5 +1,18 @@
 export type AlumniOnboardingStatus = "pending" | "approved" | "rejected";
 
+/** Canonical degree options for onboarding (Arabic labels). */
+export const ALUMNI_ONBOARDING_DEGREE_OPTIONS = [
+  "دبلوم",
+  "بكالوريوس",
+  "ماجستير",
+  "دكتوراه",
+  "زمالة",
+  "طالب جامعي",
+  "أخرى",
+] as const;
+
+export type AlumniOnboardingDegreeOption = (typeof ALUMNI_ONBOARDING_DEGREE_OPTIONS)[number];
+
 export type AlumniOnboardingServicesInput = {
   mentoring?: boolean;
   internships?: boolean;
@@ -17,6 +30,8 @@ export type AlumniOnboardingRequestInput = {
   universityName?: string;
   major?: string;
   degree?: string;
+  /** Required when degree is "أخرى". */
+  customDegree?: string;
   studyCountry?: string;
   currentCompany?: string;
   currentPosition?: string;
@@ -38,6 +53,7 @@ export type AlumniOnboardingAdminListItem = {
   universityName: string | null;
   major: string | null;
   degree: string | null;
+  customDegree: string | null;
   studyCountry: string | null;
   currentCompany: string | null;
   currentPosition: string | null;

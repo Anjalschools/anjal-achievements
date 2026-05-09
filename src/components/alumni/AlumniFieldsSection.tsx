@@ -55,19 +55,19 @@ const AlumniFieldsSectionInner = ({ locale, fields }: AlumniFieldsSectionProps) 
   const isAr = locale === "ar";
 
   return (
-    <section className="border-b border-slate-200 bg-gradient-to-b from-slate-900 to-primary py-16 text-white sm:py-20">
+    <section className="border-b border-slate-200 bg-gradient-to-b from-slate-900 to-primary py-12 text-white sm:py-14">
       <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
         <h2 className="text-center text-2xl font-black sm:text-3xl">{titles.fields}</h2>
-        <ul className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <ul className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {fieldCards.map((f) => (
             <li
               key={f.id}
-              className="rounded-2xl border border-white/10 bg-white/5 p-6 backdrop-blur-sm transition hover:bg-white/10"
+              className="rounded-xl border border-white/10 bg-white/[0.07] p-4 backdrop-blur-sm transition duration-200 hover:bg-white/[0.12]"
             >
-              <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-white/10 bg-white/10">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-white/15 bg-white/10">
                 <FieldIcon icon={f.icon} />
               </div>
-              <p className="mt-4 text-lg font-bold">{isAr ? f.labelAr : f.labelEn}</p>
+              <p className="mt-3 text-base font-bold">{isAr ? f.labelAr : f.labelEn}</p>
             </li>
           ))}
         </ul>

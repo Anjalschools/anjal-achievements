@@ -32,6 +32,7 @@ const serializeRow = (
     universityName: row.universityName ? String(row.universityName) : null,
     major: row.major ? String(row.major) : null,
     degree: row.degree ? String(row.degree) : null,
+    customDegree: row.customDegree ? String(row.customDegree) : null,
     studyCountry: row.studyCountry ? String(row.studyCountry) : null,
     currentCompany: row.currentCompany ? String(row.currentCompany) : null,
     currentPosition: row.currentPosition ? String(row.currentPosition) : null,
@@ -86,7 +87,7 @@ export async function GET(request: NextRequest) {
     const [items, total, pendingCount] = await Promise.all([
       AlumniOnboardingRequest.find(filter)
         .select(
-          "userId fullName email phone graduationYear universityName major degree studyCountry currentCompany currentPosition industry linkedinUrl city country bio services status reviewedById reviewedAt reviewNotes createdAt updatedAt"
+          "userId fullName email phone graduationYear universityName major degree customDegree studyCountry currentCompany currentPosition industry linkedinUrl city country bio services status reviewedById reviewedAt reviewNotes createdAt updatedAt"
         )
         .sort({ createdAt: -1 })
         .skip(skip)
@@ -143,11 +144,16 @@ export async function PATCH(request: NextRequest) {
       if (user) {
         user.accountType = "alumni";
         const prevProfile = user.alumniProfile || {};
+        const reqDeg = row.degree ? String(row.degree).trim() : "";
+        const reqCustom = row.customDegree ? String(row.customDegree).trim() : "";
+        const resolvedDegree =
+          reqDeg === "أخرى" ? reqCustom || prevProfile.degree || reqDeg : reqDeg || prevProfile.degree;
+
         user.alumniProfile = {
           graduationYear: row.graduationYear ?? prevProfile.graduationYear,
           universityName: row.universityName || prevProfile.universityName,
           major: row.major || prevProfile.major,
-          degree: row.degree || prevProfile.degree,
+          degree: resolvedDegree || prevProfile.degree,
           studyCountry: row.studyCountry || prevProfile.studyCountry,
           currentCompany: row.currentCompany || prevProfile.currentCompany,
           currentPosition: row.currentPosition || prevProfile.currentPosition,
@@ -168,6 +174,51 @@ export async function PATCH(request: NextRequest) {
           },
         } satisfies AlumniProfile;
         await user.save();
+
+        const emailTo = String(user.email || "").trim().toLowerCase();
+        if (emailTo.includes("@")) {
+          try {
+            const { sendAlumniApprovalEmail } = await import("@/lib/alumni/send-alumni-approval-email");
+            const sent = await sendAlumniApprovalEmail({
+              to: emailTo,
+              recipientName: String(user.fullNameAr || user.fullName || row.fullName || ""),
+              useExistingPortalPassword: user.role === "student",
+              services: row.services || undefined,
+            });
+            if (!sent) {
+              console.warn("[alumni onboarding] approval email not sent (SMTP off or failed)", {
+                userId: String(row.userId),
+              });
+            }
+          } catch (e) {
+            console.warn("[alumni onboarding] approval email error", e);
+          }
+        }
+
+        try {
+          const { canSendSystemNotification } = await import("@/lib/alumni/consent");
+          const { createStudentNotification } = await import("@/lib/student-notifications");
+          const uid = user._id as mongoose.Types.ObjectId;
+          if (await canSendSystemNotification(uid)) {
+            await createStudentNotification({
+              userId: uid,
+              type: "system",
+              title: "تم اعتماد حسابك ضمن مجتمع خريجي الأنجال",
+              message:
+                "يمكنك الآن تسجيل الدخول والاستفادة من خدمات مجتمع الخريجين. راجع بريدك الإلكتروني للتفاصيل وروابط الدخول.",
+              metadata: { alumniOnboardingApproved: true },
+            });
+          }
+        } catch (e) {
+          console.warn("[alumni onboarding] approval notification skipped", e);
+        }
+
+        const { enqueueAutomationJob } = await import("@/lib/alumni/automation/lifecycle-engine");
+        await enqueueAutomationJob({
+          type: "alumni.welcome",
+          payload: { userId: String(row.userId) },
+          correlationId: `alumni-welcome-${row.userId}`,
+        });
       }
     }
 

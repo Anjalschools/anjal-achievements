@@ -12,6 +12,7 @@ import {
   isValidSaMobile,
 } from "@/lib/user-account-preferences";
 import type { IUser } from "@/models/User";
+import { getAccountType } from "@/lib/account-type";
 import { resolveEffectiveStaffScope } from "@/lib/user-scope";
 import {
   normalizeStudentPortfolioContentFromDoc,
@@ -77,6 +78,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       id: user._id.toString(),
+      accountType: getAccountType(user as IUser),
       fullName: user.fullName,
       fullNameAr: user.fullNameAr || user.fullName,
       fullNameEn: user.fullNameEn || "",
@@ -292,6 +294,7 @@ export async function PUT(request: NextRequest) {
 
     return NextResponse.json({
       id: user._id.toString(),
+      accountType: getAccountType(user as IUser),
       fullName: user.fullName,
       fullNameAr: user.fullNameAr || user.fullName,
       fullNameEn: user.fullNameEn || "",

@@ -2,9 +2,12 @@ export type AlumniPublicSummaryStats = {
   totalAlumni: number;
   universities: number;
   countries: number;
-  featuredAlumni: number;
   companies: number;
+  /** Alumni with an international study country recorded (non-empty). */
+  globalParticipation: number;
   mentorshipAvailable: number;
+  /** Distinct featured alumni count; optional for backward-compatible consumers. */
+  featuredAlumni?: number;
 };
 
 export type AlumniSummaryResponse = {
@@ -21,6 +24,10 @@ export type FeaturedAlumniItem = {
   currentCompany: string | null;
   bio: string | null;
   avatar: string | null;
+  /** Phase 4 — optional verification signals for public cards */
+  isVerifiedAlumni?: boolean;
+  verificationTier?: "basic" | "academic" | "career" | "institution" | "global";
+  trustScore?: number | null;
 };
 
 export type FeaturedAlumniResponse = {

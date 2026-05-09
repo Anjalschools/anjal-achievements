@@ -307,6 +307,18 @@ export const ADMIN_ROUTE_REQUIRED_CAPABILITY: Array<{
   { prefix: "/admin/home-highlights", capability: "homeHighlights" },
   { prefix: "/admin/contact-messages", capability: "contactMessages" },
   { prefix: "/admin/letter-requests", capability: "letterRequests" },
+  { prefix: "/admin/alumni/verification-center", capability: "userManagement" },
+  { prefix: "/admin/alumni/onboarding-requests", capability: "userManagement" },
+  { prefix: "/admin/alumni/stories", capability: "userManagement" },
+  { prefix: "/admin/alumni/opportunities", capability: "userManagement" },
+  { prefix: "/admin/alumni/announcements", capability: "userManagement" },
+  { prefix: "/admin/alumni/cohorts", capability: "userManagement" },
+  { prefix: "/admin/alumni/analytics", capability: "userManagement" },
+  { prefix: "/admin/alumni/campaigns", capability: "userManagement" },
+  { prefix: "/admin/alumni/crm", capability: "userManagement" },
+  { prefix: "/admin/alumni/platform-health", capability: "userManagement" },
+  { prefix: "/admin/alumni/events", capability: "userManagement" },
+  { prefix: "/admin/alumni/inbox", capability: "userManagement" },
   /** Any other /admin/* screen requires at least staff (prevents students from loading admin shell). */
   { prefix: "/admin", capability: "staffArea" },
 ];

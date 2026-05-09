@@ -33,6 +33,9 @@ type FeaturedAlumniDoc = {
     currentPosition?: string;
     currentCompany?: string;
     bio?: string;
+    isVerifiedAlumni?: boolean;
+    verificationTier?: string;
+    trustScore?: number;
   };
 };
 
@@ -55,6 +58,9 @@ export async function GET() {
         "alumniProfile.currentPosition": 1,
         "alumniProfile.currentCompany": 1,
         "alumniProfile.bio": 1,
+        "alumniProfile.isVerifiedAlumni": 1,
+        "alumniProfile.verificationTier": 1,
+        "alumniProfile.trustScore": 1,
       }
     )
       .sort({ updatedAt: -1, createdAt: -1 })
@@ -72,6 +78,17 @@ export async function GET() {
         currentCompany: row.alumniProfile?.currentCompany ?? null,
         bio: row.alumniProfile?.bio ?? null,
         avatar: row.profilePhoto ?? null,
+        isVerifiedAlumni: row.alumniProfile?.isVerifiedAlumni === true,
+        verificationTier:
+          row.alumniProfile?.verificationTier === "basic" ||
+          row.alumniProfile?.verificationTier === "academic" ||
+          row.alumniProfile?.verificationTier === "career" ||
+          row.alumniProfile?.verificationTier === "institution" ||
+          row.alumniProfile?.verificationTier === "global"
+            ? row.alumniProfile.verificationTier
+            : undefined,
+        trustScore:
+          typeof row.alumniProfile?.trustScore === "number" ? row.alumniProfile.trustScore : null,
       })),
     };
 

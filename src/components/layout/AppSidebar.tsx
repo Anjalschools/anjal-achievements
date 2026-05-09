@@ -28,8 +28,16 @@ import {
   PanelsTopLeft,
   CalendarDays,
   GraduationCap,
+  BadgeCheck,
   type LucideIcon,
   MessagesSquare,
+  Newspaper,
+  BarChart3,
+  Bot,
+  Megaphone,
+  Users,
+  Activity,
+  Search,
 } from "lucide-react";
 import { useUnreadNotificationCount } from "@/hooks/useUnreadNotificationCount";
 import { getLocale } from "@/lib/i18n";
@@ -71,6 +79,11 @@ const AppSidebar = () => {
     icon: GraduationCap,
     label: locale === "ar" ? "طلبات الخريجين" : "Alumni requests",
   };
+  const alumniVerificationCenterItem = {
+    href: "/admin/alumni/verification-center",
+    icon: BadgeCheck,
+    label: locale === "ar" ? "توثيق الخريجين" : "Alumni verification",
+  };
   const alumniStoriesAdminItem = {
     href: "/admin/alumni/stories",
     icon: PanelsTopLeft,
@@ -80,6 +93,66 @@ const AppSidebar = () => {
     href: "/admin/alumni/opportunities",
     icon: Briefcase,
     label: locale === "ar" ? "فرص الخريجين" : "Alumni opportunities",
+  };
+  const alumniAnnouncementsAdminItem = {
+    href: "/admin/alumni/announcements",
+    icon: Newspaper,
+    label: locale === "ar" ? "إعلانات الخريجين" : "Alumni announcements",
+  };
+  const alumniCohortsAdminItem = {
+    href: "/admin/alumni/cohorts",
+    icon: CalendarDays,
+    label: locale === "ar" ? "دفعات الخريجين" : "Alumni cohorts",
+  };
+  const alumniAnalyticsAdminItem = {
+    href: "/admin/alumni/analytics",
+    icon: BarChart3,
+    label: locale === "ar" ? "تحليلات الخريجين" : "Alumni analytics",
+  };
+  const alumniCampaignsAdminItem = {
+    href: "/admin/alumni/campaigns",
+    icon: Megaphone,
+    label: locale === "ar" ? "حملات الخريجين" : "Alumni campaigns",
+  };
+  const alumniCrmAdminItem = {
+    href: "/admin/alumni/crm",
+    icon: Users,
+    label: locale === "ar" ? "CRM الخريجين" : "Alumni CRM",
+  };
+  const alumniPlatformHealthAdminItem = {
+    href: "/admin/alumni/platform-health",
+    icon: Activity,
+    label: locale === "ar" ? "صحة المنصة (خريجين)" : "Alumni platform health",
+  };
+  const alumniEventsAdminItem = {
+    href: "/admin/alumni/events",
+    icon: CalendarDays,
+    label: locale === "ar" ? "فعاليات الخريجين" : "Alumni events",
+  };
+  const alumniInboxAdminItem = {
+    href: "/admin/alumni/inbox",
+    icon: MessagesSquare,
+    label: locale === "ar" ? "بريد الخريجين" : "Alumni inbox",
+  };
+  const alumniDashboardNavItem = {
+    href: "/alumni/dashboard",
+    icon: LayoutDashboard,
+    label: locale === "ar" ? "لوحة الخريجين" : "Alumni dashboard",
+  };
+  const alumniInboxNavItem = {
+    href: "/alumni/inbox",
+    icon: MessagesSquare,
+    label: locale === "ar" ? "صندوق الرسائل" : "Inbox",
+  };
+  const alumniMentorshipNavItem = {
+    href: "/alumni/mentorship",
+    icon: GraduationCap,
+    label: locale === "ar" ? "الإرشاد" : "Mentorship",
+  };
+  const alumniAssistantNavItem = {
+    href: "/alumni/assistant",
+    icon: Bot,
+    label: locale === "ar" ? "مساعد الخريجين" : "Alumni assistant",
   };
   const addAchievementItem = {
     href: "/achievements/new",
@@ -95,6 +168,11 @@ const AppSidebar = () => {
     href: "/hall-of-fame",
     icon: Star,
     label: locale === "ar" ? "لوحة التميز" : "Hall of Fame",
+  };
+  const alumniDiscoverySearchItem = {
+    href: "/search",
+    icon: Search,
+    label: locale === "ar" ? "استكشاف المجتمع" : "Discover network",
   };
   const adminDashboardItem = {
     href: "/admin/dashboard",
@@ -222,8 +300,17 @@ const AppSidebar = () => {
     { ...contactMessagesItem, capability: "contactMessages" },
     { ...letterRequestsAdminItem, capability: "letterRequests" },
     { ...alumniOnboardingAdminItem, capability: "userManagement" },
+    { ...alumniVerificationCenterItem, capability: "userManagement" },
     { ...alumniStoriesAdminItem, capability: "userManagement" },
     { ...alumniOpportunitiesAdminItem, capability: "userManagement" },
+    { ...alumniAnnouncementsAdminItem, capability: "userManagement" },
+    { ...alumniCohortsAdminItem, capability: "userManagement" },
+    { ...alumniAnalyticsAdminItem, capability: "userManagement" },
+    { ...alumniCampaignsAdminItem, capability: "userManagement" },
+    { ...alumniCrmAdminItem, capability: "userManagement" },
+    { ...alumniPlatformHealthAdminItem, capability: "userManagement" },
+    { ...alumniEventsAdminItem, capability: "userManagement" },
+    { ...alumniInboxAdminItem, capability: "userManagement" },
     { ...auditLogItem, capability: "auditLog" },
     { ...adminSettingsItem, capability: "platformSettings" },
     { ...scoringSettingsItem, capability: "platformSettings" },
@@ -238,7 +325,12 @@ const AppSidebar = () => {
         .map(({ capability: _omit, ...rest }) => rest)
     : [
         studentDashboardItem,
+        ...(profile?.accountType === "alumni"
+          ? [alumniDashboardNavItem, alumniInboxNavItem, alumniMentorshipNavItem]
+          : []),
+        ...(profile?.role === "student" || profile?.accountType === "alumni" ? [alumniAssistantNavItem] : []),
         hallOfFameItem,
+        alumniDiscoverySearchItem,
         achievementsItem,
         letterRequestsStudentItem,
         addAchievementItem,
@@ -299,17 +391,47 @@ const AppSidebar = () => {
     if (href === "/admin/alumni/onboarding-requests") {
       return pathname === "/admin/alumni/onboarding-requests" || pathname?.startsWith("/admin/alumni/onboarding-requests/");
     }
+    if (href === "/admin/alumni/verification-center") {
+      return pathname === "/admin/alumni/verification-center" || pathname?.startsWith("/admin/alumni/verification-center/");
+    }
     if (href === "/admin/alumni/stories") {
       return pathname === "/admin/alumni/stories" || pathname?.startsWith("/admin/alumni/stories/");
     }
     if (href === "/admin/alumni/opportunities") {
       return pathname === "/admin/alumni/opportunities" || pathname?.startsWith("/admin/alumni/opportunities/");
     }
+    if (href === "/admin/alumni/announcements") {
+      return pathname === "/admin/alumni/announcements" || pathname?.startsWith("/admin/alumni/announcements/");
+    }
+    if (href === "/admin/alumni/cohorts") {
+      return pathname === "/admin/alumni/cohorts" || pathname?.startsWith("/admin/alumni/cohorts/");
+    }
+    if (href === "/admin/alumni/analytics") {
+      return pathname === "/admin/alumni/analytics" || pathname?.startsWith("/admin/alumni/analytics/");
+    }
+    if (href === "/admin/alumni/campaigns") {
+      return pathname === "/admin/alumni/campaigns" || pathname?.startsWith("/admin/alumni/campaigns/");
+    }
+    if (href === "/admin/alumni/crm") {
+      return pathname === "/admin/alumni/crm" || pathname?.startsWith("/admin/alumni/crm/");
+    }
+    if (href === "/admin/alumni/platform-health") {
+      return pathname === "/admin/alumni/platform-health" || pathname?.startsWith("/admin/alumni/platform-health/");
+    }
+    if (href === "/admin/alumni/events") {
+      return pathname === "/admin/alumni/events" || pathname?.startsWith("/admin/alumni/events/");
+    }
+    if (href === "/admin/alumni/inbox") {
+      return pathname === "/admin/alumni/inbox" || pathname?.startsWith("/admin/alumni/inbox/");
+    }
     if (href === "/admin/home-highlights") {
       return pathname === "/admin/home-highlights" || pathname?.startsWith("/admin/home-highlights/");
     }
     if (href === "/hall-of-fame") {
       return pathname === "/hall-of-fame";
+    }
+    if (href === "/search") {
+      return pathname === "/search" || pathname?.startsWith("/search/");
     }
     return pathname?.startsWith(href);
   };

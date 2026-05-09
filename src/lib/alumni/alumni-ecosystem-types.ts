@@ -2,6 +2,11 @@ export type AlumniBadgeUser = {
   accountType?: "student" | "alumni";
   alumniProfile?: {
     isVerifiedAlumni?: boolean;
+    verificationTier?: "basic" | "academic" | "career" | "institution" | "global";
+    trustScore?: number | null;
+    isAmbassadorAlumni?: boolean;
+    isDistinguishedAlumni?: boolean;
+    alumniServices?: { mentoring?: boolean };
   };
 };
 
@@ -52,4 +57,7 @@ export type AlumniMentorItem = {
   graduationYear: number | null;
   linkedinUrl: string | null;
   mentoringAvailable: boolean;
+  isVerifiedAlumni?: boolean;
+  verificationTier?: "basic" | "academic" | "career" | "institution" | "global";
+  trustScore?: number | null;
 };

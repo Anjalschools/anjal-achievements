@@ -15,7 +15,7 @@ const AlumniJoinCtaInner = ({ locale }: AlumniJoinCtaProps) => {
   const isAr = locale === "ar";
 
   return (
-    <section id="join-alumni" className="scroll-mt-24 bg-gradient-to-br from-slate-100 via-white to-sky-50 py-20 sm:py-28">
+    <section id="join-alumni" className="scroll-mt-24 bg-gradient-to-br from-slate-100 via-white to-sky-50 py-14 sm:py-16">
       <div className="mx-auto max-w-3xl px-4 text-center sm:px-6">
         <h2 className="text-3xl font-black text-slate-900 sm:text-4xl">{titles.joinTitle}</h2>
         <p className="mt-5 text-sm leading-relaxed text-slate-600 sm:text-base">{titles.joinBody}</p>

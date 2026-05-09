@@ -18,8 +18,23 @@ const JSON_HEADERS = {
   },
 };
 
+/** Alumni users: explicit account type or a non-empty alumni profile worth counting. */
 const ALUMNI_SCOPE_FILTER = {
-  $or: [{ accountType: "alumni" }, { "alumniProfile.isFeaturedAlumni": { $exists: true } }],
+  $or: [
+    { accountType: "alumni" },
+    { "alumniProfile.graduationYear": { $exists: true } },
+    { "alumniProfile.universityName": { $exists: true, $nin: [null, ""] } },
+    { "alumniProfile.major": { $exists: true, $nin: [null, ""] } },
+    { "alumniProfile.currentCompany": { $exists: true, $nin: [null, ""] } },
+    { "alumniProfile.industry": { $exists: true, $nin: [null, ""] } },
+    { "alumniProfile.bio": { $exists: true, $nin: [null, ""] } },
+    { "alumniProfile.linkedinUrl": { $exists: true, $nin: [null, ""] } },
+    { "alumniProfile.isFeaturedAlumni": true },
+    { "alumniProfile.isVerifiedAlumni": true },
+    { "alumniProfile.country": { $exists: true, $nin: [null, ""] } },
+    { "alumniProfile.studyCountry": { $exists: true, $nin: [null, ""] } },
+    { "alumniProfile.city": { $exists: true, $nin: [null, ""] } },
+  ],
 };
 
 const EMPTY_STATS: AlumniSummaryResponse = {
@@ -28,9 +43,10 @@ const EMPTY_STATS: AlumniSummaryResponse = {
     totalAlumni: 0,
     universities: 0,
     countries: 0,
-    featuredAlumni: 0,
     companies: 0,
+    globalParticipation: 0,
     mentorshipAvailable: 0,
+    featuredAlumni: 0,
   },
 };
 
@@ -87,6 +103,7 @@ export async function GET() {
           countries: { $ifNull: [{ $first: "$countries.count" }, 0] },
           featuredAlumni: { $ifNull: [{ $first: "$featuredAlumni.count" }, 0] },
           companies: { $ifNull: [{ $first: "$companies.count" }, 0] },
+          globalParticipation: { $ifNull: [{ $first: "$globalParticipation.count" }, 0] },
           mentorshipAvailable: { $ifNull: [{ $first: "$mentorshipAvailable.count" }, 0] },
         },
       },
@@ -98,9 +115,10 @@ export async function GET() {
         totalAlumni: Number(counts?.totalAlumni ?? 0),
         universities: Number(counts?.universities ?? 0),
         countries: Number(counts?.countries ?? 0),
-        featuredAlumni: Number(counts?.featuredAlumni ?? 0),
         companies: Number(counts?.companies ?? 0),
+        globalParticipation: Number(counts?.globalParticipation ?? 0),
         mentorshipAvailable: Number(counts?.mentorshipAvailable ?? 0),
+        featuredAlumni: Number(counts?.featuredAlumni ?? 0),
       },
     };
 

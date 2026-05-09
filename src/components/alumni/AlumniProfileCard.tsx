@@ -24,7 +24,15 @@ export const AlumniProfileCard = ({ profile, locale, href }: AlumniProfileCardPr
         </div>
         <AlumniBadge
           locale={locale}
-          user={{ accountType: "alumni", alumniProfile: { isVerifiedAlumni: true } }}
+          user={{
+            accountType: "alumni",
+            alumniProfile: {
+              isVerifiedAlumni: profile.isVerifiedAlumni === true,
+              verificationTier: profile.verificationTier,
+              trustScore: profile.trustScore ?? null,
+              alumniServices: { mentoring: profile.mentoringAvailable },
+            },
+          }}
         />
       </div>
       <div className="mt-3 grid gap-1 text-sm text-slate-600">

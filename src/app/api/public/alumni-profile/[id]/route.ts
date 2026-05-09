@@ -3,6 +3,7 @@ import mongoose from "mongoose";
 import connectDB from "@/lib/mongodb";
 import User from "@/models/User";
 import { getAccountType } from "@/lib/account-type";
+import { redactAlumniProfileForPublic } from "@/lib/alumni/privacy";
 
 type RouteParams = { params: { id: string } };
 
@@ -26,6 +27,12 @@ export async function GET(_request: Request, { params }: RouteParams) {
       return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
     }
 
+    const ap = (row as any).alumniProfile;
+    const safe = redactAlumniProfileForPublic(ap);
+    if (safe === null) {
+      return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
+    }
+
     return NextResponse.json({
       ok: true,
       item: {
@@ -33,7 +40,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
         fullName: (row as any).fullName || "",
         accountType,
         profilePhoto: (row as any).profilePhoto || null,
-        alumniProfile: (row as any).alumniProfile || {},
+        alumniProfile: safe,
         createdAt: (row as any).createdAt ? new Date((row as any).createdAt).toISOString() : null,
       },
     });

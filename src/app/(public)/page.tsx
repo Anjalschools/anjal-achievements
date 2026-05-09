@@ -22,10 +22,12 @@ import {
   Briefcase,
   Star,
   Globe,
+  Plane,
   Eye,
   Lightbulb,
   Newspaper,
 } from "lucide-react";
+import Image from "next/image";
 import Link from "next/link";
 import AuthGuardLink from "@/components/auth/AuthGuardLink";
 import PlatformLogo from "@/components/branding/PlatformLogo";
@@ -157,6 +159,7 @@ const StatisticsBar = () => {
     universities: 0,
     countries: 0,
     companies: 0,
+    globalParticipation: 0,
     mentorshipAvailable: 0,
   });
 
@@ -197,6 +200,7 @@ const StatisticsBar = () => {
               universities?: number;
               countries?: number;
               companies?: number;
+              globalParticipation?: number;
               mentorshipAvailable?: number;
             };
           };
@@ -206,6 +210,7 @@ const StatisticsBar = () => {
               universities: Number(alumniJson.stats.universities || 0),
               countries: Number(alumniJson.stats.countries || 0),
               companies: Number(alumniJson.stats.companies || 0),
+              globalParticipation: Number(alumniJson.stats.globalParticipation || 0),
               mentorshipAvailable: Number(alumniJson.stats.mentorshipAvailable || 0),
             });
           }
@@ -231,7 +236,12 @@ const StatisticsBar = () => {
     { value: formatHomeStatNumber(alumniStatsData.universities), label: "الجامعات", icon: GraduationCap },
     { value: formatHomeStatNumber(alumniStatsData.countries), label: "الدول", icon: Globe },
     { value: formatHomeStatNumber(alumniStatsData.companies), label: "الشركات العالمية", icon: Briefcase },
-    { value: formatHomeStatNumber(alumniStatsData.mentorshipAvailable), label: "الخريجون المشاركون بالإرشاد والتوجيه", icon: HandHeart },
+    {
+      value: formatHomeStatNumber(alumniStatsData.globalParticipation),
+      label: "المشاركات العالمية",
+      icon: Plane,
+    },
+    { value: formatHomeStatNumber(alumniStatsData.mentorshipAvailable), label: "الخريجون المتاحون للإرشاد والتوجيه", icon: HandHeart },
   ];
 
   return (
@@ -260,17 +270,14 @@ const StatisticsBar = () => {
           })}
         </div>
 
-        <div className="mt-10 border-t border-slate-200 pt-8">
-          <div className="mb-6 text-center">
+        <div className="mt-10 border-t border-slate-200 pt-7">
+          <div className="mb-5 text-center">
             <h3 className="text-xl font-bold tracking-tight text-slate-900 md:text-2xl">
-              أرقام تعكس أثر خريجي الأنجال
+              أرقام تعكس مسيرة الخريجين
             </h3>
-            <p className="mt-2 text-sm text-slate-600 md:text-base">
-              من الجامعات إلى الشركات العالمية… خريجونا يواصلون صناعة التميز.
-            </p>
           </div>
 
-          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
+          <div className="grid grid-cols-2 gap-x-4 gap-y-6 sm:gap-5 md:grid-cols-3 lg:grid-cols-6">
             {alumniStats.map((stat) => {
               const IconComponent = stat.icon;
               return (
@@ -280,10 +287,10 @@ const StatisticsBar = () => {
                       <IconComponent className="h-7 w-7 text-primary" />
                     </div>
                   </div>
-                  <div className="mb-1 text-3xl font-extrabold tabular-nums tracking-tight text-primary">
+                  <div className="mb-1 text-2xl font-extrabold tabular-nums tracking-tight text-primary sm:text-3xl">
                     {stat.value}
                   </div>
-                  <div className="mx-auto max-w-[11rem] text-sm font-medium leading-relaxed text-slate-600">
+                  <div className="mx-auto max-w-none px-0.5 text-xs font-medium leading-snug text-slate-600 sm:text-sm">
                     {stat.label}
                   </div>
                 </div>
@@ -319,25 +326,24 @@ const AlumniImpactSection = () => {
         <div className="mx-auto max-w-6xl">
           <div className="mb-6 border-b border-slate-200 pb-4 text-center">
             <h2 className="text-2xl font-extrabold leading-tight tracking-tight text-slate-950 md:text-3xl">
-              {isAr ? "مجتمع خريجي الأنجال — أثر المدرسة في صناعة التميز" : "Al-Anjal Alumni Community — Institutional Impact"}
+              {isAr ? "مجتمع خريجي الأنجال" : "Al-Anjal Alumni Community"}
             </h2>
             <p className="mt-2 text-sm text-slate-600 md:text-base">
               {isAr
-                ? "قسم مؤسسي يعرض أثر خريجي مدارس الأنجال في الجامعات وسوق العمل والمجالات القيادية."
-                : "An institutional section showcasing alumni impact across universities, careers, and leadership."}
+                ? "قسم يعرض احصائيات خريجي مدارس الأنجال في الجامعات وسوق العمل والمجالات القيادية."
+                : "A section presenting alumni statistics across universities, careers, and leadership fields."}
             </p>
           </div>
 
           <div className="grid items-stretch gap-5 rounded-3xl border border-slate-200 bg-slate-50 p-4 shadow-sm lg:grid-cols-[1.05fr_1fr]">
             <div className="relative overflow-hidden rounded-2xl ring-1 ring-slate-200/70">
               <div className="relative aspect-[16/10] w-full">
-                <SafeLocalImage
-                  src={PUBLIC_IMG.faceSchools}
+                <Image
+                  src="/alumni.png"
                   alt={isAr ? "مجتمع خريجي الأنجال" : "Al-Anjal alumni community"}
                   fill
-                  objectFit="cover"
+                  sizes="(max-width: 1024px) 100vw, min(528px, 50vw)"
                   className="object-cover"
-                  fallback={<div className="absolute inset-0 bg-slate-200" aria-hidden />}
                 />
                 <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-[#071a3d]/90 to-transparent p-4 text-white">
                   <p className="text-sm font-bold">{isAr ? "من مقاعد الأنجال إلى الجامعات ومنصات القيادة" : "From Al-Anjal classrooms to universities and leadership"}</p>
@@ -352,8 +358,8 @@ const AlumniImpactSection = () => {
               </div>
               <p className="text-sm leading-relaxed text-slate-600 md:text-base">
                 {isAr
-                  ? "مجتمع يربط خريجي مدارس الأنجال ببعضهم وبمدرستهم، ويترجم أثر المدرسة إلى مبادرات نوعية تدعم الأجيال القادمة."
-                  : "A community connecting Al-Anjal alumni with each other and their school, translating school impact into meaningful initiatives."}
+                  ? "منصة تربط خريجي مدارس الأنجال ببعضهم وبمدرستهم، وتوثّق رحلتهم الأكاديمية والمهنية، وتبني مجتمعًا داعمًا للأجيال القادمة."
+                  : "A platform that connects Al-Anjal alumni with each other and their school, documents their academic and professional journeys, and builds a supportive community for the next generation."}
               </p>
 
               <div className="mt-4 grid gap-3 sm:grid-cols-2">

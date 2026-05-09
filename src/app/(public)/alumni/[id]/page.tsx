@@ -54,7 +54,20 @@ const AlumniPublicProfilePage = () => {
             <h1 className="text-2xl font-black text-slate-900">{item.fullName}</h1>
             <p className="mt-1 text-sm text-slate-500">{ap.currentPosition || "—"}</p>
           </div>
-          <AlumniBadge locale={locale} user={{ accountType: "alumni", alumniProfile: { isVerifiedAlumni: ap.isVerifiedAlumni } }} />
+          <AlumniBadge
+            locale={locale}
+            user={{
+              accountType: "alumni",
+              alumniProfile: {
+                isVerifiedAlumni: ap.isVerifiedAlumni,
+                verificationTier: ap.verificationTier,
+                trustScore: typeof ap.trustScore === "number" ? ap.trustScore : null,
+                alumniServices: ap.alumniServices,
+                isAmbassadorAlumni: ap.isAmbassadorAlumni,
+                isDistinguishedAlumni: ap.isDistinguishedAlumni,
+              },
+            }}
+          />
         </div>
 
         <div className="mt-5 grid gap-3 sm:grid-cols-2 text-sm text-slate-700">

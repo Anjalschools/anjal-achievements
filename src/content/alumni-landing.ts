@@ -36,11 +36,12 @@ export type AlumniUniversity = { id: string; nameAr: string; nameEn: string; abb
 export type AlumniField = { id: string; labelAr: string; labelEn: string; icon: "med" | "eng" | "cyber" | "ai" | "law" | "biz" };
 
 export const getAlumniMockStats = (): AlumniStatCard[] => [
-  { key: "grads", value: "1,200+", labelAr: "خريج مسجّل", labelEn: "Registered alumni" },
-  { key: "uni", value: "85+", labelAr: "جامعة حول العالم", labelEn: "Universities worldwide" },
-  { key: "intl", value: "320+", labelAr: "مبتعث ومبتعثة", labelEn: "Scholars abroad" },
-  { key: "co", value: "140+", labelAr: "شركة عالمية", labelEn: "Global employers" },
-  { key: "intern", value: "90+", labelAr: "فرص تدريب سنويًا", labelEn: "Annual internships" },
+  { key: "grads", value: "—", labelAr: "عدد الخريجين", labelEn: "Total alumni" },
+  { key: "uni", value: "—", labelAr: "الجامعات", labelEn: "Universities" },
+  { key: "countries", value: "—", labelAr: "الدول", labelEn: "Countries" },
+  { key: "co", value: "—", labelAr: "الشركات العالمية", labelEn: "Global companies" },
+  { key: "global", value: "—", labelAr: "المشاركات العالمية", labelEn: "International participation" },
+  { key: "intern", value: "—", labelAr: "الخريجون المتاحون للإرشاد والتوجيه", labelEn: "Alumni available for mentoring" },
 ];
 
 export const getAlumniFeaturedMock = (): AlumniFeatured[] => [

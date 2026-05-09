@@ -1,4 +1,5 @@
-import mongoose, { Schema, Document, Model } from "mongoose";
+import mongoose, { Schema, Document, Model, Types } from "mongoose";
+import type { AlumniPrivacySettings } from "@/models/alumni-privacy-types";
 
 /** Optional alumni extension (Phase 1 — all sub-fields optional). */
 export type AlumniServices = {
@@ -9,6 +10,8 @@ export type AlumniServices = {
   judging?: boolean;
   sponsorship?: boolean;
 };
+
+export type AlumniVerificationSource = "linkedin" | "admin" | "university_email" | "career";
 
 export type AlumniProfile = {
   graduationYear?: number;
@@ -25,7 +28,24 @@ export type AlumniProfile = {
   bio?: string;
   isFeaturedAlumni?: boolean;
   isVerifiedAlumni?: boolean;
+  /** Phase 4 — optional verification audit trail */
+  verifiedAt?: Date;
+  verifiedById?: Types.ObjectId;
+  verificationSource?: AlumniVerificationSource;
+  /** Cached 0–1000; recomputed via admin reputation API */
+  reputationScore?: number;
+  /** Interest tags for smart matching (optional, max 10 in schema) */
+  interests?: string[];
+  /** Prestige flags (optional) */
+  isAmbassadorAlumni?: boolean;
+  isDistinguishedAlumni?: boolean;
   alumniServices?: AlumniServices;
+  /** Phase 6 — alumni-controlled visibility (optional; defaults = open in app layer). */
+  privacySettings?: AlumniPrivacySettings;
+  /** Phase 4 — verified ecosystem tier (admin / verification center). */
+  verificationTier?: "basic" | "academic" | "career" | "institution" | "global";
+  /** Phase 4 — composite trust 0–100 (reputation + verification + activity). */
+  trustScore?: number;
 };
 
 export interface IUser extends Document {
@@ -172,6 +192,18 @@ const AlumniServicesSchema = new Schema(
   { _id: false }
 );
 
+const AlumniPrivacySettingsSchema = new Schema(
+  {
+    publicProfile: { type: Boolean },
+    searchable: { type: Boolean },
+    showEmail: { type: Boolean },
+    showLinkedIn: { type: Boolean },
+    showCompany: { type: Boolean },
+    allowMentorshipRequests: { type: Boolean },
+  },
+  { _id: false }
+);
+
 const AlumniProfileSchema = new Schema(
   {
     graduationYear: { type: Number, min: 1950, max: 2100 },
@@ -188,7 +220,26 @@ const AlumniProfileSchema = new Schema(
     bio: { type: String, trim: true, maxlength: 4000 },
     isFeaturedAlumni: { type: Boolean },
     isVerifiedAlumni: { type: Boolean },
+    verifiedAt: { type: Date },
+    verifiedById: { type: Schema.Types.ObjectId, ref: "User", sparse: true },
+    verificationSource: {
+      type: String,
+      enum: ["linkedin", "admin", "university_email", "career"],
+      required: false,
+    },
+    reputationScore: { type: Number, min: 0, max: 10_000, sparse: true },
+    interests: [{ type: String, trim: true, maxlength: 80 }],
+    isAmbassadorAlumni: { type: Boolean, sparse: true },
+    isDistinguishedAlumni: { type: Boolean, sparse: true },
     alumniServices: { type: AlumniServicesSchema, default: undefined },
+    privacySettings: { type: AlumniPrivacySettingsSchema, default: undefined },
+    verificationTier: {
+      type: String,
+      enum: ["basic", "academic", "career", "institution", "global"],
+      required: false,
+      sparse: true,
+    },
+    trustScore: { type: Number, min: 0, max: 100, sparse: true },
   },
   { _id: false }
 );
@@ -374,6 +425,8 @@ UserSchema.index({ accountType: 1 }, { sparse: true });
 UserSchema.index({ "alumniProfile.isFeaturedAlumni": 1 }, { sparse: true });
 UserSchema.index({ "alumniProfile.universityName": 1 }, { sparse: true });
 UserSchema.index({ "alumniProfile.industry": 1 }, { sparse: true });
+UserSchema.index({ "alumniProfile.reputationScore": -1 }, { sparse: true });
+UserSchema.index({ "alumniProfile.isVerifiedAlumni": 1 }, { sparse: true });
 
 const User: Model<IUser> =
   mongoose.models.User || mongoose.model<IUser>("User", UserSchema);

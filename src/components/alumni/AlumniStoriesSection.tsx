@@ -30,14 +30,14 @@ const AlumniStoriesSectionInner = ({ locale, stories }: AlumniStoriesSectionProp
   const isAr = locale === "ar";
 
   return (
-    <section id="success-stories" className="scroll-mt-24 border-b border-slate-200 bg-slate-50 py-16 sm:py-20">
+    <section id="success-stories" className="scroll-mt-24 border-b border-slate-200 bg-slate-50 py-12 sm:py-14">
       <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
         <h2 className="text-center text-2xl font-black text-slate-900 sm:text-3xl">{titles.stories}</h2>
-        <div className="mt-12 grid gap-6 lg:grid-cols-2">
+        <div className="mt-8 grid gap-4 lg:grid-cols-2">
           {storyCards.map((s) => (
             <article
               key={s.id}
-              className="flex flex-col rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition hover:border-primary/25 hover:shadow-md sm:p-8"
+              className="flex flex-col rounded-xl border border-slate-200 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.08)] transition duration-200 hover:border-primary/25 hover:shadow-[0_8px_18px_rgba(15,23,42,0.1)]"
             >
               <h3 className="text-xl font-bold text-slate-900">{isAr ? s.titleAr : s.titleEn}</h3>
               <p className="mt-3 flex-1 text-sm leading-relaxed text-slate-600">

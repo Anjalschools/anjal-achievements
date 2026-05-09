@@ -119,3 +119,17 @@
     opacity: 0 !important;
   }
 }
+
+/* Alumni app shell — mobile / touch only (desktop layout unchanged) */
+@media (max-width: 1023px) {
+  .alumni-mobile-shell {
+    padding-left: max(0.5rem, env(safe-area-inset-left));
+    padding-right: max(0.5rem, env(safe-area-inset-right));
+    padding-bottom: max(1rem, env(safe-area-inset-bottom));
+  }
+
+  .alumni-mobile-shell button,
+  .alumni-mobile-shell a[role="button"] {
+    min-height: 44px;
+  }
+}

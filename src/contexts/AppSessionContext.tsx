@@ -14,6 +14,7 @@ import {
 export type AppSessionProfile = {
   id: string;
   role?: string;
+  accountType?: "student" | "alumni";
   email?: string;
   username?: string;
   fullName?: string;
@@ -55,6 +56,8 @@ export const AppSessionProvider = ({ children }: { children: ReactNode }) => {
         setProfile({
           id: String(data.id || ""),
           role: data.role ? String(data.role) : undefined,
+          accountType:
+            data.accountType === "alumni" ? "alumni" : data.accountType === "student" ? "student" : undefined,
           email: data.email ? String(data.email) : undefined,
           username: data.username ? String(data.username) : undefined,
           fullName: data.fullName ? String(data.fullName) : undefined,

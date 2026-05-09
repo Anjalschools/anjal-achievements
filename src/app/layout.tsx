@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
 import { headers } from "next/headers";
 import "./globals.css";
@@ -24,6 +24,16 @@ export const metadata: Metadata = {
   title: "منصة تميز الأنجال | إنجازات تصنع المستقبل",
   description:
     "منصة رقمية احترافية لتوثيق وتصنيف وإبراز إنجازات طلاب مدارس الأنجال الأهلية",
+  manifest: "/manifest.webmanifest",
+  appleWebApp: {
+    capable: true,
+    title: "الأنجال",
+    statusBarStyle: "default",
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#0b3b8c",
 };
 
 export default function RootLayout({
