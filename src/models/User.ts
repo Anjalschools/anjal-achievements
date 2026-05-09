@@ -15,6 +15,8 @@ export type AlumniVerificationSource = "linkedin" | "admin" | "university_email"
 
 export type AlumniProfile = {
   graduationYear?: number;
+  /** Year of admission to higher education (post–secondary). */
+  universityAdmissionYear?: number;
   universityName?: string;
   major?: string;
   degree?: string;
@@ -46,6 +48,16 @@ export type AlumniProfile = {
   verificationTier?: "basic" | "academic" | "career" | "institution" | "global";
   /** Phase 4 — composite trust 0–100 (reputation + verification + activity). */
   trustScore?: number;
+  /** Alumni onboarding / activation lifecycle (optional; legacy rows omit). */
+  alumniActivationStatus?:
+    | "pending"
+    | "created_new"
+    | "linked_existing"
+    | "activation_sent"
+    | "promoted_from_student"
+    | "onboarding_required"
+    | "active"
+    | "failed";
 };
 
 export interface IUser extends Document {
@@ -76,6 +88,8 @@ export interface IUser extends Document {
   preferredLanguage: "ar" | "en";
   /** Set on successful login (optional for legacy rows). */
   lastLoginAt?: Date;
+  /** When true, user must change password (e.g. first login after alumni activation). */
+  mustChangePassword?: boolean;
   /** Public achievement portfolio (slug + secret token). */
   publicPortfolioEnabled?: boolean;
   publicPortfolioSlug?: string;
@@ -137,6 +151,9 @@ export interface IUser extends Document {
   accountType?: "student" | "alumni";
   /** Optional alumni résumé / visibility fields (Phase 1). */
   alumniProfile?: AlumniProfile;
+  /** After g12 promotion: user must complete post-grad alumni onboarding (optional; legacy rows omit). */
+  needsAlumniOnboarding?: boolean;
+  completedAlumniOnboardingAt?: Date;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -207,6 +224,7 @@ const AlumniPrivacySettingsSchema = new Schema(
 const AlumniProfileSchema = new Schema(
   {
     graduationYear: { type: Number, min: 1950, max: 2100 },
+    universityAdmissionYear: { type: Number, min: 1950, max: 2100 },
     universityName: { type: String, trim: true, maxlength: 200 },
     major: { type: String, trim: true, maxlength: 200 },
     degree: { type: String, trim: true, maxlength: 120 },
@@ -240,6 +258,20 @@ const AlumniProfileSchema = new Schema(
       sparse: true,
     },
     trustScore: { type: Number, min: 0, max: 100, sparse: true },
+    alumniActivationStatus: {
+      type: String,
+      enum: [
+        "pending",
+        "created_new",
+        "linked_existing",
+        "activation_sent",
+        "promoted_from_student",
+        "onboarding_required",
+        "active",
+        "failed",
+      ],
+      required: false,
+    },
   },
   { _id: false }
 );
@@ -362,6 +394,10 @@ const UserSchema: Schema = new Schema(
       type: Date,
       required: false,
     },
+    mustChangePassword: {
+      type: Boolean,
+      default: false,
+    },
     publicPortfolioEnabled: {
       type: Boolean,
       default: true,
@@ -412,6 +448,15 @@ const UserSchema: Schema = new Schema(
     alumniProfile: {
       type: AlumniProfileSchema,
       default: undefined,
+    },
+    needsAlumniOnboarding: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+    completedAlumniOnboardingAt: {
+      type: Date,
+      required: false,
     },
   },
   {

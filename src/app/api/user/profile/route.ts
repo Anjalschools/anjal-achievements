@@ -75,6 +75,8 @@ export async function GET(request: NextRequest) {
     };
 
     const organizationalAccess = buildOrganizationalAccessPayload(user as IUser);
+    const ap = (user as IUser).alumniProfile || {};
+    const completedAt = (user as IUser).completedAlumniOnboardingAt;
 
     return NextResponse.json({
       id: user._id.toString(),
@@ -109,6 +111,21 @@ export async function GET(request: NextRequest) {
       studentPortfolioContent: normalizeStudentPortfolioContentFromDoc(
         (user as unknown as { studentPortfolioContent?: unknown }).studentPortfolioContent
       ),
+      mustChangePassword: (user as unknown as { mustChangePassword?: boolean }).mustChangePassword === true,
+      needsAlumniOnboarding: (user as IUser).needsAlumniOnboarding === true,
+      completedAlumniOnboardingAt:
+        completedAt instanceof Date ? completedAt.toISOString() : null,
+      alumniOnboardingPrefill: {
+        universityName: ap.universityName || "",
+        major: ap.major || "",
+        universityAdmissionYear: ap.universityAdmissionYear ?? null,
+        studyCountry: ap.studyCountry || "",
+        industry: ap.industry || "",
+        interests: Array.isArray(ap.interests) ? ap.interests : [],
+        linkedinUrl: ap.linkedinUrl || "",
+        futureSkillsNotes: ap.bio || "",
+      },
+      alumniActivationStatus: ap.alumniActivationStatus || null,
     });
   } catch (error) {
     const err = error instanceof Error ? error : new Error(String(error));
@@ -264,6 +281,7 @@ export async function PUT(request: NextRequest) {
       }
       // Hash new password
       updateData.passwordHash = await bcrypt.hash(newPassword, 10);
+      updateData.mustChangePassword = false;
     }
 
     const user = await User.findByIdAndUpdate(
@@ -325,6 +343,13 @@ export async function PUT(request: NextRequest) {
       studentPortfolioContent: normalizeStudentPortfolioContentFromDoc(
         (user as unknown as { studentPortfolioContent?: unknown }).studentPortfolioContent
       ),
+      mustChangePassword: (user as unknown as { mustChangePassword?: boolean }).mustChangePassword === true,
+      needsAlumniOnboarding: (user as IUser).needsAlumniOnboarding === true,
+      completedAlumniOnboardingAt:
+        (user as IUser).completedAlumniOnboardingAt instanceof Date
+          ? (user as IUser).completedAlumniOnboardingAt!.toISOString()
+          : null,
+      alumniActivationStatus: (user as IUser).alumniProfile?.alumniActivationStatus || null,
     });
   } catch (error: any) {
     console.error("Error updating user profile:", error);

@@ -46,6 +46,7 @@ import { useAppSession } from "@/contexts/AppSessionContext";
 import { roleHasCapability, type RoleCapabilityKey } from "@/lib/app-role-scope-matrix";
 import AuthGuardLink from "@/components/auth/AuthGuardLink";
 import { isAuthGuardHref } from "@/lib/requireAuthRedirect";
+import { isEligibleForAcademicAdvisor } from "@/lib/alumni/isEligibleForAcademicAdvisor";
 
 const AppSidebar = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -152,7 +153,7 @@ const AppSidebar = () => {
   const alumniAssistantNavItem = {
     href: "/alumni/assistant",
     icon: Bot,
-    label: locale === "ar" ? "مساعد الخريجين" : "Alumni assistant",
+    label: locale === "ar" ? "المرشد الأكاديمي الذكي" : "Smart academic advisor",
   };
   const addAchievementItem = {
     href: "/achievements/new",
@@ -319,6 +320,15 @@ const AppSidebar = () => {
     { ...settingsItem, capability: null },
   ];
 
+  const showAcademicAdvisorNav =
+    !isReviewer &&
+    (profile?.role === "student" || profile?.accountType === "alumni") &&
+    isEligibleForAcademicAdvisor({
+      accountType: profile?.accountType,
+      grade: profile?.grade,
+      role: profile?.role,
+    });
+
   const navItems = isReviewer
     ? staffNavCandidates
         .filter((row) => row.capability === null || can(row.capability))
@@ -328,7 +338,7 @@ const AppSidebar = () => {
         ...(profile?.accountType === "alumni"
           ? [alumniDashboardNavItem, alumniInboxNavItem, alumniMentorshipNavItem]
           : []),
-        ...(profile?.role === "student" || profile?.accountType === "alumni" ? [alumniAssistantNavItem] : []),
+        ...(showAcademicAdvisorNav ? [alumniAssistantNavItem] : []),
         hallOfFameItem,
         alumniDiscoverySearchItem,
         achievementsItem,

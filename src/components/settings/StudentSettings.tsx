@@ -227,6 +227,7 @@ const StudentSettings = () => {
   });
 
   const [showPw, setShowPw] = useState({ cur: false, nw: false, cf: false });
+  const [mustChangePassword, setMustChangePassword] = useState(false);
 
   useEffect(() => {
     if (!toast) return;
@@ -249,6 +250,7 @@ const StudentSettings = () => {
         const response = await fetch("/api/user/profile");
         if (response.ok) {
           const data = await response.json();
+          setMustChangePassword(data.mustChangePassword === true);
           setFormData((prev) => ({
             ...prev,
             fullName: data.fullName || "",
@@ -447,6 +449,7 @@ const StudentSettings = () => {
       }
 
       const updatedData = await response.json();
+      setMustChangePassword(updatedData.mustChangePassword === true);
       setFormData((prev) => ({
         ...prev,
         fullName: updatedData.fullName || prev.fullName,
@@ -542,6 +545,17 @@ const StudentSettings = () => {
           </div>
         }
       />
+
+      {mustChangePassword ? (
+        <div
+          className="mb-6 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950"
+          role="alert"
+        >
+          {isAr
+            ? "يُرجى تغيير كلمة المرور الآن (مطلوب بعد تفعيل حساب الخريجين أو كلمة مرور مؤقتة)."
+            : "Please change your password now (required after alumni activation or a temporary password)."}
+        </div>
+      ) : null}
 
       <div className="space-y-8">
         <SectionCard>

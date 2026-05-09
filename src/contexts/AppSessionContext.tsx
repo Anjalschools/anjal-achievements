@@ -20,6 +20,11 @@ export type AppSessionProfile = {
   fullName?: string;
   fullNameAr?: string;
   profilePhoto?: string;
+  /** Student grade key (e.g. g11); used for feature gating without extra fetches. */
+  grade?: string;
+  mustChangePassword?: boolean;
+  needsAlumniOnboarding?: boolean;
+  alumniActivationStatus?: string;
 };
 
 type AppSessionValue = {
@@ -63,6 +68,13 @@ export const AppSessionProvider = ({ children }: { children: ReactNode }) => {
           fullName: data.fullName ? String(data.fullName) : undefined,
           fullNameAr: data.fullNameAr ? String(data.fullNameAr) : undefined,
           profilePhoto: data.profilePhoto ? String(data.profilePhoto) : undefined,
+          grade: data.grade ? String(data.grade) : undefined,
+          mustChangePassword: data.mustChangePassword === true,
+          needsAlumniOnboarding: data.needsAlumniOnboarding === true,
+          alumniActivationStatus:
+            data.alumniActivationStatus != null && data.alumniActivationStatus !== ""
+              ? String(data.alumniActivationStatus)
+              : undefined,
         });
       } catch {
         setProfile(null);

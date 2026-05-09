@@ -84,6 +84,10 @@ export default function LoginPage() {
         typeof window !== "undefined" ? window.location.search : ""
       );
       const next = sanitizeInternalCallbackPath(params.get("callbackUrl"));
+      if (data.user?.mustChangePassword === true) {
+        window.location.href = "/settings";
+        return;
+      }
       window.location.href = next ?? getDefaultRouteByRole(role);
     } catch {
       setError(locale === "ar" ? "تعذر تسجيل الدخول حاليًا." : "Unable to sign in right now.");

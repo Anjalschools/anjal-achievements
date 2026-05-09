@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
 import connectDB from "@/lib/mongodb";
-import { requireSessionUser } from "@/lib/alumni/require-alumni";
+import { requireAcademicAdvisorEligibleSession } from "@/lib/alumni/require-alumni";
 import { searchAlumniDirectory } from "@/lib/alumni/ai/alumni-text-search";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
-  const gate = await requireSessionUser();
+  const gate = await requireAcademicAdvisorEligibleSession();
   if (!gate.ok) return gate.response;
 
   try {
@@ -33,7 +33,7 @@ export async function POST(request: Request) {
 
 /** Lightweight GET for tooling */
 export async function GET(request: Request) {
-  const gate = await requireSessionUser();
+  const gate = await requireAcademicAdvisorEligibleSession();
   if (!gate.ok) return gate.response;
   const q = new URL(request.url).searchParams.get("q") || "";
   try {

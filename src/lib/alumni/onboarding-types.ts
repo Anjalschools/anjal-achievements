@@ -67,6 +67,9 @@ export type AlumniOnboardingAdminListItem = {
   reviewedById: string | null;
   reviewedAt: string | null;
   reviewNotes: string | null;
+  /** Last activation pipeline status (optional on legacy rows). */
+  alumniActivationStatus: string | null;
+  alumniActivationLastError: string | null;
   createdAt: string;
   updatedAt: string;
 };

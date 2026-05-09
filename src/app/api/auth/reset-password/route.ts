@@ -114,7 +114,7 @@ export async function POST(request: NextRequest) {
 
     const passwordHash = await bcrypt.hash(password, 10);
 
-    await User.updateOne({ _id: record.userId }, { $set: { passwordHash } });
+    await User.updateOne({ _id: record.userId }, { $set: { passwordHash, mustChangePassword: false } });
     await PasswordResetToken.deleteMany({ userId: record.userId });
 
     return NextResponse.json({ ok: true, message: "تم تحديث كلمة المرور. يمكنك تسجيل الدخول الآن." });

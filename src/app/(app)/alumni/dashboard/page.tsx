@@ -233,7 +233,7 @@ export default function AlumniDashboardPage() {
           href="/alumni/assistant"
           className="rounded-2xl border border-amber-200 bg-amber-50/80 px-4 py-4 text-center font-bold text-amber-950 shadow-sm hover:bg-amber-100"
         >
-          مساعد الخريجين الذكي
+          المرشد الأكاديمي الذكي
         </Link>
       </div>
     </div>

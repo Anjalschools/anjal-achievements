@@ -1,7 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Loader2, UserCheck, UserX } from "lucide-react";
+import { FlaskConical, Loader2, Play, UserCheck, UserX } from "lucide-react";
+import {
+  ALUMNI_ACTIVATION_STATUS_VALUES,
+  alumniActivationStatusBadgeClass,
+  alumniActivationStatusLabel,
+  resolveAlumniActivationDisplayStatus,
+} from "@/lib/alumni/alumni-activation-ui";
 import PageContainer from "@/components/layout/PageContainer";
 import PageHeader from "@/components/layout/PageHeader";
 import { getLocale } from "@/lib/i18n";
@@ -44,6 +50,13 @@ const AlumniOnboardingAdminPage = () => {
   const [pendingCount, setPendingCount] = useState(0);
   const [selected, setSelected] = useState<AlumniOnboardingAdminListItem | null>(null);
   const [reviewNotes, setReviewNotes] = useState("");
+  const [activationFilter, setActivationFilter] = useState<string>("all");
+  const [sortField, setSortField] = useState<"createdAt" | "updatedAt" | "alumniActivationStatus">(
+    "createdAt"
+  );
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
+  const [promoBusy, setPromoBusy] = useState(false);
+  const [promoMessage, setPromoMessage] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -64,7 +77,10 @@ const AlumniOnboardingAdminPage = () => {
     try {
       const sp = new URLSearchParams();
       if (statusFilter !== "all") sp.set("status", statusFilter);
+      if (activationFilter !== "all") sp.set("alumniActivationStatus", activationFilter);
       if (q.trim()) sp.set("q", q.trim());
+      sp.set("sort", sortField);
+      sp.set("order", sortOrder);
       sp.set("page", "1");
       sp.set("limit", "30");
       const response = await fetch(`/api/admin/alumni/onboarding-requests?${sp.toString()}`, {
@@ -80,7 +96,36 @@ const AlumniOnboardingAdminPage = () => {
     } finally {
       setLoading(false);
     }
-  }, [q, statusFilter]);
+  }, [q, statusFilter, activationFilter, sortField, sortOrder]);
+
+  const runPromotion = async (dryRun: boolean) => {
+    setPromoBusy(true);
+    setPromoMessage(null);
+    try {
+      const response = await fetch("/api/admin/alumni/run-student-promotion", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dryRun }),
+      });
+      const json = (await response.json().catch(() => ({}))) as {
+        error?: string;
+        examined?: number;
+        promoted?: number;
+        skipped?: number;
+        dryRun?: boolean;
+      };
+      if (!response.ok) throw new Error(json.error || "Failed");
+      setPromoMessage(
+        isAr
+          ? `ترقية طلاب ثالث ثانوي: مُفحوص ${json.examined ?? 0}، مُرقّى ${json.promoted ?? 0}، مُتخطّى ${json.skipped ?? 0}${json.dryRun ? " (تجريبي بدون تغيير)" : ""}.`
+          : `G12 promotion: examined ${json.examined ?? 0}, promoted ${json.promoted ?? 0}, skipped ${json.skipped ?? 0}${json.dryRun ? " (dry run)" : ""}.`
+      );
+    } catch {
+      setPromoMessage(isAr ? "تعذر تشغيل الترقية." : "Could not run promotion.");
+    } finally {
+      setPromoBusy(false);
+    }
+  };
 
   useEffect(() => {
     if (allowed !== true) return;
@@ -150,6 +195,38 @@ const AlumniOnboardingAdminPage = () => {
           subtitle={isAr ? "مراجعة واعتماد طلبات الانضمام إلى مجتمع الخريجين" : "Review and approve alumni community onboarding requests"}
         />
 
+        <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+          <p className="text-sm font-bold text-slate-900">
+            {isAr ? "ترقية تلقائية — ثالث ثانوي إلى خريج" : "Automatic promotion — Grade 12 to alumni"}
+          </p>
+          <p className="mt-1 text-xs text-slate-600">
+            {isAr
+              ? "تشغيل آمن وقابل لإعادة التنفيذ: لا ينشئ مستخدمين جدد، ويربط نفس userId. جرّب «تجريبي» أولاً."
+              : "Idempotent job: no new users, same userId. Run dry run first."}
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              type="button"
+              disabled={promoBusy}
+              onClick={() => void runPromotion(true)}
+              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-100 disabled:opacity-50"
+            >
+              {promoBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <FlaskConical className="h-4 w-4" />}
+              {isAr ? "تشغيل تجريبي" : "Dry run"}
+            </button>
+            <button
+              type="button"
+              disabled={promoBusy}
+              onClick={() => void runPromotion(false)}
+              className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50"
+            >
+              {promoBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+              {isAr ? "تشغيل الترقية" : "Run promotion"}
+            </button>
+          </div>
+          {promoMessage ? <p className="mt-3 text-sm text-slate-700">{promoMessage}</p> : null}
+        </section>
+
         <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
             <p className="text-xs font-semibold text-slate-500">{isAr ? "إجمالي النتائج" : "Total results"}</p>
@@ -170,7 +247,7 @@ const AlumniOnboardingAdminPage = () => {
         </section>
 
         <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
-          <div className="mb-4 grid gap-3 sm:grid-cols-3">
+          <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
@@ -182,10 +259,41 @@ const AlumniOnboardingAdminPage = () => {
               onChange={(e) => setStatusFilter(e.target.value as "all" | AlumniOnboardingStatus)}
               className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm"
             >
-              <option value="all">{isAr ? "كل الحالات" : "All statuses"}</option>
+              <option value="all">{isAr ? "كل حالات الطلب" : "All request statuses"}</option>
               <option value="pending">{isAr ? "قيد المراجعة" : "Pending"}</option>
               <option value="approved">{isAr ? "معتمد" : "Approved"}</option>
               <option value="rejected">{isAr ? "مرفوض" : "Rejected"}</option>
+            </select>
+            <select
+              value={activationFilter}
+              onChange={(e) => setActivationFilter(e.target.value)}
+              className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm"
+            >
+              <option value="all">{isAr ? "كل حالات التفعيل" : "All activation states"}</option>
+              {ALUMNI_ACTIVATION_STATUS_VALUES.map((v) => (
+                <option key={v} value={v}>
+                  {alumniActivationStatusLabel(v, isAr)}
+                </option>
+              ))}
+            </select>
+            <select
+              value={sortField}
+              onChange={(e) =>
+                setSortField(e.target.value as "createdAt" | "updatedAt" | "alumniActivationStatus")
+              }
+              className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm"
+            >
+              <option value="createdAt">{isAr ? "ترتيب: تاريخ الإنشاء" : "Sort: created"}</option>
+              <option value="updatedAt">{isAr ? "ترتيب: آخر تحديث" : "Sort: updated"}</option>
+              <option value="alumniActivationStatus">{isAr ? "ترتيب: حالة التفعيل" : "Sort: activation"}</option>
+            </select>
+            <select
+              value={sortOrder}
+              onChange={(e) => setSortOrder(e.target.value as "asc" | "desc")}
+              className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm"
+            >
+              <option value="desc">{isAr ? "تنازلي" : "Descending"}</option>
+              <option value="asc">{isAr ? "تصاعدي" : "Ascending"}</option>
             </select>
             <button
               type="button"
@@ -207,12 +315,13 @@ const AlumniOnboardingAdminPage = () => {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[860px] text-sm">
+              <table className="w-full min-w-[960px] text-sm">
                 <thead className="border-b border-slate-200 text-slate-600">
                   <tr>
                     <th className="py-2 text-start">{isAr ? "المتقدم" : "Applicant"}</th>
                     <th className="py-2 text-start">{isAr ? "سنة التخرج" : "Graduation"}</th>
                     <th className="py-2 text-start">{isAr ? "الجامعة/المسار" : "University / career"}</th>
+                    <th className="py-2 text-start">{isAr ? "التفعيل" : "Activation"}</th>
                     <th className="py-2 text-start">{isAr ? "الحالة" : "Status"}</th>
                     <th className="py-2 text-start">{isAr ? "الإجراء" : "Action"}</th>
                   </tr>
@@ -230,6 +339,18 @@ const AlumniOnboardingAdminPage = () => {
                         <p className="text-xs text-slate-500">
                           {[item.currentPosition, item.currentCompany].filter(Boolean).join(" — ") || "—"}
                         </p>
+                      </td>
+                      <td className="py-2.5">
+                        {(() => {
+                          const disp = resolveAlumniActivationDisplayStatus(item.alumniActivationStatus, false);
+                          return (
+                            <span
+                              className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-bold ring-1 ${alumniActivationStatusBadgeClass(disp)}`}
+                            >
+                              {alumniActivationStatusLabel(disp, isAr)}
+                            </span>
+                          );
+                        })()}
                       </td>
                       <td className="py-2.5">
                         <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-bold ring-1 ${statusClass(item.status)}`}>
@@ -262,6 +383,24 @@ const AlumniOnboardingAdminPage = () => {
           <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl sm:p-6" onClick={(e) => e.stopPropagation()} dir={isAr ? "rtl" : "ltr"}>
             <h2 className="text-xl font-black text-slate-900">{selected.fullName}</h2>
             <p className="mt-1 text-sm text-slate-500">{selected.email}</p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {(() => {
+                const disp = resolveAlumniActivationDisplayStatus(selected.alumniActivationStatus, false);
+                return (
+                  <span
+                    className={`inline-flex rounded-full px-2 py-0.5 text-xs font-bold ring-1 ${alumniActivationStatusBadgeClass(disp)}`}
+                  >
+                    {alumniActivationStatusLabel(disp, isAr)}
+                  </span>
+                );
+              })()}
+              {selected.alumniActivationLastError ? (
+                <span className="text-xs text-red-600">
+                  {isAr ? "آخر خطأ: " : "Last error: "}
+                  {selected.alumniActivationLastError}
+                </span>
+              ) : null}
+            </div>
 
             <div className="mt-4 grid gap-3 sm:grid-cols-2 text-sm">
               <p><span className="font-bold">{isAr ? "سنة التخرج: " : "Graduation year: "}</span>{selected.graduationYear}</p>

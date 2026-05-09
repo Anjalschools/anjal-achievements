@@ -9,6 +9,17 @@ export type AlumniOnboardingServices = {
   sponsorship?: boolean;
 };
 
+/** Last-known alumni account activation outcome (optional; legacy rows omit). */
+export type AlumniActivationStatus =
+  | "pending"
+  | "created_new"
+  | "linked_existing"
+  | "activation_sent"
+  | "promoted_from_student"
+  | "onboarding_required"
+  | "active"
+  | "failed";
+
 export interface IAlumniOnboardingRequest extends Document {
   userId?: Types.ObjectId;
   fullName: string;
@@ -33,6 +44,10 @@ export interface IAlumniOnboardingRequest extends Document {
   reviewedById?: Types.ObjectId;
   reviewedAt?: Date;
   reviewNotes?: string;
+  /** Set when approval runs account activation (additive; optional on legacy documents). */
+  alumniActivationStatus?: AlumniActivationStatus;
+  /** Non-sensitive diagnostic when activation fails (admin-only visibility in UI). */
+  alumniActivationLastError?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -78,6 +93,21 @@ const AlumniOnboardingRequestSchema = new Schema<IAlumniOnboardingRequest>(
     reviewedById: { type: Schema.Types.ObjectId, ref: "User", index: true, sparse: true },
     reviewedAt: { type: Date },
     reviewNotes: { type: String, trim: true, maxlength: 2000 },
+    alumniActivationStatus: {
+      type: String,
+      enum: [
+        "pending",
+        "created_new",
+        "linked_existing",
+        "activation_sent",
+        "promoted_from_student",
+        "onboarding_required",
+        "active",
+        "failed",
+      ],
+      required: false,
+    },
+    alumniActivationLastError: { type: String, trim: true, maxlength: 500, required: false },
   },
   { timestamps: true }
 );

@@ -100,6 +100,7 @@ export async function POST(request: NextRequest) {
       preferredLanguage: user.preferredLanguage,
       profilePhoto: user.profilePhoto,
       createdAt: user.createdAt,
+      mustChangePassword: (user as { mustChangePassword?: boolean }).mustChangePassword === true,
     };
 
     const response = NextResponse.json(

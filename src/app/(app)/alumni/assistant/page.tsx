@@ -4,6 +4,8 @@ import { Suspense, useState } from "react";
 import Link from "next/link";
 import { Loader2, Search, Sparkles } from "lucide-react";
 import { useAppSession } from "@/contexts/AppSessionContext";
+import { getLocale } from "@/lib/i18n";
+import { isEligibleForAcademicAdvisor } from "@/lib/alumni/isEligibleForAcademicAdvisor";
 
 type SearchHit = {
   id: string;
@@ -16,6 +18,8 @@ type SearchHit = {
 
 const AssistantShell = () => {
   const { profile, loading } = useAppSession();
+  const locale = getLocale();
+  const isAr = locale === "ar";
   const [q, setQ] = useState("");
   const [hits, setHits] = useState<SearchHit[]>([]);
   const [busy, setBusy] = useState(false);
@@ -79,25 +83,56 @@ const AssistantShell = () => {
 
   if (profile?.accountType !== "alumni" && profile?.role !== "student") {
     return (
-      <div className="mx-auto max-w-lg px-4 py-16 text-center">
-        <p className="text-slate-700">يتطلّب المساعد حساب طالب أو خريج نشط.</p>
+      <div className="mx-auto max-w-lg px-4 py-16 text-center" dir={isAr ? "rtl" : "ltr"}>
+        <p className="text-slate-700">
+          {isAr
+            ? "يتطلّب المرشد الأكاديمي الذكي حساب طالب أو خريج نشط."
+            : "The smart academic advisor requires an active student or alumni account."}
+        </p>
         <Link href="/dashboard" className="mt-4 inline-block text-primary underline">
-          العودة
+          {isAr ? "العودة" : "Back"}
+        </Link>
+      </div>
+    );
+  }
+
+  if (
+    !isEligibleForAcademicAdvisor({
+      accountType: profile?.accountType,
+      grade: profile?.grade,
+      role: profile?.role,
+    })
+  ) {
+    return (
+      <div className="mx-auto max-w-lg px-4 py-16 text-center" dir={isAr ? "rtl" : "ltr"}>
+        <p className="text-slate-700">
+          {isAr
+            ? "المرشد الأكاديمي الذكي متاح لطلاب الثاني والثالث الثانوي ولخريجي المنصة فقط."
+            : "The smart academic advisor is available to secondary-year 2–3 students and alumni only."}
+        </p>
+        <Link href="/dashboard" className="mt-4 inline-block text-primary underline">
+          {isAr ? "العودة" : "Back"}
         </Link>
       </div>
     );
   }
 
   return (
-    <div dir="rtl" className="mx-auto max-w-4xl space-y-8 px-4 py-8">
+    <div dir={isAr ? "rtl" : "ltr"} className="mx-auto max-w-4xl space-y-8 px-4 py-8">
       <section className="overflow-hidden rounded-3xl border border-slate-200 bg-gradient-to-br from-slate-900 via-primary to-slate-800 p-6 text-white shadow-xl">
         <div className="flex items-start gap-3">
           <Sparkles className="mt-1 h-8 w-8 shrink-0 text-amber-200" aria-hidden />
           <div>
-            <p className="text-xs font-bold uppercase tracking-widest text-sky-100/90">مساعد الخريجين</p>
-            <h1 className="mt-1 text-2xl font-black">إرشاد داخلي سريع دون نماذج خارجية</h1>
+            <p className="text-xs font-bold uppercase tracking-widest text-sky-100/90">
+              {isAr ? "المرشد الأكاديمي الذكي" : "Smart academic advisor"}
+            </p>
+            <h1 className="mt-1 text-2xl font-black">
+              {isAr ? "إرشاد داخلي سريع دون نماذج خارجية" : "Fast in-platform guidance without external forms"}
+            </h1>
             <p className="mt-2 text-sm text-sky-50/95">
-              بحث قواعد بيانات المنصة، اقتراح مرشدين، فرص، وجامعات — مع منطق قابل للتوسعة لاحقًا.
+              {isAr
+                ? "بحث قواعد بيانات المنصة، اقتراح مرشدين، فرص، وجامعات — مع منطق قابل للتوسعة لاحقًا."
+                : "Search platform data, suggested mentors, opportunities, and universities — built to extend over time."}
             </p>
           </div>
         </div>

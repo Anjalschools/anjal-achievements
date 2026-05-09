@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import connectDB from "@/lib/mongodb";
 import User from "@/models/User";
-import { requireSessionUser } from "@/lib/alumni/require-alumni";
+import { requireAcademicAdvisorEligibleSession } from "@/lib/alumni/require-alumni";
 import { buildViewerMatchProfile } from "@/lib/alumni/matching/viewer-profile";
 import { runAlumniAssistantRecommend } from "@/lib/alumni/ai/recommend-engine";
 import type { AlumniAssistantIntent } from "@/lib/alumni/ai/types";
@@ -17,7 +17,7 @@ const INTENTS: AlumniAssistantIntent[] = [
 ];
 
 export async function POST(request: Request) {
-  const gate = await requireSessionUser();
+  const gate = await requireAcademicAdvisorEligibleSession();
   if (!gate.ok) return gate.response;
 
   try {
