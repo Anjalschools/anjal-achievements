@@ -19,12 +19,20 @@ export const requireAlumniCommunityAccess = async (): Promise<CommunityAccessGat
   if (!user?._id) {
     return { ok: false, response: forbidden() };
   }
-  const u = user as { role?: string; accountType?: string; grade?: string };
+  const u = user as {
+    role?: string;
+    accountType?: string;
+    grade?: string;
+    alumniCommunityRemovedAt?: Date | null;
+    alumniPermanentlyPurgedAt?: Date | null;
+  };
   if (
     !canAccessAlumniCommunity({
       accountType: u.accountType as "student" | "alumni" | null | undefined,
       grade: u.grade,
       role: u.role,
+      alumniCommunityRemovedAt: u.alumniCommunityRemovedAt,
+      alumniPermanentlyPurgedAt: u.alumniPermanentlyPurgedAt,
     })
   ) {
     return { ok: false, response: forbidden() };
@@ -37,12 +45,20 @@ export const requireAlumniCommunityForAuthedUser = (
   user: AuthedUser | null | undefined
 ): NextResponse | null => {
   if (!user) return forbidden();
-  const u = user as { role?: string; accountType?: string; grade?: string };
+  const u = user as {
+    role?: string;
+    accountType?: string;
+    grade?: string;
+    alumniCommunityRemovedAt?: Date | null;
+    alumniPermanentlyPurgedAt?: Date | null;
+  };
   if (
     !canAccessAlumniCommunity({
       accountType: u.accountType as "student" | "alumni" | null | undefined,
       grade: u.grade,
       role: u.role,
+      alumniCommunityRemovedAt: u.alumniCommunityRemovedAt,
+      alumniPermanentlyPurgedAt: u.alumniPermanentlyPurgedAt,
     })
   ) {
     return forbidden();

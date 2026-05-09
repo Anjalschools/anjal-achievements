@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { AlertTriangle, FlaskConical, Loader2, Play, UserCheck, UserMinus, UserX } from "lucide-react";
+import { AlertTriangle, FlaskConical, Loader2, Play, Trash2, UserCheck, UserMinus, UserX } from "lucide-react";
 import {
   ALUMNI_ACTIVATION_STATUS_VALUES,
   alumniActivationStatusBadgeClass,
@@ -68,6 +68,9 @@ const AlumniOnboardingAdminPage = () => {
   const [promoBusy, setPromoBusy] = useState(false);
   const [promoMessage, setPromoMessage] = useState<string | null>(null);
   const [softRemoving, setSoftRemoving] = useState(false);
+  const [toast, setToast] = useState<{ kind: "success" | "info" | "error"; message: string } | null>(null);
+  const [permanentPhrase, setPermanentPhrase] = useState("");
+  const [permanentBusy, setPermanentBusy] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -81,6 +84,12 @@ const AlumniOnboardingAdminPage = () => {
       }
     })();
   }, []);
+
+  useEffect(() => {
+    if (!toast) return;
+    const t = window.setTimeout(() => setToast(null), 6500);
+    return () => window.clearTimeout(t);
+  }, [toast]);
 
   useEffect(() => {
     const t = window.setTimeout(() => setQ(searchDraft.trim()), 380);
@@ -166,6 +175,28 @@ const AlumniOnboardingAdminPage = () => {
 
   const totalPages = Math.max(1, Math.ceil(listTotal / Math.max(1, listLimit)));
 
+  const mapRemovalApiError = (code: string | undefined): string => {
+    if (!code) return isAr ? "تعذر تنفيذ العملية." : "Could not complete the action.";
+    const map: Record<string, { ar: string; en: string }> = {
+      NOT_FOUND: { ar: "المستخدم غير موجود.", en: "User not found." },
+      NOT_ALUMNI_ACCOUNT: {
+        ar: "لا يمكن إزالة هذا الحساب — ليس مرتبطًا بخريج معتمد في النظام.",
+        en: "This account is not linked as an approved alumni user.",
+      },
+      INVALID_ID: { ar: "معرّف المستخدم غير صالح.", en: "Invalid user id." },
+      CONFIRM_REQUIRED: { ar: "التأكيد مطلوب.", en: "Confirmation required." },
+      CONFIRM_PHRASE_REQUIRED: {
+        ar: "اكتب DELETE أو حذف نهائي بالضبط للتأكيد.",
+        en: 'Type exactly DELETE or "حذف نهائي" to confirm.',
+      },
+      CANNOT_DELETE_SELF: { ar: "لا يمكنك حذف حسابك الحالي.", en: "You cannot delete your own account." },
+      FORBIDDEN_ADMIN_TARGET: { ar: "لا يمكن حذف حساب مدير النظام.", en: "Cannot purge a system admin account." },
+    };
+    const row = map[code];
+    if (row) return isAr ? row.ar : row.en;
+    return code;
+  };
+
   const mapPatchError = (code: string | undefined): string => {
     if (!code) return isAr ? "تعذر تنفيذ الإجراء." : "Could not complete the action.";
     if (code === "DUPLICATE_APPROVED_EMAIL") {
@@ -219,20 +250,107 @@ const AlumniOnboardingAdminPage = () => {
     setSoftRemoving(true);
     setError(null);
     try {
-      const response = await fetch(`/api/admin/alumni/users/${selected.userId}/community-soft-remove`, {
+      const payload = { confirm: true as const };
+      let response = await fetch(`/api/admin/alumni/users/${selected.userId}/community-soft-remove`, {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ confirm: true }),
+        body: JSON.stringify(payload),
       });
-      const json = (await response.json().catch(() => ({}))) as { error?: string };
-      if (!response.ok) throw new Error(json.error || "Failed");
+      if (response.status === 404) {
+        response = await fetch("/api/admin/alumni/community-soft-remove", {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...payload, userId: selected.userId }),
+        });
+      }
+      const json = (await response.json().catch(() => ({}))) as {
+        ok?: boolean;
+        alreadyRemoved?: boolean;
+        error?: string;
+      };
+      if (!response.ok) {
+        setToast({ kind: "error", message: mapRemovalApiError(json.error) });
+        return;
+      }
+      setToast({
+        kind: json.alreadyRemoved ? "info" : "success",
+        message: json.alreadyRemoved
+          ? isAr
+            ? "تم حذف الخريج مسبقًا من مجتمع الخريجين — لا حاجة لإعادة التنفيذ."
+            : "This alumni was already removed from the community."
+          : isAr
+            ? "تم حذف الخريج من مجتمع الخريجين بنجاح (حذف ناعم)."
+            : "Alumni removed from the community successfully (soft delete).",
+      });
       setSelected(null);
+      setPermanentPhrase("");
       await fetchList();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Error");
+    } catch {
+      setToast({
+        kind: "error",
+        message: isAr ? "فشل الاتصال بالخادم أثناء الحذف الناعم." : "Network error during soft remove.",
+      });
     } finally {
       setSoftRemoving(false);
+    }
+  };
+
+  const handlePermanentRemove = async () => {
+    if (!selected?.userId) return;
+    const phraseOk = permanentPhrase.trim() === "DELETE" || permanentPhrase.trim() === "حذف نهائي";
+    if (!phraseOk) {
+      setToast({
+        kind: "error",
+        message: isAr ? "اكتب DELETE أو حذف نهائي في الحقل للمتابعة." : 'Type DELETE or "حذف نهائي" in the box to continue.',
+      });
+      return;
+    }
+    const ok = window.confirm(
+      isAr
+        ? "حذف نهائي: سيتم إزالة ملف الخريج المضمّن وسجلات CRM والموافقات المرتبطة. لن تُحذف الإنجازات أو الشهادات. هل أنت متأكد؟"
+        : "Permanent purge: embedded alumni profile and CRM/consent data will be removed. Achievements and certificates stay. Continue?"
+    );
+    if (!ok) return;
+    setPermanentBusy(true);
+    setError(null);
+    try {
+      const response = await fetch(`/api/admin/alumni/users/${selected.userId}/permanent-delete`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirm: true, confirmPhrase: permanentPhrase.trim() }),
+      });
+      const json = (await response.json().catch(() => ({}))) as {
+        ok?: boolean;
+        alreadyPurged?: boolean;
+        error?: string;
+      };
+      if (!response.ok) {
+        setToast({ kind: "error", message: mapRemovalApiError(json.error) });
+        return;
+      }
+      setToast({
+        kind: json.alreadyPurged ? "info" : "success",
+        message: json.alreadyPurged
+          ? isAr
+            ? "تم تنفيذ الحذف النهائي مسبقًا لهذا الحساب."
+            : "Permanent purge was already applied for this account."
+          : isAr
+            ? "تم تنفيذ الحذف النهائي لبيانات الخريج بنجاح."
+            : "Permanent alumni data purge completed successfully.",
+      });
+      setSelected(null);
+      setPermanentPhrase("");
+      await fetchList();
+    } catch {
+      setToast({
+        kind: "error",
+        message: isAr ? "فشل الاتصال أثناء الحذف النهائي." : "Network error during permanent delete.",
+      });
+    } finally {
+      setPermanentBusy(false);
     }
   };
 
@@ -263,6 +381,21 @@ const AlumniOnboardingAdminPage = () => {
           title={isAr ? "طلبات انضمام الخريجين" : "Alumni onboarding requests"}
           subtitle={isAr ? "مراجعة واعتماد طلبات الانضمام إلى مجتمع الخريجين" : "Review and approve alumni community onboarding requests"}
         />
+
+        {toast ? (
+          <div
+            role="status"
+            className={`rounded-2xl border px-4 py-3 text-sm font-semibold shadow-sm ${
+              toast.kind === "error"
+                ? "border-red-200 bg-red-50 text-red-900"
+                : toast.kind === "info"
+                  ? "border-sky-200 bg-sky-50 text-sky-900"
+                  : "border-emerald-200 bg-emerald-50 text-emerald-900"
+            }`}
+          >
+            {toast.message}
+          </div>
+        ) : null}
 
         <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
           <p className="text-sm font-bold text-slate-900">
@@ -572,6 +705,33 @@ const AlumniOnboardingAdminPage = () => {
                 placeholder={isAr ? "ملاحظات اختيارية..." : "Optional notes..."}
               />
             </div>
+
+            {selected.userId && selected.status === "approved" ? (
+              <div className="mt-5 rounded-2xl border border-red-200 bg-red-50/80 p-4">
+                <p className="text-sm font-black text-red-950">{isAr ? "منطقة خطرة — حذف نهائي" : "Danger zone — permanent purge"}</p>
+                <p className="mt-1 text-xs text-red-900">
+                  {isAr
+                    ? "يحذف ملف الخريج المضمّن وسجلات CRM والموافقات؛ لا يحذف الإنجازات. اكتب DELETE أو حذف نهائي ثم نفّذ."
+                    : "Removes embedded alumni profile, CRM row, consent, and cancels open mentorships. Achievements are kept. Type DELETE or حذف نهائي."}
+                </p>
+                <input
+                  value={permanentPhrase}
+                  onChange={(e) => setPermanentPhrase(e.target.value)}
+                  placeholder={isAr ? "DELETE أو حذف نهائي" : "DELETE or حذف نهائي"}
+                  autoComplete="off"
+                  className="mt-3 w-full rounded-xl border border-red-200 bg-white px-3 py-2 text-sm"
+                />
+                <button
+                  type="button"
+                  disabled={permanentBusy}
+                  onClick={() => void handlePermanentRemove()}
+                  className="mt-3 inline-flex items-center gap-2 rounded-xl bg-red-800 px-4 py-2 text-sm font-bold text-white hover:bg-red-900 disabled:opacity-60"
+                >
+                  {permanentBusy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Trash2 className="h-4 w-4" aria-hidden />}
+                  {isAr ? "تنفيذ الحذف النهائي" : "Run permanent purge"}
+                </button>
+              </div>
+            ) : null}
 
             <div className="mt-5 flex flex-wrap justify-end gap-2">
               <button type="button" onClick={() => setSelected(null)} className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold">

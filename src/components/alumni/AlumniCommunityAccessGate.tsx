@@ -34,11 +34,15 @@ export const AlumniCommunityAccessGate = ({ children }: Props) => {
           role?: string;
           grade?: string | null;
           accountType?: string | null;
+          alumniCommunityRemovedAt?: string | null;
+          alumniPermanentlyPurgedAt?: string | null;
         };
         const ok = canAccessAlumniCommunity({
           role: data.role,
           grade: data.grade,
           accountType: data.accountType as "student" | "alumni" | null | undefined,
+          alumniCommunityRemovedAt: data.alumniCommunityRemovedAt,
+          alumniPermanentlyPurgedAt: data.alumniPermanentlyPurgedAt,
         });
         setState(ok ? "ok" : "denied");
       } catch {

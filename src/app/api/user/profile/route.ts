@@ -126,6 +126,14 @@ export async function GET(request: NextRequest) {
         futureSkillsNotes: ap.bio || "",
       },
       alumniActivationStatus: ap.alumniActivationStatus || null,
+      alumniCommunityRemovedAt:
+        (user as IUser).alumniCommunityRemovedAt instanceof Date
+          ? (user as IUser).alumniCommunityRemovedAt!.toISOString()
+          : null,
+      alumniPermanentlyPurgedAt:
+        (user as IUser).alumniPermanentlyPurgedAt instanceof Date
+          ? (user as IUser).alumniPermanentlyPurgedAt!.toISOString()
+          : null,
     });
   } catch (error) {
     const err = error instanceof Error ? error : new Error(String(error));

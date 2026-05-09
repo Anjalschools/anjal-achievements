@@ -9,12 +9,20 @@ import { canAccessAlumniCommunity } from "@/lib/alumni/canAccessAlumniCommunity"
 export const blockIneligibleStudentOnPublicCommunityApi = async (): Promise<NextResponse | null> => {
   const user = await getCurrentDbUser();
   if (!user?._id) return null;
-  const u = user as { role?: string; accountType?: string; grade?: string };
+  const u = user as {
+    role?: string;
+    accountType?: string;
+    grade?: string;
+    alumniCommunityRemovedAt?: Date | null;
+    alumniPermanentlyPurgedAt?: Date | null;
+  };
   if (
     !canAccessAlumniCommunity({
       accountType: u.accountType as "student" | "alumni" | null | undefined,
       grade: u.grade,
       role: u.role,
+      alumniCommunityRemovedAt: u.alumniCommunityRemovedAt,
+      alumniPermanentlyPurgedAt: u.alumniPermanentlyPurgedAt,
     })
   ) {
     return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });

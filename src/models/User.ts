@@ -157,6 +157,9 @@ export interface IUser extends Document {
   /** Admin soft-remove from alumni community listings (user doc retained). */
   alumniCommunityRemovedAt?: Date;
   alumniCommunityRemovedById?: Types.ObjectId;
+  /** Irreversible alumni data purge (profile stripped; account row kept for achievements). */
+  alumniPermanentlyPurgedAt?: Date;
+  alumniPermanentlyPurgedById?: Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -466,6 +469,18 @@ const UserSchema: Schema = new Schema(
       required: false,
     },
     alumniCommunityRemovedById: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+      required: false,
+      sparse: true,
+    },
+    alumniPermanentlyPurgedAt: {
+      type: Date,
+      required: false,
+      index: true,
+      sparse: true,
+    },
+    alumniPermanentlyPurgedById: {
       type: Schema.Types.ObjectId,
       ref: "User",
       required: false,

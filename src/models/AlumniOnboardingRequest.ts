@@ -48,6 +48,12 @@ export interface IAlumniOnboardingRequest extends Document {
   alumniActivationStatus?: AlumniActivationStatus;
   /** Non-sensitive diagnostic when activation fails (admin-only visibility in UI). */
   alumniActivationLastError?: string;
+  /** Synced when admin soft-removes linked user from alumni community visibility. */
+  communitySoftRemovedAt?: Date;
+  communitySoftRemovedById?: Types.ObjectId;
+  /** Set on irreversible alumni identity purge (request row retained). */
+  alumniIdentityPurgedAt?: Date;
+  alumniIdentityPurgedById?: Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -108,6 +114,10 @@ const AlumniOnboardingRequestSchema = new Schema<IAlumniOnboardingRequest>(
       required: false,
     },
     alumniActivationLastError: { type: String, trim: true, maxlength: 500, required: false },
+    communitySoftRemovedAt: { type: Date, required: false },
+    communitySoftRemovedById: { type: Schema.Types.ObjectId, ref: "User", required: false, sparse: true },
+    alumniIdentityPurgedAt: { type: Date, required: false },
+    alumniIdentityPurgedById: { type: Schema.Types.ObjectId, ref: "User", required: false, sparse: true },
   },
   { timestamps: true }
 );

@@ -336,6 +336,8 @@ const AppSidebar = () => {
       accountType: profile?.accountType,
       grade: profile?.grade,
       role: profile?.role,
+      alumniCommunityRemovedAt: profile?.alumniCommunityRemovedAt,
+      alumniPermanentlyPurgedAt: profile?.alumniPermanentlyPurgedAt,
     });
 
   const isAlumniAccount = profile?.accountType === "alumni";

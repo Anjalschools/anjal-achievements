@@ -13,6 +13,10 @@ export type AlumniCommunityEligibilityInput = {
   accountType?: AccountTypeUserLike["accountType"] | null;
   grade?: string | null;
   role?: string | null;
+  /** Admin soft-remove — block alumni ecosystem access (Date or ISO string from API). */
+  alumniCommunityRemovedAt?: Date | string | null;
+  /** Permanent alumni data purge — block alumni ecosystem access. */
+  alumniPermanentlyPurgedAt?: Date | string | null;
 };
 
 /** Student-only grade check (g11/g12 after normalize); used by advisor + community for learners. */
@@ -29,7 +33,10 @@ export const isEligibleStudentGradeForAlumniEcosystem = (grade: string | null | 
  * Unknown / legacy / missing grade for students: denied (fail-safe).
  */
 export const canAccessAlumniCommunity = (input: AlumniCommunityEligibilityInput): boolean => {
-  if (getAccountType(input as AccountTypeUserLike) === "alumni") return true;
+  if (getAccountType(input as AccountTypeUserLike) === "alumni") {
+    if (Boolean(input.alumniCommunityRemovedAt) || Boolean(input.alumniPermanentlyPurgedAt)) return false;
+    return true;
+  }
 
   const role = String(input.role || "");
   if (role !== "student") return true;

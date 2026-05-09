@@ -127,8 +127,16 @@ export default function AlumniDashboardPage() {
         accountType: profile?.accountType,
         grade: profile?.grade,
         role: profile?.role,
+        alumniCommunityRemovedAt: profile?.alumniCommunityRemovedAt,
+        alumniPermanentlyPurgedAt: profile?.alumniPermanentlyPurgedAt,
       }),
-    [profile?.accountType, profile?.grade, profile?.role]
+    [
+      profile?.accountType,
+      profile?.grade,
+      profile?.role,
+      profile?.alumniCommunityRemovedAt,
+      profile?.alumniPermanentlyPurgedAt,
+    ]
   );
 
   useEffect(() => {

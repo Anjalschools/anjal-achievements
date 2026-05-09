@@ -25,6 +25,9 @@ export type AppSessionProfile = {
   mustChangePassword?: boolean;
   needsAlumniOnboarding?: boolean;
   alumniActivationStatus?: string;
+  /** ISO timestamps when admin removed alumni from community visibility. */
+  alumniCommunityRemovedAt?: string | null;
+  alumniPermanentlyPurgedAt?: string | null;
 };
 
 type AppSessionValue = {
@@ -75,6 +78,14 @@ export const AppSessionProvider = ({ children }: { children: ReactNode }) => {
             data.alumniActivationStatus != null && data.alumniActivationStatus !== ""
               ? String(data.alumniActivationStatus)
               : undefined,
+          alumniCommunityRemovedAt:
+            data.alumniCommunityRemovedAt != null && String(data.alumniCommunityRemovedAt) !== ""
+              ? String(data.alumniCommunityRemovedAt)
+              : null,
+          alumniPermanentlyPurgedAt:
+            data.alumniPermanentlyPurgedAt != null && String(data.alumniPermanentlyPurgedAt) !== ""
+              ? String(data.alumniPermanentlyPurgedAt)
+              : null,
         });
       } catch {
         setProfile(null);
