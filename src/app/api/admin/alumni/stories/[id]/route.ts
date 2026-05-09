@@ -6,15 +6,35 @@ import { requireAdminUserManager } from "@/lib/admin-user-management-auth";
 import { sanitizeMongoShape } from "@/lib/sanitize-input";
 import { sanitizeUserText } from "@/lib/sanitize-html";
 
-type RouteParams = { params: { id: string } };
+type RouteParams = { params: Promise<{ id: string }> };
 
 export const dynamic = "force-dynamic";
 
-export async function PATCH(request: NextRequest, { params }: RouteParams) {
+export async function DELETE(_request: NextRequest, ctx: RouteParams) {
   const gate = await requireAdminUserManager();
   if (!gate.ok) return gate.response;
   try {
-    const id = String(params.id || "");
+    const { id: rawId } = await ctx.params;
+    const id = String(rawId || "");
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return NextResponse.json({ error: "INVALID_ID" }, { status: 400 });
+    }
+    await connectDB();
+    const res = await AlumniStory.deleteOne({ _id: id });
+    if (res.deletedCount === 0) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    console.error("[DELETE /api/admin/alumni/stories/[id]]", error);
+    return NextResponse.json({ error: "INTERNAL_SERVER_ERROR" }, { status: 500 });
+  }
+}
+
+export async function PATCH(request: NextRequest, ctx: RouteParams) {
+  const gate = await requireAdminUserManager();
+  if (!gate.ok) return gate.response;
+  try {
+    const { id: rawId } = await ctx.params;
+    const id = String(rawId || "");
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return NextResponse.json({ error: "INVALID_ID" }, { status: 400 });
     }

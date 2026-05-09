@@ -154,6 +154,9 @@ export interface IUser extends Document {
   /** After g12 promotion: user must complete post-grad alumni onboarding (optional; legacy rows omit). */
   needsAlumniOnboarding?: boolean;
   completedAlumniOnboardingAt?: Date;
+  /** Admin soft-remove from alumni community listings (user doc retained). */
+  alumniCommunityRemovedAt?: Date;
+  alumniCommunityRemovedById?: Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -457,6 +460,16 @@ const UserSchema: Schema = new Schema(
     completedAlumniOnboardingAt: {
       type: Date,
       required: false,
+    },
+    alumniCommunityRemovedAt: {
+      type: Date,
+      required: false,
+    },
+    alumniCommunityRemovedById: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+      required: false,
+      sparse: true,
     },
   },
   {

@@ -11,6 +11,7 @@ import AlumniRelationshipScore, {
 } from "@/models/AlumniRelationshipScore";
 import { weightSignals, type EngagementSignals } from "@/lib/alumni/automation/engagement-engine";
 import { getAlumniIntelCached, setAlumniIntelCached } from "@/lib/alumni/alumni-intelligence-cache";
+import { alumniCommunityActiveUserClause } from "@/lib/alumni/alumni-community-active";
 
 const SEG_TTL_MS = 45_000;
 
@@ -132,7 +133,10 @@ export const getCrmOverviewCached = async (): Promise<CrmOverview> => {
   const hit = getAlumniIntelCached<CrmOverview>(key);
   if (hit) return hit;
 
-  const alumniTotal = await User.countDocuments({ accountType: "alumni" });
+  const alumniTotal = await User.countDocuments({
+    accountType: "alumni",
+    ...alumniCommunityActiveUserClause(),
+  });
   const segRows = await AlumniRelationshipScore.aggregate<{ _id: string; c: number }>([
     { $group: { _id: "$segment", c: { $sum: 1 } } },
   ]);

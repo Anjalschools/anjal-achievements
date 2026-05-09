@@ -1,4 +1,5 @@
 import User from "@/models/User";
+import { alumniCommunityActiveUserClause } from "@/lib/alumni/alumni-community-active";
 import AlumniOpportunity from "@/models/AlumniOpportunity";
 import AlumniReunionEvent from "@/models/AlumniReunionEvent";
 import AlumniStory from "@/models/AlumniStory";
@@ -121,6 +122,7 @@ export const searchAlumni = async (nq: NormalizedQuery, pag: Pagination, options
 
   const base: Record<string, unknown> = {
     accountType: "alumni",
+    ...alumniCommunityActiveUserClause(),
     ...privacySearchableMatch(),
   };
 
@@ -157,6 +159,7 @@ export const searchMentors = async (nq: NormalizedQuery, pag: Pagination, option
 
   const base: Record<string, unknown> = {
     accountType: "alumni",
+    ...alumniCommunityActiveUserClause(),
     ...mentorDiscoverableMatch(),
   };
 
@@ -195,16 +198,20 @@ export const searchMentors = async (nq: NormalizedQuery, pag: Pagination, option
 };
 
 const oppMatch = (tokens: string[]) => {
-  const published: Record<string, unknown> = {
-    published: true,
-    $or: [{ expiresAt: { $exists: false } }, { expiresAt: null }, { expiresAt: { $gt: new Date() } }],
-  };
-  if (!tokens.length) return published;
+  const baseAnd = [
+    { $or: [{ archivedAt: null }, { archivedAt: { $exists: false } }] },
+    {
+      $or: [{ expiresAt: { $exists: false } }, { expiresAt: null }, { expiresAt: { $gt: new Date() } }],
+    },
+  ];
+  if (!tokens.length) {
+    return { published: true, $and: baseAnd } as Record<string, unknown>;
+  }
   const or = tokens.flatMap((t) => {
     const re = new RegExp(escapeRegExp(t), "i");
     return [{ title: re }, { description: re }, { company: re }, { location: re }, { type: re }];
   });
-  return { ...published, $and: [{ $or: or }] };
+  return { published: true, $and: [...baseAnd, { $or: or }] } as Record<string, unknown>;
 };
 
 export const searchOpportunities = async (nq: NormalizedQuery, pag: Pagination) => {
@@ -347,6 +354,7 @@ export const searchUniversities = async (nq: NormalizedQuery, pag: Pagination) =
   const tokens = nq.tokens;
   const match: Record<string, unknown> = {
     accountType: "alumni",
+    ...alumniCommunityActiveUserClause(),
     ...privacySearchableMatch(),
     "alumniProfile.universityName": { $exists: true, $nin: [null, ""] },
   };
@@ -403,6 +411,7 @@ export const searchCareers = async (nq: NormalizedQuery, pag: Pagination) => {
   const tokens = nq.tokens;
   const match: Record<string, unknown> = {
     accountType: "alumni",
+    ...alumniCommunityActiveUserClause(),
     ...privacySearchableMatch(),
     "alumniProfile.currentCompany": { $exists: true, $nin: [null, ""] },
   };

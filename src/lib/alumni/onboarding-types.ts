@@ -72,4 +72,6 @@ export type AlumniOnboardingAdminListItem = {
   alumniActivationLastError: string | null;
   createdAt: string;
   updatedAt: string;
+  /** True when another onboarding row shares the same email (admin warning). */
+  duplicateEmailWarning?: boolean;
 };

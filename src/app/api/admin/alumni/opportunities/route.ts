@@ -22,8 +22,10 @@ export async function GET() {
   if (!gate.ok) return gate.response;
   try {
     await connectDB();
-    const rows = await AlumniOpportunity.find({})
-      .select("title type company remote published featured expiresAt createdAt")
+    const rows = await AlumniOpportunity.find({
+      $or: [{ archivedAt: null }, { archivedAt: { $exists: false } }],
+    })
+      .select("title type company remote published featured expiresAt createdAt archivedAt")
       .sort({ updatedAt: -1, createdAt: -1 })
       .limit(120)
       .lean();
@@ -38,6 +40,7 @@ export async function GET() {
         published: row.published === true,
         featured: row.featured === true,
         expiresAt: row.expiresAt ? new Date(row.expiresAt).toISOString() : null,
+        createdAt: row.createdAt ? new Date(row.createdAt).toISOString() : null,
       })),
     });
   } catch (error) {
@@ -99,6 +102,10 @@ export async function PATCH(request: NextRequest) {
     if (body.expiresAt !== undefined) updates.expiresAt = body.expiresAt ? new Date(String(body.expiresAt)) : null;
     if (body.type !== undefined && TYPES.has(String(body.type) as AlumniOpportunityType)) {
       updates.type = String(body.type);
+    }
+    if (body.archive === true) {
+      updates.archivedAt = new Date();
+      updates.published = false;
     }
 
     await connectDB();

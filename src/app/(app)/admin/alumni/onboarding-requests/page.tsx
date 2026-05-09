@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { FlaskConical, Loader2, Play, UserCheck, UserX } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { AlertTriangle, FlaskConical, Loader2, Play, UserCheck, UserMinus, UserX } from "lucide-react";
 import {
   ALUMNI_ACTIVATION_STATUS_VALUES,
   alumniActivationStatusBadgeClass,
@@ -23,6 +23,11 @@ type ListResponse = {
   page: number;
   limit: number;
   pendingCount: number;
+  stats?: {
+    breakdown: { pending: number; approved: number; rejected: number };
+    activeAlumniUsers: number;
+    duplicateEmailCount: number;
+  };
 };
 
 const statusLabel = (status: AlumniOnboardingStatus, isAr: boolean): string => {
@@ -45,9 +50,14 @@ const AlumniOnboardingAdminPage = () => {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<"all" | AlumniOnboardingStatus>("pending");
+  const [searchDraft, setSearchDraft] = useState("");
   const [q, setQ] = useState("");
   const [items, setItems] = useState<AlumniOnboardingAdminListItem[]>([]);
+  const [listTotal, setListTotal] = useState(0);
+  const [listPage, setListPage] = useState(1);
+  const [listLimit, setListLimit] = useState(20);
   const [pendingCount, setPendingCount] = useState(0);
+  const [serverStats, setServerStats] = useState<ListResponse["stats"] | null>(null);
   const [selected, setSelected] = useState<AlumniOnboardingAdminListItem | null>(null);
   const [reviewNotes, setReviewNotes] = useState("");
   const [activationFilter, setActivationFilter] = useState<string>("all");
@@ -57,6 +67,7 @@ const AlumniOnboardingAdminPage = () => {
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [promoBusy, setPromoBusy] = useState(false);
   const [promoMessage, setPromoMessage] = useState<string | null>(null);
+  const [softRemoving, setSoftRemoving] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -71,32 +82,53 @@ const AlumniOnboardingAdminPage = () => {
     })();
   }, []);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const sp = new URLSearchParams();
-      if (statusFilter !== "all") sp.set("status", statusFilter);
-      if (activationFilter !== "all") sp.set("alumniActivationStatus", activationFilter);
-      if (q.trim()) sp.set("q", q.trim());
-      sp.set("sort", sortField);
-      sp.set("order", sortOrder);
-      sp.set("page", "1");
-      sp.set("limit", "30");
-      const response = await fetch(`/api/admin/alumni/onboarding-requests?${sp.toString()}`, {
-        cache: "no-store",
-      });
-      const json = (await response.json()) as ListResponse & { error?: string };
-      if (!response.ok) throw new Error(json.error || "Failed");
-      setItems(Array.isArray(json.items) ? json.items : []);
-      setPendingCount(Number(json.pendingCount || 0));
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Error");
-      setItems([]);
-    } finally {
-      setLoading(false);
-    }
-  }, [q, statusFilter, activationFilter, sortField, sortOrder]);
+  useEffect(() => {
+    const t = window.setTimeout(() => setQ(searchDraft.trim()), 380);
+    return () => window.clearTimeout(t);
+  }, [searchDraft]);
+
+  useEffect(() => {
+    if (allowed !== true) return;
+    setListPage(1);
+  }, [allowed, q]);
+
+  type FetchOpts = { page?: number; search?: string };
+  const fetchList = useCallback(
+    async (opts?: FetchOpts) => {
+      setLoading(true);
+      setError(null);
+      const page = opts?.page ?? listPage;
+      const search = opts?.search ?? q;
+      try {
+        const sp = new URLSearchParams();
+        if (statusFilter !== "all") sp.set("status", statusFilter);
+        if (activationFilter !== "all") sp.set("alumniActivationStatus", activationFilter);
+        if (search.trim()) sp.set("q", search.trim());
+        sp.set("sort", sortField);
+        sp.set("order", sortOrder);
+        sp.set("page", String(page));
+        sp.set("limit", String(listLimit));
+        const response = await fetch(`/api/admin/alumni/onboarding-requests?${sp.toString()}`, {
+          cache: "no-store",
+          credentials: "include",
+        });
+        const json = (await response.json()) as ListResponse & { error?: string };
+        if (!response.ok) throw new Error(json.error || "Failed");
+        setItems(Array.isArray(json.items) ? json.items : []);
+        setListTotal(Number(json.total || 0));
+        setListLimit(Number(json.limit || listLimit));
+        setPendingCount(Number(json.pendingCount || 0));
+        setServerStats(json.stats ?? null);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Error");
+        setItems([]);
+        setServerStats(null);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [listPage, q, statusFilter, activationFilter, sortField, sortOrder, listLimit]
+  );
 
   const runPromotion = async (dryRun: boolean) => {
     setPromoBusy(true);
@@ -129,17 +161,25 @@ const AlumniOnboardingAdminPage = () => {
 
   useEffect(() => {
     if (allowed !== true) return;
-    void load();
-  }, [allowed, load]);
+    void fetchList();
+  }, [allowed, fetchList]);
 
-  const stats = useMemo(
-    () => ({
-      total: items.length,
-      approved: items.filter((i) => i.status === "approved").length,
-      rejected: items.filter((i) => i.status === "rejected").length,
-    }),
-    [items]
-  );
+  const totalPages = Math.max(1, Math.ceil(listTotal / Math.max(1, listLimit)));
+
+  const mapPatchError = (code: string | undefined): string => {
+    if (!code) return isAr ? "تعذر تنفيذ الإجراء." : "Could not complete the action.";
+    if (code === "DUPLICATE_APPROVED_EMAIL") {
+      return isAr
+        ? "يوجد طلب معتمد آخر بنفس البريد — لا يمكن الاعتماد."
+        : "Another approved request already uses this email.";
+    }
+    if (code === "DUPLICATE_PENDING_EMAIL_CLEAR_FIRST") {
+      return isAr
+        ? "يوجد طلب آخر قيد المراجعة بنفس البريد — عالج الطلب المكرر أولاً."
+        : "Another pending request shares this email — resolve it first.";
+    }
+    return code;
+  };
 
   const handleDecision = async (status: "approved" | "rejected") => {
     if (!selected) return;
@@ -148,6 +188,7 @@ const AlumniOnboardingAdminPage = () => {
     try {
       const response = await fetch("/api/admin/alumni/onboarding-requests", {
         method: "PATCH",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           requestId: selected.id,
@@ -156,14 +197,42 @@ const AlumniOnboardingAdminPage = () => {
         }),
       });
       const json = (await response.json().catch(() => ({}))) as { error?: string };
-      if (!response.ok) throw new Error(json.error || "Failed");
+      if (!response.ok) throw new Error(mapPatchError(json.error));
       setSelected(null);
       setReviewNotes("");
-      await load();
+      await fetchList();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleCommunitySoftRemove = async () => {
+    if (!selected?.userId) return;
+    const ok = window.confirm(
+      isAr
+        ? "إزالة هذا الخريج من ظهور مجتمع الخريجين (حذف ناعم)؟ لن يُحذف الحساب بالكامل."
+        : "Soft-remove this alumni from the alumni community visibility? The account is not fully deleted."
+    );
+    if (!ok) return;
+    setSoftRemoving(true);
+    setError(null);
+    try {
+      const response = await fetch(`/api/admin/alumni/users/${selected.userId}/community-soft-remove`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirm: true }),
+      });
+      const json = (await response.json().catch(() => ({}))) as { error?: string };
+      if (!response.ok) throw new Error(json.error || "Failed");
+      setSelected(null);
+      await fetchList();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Error");
+    } finally {
+      setSoftRemoving(false);
     }
   };
 
@@ -227,36 +296,48 @@ const AlumniOnboardingAdminPage = () => {
           {promoMessage ? <p className="mt-3 text-sm text-slate-700">{promoMessage}</p> : null}
         </section>
 
-        <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
           <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-            <p className="text-xs font-semibold text-slate-500">{isAr ? "إجمالي النتائج" : "Total results"}</p>
-            <p className="mt-1 text-2xl font-black text-slate-900">{stats.total}</p>
+            <p className="text-xs font-semibold text-slate-500">{isAr ? "إجمالي النتائج (حسب الفلاتر)" : "Total (current filters)"}</p>
+            <p className="mt-1 text-2xl font-black text-slate-900">{listTotal}</p>
           </div>
           <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 shadow-sm">
-            <p className="text-xs font-semibold text-amber-700">{isAr ? "قيد المراجعة" : "Pending"}</p>
+            <p className="text-xs font-semibold text-amber-700">{isAr ? "قيد المراجعة (نطاق البحث)" : "Pending (search scope)"}</p>
             <p className="mt-1 text-2xl font-black text-amber-800">{pendingCount}</p>
           </div>
           <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 shadow-sm">
-            <p className="text-xs font-semibold text-emerald-700">{isAr ? "معتمد" : "Approved"}</p>
-            <p className="mt-1 text-2xl font-black text-emerald-800">{stats.approved}</p>
+            <p className="text-xs font-semibold text-emerald-700">{isAr ? "معتمد (نطاق البحث)" : "Approved (search scope)"}</p>
+            <p className="mt-1 text-2xl font-black text-emerald-800">{serverStats?.breakdown.approved ?? "—"}</p>
           </div>
           <div className="rounded-2xl border border-red-200 bg-red-50 p-4 shadow-sm">
-            <p className="text-xs font-semibold text-red-700">{isAr ? "مرفوض" : "Rejected"}</p>
-            <p className="mt-1 text-2xl font-black text-red-800">{stats.rejected}</p>
+            <p className="text-xs font-semibold text-red-700">{isAr ? "مرفوض (نطاق البحث)" : "Rejected (search scope)"}</p>
+            <p className="mt-1 text-2xl font-black text-red-800">{serverStats?.breakdown.rejected ?? "—"}</p>
+          </div>
+          <div className="rounded-2xl border border-sky-200 bg-sky-50 p-4 shadow-sm">
+            <p className="text-xs font-semibold text-sky-800">{isAr ? "حسابات خريجين نشطة" : "Active alumni accounts"}</p>
+            <p className="mt-1 text-2xl font-black text-sky-900">{serverStats?.activeAlumniUsers ?? "—"}</p>
+            <p className="mt-1 text-[10px] text-sky-700">{isAr ? "accountType = alumni" : "accountType = alumni"}</p>
+          </div>
+          <div className="rounded-2xl border border-orange-200 bg-orange-50 p-4 shadow-sm">
+            <p className="text-xs font-semibold text-orange-800">{isAr ? "تنبيهات بريد مكرر" : "Duplicate email rows"}</p>
+            <p className="mt-1 text-2xl font-black text-orange-900">{serverStats?.duplicateEmailCount ?? "—"}</p>
           </div>
         </section>
 
         <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
           <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
             <input
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
+              value={searchDraft}
+              onChange={(e) => setSearchDraft(e.target.value)}
               placeholder={isAr ? "بحث بالاسم/البريد/الجامعة..." : "Search by name/email/university..."}
               className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm"
             />
             <select
               value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value as "all" | AlumniOnboardingStatus)}
+              onChange={(e) => {
+                setStatusFilter(e.target.value as "all" | AlumniOnboardingStatus);
+                setListPage(1);
+              }}
               className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm"
             >
               <option value="all">{isAr ? "كل حالات الطلب" : "All request statuses"}</option>
@@ -266,7 +347,10 @@ const AlumniOnboardingAdminPage = () => {
             </select>
             <select
               value={activationFilter}
-              onChange={(e) => setActivationFilter(e.target.value)}
+              onChange={(e) => {
+                setActivationFilter(e.target.value);
+                setListPage(1);
+              }}
               className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm"
             >
               <option value="all">{isAr ? "كل حالات التفعيل" : "All activation states"}</option>
@@ -278,9 +362,10 @@ const AlumniOnboardingAdminPage = () => {
             </select>
             <select
               value={sortField}
-              onChange={(e) =>
-                setSortField(e.target.value as "createdAt" | "updatedAt" | "alumniActivationStatus")
-              }
+              onChange={(e) => {
+                setSortField(e.target.value as "createdAt" | "updatedAt" | "alumniActivationStatus");
+                setListPage(1);
+              }}
               className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm"
             >
               <option value="createdAt">{isAr ? "ترتيب: تاريخ الإنشاء" : "Sort: created"}</option>
@@ -289,7 +374,10 @@ const AlumniOnboardingAdminPage = () => {
             </select>
             <select
               value={sortOrder}
-              onChange={(e) => setSortOrder(e.target.value as "asc" | "desc")}
+              onChange={(e) => {
+                setSortOrder(e.target.value as "asc" | "desc");
+                setListPage(1);
+              }}
               className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm"
             >
               <option value="desc">{isAr ? "تنازلي" : "Descending"}</option>
@@ -297,7 +385,12 @@ const AlumniOnboardingAdminPage = () => {
             </select>
             <button
               type="button"
-              onClick={() => void load()}
+              onClick={() => {
+                const s = searchDraft.trim();
+                setQ(s);
+                setListPage(1);
+                void fetchList({ page: 1, search: s });
+              }}
               className="rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-bold text-white hover:bg-slate-800"
             >
               {isAr ? "تحديث القائمة" : "Refresh list"}
@@ -315,7 +408,7 @@ const AlumniOnboardingAdminPage = () => {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[960px] text-sm">
+              <table className="w-full min-w-[1020px] text-sm">
                 <thead className="border-b border-slate-200 text-slate-600">
                   <tr>
                     <th className="py-2 text-start">{isAr ? "المتقدم" : "Applicant"}</th>
@@ -323,6 +416,7 @@ const AlumniOnboardingAdminPage = () => {
                     <th className="py-2 text-start">{isAr ? "الجامعة/المسار" : "University / career"}</th>
                     <th className="py-2 text-start">{isAr ? "التفعيل" : "Activation"}</th>
                     <th className="py-2 text-start">{isAr ? "الحالة" : "Status"}</th>
+                    <th className="py-2 text-start">{isAr ? "تنبيه" : "Alert"}</th>
                     <th className="py-2 text-start">{isAr ? "الإجراء" : "Action"}</th>
                   </tr>
                 </thead>
@@ -332,6 +426,9 @@ const AlumniOnboardingAdminPage = () => {
                       <td className="py-2.5">
                         <p className="font-semibold text-slate-900">{item.fullName}</p>
                         <p className="text-xs text-slate-500">{item.email}</p>
+                        {item.userId ? (
+                          <p className="text-[10px] text-slate-400">userId: {item.userId}</p>
+                        ) : null}
                       </td>
                       <td className="py-2.5 text-slate-700">{item.graduationYear}</td>
                       <td className="py-2.5 text-slate-700">
@@ -358,6 +455,16 @@ const AlumniOnboardingAdminPage = () => {
                         </span>
                       </td>
                       <td className="py-2.5">
+                        {item.duplicateEmailWarning ? (
+                          <span className="inline-flex items-center gap-1 rounded-lg bg-orange-50 px-2 py-1 text-[11px] font-bold text-orange-800 ring-1 ring-orange-200">
+                            <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                            {isAr ? "بريد مكرر في الطلبات" : "Duplicate request email"}
+                          </span>
+                        ) : (
+                          <span className="text-slate-400">—</span>
+                        )}
+                      </td>
+                      <td className="py-2.5">
                         <button
                           type="button"
                           onClick={() => {
@@ -375,6 +482,32 @@ const AlumniOnboardingAdminPage = () => {
               </table>
             </div>
           )}
+          {!loading && items.length > 0 ? (
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4 text-sm text-slate-600">
+              <p className="tabular-nums">
+                {isAr ? "صفحة" : "Page"} {listPage} / {totalPages} · {listTotal}{" "}
+                {isAr ? "سجل" : "records"}
+              </p>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  disabled={listPage <= 1}
+                  onClick={() => setListPage((p) => Math.max(1, p - 1))}
+                  className="rounded-xl border border-slate-200 px-3 py-1.5 text-xs font-bold hover:bg-slate-50 disabled:opacity-40"
+                >
+                  {isAr ? "السابق" : "Prev"}
+                </button>
+                <button
+                  type="button"
+                  disabled={listPage >= totalPages}
+                  onClick={() => setListPage((p) => p + 1)}
+                  className="rounded-xl border border-slate-200 px-3 py-1.5 text-xs font-bold hover:bg-slate-50 disabled:opacity-40"
+                >
+                  {isAr ? "التالي" : "Next"}
+                </button>
+              </div>
+            </div>
+          ) : null}
         </section>
       </div>
 
@@ -383,6 +516,12 @@ const AlumniOnboardingAdminPage = () => {
           <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl sm:p-6" onClick={(e) => e.stopPropagation()} dir={isAr ? "rtl" : "ltr"}>
             <h2 className="text-xl font-black text-slate-900">{selected.fullName}</h2>
             <p className="mt-1 text-sm text-slate-500">{selected.email}</p>
+            {selected.duplicateEmailWarning ? (
+              <p className="mt-2 flex items-center gap-2 rounded-xl bg-orange-50 px-3 py-2 text-xs font-bold text-orange-900 ring-1 ring-orange-200">
+                <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden />
+                {isAr ? "يوجد أكثر من طلب يستخدم هذا البريد — راجع قبل الاعتماد." : "Multiple requests share this email — review before approving."}
+              </p>
+            ) : null}
             <div className="mt-3 flex flex-wrap gap-2">
               {(() => {
                 const disp = resolveAlumniActivationDisplayStatus(selected.alumniActivationStatus, false);
@@ -438,6 +577,17 @@ const AlumniOnboardingAdminPage = () => {
               <button type="button" onClick={() => setSelected(null)} className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold">
                 {isAr ? "إغلاق" : "Close"}
               </button>
+              {selected.userId && selected.status === "approved" ? (
+                <button
+                  type="button"
+                  disabled={softRemoving}
+                  onClick={() => void handleCommunitySoftRemove()}
+                  className="inline-flex items-center gap-2 rounded-xl border border-orange-300 bg-orange-50 px-4 py-2 text-sm font-semibold text-orange-900 hover:bg-orange-100 disabled:opacity-60"
+                >
+                  {softRemoving ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserMinus className="h-4 w-4" />}
+                  {isAr ? "حذف من مجتمع الخريجين (ناعم)" : "Remove from alumni community (soft)"}
+                </button>
+              ) : null}
               <button type="button" disabled={saving} onClick={() => void handleDecision("rejected")} className="inline-flex items-center gap-2 rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-60">
                 {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserX className="h-4 w-4" />}
                 {isAr ? "رفض الطلب" : "Reject"}

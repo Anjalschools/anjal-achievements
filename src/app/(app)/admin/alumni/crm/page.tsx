@@ -3,6 +3,22 @@
 import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 
+const segmentLabelAr = (key: string): string => {
+  const k = String(key || "").trim();
+  const map: Record<string, string> = {
+    champion: "مميزون — علاقة قوية",
+    engaged: "منخرطون",
+    active: "نشطون",
+    warming: "متزايدو النشاط",
+    cooling: "تراجع النشاط",
+    at_risk: "معرضون للخمود",
+    dormant: "خاملون",
+    new: "جدد",
+    unknown: "غير مصنّف",
+  };
+  return map[k] || k.replace(/_/g, " ");
+};
+
 export default function AdminAlumniCrmPage() {
   const [loading, setLoading] = useState(true);
   const [overview, setOverview] = useState<{
@@ -49,8 +65,12 @@ export default function AdminAlumniCrmPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ limit: 80 }),
     });
-    const json = await res.json();
-    setLog(JSON.stringify(json));
+    const json = (await res.json()) as { ok?: boolean; error?: string; message?: string };
+    if (json.ok) {
+      setLog("تم إرسال طلب إعادة الحساب — سيتم تحديث الصفحة.");
+    } else {
+      setLog(`تعذر التنفيذ: ${json.error || json.message || "خطأ غير معروف"}`);
+    }
     window.location.reload();
   };
 
@@ -75,7 +95,11 @@ export default function AdminAlumniCrmPage() {
           إعادة حساب المجموعة
         </button>
       </div>
-      {log ? <p className="text-xs text-slate-600">{log}</p> : null}
+      {log ? (
+        <p className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700" role="status">
+          {log}
+        </p>
+      ) : null}
 
       <div className="grid gap-4 sm:grid-cols-3">
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -97,7 +121,7 @@ export default function AdminAlumniCrmPage() {
         <ul className="mt-4 space-y-2 text-sm">
           {segments.map((s) => (
             <li key={s.segment} className="flex justify-between rounded-xl bg-slate-50 px-3 py-2">
-              <span className="font-bold text-slate-800">{s.segment}</span>
+              <span className="font-bold text-slate-800">{segmentLabelAr(s.segment)}</span>
               <span className="text-slate-600">
                 {s.count} · متوسط {s.avgScore}
               </span>

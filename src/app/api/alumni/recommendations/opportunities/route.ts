@@ -23,7 +23,10 @@ export async function GET(request: NextRequest) {
     const now = new Date();
     const rows = await AlumniOpportunity.find({
       published: true,
-      $or: [{ expiresAt: { $exists: false } }, { expiresAt: null }, { expiresAt: { $gt: now } }],
+      $and: [
+        { $or: [{ archivedAt: null }, { archivedAt: { $exists: false } }] },
+        { $or: [{ expiresAt: { $exists: false } }, { expiresAt: null }, { expiresAt: { $gt: now } }] },
+      ],
     })
       .select("title description type company location featured")
       .sort({ featured: -1, updatedAt: -1 })

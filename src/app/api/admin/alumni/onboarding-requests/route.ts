@@ -10,6 +10,11 @@ import type {
   AlumniOnboardingStatus,
 } from "@/lib/alumni/onboarding-types";
 import { ALUMNI_ACTIVATION_STATUS_VALUES } from "@/lib/alumni/alumni-activation-ui";
+import {
+  buildOnboardingScopeFilter,
+  computeOnboardingAdminStats,
+} from "@/lib/alumni/admin-stats";
+import { normalizeAlumniOnboardingEmail } from "@/lib/alumni/account-activation/activation-types";
 
 export const dynamic = "force-dynamic";
 
@@ -22,12 +27,11 @@ const isValidActivationFilter = (value: unknown): value is string =>
   value !== "all" &&
   (ALUMNI_ACTIVATION_STATUS_VALUES as readonly string[]).includes(value);
 
-const escapeRegExp = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-
 const SORT_FIELDS = new Set(["createdAt", "updatedAt", "alumniActivationStatus"]);
 
 const serializeRow = (
-  row: Record<string, unknown> & { _id: { toString(): string } }
+  row: Record<string, unknown> & { _id: { toString(): string } },
+  duplicateEmailWarning: boolean
 ): AlumniOnboardingAdminListItem => {
   const services = (row.services as Record<string, unknown> | undefined) || {};
   return {
@@ -65,6 +69,7 @@ const serializeRow = (
     alumniActivationLastError: row.alumniActivationLastError ? String(row.alumniActivationLastError) : null,
     createdAt: new Date(String(row.createdAt)).toISOString(),
     updatedAt: new Date(String(row.updatedAt)).toISOString(),
+    duplicateEmailWarning,
   };
 };
 
@@ -84,20 +89,14 @@ export async function GET(request: NextRequest) {
     const sortKey = SORT_FIELDS.has(sortKeyRaw) ? sortKeyRaw : "createdAt";
     const sortDir = String(sp.get("order") || "desc") === "asc" ? 1 : -1;
 
-    const filter: Record<string, unknown> = {};
-    if (isValidStatus(statusParam)) filter.status = statusParam;
-    if (isValidActivationFilter(activationParam)) {
-      filter.alumniActivationStatus = activationParam;
-    }
-    if (q) {
-      const escaped = escapeRegExp(q);
-      filter.$or = [
-        { fullName: { $regex: escaped, $options: "i" } },
-        { email: { $regex: escaped, $options: "i" } },
-        { universityName: { $regex: escaped, $options: "i" } },
-        { currentCompany: { $regex: escaped, $options: "i" } },
-      ];
-    }
+    const scopeFilter = buildOnboardingScopeFilter({
+      q,
+      activationParam,
+      isValidActivation: isValidActivationFilter,
+    });
+
+    const fullFilter: Record<string, unknown> = { ...scopeFilter };
+    if (isValidStatus(statusParam)) fullFilter.status = statusParam;
 
     await connectDB();
 
@@ -106,8 +105,8 @@ export async function GET(request: NextRequest) {
       sortSpec.createdAt = -1;
     }
 
-    const [items, total, pendingCount] = await Promise.all([
-      AlumniOnboardingRequest.find(filter)
+    const [items, adminStats] = await Promise.all([
+      AlumniOnboardingRequest.find(fullFilter)
         .select(
           "userId fullName email phone graduationYear universityName major degree customDegree studyCountry currentCompany currentPosition industry linkedinUrl city country bio services status reviewedById reviewedAt reviewNotes alumniActivationStatus alumniActivationLastError createdAt updatedAt"
         )
@@ -115,17 +114,25 @@ export async function GET(request: NextRequest) {
         .skip(skip)
         .limit(limit)
         .lean<Record<string, unknown>[]>(),
-      AlumniOnboardingRequest.countDocuments(filter),
-      AlumniOnboardingRequest.countDocuments({ status: "pending" }),
+      computeOnboardingAdminStats(fullFilter, scopeFilter),
     ]);
+
+    const dupSet = new Set(adminStats.duplicateRequestEmails.map((e) => e.toLowerCase()));
 
     return NextResponse.json({
       ok: true,
-      items: items.map((row) => serializeRow(row as Record<string, unknown> & { _id: { toString(): string } })),
-      total,
+      items: items.map((row) =>
+        serializeRow(row as Record<string, unknown> & { _id: { toString(): string } }, dupSet.has(String(row.email || "").toLowerCase()))
+      ),
+      total: adminStats.total,
       page,
       limit,
-      pendingCount,
+      pendingCount: adminStats.breakdown.pending,
+      stats: {
+        breakdown: adminStats.breakdown,
+        activeAlumniUsers: adminStats.activeAlumniUsers,
+        duplicateEmailCount: adminStats.duplicateRequestEmails.length,
+      },
     });
   } catch (error) {
     console.error("[GET /api/admin/alumni/onboarding-requests]", error);
@@ -160,6 +167,26 @@ export async function PATCH(request: NextRequest) {
         return NextResponse.json({ ok: true, idempotent: true });
       }
       return NextResponse.json({ error: "INVALID_STATE_TRANSITION" }, { status: 400 });
+    }
+
+    const emailNorm = normalizeAlumniOnboardingEmail(String(row.email || ""));
+    if (nextStatus === "approved" && emailNorm.includes("@")) {
+      const otherApproved = await AlumniOnboardingRequest.countDocuments({
+        email: emailNorm,
+        _id: { $ne: row._id },
+        status: "approved",
+      });
+      if (otherApproved > 0) {
+        return NextResponse.json({ error: "DUPLICATE_APPROVED_EMAIL" }, { status: 409 });
+      }
+      const otherPending = await AlumniOnboardingRequest.countDocuments({
+        email: emailNorm,
+        _id: { $ne: row._id },
+        status: "pending",
+      });
+      if (otherPending > 0) {
+        return NextResponse.json({ error: "DUPLICATE_PENDING_EMAIL_CLEAR_FIRST" }, { status: 409 });
+      }
     }
 
     if (nextStatus === "approved") {

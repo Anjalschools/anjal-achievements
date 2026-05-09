@@ -70,7 +70,10 @@ export async function GET(request: Request, ctx: { params: Promise<{ year: strin
     const now = new Date();
     const opRows = await AlumniOpportunity.find({
       published: true,
-      $or: [{ expiresAt: { $exists: false } }, { expiresAt: null }, { expiresAt: { $gt: now } }],
+      $and: [
+        { $or: [{ archivedAt: null }, { archivedAt: { $exists: false } }] },
+        { $or: [{ expiresAt: { $exists: false } }, { expiresAt: null }, { expiresAt: { $gt: now } }] },
+      ],
     })
       .select("title description type company location featured")
       .limit(40)

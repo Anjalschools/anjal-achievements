@@ -21,6 +21,8 @@ export interface IAlumniOpportunity extends Document {
   published: boolean;
   featured: boolean;
   expiresAt?: Date;
+  /** When set, hidden from default admin/public listings (archived). */
+  archivedAt?: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -44,6 +46,7 @@ const AlumniOpportunitySchema = new Schema<IAlumniOpportunity>(
     published: { type: Boolean, default: false, index: true },
     featured: { type: Boolean, default: false, index: true },
     expiresAt: { type: Date, index: true },
+    archivedAt: { type: Date, default: null, index: true },
   },
   { timestamps: true }
 );

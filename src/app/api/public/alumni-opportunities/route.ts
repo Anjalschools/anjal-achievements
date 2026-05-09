@@ -31,7 +31,12 @@ export async function GET(request: NextRequest) {
     const now = new Date();
     const filter: Record<string, unknown> = {
       published: true,
-      $or: [{ expiresAt: { $exists: false } }, { expiresAt: null }, { expiresAt: { $gte: now } }],
+      $and: [
+        { $or: [{ archivedAt: null }, { archivedAt: { $exists: false } }] },
+        {
+          $or: [{ expiresAt: { $exists: false } }, { expiresAt: null }, { expiresAt: { $gte: now } }],
+        },
+      ],
     };
     if (TYPES.has(type)) filter.type = type;
     if (remote === "1") filter.remote = true;

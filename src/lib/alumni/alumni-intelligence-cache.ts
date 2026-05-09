@@ -13,3 +13,7 @@ export const getAlumniIntelCached = <T>(key: string): T | null => {
 export const setAlumniIntelCached = <T>(key: string, value: T, ttlMs: number = DEFAULT_TTL_MS) => {
   slots.set(key, { value, expiresAt: Date.now() + ttlMs });
 };
+
+export const deleteAlumniIntelCacheKey = (key: string): void => {
+  slots.delete(key);
+};
