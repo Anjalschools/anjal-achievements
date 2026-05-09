@@ -18,16 +18,32 @@ const STAFF_ROLE_ALIASES: Record<string, string> = {
   activityLeader: "teacher",
 };
 
+const normalizeRole = (role: string | undefined | null): string => {
+  const raw = String(role ?? "").trim();
+  return STAFF_ROLE_ALIASES[raw] ?? raw;
+};
+
 /**
- * Returns the first path to open after a successful login.
- * - `student` → student dashboard
- * - All reviewer / admin roles in this repo → admin command dashboard
- * - Unknown or empty role → student dashboard (safe default)
+ * Returns the first path to open after a successful login when `accountType` is known.
+ * - Staff roles → admin command dashboard (takes precedence)
+ * - Alumni → alumni hub
+ * - Student / unknown → student dashboard
+ */
+export const getPostLoginDestination = (input: {
+  role?: string | null;
+  accountType?: string | null;
+}): string => {
+  const r = normalizeRole(input.role);
+  if (r && STAFF_ROLES.has(r)) return "/admin/dashboard";
+  if (String(input.accountType || "").toLowerCase() === "alumni") return "/alumni/dashboard";
+  return "/dashboard";
+};
+
+/**
+ * Legacy helper: role only (no alumni discrimination). Prefer `getPostLoginDestination` after login.
  */
 export const getDefaultRouteByRole = (role: string | undefined | null): string => {
-  const raw = String(role ?? "").trim();
-  const r = STAFF_ROLE_ALIASES[raw] ?? raw;
-
+  const r = normalizeRole(role);
   if (r === "student") return "/dashboard";
   if (!r) return "/dashboard";
   if (STAFF_ROLES.has(r)) return "/admin/dashboard";

@@ -70,7 +70,7 @@ export const AlumniCommunityAccessGate = ({ children }: Props) => {
           <p className="text-lg font-black text-slate-900">
             {locale === "ar" ? "يجب تسجيل الدخول للوصول إلى بحث مجتمع الخريجين." : "Sign in to access the alumni community search."}
           </p>
-          <Link href="/login" className="inline-block font-bold text-primary underline">
+          <Link href="/login/alumni" className="inline-block font-bold text-primary underline">
             {locale === "ar" ? "تسجيل الدخول" : "Sign in"}
           </Link>
         </div>

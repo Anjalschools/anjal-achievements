@@ -34,8 +34,9 @@ const UnifiedHeader = ({ variant = "default", userAccount: userAccountProp }: Un
   const session = useAppSessionOptional();
   const locale = getLocale();
   const mergedAccount = (() => {
-    const fromSessionAppHome =
-      session?.profile?.id ? resolveHeaderAppHome(session.profile.role, locale) : undefined;
+    const fromSessionAppHome = session?.profile?.id
+      ? resolveHeaderAppHome(session.profile.role, locale, session.profile.accountType)
+      : undefined;
     if (userAccountProp) {
       if (userAccountProp.appHome !== undefined) return userAccountProp;
       return { ...userAccountProp, appHome: fromSessionAppHome };

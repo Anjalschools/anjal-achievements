@@ -6,6 +6,7 @@ import { perfElapsed, perfLog, perfNow } from "@/lib/perf-debug";
 // Rate limit: must import from this module only (contains diagnostic logs inside checkRateLimit).
 import { checkRateLimit } from "@/lib/rate-limit";
 import { warnSecurityEvent } from "@/lib/security-log";
+import { getAccountType } from "@/lib/account-type";
 
 const loginSafeDiag = () => ({
   hasNextAuthSecret: Boolean(process.env.NEXTAUTH_SECRET?.trim()),
@@ -96,6 +97,7 @@ export async function POST(request: NextRequest) {
       username: user.username,
       studentId: user.studentId,
       role: user.role,
+      accountType: getAccountType(user as { accountType?: "student" | "alumni" | null }),
       status: user.status,
       preferredLanguage: user.preferredLanguage,
       profilePhoto: user.profilePhoto,

@@ -24,6 +24,7 @@ import {
   QrCode,
 } from "lucide-react";
 import { getLocale } from "@/lib/i18n";
+import { useAppSession } from "@/contexts/AppSessionContext";
 import AchievementStatusBadge from "@/components/achievements/AchievementStatusBadge";
 import StudentAchievementDataRows from "@/components/achievements/StudentAchievementDataRows";
 import type { WorkflowDisplayStatus } from "@/lib/achievementWorkflow";
@@ -53,6 +54,14 @@ const DashboardPage = () => {
   const router = useRouter();
   const locale = getLocale();
   const isAr = locale === "ar";
+  const { profile, loading: sessionLoading } = useAppSession();
+
+  useEffect(() => {
+    if (sessionLoading) return;
+    if (profile?.accountType === "alumni") {
+      router.replace("/alumni/dashboard");
+    }
+  }, [sessionLoading, profile?.accountType, router]);
 
   const [data, setData] = useState<DashboardPayload | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -188,6 +197,17 @@ const DashboardPage = () => {
     () => (publicPortfolio?.enabled ? publicPortfolio.publicUrl?.trim() || "" : ""),
     [publicPortfolio?.enabled, publicPortfolio?.publicUrl]
   );
+
+  if (!sessionLoading && profile?.accountType === "alumni") {
+    return (
+      <PageContainer>
+        <div className="flex min-h-[40vh] flex-col items-center justify-center gap-3 text-center">
+          <div className="h-10 w-10 animate-spin rounded-full border-2 border-primary border-t-transparent" aria-hidden />
+          <p className="text-sm text-text-muted">{isAr ? "جاري فتح لوحة الخريجين…" : "Opening alumni hub…"}</p>
+        </div>
+      </PageContainer>
+    );
+  }
 
   const handleCopyPublicUrl = async () => {
     if (!publicUrl) return;

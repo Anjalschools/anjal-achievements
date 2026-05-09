@@ -52,7 +52,7 @@ const AppShell = ({ children }: AppShellProps) => {
           userFullName,
           userEmail,
           userAvatar,
-          appHome: resolveHeaderAppHome(profile?.role, locale),
+          appHome: resolveHeaderAppHome(profile?.role, locale, profile?.accountType),
         }}
       />
       <div className="flex min-h-0 min-w-0 flex-1 flex-col lg:flex-row">

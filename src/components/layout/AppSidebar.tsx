@@ -338,27 +338,29 @@ const AppSidebar = () => {
       role: profile?.role,
     });
 
+  const isAlumniAccount = profile?.accountType === "alumni";
+
   const navItems = isReviewer
     ? staffNavCandidates
         .filter((row) => row.capability === null || can(row.capability))
         .map(({ capability: _omit, ...rest }) => rest)
     : [
-        studentDashboardItem,
-        ...(profile?.accountType === "alumni"
+        ...(isAlumniAccount
           ? [alumniDashboardNavItem, alumniInboxNavItem, alumniMentorshipNavItem]
-          : []),
+          : [studentDashboardItem]),
         ...(showAcademicAdvisorNav ? [alumniAssistantNavItem] : []),
-        hallOfFameItem,
+        ...(!isAlumniAccount ? [hallOfFameItem] : []),
         ...(showAlumniCommunityNav ? [alumniDiscoverySearchItem] : []),
-        achievementsItem,
-        letterRequestsStudentItem,
-        addAchievementItem,
+        ...(!isAlumniAccount ? [achievementsItem, letterRequestsStudentItem, addAchievementItem] : []),
         notificationsItem,
         profileItem,
         settingsItem,
       ];
 
   const isActive = (href: string) => {
+    if (href === "/alumni/dashboard") {
+      return pathname === "/alumni/dashboard" || pathname?.startsWith("/alumni/dashboard/");
+    }
     if (href === "/dashboard") {
       return pathname === "/dashboard";
     }
@@ -485,7 +487,13 @@ const AppSidebar = () => {
           {/* Logo/Header */}
           <div className="flex h-16 shrink-0 items-center border-b border-gray-200 px-6">
             <h2 className="text-lg font-bold text-primary">
-              {locale === "ar" ? "منصة التميز" : "Excellence Platform"}
+              {isAlumniAccount
+                ? locale === "ar"
+                  ? "مجتمع الخريجين"
+                  : "Alumni hub"
+                : locale === "ar"
+                  ? "منصة التميز"
+                  : "Excellence Platform"}
             </h2>
           </div>
 
