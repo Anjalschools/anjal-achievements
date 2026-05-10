@@ -33,7 +33,7 @@ const wrapAlumniEmail = (params: {
       <table role="presentation" width="100%" style="max-width:600px;background:#ffffff;border-radius:20px;overflow:hidden;box-shadow:0 8px 32px rgba(15,23,42,0.08);">
         <tr><td style="background:linear-gradient(145deg,#0f172a 0%,#1e3a8a 55%,#1d4ed8 100%);padding:32px 28px;text-align:center;">
           <img src="${params.logoUrl}" alt="مدارس الأنجال" width="112" style="display:inline-block;max-width:112px;height:auto;"/>
-          <h1 style="margin:20px 0 0;color:#f8fafc;font-size:22px;font-weight:800;line-height:1.45;letter-spacing:-0.02em;">تم تفعيل حساب الخريجين الخاص بك</h1>
+          <h1 style="margin:20px 0 0;color:#f8fafc;font-size:22px;font-weight:800;line-height:1.45;letter-spacing:-0.02em;">تم تفعيل حسابك في موقع مجتمع خريجي الأنجال</h1>
         </td></tr>
         <tr><td style="padding:32px 28px 28px;">
           ${params.innerHtml}
@@ -88,6 +88,7 @@ export const sendNewAlumniAccountActivationEmail = async (
   const inner = `
           <p style="margin:0;color:#0f172a;font-size:17px;line-height:1.8;font-weight:600;">عزيزي/عزيزتي ${name}،</p>
           <p style="margin:16px 0 0;color:#334155;font-size:16px;line-height:1.9;">تم <strong>إنشاء حساب جديد</strong> لك في <strong>مجتمع خريجي مدارس الأنجال الأهلية</strong> بعد اعتماد طلبك. هذا الحساب مخصص لخدمات الخريجين المهنية والأكاديمية.</p>
+          <p style="margin:12px 0 0;color:#475569;font-size:15px;line-height:1.85;">يمكنك تسجيل الدخول باستخدام <strong>البريد الإلكتروني</strong> أو <strong>اسم المستخدم</strong> الظاهر أدناه.</p>
           <p style="margin:14px 0 0;color:#b45309;font-size:14px;line-height:1.7;background:#fffbeb;padding:12px 14px;border-radius:12px;border:1px solid #fde68a;">لأسباب أمنية: لا تشارك هذه الرسالة أو كلمة المرور. يُرجى <strong>تغيير كلمة المرور</strong> فور أول تسجيل دخول من صفحة الإعدادات.</p>
 
           <h2 style="margin:28px 0 10px;color:#1e3a8a;font-size:17px;font-weight:800;">مساهماتك المختارة</h2>
@@ -107,7 +108,7 @@ export const sendNewAlumniAccountActivationEmail = async (
   const html = wrapAlumniEmail({ base, logoUrl, innerHtml: inner });
 
   const text = [
-    `تم تفعيل حساب الخريجين الخاص بك — حساب جديد — ${name}`,
+    `تم تفعيل حسابك في موقع مجتمع خريجي الأنجال — بيانات الدخول (حساب جديد) — ${name}`,
     ``,
     `تم إنشاء حساب جديد في مجتمع الخريجين.`,
     `رابط الدخول (خريجين): ${loginUrl}`,
@@ -121,7 +122,7 @@ export const sendNewAlumniAccountActivationEmail = async (
 
   const result = await sendSmtpMail({
     to,
-    subject: "تم تفعيل حساب الخريجين — بيانات الدخول (حساب جديد)",
+    subject: "تم تفعيل حسابك في موقع مجتمع خريجي الأنجال - بيانات الدخول (حساب جديد)",
     text,
     html,
   });

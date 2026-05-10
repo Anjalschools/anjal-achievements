@@ -25,3 +25,20 @@ export const generateUniqueAlumniUsername = async (fullName: string): Promise<st
   }
   return `${slug}.${randomBytes(8).toString("hex")}`;
 };
+
+/**
+ * Prefer normalized email as portal username; on collision, keep generated username and warn internally.
+ */
+export const resolveAlumniPortalUsername = async (params: {
+  emailNorm: string;
+  fullName: string;
+}): Promise<string> => {
+  const desired = params.emailNorm.trim().toLowerCase();
+  if (!desired) return generateUniqueAlumniUsername(params.fullName);
+  const clash = await User.findOne({ username: desired }).select("_id").lean();
+  if (!clash) return desired;
+  console.warn(
+    "[alumni onboarding] email unavailable as username (already taken); using generated alumni username"
+  );
+  return generateUniqueAlumniUsername(params.fullName);
+};

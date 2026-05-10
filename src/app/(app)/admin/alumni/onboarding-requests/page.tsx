@@ -71,6 +71,7 @@ const AlumniOnboardingAdminPage = () => {
   const [toast, setToast] = useState<{ kind: "success" | "info" | "error"; message: string } | null>(null);
   const [permanentPhrase, setPermanentPhrase] = useState("");
   const [permanentBusy, setPermanentBusy] = useState(false);
+  const [requestDeleteBusy, setRequestDeleteBusy] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -308,6 +309,60 @@ const AlumniOnboardingAdminPage = () => {
     }
   };
 
+  const showOnboardingRequestDeleteZone = Boolean(
+    selected && (!selected.userId || selected.status !== "approved")
+  );
+
+  const handleDeleteOnboardingRequest = async () => {
+    if (!selected) return;
+    const ok = window.confirm(
+      isAr
+        ? "حذف طلب الانضمام نهائيًا من النظام؟ لن يُحذف أي حساب مستخدم."
+        : "Delete this onboarding request permanently? No user account will be removed."
+    );
+    if (!ok) return;
+    setRequestDeleteBusy(true);
+    setError(null);
+    try {
+      const response = await fetch(`/api/admin/alumni/onboarding-requests/${selected.id}/delete`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirm: true }),
+      });
+      const json = (await response.json().catch(() => ({}))) as {
+        ok?: boolean;
+        mode?: string;
+        error?: string;
+      };
+      if (!response.ok) {
+        setToast({
+          kind: "error",
+          message:
+            json.error === "USE_PERMANENT_DELETE"
+              ? isAr
+                ? "هذا الطلب مرتبط بخريج معتمد — استخدم الحذف النهائي من منطقة الخريج."
+                : "This request is linked to an approved alumni user — use permanent purge instead."
+              : isAr
+                ? "تعذر حذف الطلب."
+                : "Could not delete the request.",
+        });
+        return;
+      }
+      setToast({ kind: "success", message: isAr ? "تم حذف طلب الانضمام." : "Onboarding request deleted." });
+      setSelected(null);
+      setPermanentPhrase("");
+      await fetchList();
+    } catch {
+      setToast({
+        kind: "error",
+        message: isAr ? "فشل الاتصال أثناء حذف الطلب." : "Network error while deleting the request.",
+      });
+    } finally {
+      setRequestDeleteBusy(false);
+    }
+  };
+
   const handlePermanentRemove = async () => {
     if (!selected?.userId) return;
     const phraseOk = permanentPhrase.trim() === "DELETE" || permanentPhrase.trim() === "حذف نهائي";
@@ -318,10 +373,15 @@ const AlumniOnboardingAdminPage = () => {
       });
       return;
     }
+    const detachHint = selected.permanentPurgeProtected === true;
     const ok = window.confirm(
       isAr
-        ? "حذف نهائي: سيتم إزالة ملف الخريج المضمّن وسجلات CRM والموافقات المرتبطة. لن تُحذف الإنجازات أو الشهادات. هل أنت متأكد؟"
-        : "Permanent purge: embedded alumni profile and CRM/consent data will be removed. Achievements and certificates stay. Continue?"
+        ? detachHint
+          ? "فصل هوية الخريج: سيتم إزالة بيانات المجتمع والـ CRM مع الإبقاء على الحساب الأساسي (حساب إداري أو مرتبط بك). هل تريد المتابعة؟"
+          : "حذف نهائي: سيتم حذف حساب الخريج (alumni-only) وجميع بيانات المجتمع المرتبطة من النظام. هل أنت متأكد؟"
+        : detachHint
+          ? "Detach alumni: community data and CRM will be removed; the underlying user account will be kept. Continue?"
+          : "Full delete: the alumni-only user account and linked community data will be removed from the system. Continue?"
     );
     if (!ok) return;
     setPermanentBusy(true);
@@ -337,6 +397,7 @@ const AlumniOnboardingAdminPage = () => {
         ok?: boolean;
         alreadyPurged?: boolean;
         alreadyDeleted?: boolean;
+        mode?: "alumni_detach" | "full_delete";
         error?: string;
         reason?: string;
       };
@@ -351,15 +412,20 @@ const AlumniOnboardingAdminPage = () => {
         return;
       }
       const wasAlready = json.alreadyDeleted === true || json.alreadyPurged === true;
+      const mode = json.mode;
       setToast({
         kind: wasAlready ? "info" : "success",
         message: wasAlready
           ? isAr
             ? "تم حذف الخريج مسبقًا — لا حاجة لإعادة التنفيذ."
             : "This alumni was already permanently purged."
-          : isAr
-            ? "تم تنفيذ الحذف النهائي بنجاح."
-            : "Permanent alumni data purge completed successfully.",
+          : mode === "alumni_detach"
+            ? isAr
+              ? "تمت إزالة الخريج من مجتمع الخريجين مع الاحتفاظ بالحساب الإداري."
+              : "Alumni community data removed; the underlying account was preserved."
+            : isAr
+              ? "تم حذف الخريج نهائيًا."
+              : "The alumni user was permanently deleted.",
       });
       setSelected(null);
       setPermanentPhrase("");
@@ -726,13 +792,47 @@ const AlumniOnboardingAdminPage = () => {
               />
             </div>
 
+            {showOnboardingRequestDeleteZone ? (
+              <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50/90 p-4">
+                <p className="text-sm font-black text-amber-950">{isAr ? "حذف الطلب" : "Delete request"}</p>
+                <p className="mt-2 rounded-xl border border-amber-200 bg-amber-100/80 px-3 py-2 text-xs font-semibold text-amber-950">
+                  {isAr
+                    ? "هذا الطلب غير مرتبط بحساب خريج فعلي بعد، وسيتم حذف طلب الانضمام فقط."
+                    : "This request is not linked to a live alumni account yet; only the onboarding row will be removed."}
+                </p>
+                <button
+                  type="button"
+                  disabled={requestDeleteBusy}
+                  onClick={() => void handleDeleteOnboardingRequest()}
+                  className="mt-3 inline-flex items-center gap-2 rounded-xl bg-amber-700 px-4 py-2 text-sm font-bold text-white hover:bg-amber-800 disabled:opacity-60"
+                >
+                  {requestDeleteBusy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Trash2 className="h-4 w-4" aria-hidden />}
+                  {isAr ? "حذف الطلب" : "Delete request"}
+                </button>
+              </div>
+            ) : null}
+
             {selected.userId && selected.status === "approved" ? (
               <div className="mt-5 rounded-2xl border border-red-200 bg-red-50/80 p-4">
-                <p className="text-sm font-black text-red-950">{isAr ? "منطقة خطرة — حذف نهائي" : "Danger zone — permanent purge"}</p>
+                <p className="text-sm font-black text-red-950">{isAr ? "منطقة خطرة — حذف نهائي للخريج" : "Danger zone — alumni permanent purge"}</p>
+                {selected.permanentPurgeProtected === true ? (
+                  <p
+                    className="mt-2 rounded-xl border border-red-300 bg-red-100 px-3 py-2 text-xs font-bold text-red-950"
+                    role="status"
+                  >
+                    {isAr
+                      ? "هذا الحساب مرتبط بحساب إداري أو بالحساب الحالي، لذلك سيتم فصله من مجتمع الخريجين فقط دون حذف المستخدم الأساسي."
+                      : "This account is linked to an admin or your current login. Only alumni community data will be removed; the user account will stay."}
+                  </p>
+                ) : null}
                 <p className="mt-1 text-xs text-red-900">
                   {isAr
-                    ? "يحذف ملف الخريج المضمّن وسجلات CRM والموافقات؛ لا يحذف الإنجازات. اكتب DELETE أو حذف نهائي ثم نفّذ."
-                    : "Removes embedded alumni profile, CRM row, consent, and cancels open mentorships. Achievements are kept. Type DELETE or حذف نهائي."}
+                    ? selected.permanentPurgeProtected === true
+                      ? "سيتم إزالة بيانات الخريج من المجتمع والـ CRM وطلبات الانضمام؛ الحساب الأساسي يبقى. اكتب DELETE أو حذف نهائي ثم نفّذ."
+                      : "يحذف حساب الخريج (alumni-only) وبيانات المجتمع المرتبطة. اكتب DELETE أو حذف نهائي ثم نفّذ."
+                    : selected.permanentPurgeProtected === true
+                      ? "Alumni community data and CRM will be cleared; the core account remains. Type DELETE or حذف نهائي."
+                      : "Deletes the alumni-only user and linked community data. Type DELETE or حذف نهائي."}
                 </p>
                 <input
                   value={permanentPhrase}

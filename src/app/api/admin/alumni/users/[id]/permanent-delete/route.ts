@@ -60,11 +60,28 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
     }
 
     const already = result.alreadyPurged === true;
-    return NextResponse.json({
-      ok: true,
+
+    console.info("[alumni:permanent-delete]", {
+      mode: result.mode,
+      targetUserId: String(id),
+      actorUserId: String(gate.user._id),
+    });
+
+    const base = {
+      ok: true as const,
       alreadyPurged: already,
       alreadyDeleted: already,
-    });
+      mode: result.mode,
+    };
+
+    if (result.mode === "alumni_detach") {
+      return NextResponse.json({
+        ...base,
+        message: "Alumni profile detached while preserving protected user account.",
+      });
+    }
+
+    return NextResponse.json(base);
   } catch (error) {
     console.error("[POST permanent-delete]", error);
     return NextResponse.json(

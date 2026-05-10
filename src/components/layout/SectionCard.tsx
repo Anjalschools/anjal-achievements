@@ -4,12 +4,14 @@ type SectionCardProps = {
   children: ReactNode;
   className?: string;
   padding?: "sm" | "md" | "lg";
+  id?: string;
 };
 
 const SectionCard = ({
   children,
   className = "",
   padding = "md",
+  id,
 }: SectionCardProps) => {
   const paddingClasses = {
     sm: "p-4",
@@ -19,6 +21,7 @@ const SectionCard = ({
 
   return (
     <div
+      id={id}
       className={`rounded-2xl border border-gray-200 bg-white shadow-sm transition-shadow hover:shadow-md ${paddingClasses[padding]} ${className}`}
     >
       {children}

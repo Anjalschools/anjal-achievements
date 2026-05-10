@@ -6,6 +6,8 @@ import { Loader2, Search, Sparkles } from "lucide-react";
 import { useAppSession } from "@/contexts/AppSessionContext";
 import { getLocale } from "@/lib/i18n";
 import { isEligibleForAcademicAdvisor } from "@/lib/alumni/isEligibleForAcademicAdvisor";
+import AlumniPageHeader from "@/components/alumni/AlumniPageHeader";
+import AlumniEmptyState from "@/components/alumni/AlumniEmptyState";
 
 type SearchHit = {
   id: string;
@@ -27,6 +29,7 @@ const AssistantShell = () => {
   const [opps, setOpps] = useState<{ id: string; title: string; matchScore: number }[]>([]);
   const [universities, setUniversities] = useState<{ universityName: string; alumniCount: number }[]>([]);
   const [career, setCareer] = useState<{ alumniMatchingFocus: number; focus: string } | null>(null);
+  const [hasSearched, setHasSearched] = useState(false);
 
   const handleSearch = async () => {
     if (!q.trim()) return;
@@ -40,6 +43,7 @@ const AssistantShell = () => {
       });
       const json = (await res.json()) as { ok?: boolean; items?: SearchHit[] };
       if (json.ok && json.items) setHits(json.items);
+      setHasSearched(true);
     } finally {
       setBusy(false);
     }
@@ -119,31 +123,31 @@ const AssistantShell = () => {
 
   return (
     <div dir={isAr ? "rtl" : "ltr"} className="mx-auto max-w-4xl space-y-8 px-4 py-8">
-      <section className="overflow-hidden rounded-3xl border border-slate-200 bg-gradient-to-br from-slate-900 via-primary to-slate-800 p-6 text-white shadow-xl">
-        <div className="flex items-start gap-3">
-          <Sparkles className="mt-1 h-8 w-8 shrink-0 text-amber-200" aria-hidden />
-          <div>
-            <p className="text-xs font-bold uppercase tracking-widest text-sky-100/90">
-              {isAr ? "المرشد الأكاديمي الذكي" : "Smart academic advisor"}
-            </p>
-            <h1 className="mt-1 text-2xl font-black">
-              {isAr ? "إرشاد داخلي سريع دون نماذج خارجية" : "Fast in-platform guidance without external forms"}
-            </h1>
-            <p className="mt-2 text-sm text-sky-50/95">
-              {isAr
-                ? "بحث قواعد بيانات المنصة، اقتراح مرشدين، فرص، وجامعات — مع منطق قابل للتوسعة لاحقًا."
-                : "Search platform data, suggested mentors, opportunities, and universities — built to extend over time."}
-            </p>
-          </div>
-        </div>
-      </section>
+      <AlumniPageHeader
+        title={isAr ? "المرشد الأكاديمي الذكي" : "Smart academic advisor"}
+        description={
+          isAr
+            ? "إرشاد داخلي سريع: بحث في بيانات المنصة، مرشدون مقترحون، فرص، وجامعات."
+            : "Fast in-platform guidance: search alumni data, mentors, opportunities, and universities."
+        }
+        backHref="/alumni/dashboard"
+        backLabel={isAr ? "رجوع" : "Back"}
+        icon={<Sparkles className="h-6 w-6 text-amber-200" aria-hidden />}
+        breadcrumb={[
+          { label: isAr ? "الخريجون" : "Alumni", href: "/alumni" },
+          { label: isAr ? "المرشد الذكي" : "Advisor" },
+        ]}
+        dir={isAr ? "rtl" : "ltr"}
+      />
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-md">
         <h2 className="flex items-center gap-2 text-lg font-black text-slate-900">
           <Search className="h-5 w-5 text-primary" aria-hidden />
-          بحث الخريجين
+          {isAr ? "بحث الخريجين" : "Alumni search"}
         </h2>
-        <p className="mt-1 text-xs text-slate-500">مثال: «أرامكو»، «KAUST»، «أمن سيبراني».</p>
+        <p className="mt-1 text-xs text-slate-500">
+          {isAr ? "مثال: «أرامكو»، «KAUST»، «أمن سيبراني»." : "e.g. Aramco, KAUST, cybersecurity."}
+        </p>
         <div className="mt-3 flex flex-col gap-2 sm:flex-row">
           <input
             value={q}
@@ -152,8 +156,8 @@ const AssistantShell = () => {
               if (e.key === "Enter") void handleSearch();
             }}
             className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
-            placeholder="اكتب استعلامك..."
-            aria-label="استعلام البحث"
+            placeholder={isAr ? "اكتب استعلامك…" : "Enter your query…"}
+            aria-label={isAr ? "استعلام البحث" : "Search query"}
           />
           <button
             type="button"
@@ -161,26 +165,38 @@ const AssistantShell = () => {
             disabled={busy}
             className="rounded-xl bg-primary px-4 py-2 text-sm font-bold text-white disabled:opacity-50"
           >
-            بحث
+            {isAr ? "بحث" : "Search"}
           </button>
         </div>
-        <ul className="mt-4 space-y-2">
-          {hits.map((h) => (
-            <li key={h.id} className="rounded-xl border border-slate-100 bg-slate-50/80 px-3 py-2 text-sm">
-              <Link href={`/alumni/${h.id}`} className="font-bold text-primary hover:underline">
-                {h.fullName}
-              </Link>
-              <p className="text-xs text-slate-600">
-                {[h.universityName, h.company, h.industry].filter(Boolean).join(" · ")}
-                {h.mentoringAvailable ? (
-                  <span className="mr-2 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
-                    مرشد
-                  </span>
-                ) : null}
-              </p>
-            </li>
-          ))}
-        </ul>
+        {hasSearched && hits.length === 0 && !busy ? (
+          <div className="mt-4">
+            <AlumniEmptyState
+              className="!py-10"
+              icon={<Search className="h-8 w-8 text-primary" aria-hidden />}
+              title={isAr ? "لا نتائج لهذا الاستعلام" : "No results for this query"}
+              description={isAr ? "جرّب كلمات مختلفة أو أوسع." : "Try different or broader keywords."}
+              dir={isAr ? "rtl" : "ltr"}
+            />
+          </div>
+        ) : (
+          <ul className="mt-4 space-y-2">
+            {hits.map((h) => (
+              <li key={h.id} className="rounded-xl border border-slate-100 bg-slate-50/80 px-3 py-2 text-sm">
+                <Link href={`/alumni/${h.id}`} className="font-bold text-primary hover:underline">
+                  {h.fullName}
+                </Link>
+                <p className="text-xs text-slate-600">
+                  {[h.universityName, h.company, h.industry].filter(Boolean).join(" · ")}
+                  {h.mentoringAvailable ? (
+                    <span className="me-2 inline-block rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
+                      {isAr ? "مرشد" : "Mentor"}
+                    </span>
+                  ) : null}
+                </p>
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
 
       <section className="grid gap-4 md:grid-cols-2">

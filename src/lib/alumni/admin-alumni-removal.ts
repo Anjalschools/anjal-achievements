@@ -14,12 +14,33 @@ import AlumniContactRequest from "@/models/AlumniContactRequest";
 import AlumniInboxThread from "@/models/AlumniInboxThread";
 import AlumniInboxMessage from "@/models/AlumniInboxMessage";
 import AlumniStory from "@/models/AlumniStory";
+import Notification from "@/models/Notification";
+import PasswordResetToken from "@/models/PasswordResetToken";
 import type { IUser } from "@/models/User";
+import { getAccountType } from "@/lib/account-type";
 import { invalidateSessionUserCache } from "@/lib/auth-session-cache";
 import { logAuditEvent, actorFromUser } from "@/lib/audit-log-service";
 import { clearAlumniIntelCache } from "@/lib/alumni/alumni-intelligence-cache";
 
 const actor = (u: IUser & { _id: mongoose.Types.ObjectId }) => actorFromUser(u);
+
+type PurgeCleanupMode = "detach" | "full_delete";
+
+/** True → keep User row; strip alumni community data only (admin / self / non–alumni-only accounts). */
+export const isPermanentPurgeProtectedTarget = (
+  target: { _id: mongoose.Types.ObjectId | string; role?: string; accountType?: string; email?: string },
+  actor: { _id: mongoose.Types.ObjectId | string; email?: string }
+): boolean => {
+  const roleLower = String(target.role || "").toLowerCase();
+  if (roleLower === "admin" || roleLower === "systemadmin") return true;
+  if (String(target._id) === String(actor._id)) return true;
+  const norm = (s: string) => s.trim().toLowerCase();
+  const te = norm(String(target.email || ""));
+  const ae = norm(String(actor.email || ""));
+  if (te.length > 0 && ae.length > 0 && te === ae) return true;
+  if (getAccountType({ accountType: target.accountType as IUser["accountType"] }) !== "alumni") return true;
+  return false;
+};
 
 const invalidateAlumniCaches = (userId: string, email: string): void => {
   clearAlumniIntelCache();
@@ -29,7 +50,8 @@ const invalidateAlumniCaches = (userId: string, email: string): void => {
 type CleanupStepResult = { step: string; status: "fulfilled" | "rejected"; detail?: string };
 
 const runCleanupSteps = async (
-  uid: mongoose.Types.ObjectId
+  uid: mongoose.Types.ObjectId,
+  mode: PurgeCleanupMode
 ): Promise<{ results: CleanupStepResult[] }> => {
   const steps: Array<{ name: string; run: () => Promise<unknown> }> = [
     { name: "AlumniRelationshipScore.deleteMany", run: () => AlumniRelationshipScore.deleteMany({ userId: uid }) },
@@ -54,8 +76,11 @@ const runCleanupSteps = async (
       run: () => AlumniContactRequest.deleteMany({ requesterUserId: uid }),
     },
     {
-      name: "AlumniStory.unlink",
-      run: () => AlumniStory.updateMany({ relatedUserId: uid }, { $unset: { relatedUserId: 1 } }),
+      name: "AlumniStory.deleteForUser",
+      run: () =>
+        AlumniStory.deleteMany({
+          $or: [{ relatedUserId: uid }, { createdById: uid }],
+        }),
     },
     {
       name: "AlumniInbox.purge",
@@ -69,6 +94,13 @@ const runCleanupSteps = async (
       },
     },
   ];
+
+  if (mode === "full_delete") {
+    steps.push(
+      { name: "Notification.deleteMany", run: () => Notification.deleteMany({ userId: uid }) },
+      { name: "PasswordResetToken.deleteMany", run: () => PasswordResetToken.deleteMany({ userId: uid }) }
+    );
+  }
 
   const settled = await Promise.allSettled(steps.map((s) => s.run()));
   const results: CleanupStepResult[] = steps.map((s, i) => {
@@ -187,15 +219,17 @@ export const executeCommunitySoftRemove = async (input: {
   return { ok: true, alreadyRemoved: false };
 };
 
+export type PermanentAlumniPurgeMode = "alumni_detach" | "full_delete";
+
 export type PermanentAlumniPurgeResult =
-  | { ok: true; alreadyPurged: boolean }
+  | { ok: true; alreadyPurged: boolean; mode: PermanentAlumniPurgeMode }
   | { ok: false; error: string; status: number };
 
 const CONFIRM_PHRASES = new Set(["DELETE", "حذف نهائي"]);
 
 /**
- * Irreversible alumni identity purge: strips embedded profile, CRM scores, consent, cancels open mentorships.
- * Does not delete User, achievements, certificates, or audit logs.
+ * Alumni “permanent delete” from admin: either full User removal (alumni-only) or detach (protected accounts).
+ * Achievements / certificates / audit logs are not deleted here; full_delete removes the User row only.
  */
 export const executePermanentAlumniPurge = async (input: {
   targetUserId: string;
@@ -211,10 +245,6 @@ export const executePermanentAlumniPurge = async (input: {
   }
   const uid = new mongoose.Types.ObjectId(rawId);
 
-  if (String(input.actorUser._id) === rawId) {
-    return { ok: false, error: "SELF_DELETE_FORBIDDEN", status: 400 };
-  }
-
   const phrase = String(input.confirmPhrase || "").trim();
   if (!CONFIRM_PHRASES.has(phrase)) {
     return { ok: false, error: "CONFIRM_PHRASE_REQUIRED", status: 400 };
@@ -225,15 +255,23 @@ export const executePermanentAlumniPurge = async (input: {
     .lean();
   if (!user) return { ok: false, error: "NOT_FOUND", status: 404 };
 
-  const role = String((user as { role?: string }).role || "").toLowerCase();
-  if (role === "admin") {
-    return { ok: false, error: "FORBIDDEN_ADMIN_TARGET", status: 403 };
-  }
-
   const accountType = String((user as { accountType?: string }).accountType || "");
   if (!(await isAlumniLikeUser(uid, accountType))) {
     return { ok: false, error: "NOT_ALUMNI_ACCOUNT", status: 400 };
   }
+
+  const protectedAccount = isPermanentPurgeProtectedTarget(
+    {
+      _id: uid,
+      role: (user as { role?: string }).role,
+      accountType: (user as { accountType?: string }).accountType,
+      email: (user as { email?: string }).email,
+    },
+    { _id: input.actorUser._id, email: input.actorUser.email }
+  );
+
+  const mode: PermanentAlumniPurgeMode = protectedAccount ? "alumni_detach" : "full_delete";
+  const cleanupMode: PurgeCleanupMode = protectedAccount ? "detach" : "full_delete";
 
   if ((user as { alumniPermanentlyPurgedAt?: Date | null }).alumniPermanentlyPurgedAt) {
     await logAuditEvent({
@@ -242,16 +280,17 @@ export const executePermanentAlumniPurge = async (input: {
       entityId: rawId,
       entityTitle: String((user as { fullNameAr?: string; fullName?: string }).fullNameAr || (user as { fullName?: string }).fullName || ""),
       descriptionAr: "محاولة حذف نهائي لبيانات خريج سبق معالجتها — تم تجاهل التكرار",
+      metadata: { mode },
       actor: actor(input.actorUser),
       request: input.request,
       outcome: "success",
     });
-    return { ok: true, alreadyPurged: true };
+    return { ok: true, alreadyPurged: true, mode };
   }
 
   const now = new Date();
 
-  const { results: cleanupResults } = await runCleanupSteps(uid);
+  const { results: cleanupResults } = await runCleanupSteps(uid, cleanupMode);
 
   await AlumniOnboardingRequest.updateMany(
     { userId: uid },
@@ -264,37 +303,67 @@ export const executePermanentAlumniPurge = async (input: {
     }
   );
 
-  const up = await User.updateOne(
-    {
-      _id: uid,
-      $or: [{ alumniPermanentlyPurgedAt: null }, { alumniPermanentlyPurgedAt: { $exists: false } }],
-    },
-    {
-      $set: {
-        alumniPermanentlyPurgedAt: now,
-        alumniPermanentlyPurgedById: input.actorUser._id,
-        alumniCommunityRemovedAt: now,
-        alumniCommunityRemovedById: input.actorUser._id,
-        needsAlumniOnboarding: false,
-      },
-      $unset: {
-        alumniProfile: 1,
-        completedAlumniOnboardingAt: 1,
-      },
-    }
-  );
+  const roleLower = String((user as { role?: string }).role || "").toLowerCase();
+  const privilegedTarget = roleLower === "admin" || roleLower === "systemadmin";
 
-  if (up.modifiedCount === 0) {
-    await logAuditEvent({
-      actionType: "alumni_permanent_purge_idempotent",
-      entityType: "User",
-      entityId: rawId,
-      descriptionAr: "تعارض متزامن أثناء الحذف النهائي — الحساب مُعالَج مسبقًا",
-      actor: actor(input.actorUser),
-      request: input.request,
-      outcome: "success",
-    });
-    return { ok: true, alreadyPurged: true };
+  if (protectedAccount) {
+    const setFields: Record<string, unknown> = {
+      alumniPermanentlyPurgedAt: now,
+      alumniPermanentlyPurgedById: input.actorUser._id,
+      alumniCommunityRemovedAt: now,
+      alumniCommunityRemovedById: input.actorUser._id,
+      needsAlumniOnboarding: false,
+    };
+    if (!privilegedTarget && getAccountType(user as IUser) === "alumni") {
+      setFields.accountType = "student";
+    }
+
+    const up = await User.updateOne(
+      {
+        _id: uid,
+        $or: [{ alumniPermanentlyPurgedAt: null }, { alumniPermanentlyPurgedAt: { $exists: false } }],
+      },
+      {
+        $set: setFields,
+        $unset: {
+          alumniProfile: 1,
+          completedAlumniOnboardingAt: 1,
+        },
+      }
+    );
+
+    if (up.modifiedCount === 0) {
+      await logAuditEvent({
+        actionType: "alumni_permanent_purge_idempotent",
+        entityType: "User",
+        entityId: rawId,
+        descriptionAr: "تعارض متزامن أثناء فصل هوية الخريج — الحساب مُعالَج مسبقًا",
+        metadata: { mode },
+        actor: actor(input.actorUser),
+        request: input.request,
+        outcome: "success",
+      });
+      return { ok: true, alreadyPurged: true, mode };
+    }
+  } else {
+    if (String(input.actorUser._id) === rawId) {
+      return { ok: false, error: "SELF_DELETE_FORBIDDEN", status: 400 };
+    }
+
+    const del = await User.deleteOne({ _id: uid });
+    if (del.deletedCount === 0) {
+      await logAuditEvent({
+        actionType: "alumni_permanent_purge_idempotent",
+        entityType: "User",
+        entityId: rawId,
+        descriptionAr: "تعارض متزامن أثناء حذف مستخدم خريج — تم تجاهل التكرار",
+        metadata: { mode },
+        actor: actor(input.actorUser),
+        request: input.request,
+        outcome: "success",
+      });
+      return { ok: true, alreadyPurged: true, mode };
+    }
   }
 
   invalidateAlumniCaches(rawId, String((user as { email?: string }).email || ""));
@@ -303,17 +372,21 @@ export const executePermanentAlumniPurge = async (input: {
   const failedCleanups = cleanupResults.filter((r) => r.status === "rejected");
 
   await logAuditEvent({
-    actionType: "alumni_permanently_deleted",
+    actionType: mode === "alumni_detach" ? "alumni_identity_detached" : "alumni_user_full_deleted",
     entityType: "User",
     entityId: rawId,
     entityTitle: String((user as { fullNameAr?: string; fullName?: string }).fullNameAr || (user as { fullName?: string }).fullName || ""),
-    descriptionAr: "حذف نهائي لبيانات هوية الخريج (ملف مضمّن، CRM، موافقات) — الحساب الأساسي محفوظ",
+    descriptionAr:
+      mode === "alumni_detach"
+        ? "فصل هوية الخريج عن الحساب المحمي (إداري/حساب حالي/غير alumni-only) مع الإبقاء على سجل المستخدم"
+        : "حذف نهائي لحساب خريج (alumni-only) مع إزالة بيانات المجتمع المرتبطة",
     metadata: {
       reason: input.reason,
       actorId: String(input.actorUser._id),
       actorRole: String(input.actorUser.role || ""),
       targetUserId: rawId,
       targetEmail,
+      mode,
       cleanupSummary: cleanupResults,
       failedCleanups: failedCleanups.length,
     },
@@ -322,5 +395,5 @@ export const executePermanentAlumniPurge = async (input: {
     outcome: failedCleanups.length > 0 ? "partial" : "success",
   });
 
-  return { ok: true, alreadyPurged: false };
+  return { ok: true, alreadyPurged: false, mode };
 };

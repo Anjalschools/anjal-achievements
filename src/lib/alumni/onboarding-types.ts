@@ -74,4 +74,6 @@ export type AlumniOnboardingAdminListItem = {
   updatedAt: string;
   /** True when another onboarding row shares the same email (admin warning). */
   duplicateEmailWarning?: boolean;
+  /** True when permanent purge will detach alumni data only (admin / self / non–alumni-only account). */
+  permanentPurgeProtected?: boolean;
 };

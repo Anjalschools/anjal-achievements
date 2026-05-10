@@ -53,9 +53,13 @@ const LoginShell = ({ mode }: Props) => {
 
     if (!identifier.trim()) {
       setError(
-        locale === "ar"
-          ? "يرجى إدخال رقم الهوية أو البريد الإلكتروني أو اسم المستخدم."
-          : "Please enter your national ID, email, or username."
+        isAlumni
+          ? locale === "ar"
+            ? "يرجى إدخال البريد الإلكتروني أو اسم المستخدم."
+            : "Please enter your email or username."
+          : locale === "ar"
+            ? "يرجى إدخال رقم الهوية أو البريد الإلكتروني أو اسم المستخدم."
+            : "Please enter your national ID, email, or username."
       );
       return;
     }
@@ -203,7 +207,13 @@ const LoginShell = ({ mode }: Props) => {
               <form onSubmit={handleSubmit} className="space-y-5">
                 <div>
                   <label className="mb-2 block text-sm font-semibold text-slate-700">
-                    {locale === "ar" ? "رقم الهوية / البريد الإلكتروني / اسم المستخدم" : "National ID / Email / Username"}
+                    {isAlumni
+                      ? locale === "ar"
+                        ? "البريد الإلكتروني أو اسم المستخدم"
+                        : "Email or username"
+                      : locale === "ar"
+                        ? "رقم الهوية / البريد الإلكتروني / اسم المستخدم"
+                        : "National ID / Email / Username"}
                   </label>
                   <div className="relative">
                     <span
@@ -218,9 +228,13 @@ const LoginShell = ({ mode }: Props) => {
                       value={identifier}
                       onChange={(e) => setIdentifier(e.target.value)}
                       placeholder={
-                        locale === "ar"
-                          ? "أدخل رقم الهوية أو البريد الإلكتروني أو اسم المستخدم"
-                          : "Enter your national ID, email, or username"
+                        isAlumni
+                          ? locale === "ar"
+                            ? "مثال: بريدك@example.com أو اسم المستخدم"
+                            : "e.g. your@email.com or username"
+                          : locale === "ar"
+                            ? "أدخل رقم الهوية أو البريد الإلكتروني أو اسم المستخدم"
+                            : "Enter your national ID, email, or username"
                       }
                       className={`h-12 w-full rounded-2xl border border-slate-200 bg-white text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-sky-500 focus:ring-4 focus:ring-sky-100 ${
                         isArabic ? "pr-11 pl-4" : "pl-11 pr-4"

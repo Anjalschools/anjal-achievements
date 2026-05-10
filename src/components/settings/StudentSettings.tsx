@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import PageContainer from "@/components/layout/PageContainer";
 import PageHeader from "@/components/layout/PageHeader";
+import AlumniPageHeader from "@/components/alumni/AlumniPageHeader";
 import SectionCard from "@/components/layout/SectionCard";
 import {
   User,
@@ -23,6 +24,7 @@ import {
   XCircle,
   PlusCircle,
   Star,
+  Settings2,
 } from "lucide-react";
 import {
   normalizeStudentPortfolioContentFromDoc,
@@ -188,7 +190,11 @@ const buildPortfolioContentForSave = (
   };
 };
 
-const StudentSettings = () => {
+type StudentSettingsProps = {
+  alumniAccount?: boolean;
+};
+
+const StudentSettings = ({ alumniAccount = false }: StudentSettingsProps) => {
   const router = useRouter();
   const [locale, setLocale] = useState<"ar" | "en">("ar");
   const [isSaving, setIsSaving] = useState(false);
@@ -340,24 +346,28 @@ const StudentSettings = () => {
     if (!formData.gender) {
       errs.gender = isAr ? "اختر الجنس" : "Select gender";
     }
-    if (!formData.grade) {
-      errs.grade = isAr ? "اختر الصف" : "Select grade";
-    }
-    if (!formData.section) {
-      errs.section = isAr ? "اختر القسم" : "Select section";
+    if (!alumniAccount) {
+      if (!formData.grade) {
+        errs.grade = isAr ? "اختر الصف" : "Select grade";
+      }
+      if (!formData.section) {
+        errs.section = isAr ? "اختر القسم" : "Select section";
+      }
     }
     const ph = formData.phone.replace(/\D/g, "");
     if (!ph) errs.phone = isAr ? "مطلوب" : "Required";
     else if (!isValidSaMobile(ph)) {
       errs.phone = isAr ? "رقم غير صالح (05xxxxxxxx)" : "Invalid number (05xxxxxxxx)";
     }
-    if (!formData.guardianName.trim()) {
-      errs.guardianName = isAr ? "مطلوب" : "Required";
-    }
-    const gp = formData.guardianPhone.replace(/\D/g, "");
-    if (!gp) errs.guardianPhone = isAr ? "مطلوب" : "Required";
-    else if (!isValidSaMobile(gp)) {
-      errs.guardianPhone = isAr ? "رقم غير صالح" : "Invalid number";
+    if (!alumniAccount) {
+      if (!formData.guardianName.trim()) {
+        errs.guardianName = isAr ? "مطلوب" : "Required";
+      }
+      const gp = formData.guardianPhone.replace(/\D/g, "");
+      if (!gp) errs.guardianPhone = isAr ? "مطلوب" : "Required";
+      else if (!isValidSaMobile(gp)) {
+        errs.guardianPhone = isAr ? "رقم غير صالح" : "Invalid number";
+      }
     }
 
     if (
@@ -380,7 +390,7 @@ const StudentSettings = () => {
 
     setFieldErrors(errs);
     return Object.keys(errs).length === 0;
-  }, [formData, isAr]);
+  }, [formData, isAr, alumniAccount]);
 
   const handleSave = async () => {
     if (!validate()) {
@@ -412,11 +422,6 @@ const StudentSettings = () => {
         fullNameEn: formData.fullNameEn,
         phone: formData.phone.replace(/\D/g, ""),
         gender: formData.gender,
-        section: formData.section,
-        grade: normalizeGrade(formData.grade) || formData.grade,
-        guardianName: formData.guardianName,
-        guardianPhone: formData.guardianPhone.replace(/\D/g, ""),
-        guardianNationalId: formData.guardianNationalId,
         preferredLanguage: locale,
         notifications: formData.notifications,
         privacy: formData.privacy,
@@ -430,6 +435,13 @@ const StudentSettings = () => {
           formData.portfolioShowPhone
         ),
       };
+      if (!alumniAccount) {
+        updatePayload.section = formData.section;
+        updatePayload.grade = normalizeGrade(formData.grade) || formData.grade;
+        updatePayload.guardianName = formData.guardianName;
+        updatePayload.guardianPhone = formData.guardianPhone.replace(/\D/g, "");
+        updatePayload.guardianNationalId = formData.guardianNationalId;
+      }
 
       if (profilePhotoBase64) updatePayload.profilePhoto = profilePhotoBase64;
       if (formData.newPassword && formData.currentPassword) {
@@ -517,34 +529,76 @@ const StudentSettings = () => {
         </div>
       ) : null}
 
-      <PageHeader
-        title={t.settings.title}
-        subtitle={t.settings.subtitle}
-        actions={
-          <div className="flex flex-wrap gap-3">
-            <Link
-              href="/profile"
-              className="inline-flex items-center gap-2 rounded-xl border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-text transition-colors hover:bg-gray-50"
-            >
-              <ArrowLeft className="h-4 w-4" />
-              <span>{isAr ? "رجوع" : "Back"}</span>
-            </Link>
-            <button
-              type="button"
-              onClick={handleSave}
-              disabled={isSaving || passwordMismatch}
-              className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-primary-dark disabled:opacity-50"
-            >
-              {isSaving ? (
-                <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-              ) : (
-                <Save className="h-4 w-4" />
-              )}
-              <span>{t.settings.save}</span>
-            </button>
-          </div>
-        }
-      />
+      {alumniAccount ? (
+        <AlumniPageHeader
+          title={isAr ? "إعدادات حساب الخريج" : "Alumni account settings"}
+          description={
+            isAr
+              ? "إدارة بياناتك المهنية، الخصوصية، والأمان — بدون حقول الطالب المدرسي."
+              : "Manage your professional details, privacy, and security — without school-student fields."
+          }
+          backHref="/alumni/dashboard"
+          backLabel={isAr ? "رجوع" : "Back"}
+          icon={<Settings2 className="h-6 w-6 text-white" aria-hidden />}
+          breadcrumb={[
+            { label: isAr ? "مجتمع الخريجين" : "Alumni", href: "/alumni" },
+            { label: isAr ? "الإعدادات" : "Settings" },
+          ]}
+          dir={isAr ? "rtl" : "ltr"}
+          actions={
+            <div className="flex flex-wrap gap-2">
+              <Link
+                href="/alumni/profile"
+                className="inline-flex items-center gap-2 rounded-xl border border-white/25 bg-white/10 px-4 py-2.5 text-sm font-bold text-white backdrop-blur-sm transition hover:bg-white/15"
+              >
+                {isAr ? "ملفي كخريج" : "My alumni profile"}
+              </Link>
+              <button
+                type="button"
+                onClick={handleSave}
+                disabled={isSaving || passwordMismatch}
+                className="inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-bold text-primary shadow-sm transition hover:bg-sky-50 disabled:opacity-50"
+              >
+                {isSaving ? (
+                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                ) : (
+                  <Save className="h-4 w-4" />
+                )}
+                <span>{t.settings.save}</span>
+              </button>
+            </div>
+          }
+        />
+      ) : (
+        <PageHeader
+          title={t.settings.title}
+          subtitle={t.settings.subtitle}
+          actions={
+            <div className="flex flex-wrap gap-3">
+              <Link
+                href="/profile"
+                className="inline-flex items-center gap-2 rounded-xl border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-text transition-colors hover:bg-gray-50"
+              >
+                <ArrowLeft className="h-4 w-4" />
+                <span>{isAr ? "رجوع" : "Back"}</span>
+              </Link>
+              <button
+                type="button"
+                onClick={handleSave}
+                disabled={isSaving || passwordMismatch}
+                className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-primary-dark disabled:opacity-50"
+              >
+                {isSaving ? (
+                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                ) : (
+                  <Save className="h-4 w-4" />
+                )}
+                <span>{t.settings.save}</span>
+              </button>
+            </div>
+          }
+        />
+      )}
 
       {mustChangePassword ? (
         <div
@@ -557,8 +611,37 @@ const StudentSettings = () => {
         </div>
       ) : null}
 
+      {alumniAccount ? (
+        <nav
+          className="mb-6 flex flex-wrap gap-2 rounded-2xl border border-gray-200 bg-white p-2 shadow-sm"
+          aria-label={isAr ? "أقسام الإعدادات" : "Settings sections"}
+        >
+          {(
+            [
+              { id: "alumni-settings-account", ar: "الحساب", en: "Account" },
+              { id: "alumni-settings-security", ar: "الأمان", en: "Security" },
+              { id: "alumni-settings-portfolio", ar: "الملف المهني", en: "Portfolio" },
+              { id: "alumni-settings-language", ar: "اللغة", en: "Language" },
+              { id: "alumni-settings-notifications", ar: "الإشعارات", en: "Notifications" },
+              { id: "alumni-settings-privacy", ar: "الخصوصية", en: "Privacy" },
+            ] as const
+          ).map((row) => (
+            <button
+              key={row.id}
+              type="button"
+              className="rounded-xl px-3 py-2 text-xs font-bold text-text transition hover:bg-primary/10 sm:text-sm"
+              onClick={() =>
+                document.getElementById(row.id)?.scrollIntoView({ behavior: "smooth", block: "start" })
+              }
+            >
+              {isAr ? row.ar : row.en}
+            </button>
+          ))}
+        </nav>
+      ) : null}
+
       <div className="space-y-8">
-        <SectionCard>
+        <SectionCard id="alumni-settings-account">
           <div className="mb-6 flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
               <User className="h-5 w-5 text-primary" />
@@ -611,9 +694,13 @@ const StudentSettings = () => {
               <div className="mt-4 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3">
                 <AlertCircle className="h-5 w-5 shrink-0 text-amber-600" />
                 <p className="text-xs font-medium text-amber-800">
-                  {isAr
-                    ? "يجب الالتزام برفع صورة رسمية للطالب، حيث سيتم استخدامها في العرض التقديمي للحفل، وأيضًا ستظهر في صفحة الطالب."
-                    : "Please upload an official formal photo of the student, as it will be used in the ceremony presentation and will also appear on the student's page."}
+                  {alumniAccount
+                    ? isAr
+                      ? "يُفضّل صورة مهنية واضحة؛ تظهر في ملفك العام وشبكة الخريجين عند التفعيل."
+                      : "A clear professional photo is recommended; it may appear on your public profile and alumni network when enabled."
+                    : isAr
+                      ? "يجب الالتزام برفع صورة رسمية للطالب، حيث سيتم استخدامها في العرض التقديمي للحفل، وأيضًا ستظهر في صفحة الطالب."
+                      : "Please upload an official formal photo of the student, as it will be used in the ceremony presentation and will also appear on the student's page."}
                 </p>
               </div>
             </div>
@@ -621,7 +708,14 @@ const StudentSettings = () => {
             <div className="grid gap-5 sm:grid-cols-2">
               <div className="sm:col-span-2">
                 <span className={labelClass}>
-                  {isAr ? "اسم الطالب بالعربية" : "Student name (Arabic)"} *
+                  {alumniAccount
+                    ? isAr
+                      ? "الاسم بالعربية"
+                      : "Full name (Arabic)"
+                    : isAr
+                      ? "اسم الطالب بالعربية"
+                      : "Student name (Arabic)"}{" "}
+                  *
                 </span>
                 <input
                   type="text"
@@ -630,7 +724,15 @@ const StudentSettings = () => {
                   value={formData.fullNameAr}
                   onChange={(e) => handleChange("fullNameAr", e.target.value)}
                   className={`${fieldClass} ${fieldErrors.fullNameAr ? "border-red-400" : ""}`}
-                  placeholder={isAr ? "أدخل اسم الطالب بالعربية" : "Enter student name in Arabic"}
+                  placeholder={
+                    alumniAccount
+                      ? isAr
+                        ? "أدخل اسمك بالعربية"
+                        : "Enter your name in Arabic"
+                      : isAr
+                        ? "أدخل اسم الطالب بالعربية"
+                        : "Enter student name in Arabic"
+                  }
                 />
                 {fieldErrors.fullNameAr ? (
                   <p className="mt-1 text-sm text-red-600" role="alert">
@@ -641,7 +743,14 @@ const StudentSettings = () => {
 
               <div className="sm:col-span-2">
                 <span className={labelClass}>
-                  {isAr ? "اسم الطالب بالإنجليزية" : "Student name (English)"} *
+                  {alumniAccount
+                    ? isAr
+                      ? "الاسم بالإنجليزية"
+                      : "Full name (English)"
+                    : isAr
+                      ? "اسم الطالب بالإنجليزية"
+                      : "Student name (English)"}{" "}
+                  *
                 </span>
                 <input
                   type="text"
@@ -651,7 +760,15 @@ const StudentSettings = () => {
                   value={formData.fullNameEn}
                   onChange={(e) => handleChange("fullNameEn", e.target.value)}
                   className={`${fieldClass} ${fieldErrors.fullNameEn ? "border-red-400" : ""}`}
-                  placeholder={isAr ? "أدخل اسم الطالب بالإنجليزية" : "Enter student name in English"}
+                  placeholder={
+                    alumniAccount
+                      ? isAr
+                        ? "أدخل اسمك بالإنجليزية"
+                        : "Enter your name in English"
+                      : isAr
+                        ? "أدخل اسم الطالب بالإنجليزية"
+                        : "Enter student name in English"
+                  }
                 />
                 {fieldErrors.fullNameEn ? (
                   <p className="mt-1 text-sm text-red-600" role="alert">
@@ -661,7 +778,15 @@ const StudentSettings = () => {
               </div>
 
               <div>
-                <span className={labelClass}>{isAr ? "رقم هوية الطالب" : "Student ID"}</span>
+                <span className={labelClass}>
+                  {alumniAccount
+                    ? isAr
+                      ? "المعرّف الداخلي"
+                      : "Internal member ID"
+                    : isAr
+                      ? "رقم هوية الطالب"
+                      : "Student ID"}
+                </span>
                 <input
                   type="text"
                   dir="ltr"
@@ -672,7 +797,7 @@ const StudentSettings = () => {
                 <p className="mt-1 text-xs text-text-light">{lockHint(isAr)}</p>
               </div>
 
-              {formData.nationalId ? (
+              {formData.nationalId && !alumniAccount ? (
                 <div>
                   <span className={labelClass}>{isAr ? "رقم الهوية" : "National ID"}</span>
                   <input
@@ -747,70 +872,81 @@ const StudentSettings = () => {
                 ) : null}
               </div>
 
-              <div className="sm:col-span-2">
-                <span className={`${labelClass} mb-3`}>{isAr ? "الصف والقسم" : "Grade & section"}</span>
-                <div className="grid gap-5 rounded-xl border border-gray-100 bg-gray-50/90 p-4 sm:grid-cols-2">
-                  <div>
-                    <span className={labelClass}>{isAr ? "الصف الدراسي" : "Grade"} *</span>
-                    <select
-                      value={formData.grade}
-                      onChange={(e) => handleChange("grade", e.target.value)}
-                      className={`${fieldClass} ${fieldErrors.grade ? "border-red-400" : ""}`}
-                    >
-                      <option value="">{isAr ? "اختر الصف الدراسي" : "Select grade"}</option>
-                      {GRADE_OPTIONS.map((grade) => (
-                        <option key={grade.value} value={grade.value}>
-                          {isAr ? grade.ar : grade.en}
-                        </option>
-                      ))}
-                    </select>
-                    {fieldErrors.grade ? (
-                      <p className="mt-1 text-sm text-red-600" role="alert">
-                        {fieldErrors.grade}
-                      </p>
-                    ) : null}
-                  </div>
-                  <div>
-                    <span className={labelClass}>{isAr ? "القسم" : "Section"} *</span>
-                    <div className="mt-2 flex flex-col gap-3 sm:flex-row">
-                      <label className="flex flex-1 cursor-pointer items-center gap-2 rounded-xl border border-gray-200 bg-white p-3 transition hover:border-primary">
-                        <input
-                          type="radio"
-                          name="section"
-                          value="arabic"
-                          checked={formData.section === "arabic"}
-                          onChange={(e) => handleChange("section", e.target.value as "arabic")}
-                          className="h-4 w-4 text-primary focus:ring-primary"
-                        />
-                        <span className="text-sm font-medium text-text">{isAr ? "عربي" : "Arabic"}</span>
-                      </label>
-                      <label className="flex flex-1 cursor-pointer items-center gap-2 rounded-xl border border-gray-200 bg-white p-3 transition hover:border-primary">
-                        <input
-                          type="radio"
-                          name="section"
-                          value="international"
-                          checked={formData.section === "international"}
-                          onChange={(e) =>
-                            handleChange("section", e.target.value as "international")
-                          }
-                          className="h-4 w-4 text-primary focus:ring-primary"
-                        />
-                        <span className="text-sm font-medium text-text">
-                          {isAr ? "دولي" : "International"}
-                        </span>
-                      </label>
+              {!alumniAccount ? (
+                <div className="sm:col-span-2">
+                  <span className={`${labelClass} mb-3`}>{isAr ? "الصف والقسم" : "Grade & section"}</span>
+                  <div className="grid gap-5 rounded-xl border border-gray-100 bg-gray-50/90 p-4 sm:grid-cols-2">
+                    <div>
+                      <span className={labelClass}>{isAr ? "الصف الدراسي" : "Grade"} *</span>
+                      <select
+                        value={formData.grade}
+                        onChange={(e) => handleChange("grade", e.target.value)}
+                        className={`${fieldClass} ${fieldErrors.grade ? "border-red-400" : ""}`}
+                      >
+                        <option value="">{isAr ? "اختر الصف الدراسي" : "Select grade"}</option>
+                        {GRADE_OPTIONS.map((grade) => (
+                          <option key={grade.value} value={grade.value}>
+                            {isAr ? grade.ar : grade.en}
+                          </option>
+                        ))}
+                      </select>
+                      {fieldErrors.grade ? (
+                        <p className="mt-1 text-sm text-red-600" role="alert">
+                          {fieldErrors.grade}
+                        </p>
+                      ) : null}
                     </div>
-                    {fieldErrors.section ? (
-                      <p className="mt-1 text-sm text-red-600" role="alert">
-                        {fieldErrors.section}
-                      </p>
-                    ) : null}
+                    <div>
+                      <span className={labelClass}>{isAr ? "القسم" : "Section"} *</span>
+                      <div className="mt-2 flex flex-col gap-3 sm:flex-row">
+                        <label className="flex flex-1 cursor-pointer items-center gap-2 rounded-xl border border-gray-200 bg-white p-3 transition hover:border-primary">
+                          <input
+                            type="radio"
+                            name="section"
+                            value="arabic"
+                            checked={formData.section === "arabic"}
+                            onChange={(e) => handleChange("section", e.target.value as "arabic")}
+                            className="h-4 w-4 text-primary focus:ring-primary"
+                          />
+                          <span className="text-sm font-medium text-text">{isAr ? "عربي" : "Arabic"}</span>
+                        </label>
+                        <label className="flex flex-1 cursor-pointer items-center gap-2 rounded-xl border border-gray-200 bg-white p-3 transition hover:border-primary">
+                          <input
+                            type="radio"
+                            name="section"
+                            value="international"
+                            checked={formData.section === "international"}
+                            onChange={(e) =>
+                              handleChange("section", e.target.value as "international")
+                            }
+                            className="h-4 w-4 text-primary focus:ring-primary"
+                          />
+                          <span className="text-sm font-medium text-text">
+                            {isAr ? "دولي" : "International"}
+                          </span>
+                        </label>
+                      </div>
+                      {fieldErrors.section ? (
+                        <p className="mt-1 text-sm text-red-600" role="alert">
+                          {fieldErrors.section}
+                        </p>
+                      ) : null}
+                    </div>
                   </div>
                 </div>
-              </div>
+              ) : null}
 
               <div className="sm:col-span-2">
-                <span className={labelClass}>{isAr ? "رقم جوال الطالب" : "Student phone"} *</span>
+                <span className={labelClass}>
+                  {alumniAccount
+                    ? isAr
+                      ? "رقم الجوال"
+                      : "Mobile number"
+                    : isAr
+                      ? "رقم جوال الطالب"
+                      : "Student phone"}{" "}
+                  *
+                </span>
                 <div className="relative" dir="ltr">
                   <Phone className="pointer-events-none absolute end-3 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400" />
                   <input
@@ -839,84 +975,86 @@ const StudentSettings = () => {
           </div>
         </SectionCard>
 
-        <SectionCard>
-          <div className="mb-6 flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-              <Shield className="h-5 w-5 text-primary" />
+        {!alumniAccount ? (
+          <SectionCard>
+            <div className="mb-6 flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+                <Shield className="h-5 w-5 text-primary" />
+              </div>
+              <h2 className="text-xl font-bold text-text">
+                {isAr ? "بيانات ولي الأمر" : "Guardian information"}
+              </h2>
             </div>
-            <h2 className="text-xl font-bold text-text">
-              {isAr ? "بيانات ولي الأمر" : "Guardian information"}
-            </h2>
-          </div>
-          <div className="grid gap-5 sm:grid-cols-2">
-            <div className="sm:col-span-2">
-              <span className={labelClass}>{isAr ? "اسم ولي الأمر" : "Guardian name"} *</span>
-              <input
-                type="text"
-                dir="rtl"
-                lang="ar"
-                value={formData.guardianName}
-                onChange={(e) => handleChange("guardianName", e.target.value)}
-                className={`${fieldClass} ${fieldErrors.guardianName ? "border-red-400" : ""}`}
-                placeholder={isAr ? "أدخل اسم ولي الأمر" : "Enter guardian name"}
-              />
-              {fieldErrors.guardianName ? (
-                <p className="mt-1 text-sm text-red-600" role="alert">
-                  {fieldErrors.guardianName}
-                </p>
-              ) : null}
-            </div>
-
-            <div>
-              <span className={labelClass}>{isAr ? "رقم هوية ولي الأمر" : "Guardian national ID"}</span>
-              <div dir="ltr">
+            <div className="grid gap-5 sm:grid-cols-2">
+              <div className="sm:col-span-2">
+                <span className={labelClass}>{isAr ? "اسم ولي الأمر" : "Guardian name"} *</span>
                 <input
                   type="text"
-                  inputMode="numeric"
-                  value={formData.guardianNationalId}
-                  onChange={(e) => {
-                    const numbersOnly = e.target.value.replace(/\D/g, "");
-                    if (numbersOnly.length <= 10) {
-                      handleChange("guardianNationalId", numbersOnly);
-                    }
-                  }}
-                  maxLength={10}
-                  className={fieldClass}
-                  placeholder={isAr ? "أرقام فقط" : "Digits only"}
+                  dir="rtl"
+                  lang="ar"
+                  value={formData.guardianName}
+                  onChange={(e) => handleChange("guardianName", e.target.value)}
+                  className={`${fieldClass} ${fieldErrors.guardianName ? "border-red-400" : ""}`}
+                  placeholder={isAr ? "أدخل اسم ولي الأمر" : "Enter guardian name"}
                 />
+                {fieldErrors.guardianName ? (
+                  <p className="mt-1 text-sm text-red-600" role="alert">
+                    {fieldErrors.guardianName}
+                  </p>
+                ) : null}
+              </div>
+
+              <div>
+                <span className={labelClass}>{isAr ? "رقم هوية ولي الأمر" : "Guardian national ID"}</span>
+                <div dir="ltr">
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={formData.guardianNationalId}
+                    onChange={(e) => {
+                      const numbersOnly = e.target.value.replace(/\D/g, "");
+                      if (numbersOnly.length <= 10) {
+                        handleChange("guardianNationalId", numbersOnly);
+                      }
+                    }}
+                    maxLength={10}
+                    className={fieldClass}
+                    placeholder={isAr ? "أرقام فقط" : "Digits only"}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <span className={labelClass}>{isAr ? "رقم جوال ولي الأمر" : "Guardian phone"} *</span>
+                <div className="relative" dir="ltr">
+                  <Phone className="pointer-events-none absolute end-3 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400" />
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    autoComplete="tel"
+                    value={formData.guardianPhone}
+                    onChange={(e) => {
+                      const numbersOnly = e.target.value.replace(/\D/g, "");
+                      if (numbersOnly.length <= 10) {
+                        handleChange("guardianPhone", numbersOnly);
+                      }
+                    }}
+                    maxLength={10}
+                    className={`${fieldClass} pe-11 ${fieldErrors.guardianPhone ? "border-red-400" : ""}`}
+                    placeholder={isAr ? "مثال: 05xxxxxxxx" : "e.g. 05xxxxxxxx"}
+                  />
+                </div>
+                {fieldErrors.guardianPhone ? (
+                  <p className="mt-1 text-sm text-red-600" role="alert">
+                    {fieldErrors.guardianPhone}
+                  </p>
+                ) : null}
               </div>
             </div>
+          </SectionCard>
+        ) : null}
 
-            <div>
-              <span className={labelClass}>{isAr ? "رقم جوال ولي الأمر" : "Guardian phone"} *</span>
-              <div className="relative" dir="ltr">
-                <Phone className="pointer-events-none absolute end-3 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400" />
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  autoComplete="tel"
-                  value={formData.guardianPhone}
-                  onChange={(e) => {
-                    const numbersOnly = e.target.value.replace(/\D/g, "");
-                    if (numbersOnly.length <= 10) {
-                      handleChange("guardianPhone", numbersOnly);
-                    }
-                  }}
-                  maxLength={10}
-                  className={`${fieldClass} pe-11 ${fieldErrors.guardianPhone ? "border-red-400" : ""}`}
-                  placeholder={isAr ? "مثال: 05xxxxxxxx" : "e.g. 05xxxxxxxx"}
-                />
-              </div>
-              {fieldErrors.guardianPhone ? (
-                <p className="mt-1 text-sm text-red-600" role="alert">
-                  {fieldErrors.guardianPhone}
-                </p>
-              ) : null}
-            </div>
-          </div>
-        </SectionCard>
-
-        <SectionCard>
+        <SectionCard id="alumni-settings-security">
           <div className="mb-6 flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
               <Lock className="h-5 w-5 text-primary" />
@@ -1024,24 +1162,40 @@ const StudentSettings = () => {
           </div>
         </SectionCard>
 
-        <SectionCard>
+        <SectionCard id="alumni-settings-portfolio">
           <div className="mb-6 flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
               <Star className="h-5 w-5 text-primary" />
             </div>
             <h2 className="text-xl font-bold text-text">
-              {isAr ? "ملف الإنجاز العام — محتوى إضافي" : "Public portfolio — extra profile"}
+              {alumniAccount
+                ? isAr
+                  ? "الملف المهني — ملف الإنجاز العام"
+                  : "Professional profile — public portfolio"
+                : isAr
+                  ? "ملف الإنجاز العام — محتوى إضافي"
+                  : "Public portfolio — extra profile"}
             </h2>
           </div>
           <p className="mb-6 text-sm text-text-light">
-            {isAr
-              ? "يظهر ما تدخله هنا في صفحة ملف الإنجاز العام عند تفعيله. اترك الحقول فارغة لإخفاء القسم."
-              : "What you enter here appears on your public achievement portfolio when enabled. Leave fields empty to hide sections."}
+            {alumniAccount
+              ? isAr
+                ? "يُعرض هذا المحتوى في ملف الإنجاز العام عند تفعيله من الإدارة. اترك الحقول فارغة لإخفاء الأقسام."
+                : "Shown on your public achievement portfolio when enabled by administration. Leave fields empty to hide sections."
+              : isAr
+                ? "يظهر ما تدخله هنا في صفحة ملف الإنجاز العام عند تفعيله. اترك الحقول فارغة لإخفاء القسم."
+                : "What you enter here appears on your public achievement portfolio when enabled. Leave fields empty to hide sections."}
           </p>
           <div className="space-y-6">
             <div>
               <label htmlFor="stu-portfolio-bio" className={labelClass}>
-                {isAr ? "نبذة عن الطالب" : "Short bio"}
+                {alumniAccount
+                  ? isAr
+                    ? "نبذة مهنية"
+                    : "Professional bio"
+                  : isAr
+                    ? "نبذة عن الطالب"
+                    : "Short bio"}
               </label>
               <textarea
                 id="stu-portfolio-bio"
@@ -1344,7 +1498,7 @@ const StudentSettings = () => {
           </div>
         </SectionCard>
 
-        <SectionCard>
+        <SectionCard id="alumni-settings-language">
           <div className="mb-6 flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
               <Globe className="h-5 w-5 text-primary" />
@@ -1366,7 +1520,7 @@ const StudentSettings = () => {
           </div>
         </SectionCard>
 
-        <SectionCard>
+        <SectionCard id="alumni-settings-notifications">
           <div className="mb-6 flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
               <Bell className="h-5 w-5 text-primary" />
@@ -1405,7 +1559,7 @@ const StudentSettings = () => {
           </div>
         </SectionCard>
 
-        <SectionCard>
+        <SectionCard id="alumni-settings-privacy">
           <div className="mb-6 flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
               <Lock className="h-5 w-5 text-primary" />

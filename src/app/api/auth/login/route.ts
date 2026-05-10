@@ -7,6 +7,7 @@ import { perfElapsed, perfLog, perfNow } from "@/lib/perf-debug";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { warnSecurityEvent } from "@/lib/security-log";
 import { getAccountType } from "@/lib/account-type";
+import { escapeRegExp } from "@/lib/search/query-normalizer";
 
 const loginSafeDiag = () => ({
   hasNextAuthSecret: Boolean(process.env.NEXTAUTH_SECRET?.trim()),
@@ -55,15 +56,16 @@ export async function POST(request: NextRequest) {
     // Determine search criteria based on identifier
     let searchCriteria: {
       email?: string;
-      $or?: Array<{ username: string } | { studentId: string }>;
+      $or?: Array<{ username: string | RegExp } | { studentId: string }>;
     };
 
-    if (identifier.includes("@")) {
-      searchCriteria = { email: identifier.toLowerCase().trim() };
+    const trimmedId = identifier.trim();
+    if (trimmedId.includes("@")) {
+      searchCriteria = { email: trimmedId.toLowerCase() };
     } else {
-      const trimmedIdentifier = identifier.trim();
+      const usernamePattern = new RegExp(`^${escapeRegExp(trimmedId)}$`, "i");
       searchCriteria = {
-        $or: [{ username: trimmedIdentifier }, { studentId: trimmedIdentifier }],
+        $or: [{ username: usernamePattern }, { studentId: trimmedId }],
       };
     }
 

@@ -5,7 +5,7 @@ import User from "@/models/User";
 import { invalidateSessionUserCache } from "@/lib/auth-session-cache";
 import type { HydratedDocument } from "mongoose";
 import type { IAlumniOnboardingRequest } from "@/models/AlumniOnboardingRequest";
-import { generateTempPassword } from "./generate-temp-password";
+import { generateAlumniInitialPassword } from "./generate-temp-password";
 import { createAlumniPortalUserFromOnboarding } from "./create-alumni-user";
 import { applyAlumniOnboardingToExistingUser } from "./link-existing-user";
 import {
@@ -99,7 +99,7 @@ export const runAlumniOnboardingActivation = async (params: {
       resolvedUserId = String(existing._id);
       outcome = "linked_existing";
     } else {
-      plainPassword = generateTempPassword();
+      plainPassword = generateAlumniInitialPassword(activationRow.phone);
       const created = await createAlumniPortalUserFromOnboarding({
         row: activationRow,
         emailNorm,

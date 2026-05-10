@@ -3,7 +3,7 @@ import User from "@/models/User";
 import { ensureStudentPublicPortfolioReady } from "@/lib/public-portfolio-bootstrap";
 import { queueHomeStatsRefresh } from "@/lib/home-stats-service";
 import type { AlumniOnboardingActivationRow } from "./activation-types";
-import { generateUniqueAlumniUsername } from "./generate-username";
+import { resolveAlumniPortalUsername } from "./generate-username";
 import { generateUniqueAlumniStudentId } from "./generate-alumni-student-id";
 import { mergeAlumniProfileFromOnboarding } from "./link-existing-user";
 
@@ -13,7 +13,10 @@ export const createAlumniPortalUserFromOnboarding = async (params: {
   plainPassword: string;
 }): Promise<{ userId: string }> => {
   const passwordHash = await bcrypt.hash(params.plainPassword, 10);
-  const username = await generateUniqueAlumniUsername(params.row.fullName);
+  const username = await resolveAlumniPortalUsername({
+    emailNorm: params.emailNorm,
+    fullName: params.row.fullName,
+  });
   const studentId = await generateUniqueAlumniStudentId();
 
   const mergedProfile = mergeAlumniProfileFromOnboarding(params.row, undefined);

@@ -1,8 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { Briefcase } from "lucide-react";
 import { getLocale } from "@/lib/i18n";
 import type { AlumniOpportunityItem } from "@/lib/alumni/alumni-ecosystem-types";
+import AlumniPageHeader from "@/components/alumni/AlumniPageHeader";
+import AlumniEmptyState from "@/components/alumni/AlumniEmptyState";
 
 const AlumniOpportunitiesPage = () => {
   const locale = getLocale();
@@ -34,14 +37,26 @@ const AlumniOpportunitiesPage = () => {
     })();
   }, [query]);
 
+  const dir = isAr ? "rtl" : "ltr";
+
   return (
-    <main className="mx-auto max-w-6xl px-4 py-10 sm:py-14" dir={isAr ? "rtl" : "ltr"}>
-      <header className="rounded-3xl border border-slate-200 bg-gradient-to-br from-slate-900 to-primary p-6 text-white sm:p-8">
-        <h1 className="text-3xl font-black">{isAr ? "فرص الخريجين" : "Alumni opportunities"}</h1>
-        <p className="mt-2 text-sm text-sky-100">
-          {isAr ? "فرص إرشاد وتدريب وعمل وشراكات بإشراف إداري." : "Mentorship, internship, jobs, and partnerships under admin moderation."}
-        </p>
-      </header>
+    <main className="mx-auto max-w-6xl space-y-8 px-4 py-8 sm:py-12" dir={dir}>
+      <AlumniPageHeader
+        title={isAr ? "فرص الخريجين" : "Alumni opportunities"}
+        description={
+          isAr
+            ? "فرص إرشاد وتدريب وعمل وشراكات بإشراف إداري."
+            : "Mentorship, internship, jobs, and partnerships under admin moderation."
+        }
+        backHref="/alumni"
+        backLabel={isAr ? "رجوع" : "Back"}
+        icon={<Briefcase className="h-6 w-6 text-white" aria-hidden />}
+        breadcrumb={[
+          { label: isAr ? "الخريجون" : "Alumni", href: "/alumni" },
+          { label: isAr ? "الفرص" : "Opportunities" },
+        ]}
+        dir={dir}
+      />
 
       <section className="mt-6 grid gap-3 rounded-2xl border border-slate-200 bg-white p-4 sm:grid-cols-4">
         <select value={type} onChange={(e) => setType(e.target.value)} className="rounded-xl border border-slate-200 px-3 py-2 text-sm">
@@ -66,19 +81,40 @@ const AlumniOpportunitiesPage = () => {
       </section>
 
       {loading ? (
-        <p className="py-10 text-center text-slate-500">{isAr ? "جاري التحميل..." : "Loading..."}</p>
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3" aria-busy>
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="h-48 animate-pulse rounded-3xl bg-gradient-to-br from-slate-100 to-slate-50" />
+          ))}
+        </div>
+      ) : items.length === 0 ? (
+        <AlumniEmptyState
+          icon={<Briefcase className="h-8 w-8 text-primary" aria-hidden />}
+          title={isAr ? "لا توجد فرص مطابقة حالياً" : "No matching opportunities yet"}
+          description={
+            isAr ? "غيّر المرشحات أو عد لاحقاً بعد نشر فرص جديدة." : "Adjust filters or check back after new postings."
+          }
+          dir={dir}
+        />
       ) : (
-        <section className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {items.map((item) => (
-            <article key={item.id} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <article
+              key={item.id}
+              className="flex flex-col rounded-3xl border border-slate-200/90 bg-white p-5 shadow-[0_16px_48px_-28px_rgba(15,23,42,0.3)] transition hover:-translate-y-0.5 hover:border-primary/30"
+            >
               <p className="text-xs font-bold uppercase tracking-wide text-primary">{item.type}</p>
               <h2 className="mt-2 text-lg font-black text-slate-900">{item.title}</h2>
-              <p className="mt-2 text-sm text-slate-600 line-clamp-4">{item.description || "—"}</p>
-              <p className="mt-3 text-xs text-slate-500">
+              <p className="mt-2 flex-1 text-sm leading-relaxed text-slate-600 line-clamp-4">{item.description || "—"}</p>
+              <p className="mt-3 text-xs font-medium text-slate-500">
                 {[item.company, item.location, item.remote ? (isAr ? "عن بُعد" : "Remote") : ""].filter(Boolean).join(" • ") || "—"}
               </p>
               {item.applicationUrl ? (
-                <a className="mt-4 inline-flex text-sm font-bold text-primary hover:underline" href={item.applicationUrl} target="_blank">
+                <a
+                  className="mt-4 inline-flex text-sm font-bold text-primary hover:underline"
+                  href={item.applicationUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
                   {isAr ? "رابط التقديم" : "Apply link"}
                 </a>
               ) : null}

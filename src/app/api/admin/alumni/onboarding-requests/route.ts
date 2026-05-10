@@ -17,6 +17,9 @@ import {
   onboardingIdentityActiveClause,
 } from "@/lib/alumni/admin-stats";
 import { normalizeAlumniOnboardingEmail } from "@/lib/alumni/account-activation/activation-types";
+import { isPermanentPurgeProtectedTarget } from "@/lib/alumni/admin-alumni-removal";
+import User from "@/models/User";
+import type { IUser } from "@/models/User";
 
 export const dynamic = "force-dynamic";
 
@@ -33,7 +36,8 @@ const SORT_FIELDS = new Set(["createdAt", "updatedAt", "alumniActivationStatus"]
 
 const serializeRow = (
   row: Record<string, unknown> & { _id: { toString(): string } },
-  duplicateEmailWarning: boolean
+  duplicateEmailWarning: boolean,
+  permanentPurgeProtected: boolean
 ): AlumniOnboardingAdminListItem => {
   const services = (row.services as Record<string, unknown> | undefined) || {};
   return {
@@ -72,6 +76,7 @@ const serializeRow = (
     createdAt: new Date(String(row.createdAt)).toISOString(),
     updatedAt: new Date(String(row.updatedAt)).toISOString(),
     duplicateEmailWarning,
+    permanentPurgeProtected,
   };
 };
 
@@ -126,11 +131,50 @@ export async function GET(request: NextRequest) {
 
     const dupSet = new Set(adminStats.duplicateRequestEmails.map((e) => e.toLowerCase()));
 
+    const userIdStrings = [
+      ...new Set(
+        items
+          .map((row) => (row.userId ? String(row.userId) : ""))
+          .filter((id) => id && mongoose.Types.ObjectId.isValid(id))
+      ),
+    ];
+    const linkedUsers =
+      userIdStrings.length > 0
+        ? await User.find({ _id: { $in: userIdStrings.map((s) => new mongoose.Types.ObjectId(s)) } })
+            .select("_id role accountType email")
+            .lean()
+        : [];
+    const userById = new Map(
+      linkedUsers.map((u) => [
+        String(u._id),
+        u as { _id: mongoose.Types.ObjectId; role?: string; accountType?: string; email?: string },
+      ])
+    );
+
+    const actor = gate.user as unknown as IUser & { _id: mongoose.Types.ObjectId };
+
     return NextResponse.json({
       ok: true,
-      items: items.map((row) =>
-        serializeRow(row as Record<string, unknown> & { _id: { toString(): string } }, dupSet.has(String(row.email || "").toLowerCase()))
-      ),
+      items: items.map((row) => {
+        const uid = row.userId ? String(row.userId) : "";
+        const u = uid ? userById.get(uid) : undefined;
+        const permanentPurgeProtected = u
+          ? isPermanentPurgeProtectedTarget(
+              {
+                _id: u._id,
+                role: u.role,
+                accountType: u.accountType,
+                email: u.email,
+              },
+              { _id: actor._id, email: actor.email }
+            )
+          : Boolean(uid);
+        return serializeRow(
+          row as Record<string, unknown> & { _id: { toString(): string } },
+          dupSet.has(String(row.email || "").toLowerCase()),
+          permanentPurgeProtected
+        );
+      }),
       total: adminStats.total,
       page,
       limit,

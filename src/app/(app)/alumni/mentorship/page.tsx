@@ -3,7 +3,9 @@
 import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Loader2 } from "lucide-react";
+import { Loader2, UserRoundSearch } from "lucide-react";
+import { getLocale } from "@/lib/i18n";
+import AlumniPageHeader from "@/components/alumni/AlumniPageHeader";
 
 type Mentor = {
   id: string;
@@ -13,6 +15,9 @@ type Mentor = {
 };
 
 const MentorshipForm = () => {
+  const locale = getLocale();
+  const isAr = locale === "ar";
+  const dir = isAr ? "rtl" : "ltr";
   const searchParams = useSearchParams();
   const [mentors, setMentors] = useState<Mentor[]>([]);
   const [loading, setLoading] = useState(true);
@@ -59,28 +64,58 @@ const MentorshipForm = () => {
   };
 
   return (
-    <div dir="rtl" className="alumni-mobile-shell mx-auto max-w-3xl px-4 py-8">
-      <h1 className="text-2xl font-black text-slate-900">طلب إرشاد</h1>
-      <p className="mt-2 text-sm text-slate-600">
-        اختر مرشدًا من القائمة وأرسل رسالة قصيرة. يمكنك متابعة الطلبات من{" "}
-        <Link href="/alumni/mentorship/requests" className="font-bold text-primary underline">
-          صفحة المتابعة
-        </Link>
-        .
+    <div dir={dir} className="alumni-mobile-shell mx-auto max-w-3xl space-y-6 px-4 py-8">
+      <AlumniPageHeader
+        title={isAr ? "طلب إرشاد" : "Mentorship request"}
+        description={
+          isAr
+            ? "اختر مرشدًا وأرسل رسالة قصيرة. تابع الطلبات من صفحة المتابعة."
+            : "Choose a mentor and send a short message. Track requests from the follow-up page."
+        }
+        backHref="/alumni/dashboard"
+        backLabel={isAr ? "رجوع" : "Back"}
+        icon={<UserRoundSearch className="h-6 w-6 text-white" aria-hidden />}
+        breadcrumb={[
+          { label: isAr ? "الخريجون" : "Alumni", href: "/alumni" },
+          { label: isAr ? "الإرشاد" : "Mentoring" },
+        ]}
+        dir={dir}
+      />
+
+      <p className="text-sm text-slate-600">
+        {isAr ? (
+          <>
+            يمكنك متابعة الطلبات من{" "}
+            <Link href="/alumni/mentorship/requests" className="font-bold text-primary underline">
+              صفحة المتابعة
+            </Link>
+            .
+          </>
+        ) : (
+          <>
+            Track your requests on the{" "}
+            <Link href="/alumni/mentorship/requests" className="font-bold text-primary underline">
+              requests page
+            </Link>
+            .
+          </>
+        )}
       </p>
 
       {loading ? (
-        <Loader2 className="mt-8 h-8 w-8 animate-spin text-primary" />
+        <div className="flex justify-center py-12">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" aria-hidden />
+        </div>
       ) : (
-        <div className="mt-6 space-y-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="space-y-4 rounded-3xl border border-slate-200 bg-white p-5 shadow-md">
           <label className="block text-sm font-bold text-slate-800">
-            المرشد
+            {isAr ? "المرشد" : "Mentor"}
             <select
               value={mentorId}
               onChange={(e) => setMentorId(e.target.value)}
               className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
             >
-              <option value="">— اختر مرشدًا —</option>
+              <option value="">{isAr ? "— اختر مرشدًا —" : "— Select a mentor —"}</option>
               {mentors.map((x) => (
                 <option key={x.id} value={x.id}>
                   {(x.fullName || x.id) +
@@ -91,7 +126,7 @@ const MentorshipForm = () => {
             </select>
           </label>
           <label className="block text-sm font-bold text-slate-800">
-            الفئة
+            {isAr ? "الفئة" : "Category"}
             <input
               value={category}
               onChange={(e) => setCategory(e.target.value)}
@@ -99,7 +134,7 @@ const MentorshipForm = () => {
             />
           </label>
           <label className="block text-sm font-bold text-slate-800">
-            الرسالة
+            {isAr ? "الرسالة" : "Message"}
             <textarea
               value={message}
               onChange={(e) => setMessage(e.target.value)}
@@ -113,10 +148,16 @@ const MentorshipForm = () => {
             disabled={status === "sending"}
             className="rounded-xl bg-primary px-6 py-3 text-sm font-bold text-white disabled:opacity-50"
           >
-            إرسال الطلب
+            {isAr ? "إرسال الطلب" : "Submit request"}
           </button>
-          {status === "done" ? <p className="text-sm font-bold text-emerald-700">تم إرسال الطلب.</p> : null}
-          {status === "err" ? <p className="text-sm font-bold text-red-700">تعذر الإرسال. تأكد من تسجيل الدخول.</p> : null}
+          {status === "done" ? (
+            <p className="text-sm font-bold text-emerald-700">{isAr ? "تم إرسال الطلب." : "Request sent."}</p>
+          ) : null}
+          {status === "err" ? (
+            <p className="text-sm font-bold text-red-700">
+              {isAr ? "تعذر الإرسال. تأكد من تسجيل الدخول." : "Could not send. Please sign in."}
+            </p>
+          ) : null}
         </div>
       )}
     </div>

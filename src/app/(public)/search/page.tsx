@@ -7,6 +7,9 @@ import type { SearchHit } from "@/lib/search/global-search";
 import { escapeRegExp } from "@/lib/search/query-normalizer";
 import { smartSearchSuggestions } from "@/lib/search/semantic/semantic-search";
 import { AlumniCommunityAccessGate } from "@/components/alumni/AlumniCommunityAccessGate";
+import AlumniPageHeader from "@/components/alumni/AlumniPageHeader";
+import AlumniEmptyState from "@/components/alumni/AlumniEmptyState";
+import { Compass, Search as SearchIcon } from "lucide-react";
 
 const RECENT_KEY = "alumni-unified-search-recent-v1";
 
@@ -113,9 +116,9 @@ const hitHref = (h: SearchHit): string => {
 };
 
 const SkeletonList = () => (
-  <div className="space-y-3" aria-hidden>
-    {Array.from({ length: 6 }).map((_, i) => (
-      <div key={i} className="h-16 animate-pulse rounded-2xl bg-slate-100" />
+  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3" aria-hidden>
+    {Array.from({ length: 9 }).map((_, i) => (
+      <div key={i} className="h-36 animate-pulse rounded-3xl bg-gradient-to-br from-slate-100 to-slate-50" />
     ))}
   </div>
 );
@@ -130,7 +133,6 @@ function UnifiedSearchPageInner() {
   const [recent, setRecent] = useState<string[]>([]);
   const [hits, setHits] = useState<SearchHit[]>([]);
   const [globalData, setGlobalData] = useState<GlobalBundle | null>(null);
-  const [totalEstimate, setTotalEstimate] = useState(0);
 
   useEffect(() => {
     initLocale();
@@ -173,18 +175,15 @@ function UnifiedSearchPageInner() {
       if (!j.ok) {
         setHits([]);
         setGlobalData(null);
-        setTotalEstimate(0);
         return;
       }
       if (tab === "global") {
         setGlobalData(j.data as GlobalBundle);
         setHits([]);
-        setTotalEstimate(0);
       } else {
         setGlobalData(null);
         const items = (j.data?.items || []) as SearchHit[];
         setHits(items);
-        setTotalEstimate(Number(j.data?.totalEstimate || items.length));
       }
       if (query.length >= 2) {
         writeRecent(query);
@@ -202,32 +201,39 @@ function UnifiedSearchPageInner() {
   const t = (row: { ar: string; en: string }) => (locale === "en" ? row.en : row.ar);
 
   const renderHit = (h: SearchHit) => (
-    <li key={`${h.type}-${h.id}`}>
+    <li key={`${h.type}-${h.id}`} className="break-words">
       <Link
         href={hitHref(h)}
-        className="flex flex-col gap-1 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-primary/40 hover:shadow-md"
+        className="group flex h-full flex-col gap-2 rounded-3xl border border-slate-200/90 bg-white p-5 shadow-[0_12px_40px_-28px_rgba(15,23,42,0.35)] transition hover:-translate-y-0.5 hover:border-primary/35 hover:shadow-[0_20px_50px_-24px_rgba(30,58,138,0.35)]"
       >
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-xs font-bold uppercase text-primary/80">{h.type}</span>
+          <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wide text-primary">
+            {h.type}
+          </span>
           {h.rankHighlights?.length ? (
             <span className="flex flex-wrap gap-1">
-              {h.rankHighlights.slice(0, 4).map((x) => (
-                <span key={x} className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-600">
+              {h.rankHighlights.slice(0, 3).map((x) => (
+                <span
+                  key={x}
+                  className="rounded-full border border-slate-200/80 bg-slate-50 px-2 py-0.5 text-[10px] font-semibold text-slate-600"
+                >
                   {x}
                 </span>
               ))}
             </span>
           ) : null}
         </div>
-        <p className="text-base font-black text-slate-900">
+        <p className="text-base font-black leading-snug text-slate-900">
           <Highlight text={h.title} query={debounced} />
         </p>
         {h.subtitle ? (
-          <p className="text-sm text-slate-600">
+          <p className="line-clamp-3 text-sm leading-relaxed text-slate-600">
             <Highlight text={h.subtitle} query={debounced} />
           </p>
         ) : null}
-        {h.meta ? <p className="text-xs text-slate-400">{h.meta}</p> : null}
+        {h.meta ? (
+          <p className="mt-auto pt-2 text-xs font-medium text-slate-400">{h.meta}</p>
+        ) : null}
       </Link>
     </li>
   );
@@ -238,23 +244,31 @@ function UnifiedSearchPageInner() {
       ? "جرّب الاسم، الجامعة، الشركة، السنة، أو مجال العمل."
       : "Try a name, university, company, graduation year, or industry.";
 
-  return (
-    <div className="min-h-screen bg-slate-50 px-4 py-10" dir={locale === "ar" ? "rtl" : "ltr"}>
-      <div className="mx-auto max-w-5xl space-y-8">
-        <header className="space-y-2">
-          <p className="text-xs font-bold uppercase tracking-wide text-primary">{locale === "ar" ? "استكشاف" : "Discover"}</p>
-          <h1 className="text-3xl font-black text-slate-900">
-            {locale === "ar" ? "بحث موحّد في منصة الخريجين" : "Unified alumni intelligence search"}
-          </h1>
-          <p className="text-sm text-slate-600">
-            {locale === "ar"
-              ? "جمع النتائج من الملفات، الفعاليات، الفرص، القصص، والإرشاد — مع ترتيب ذكي وخصوصية محترمة."
-              : "Search profiles, events, opportunities, stories, and mentorship with ranked results and privacy-aware visibility."}
-          </p>
-        </header>
+  const dir = locale === "ar" ? "rtl" : "ltr";
 
-        <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
-          <label className="block text-xs font-bold text-slate-500" htmlFor="unified-search-input">
+  return (
+    <div className="min-h-screen bg-slate-50 px-4 py-8 sm:py-10" dir={dir}>
+      <div className="mx-auto max-w-6xl space-y-8">
+        <AlumniPageHeader
+          title={locale === "ar" ? "بحث مجتمع الخريجين" : "Alumni network search"}
+          description={
+            locale === "ar"
+              ? "جمع النتائج من الملفات، الفعاليات، الفرص، القصص، والإرشاد — مع ترتيب ذكي وخصوصية محترمة."
+              : "Search profiles, events, opportunities, stories, and mentorship with ranked results and privacy-aware visibility."
+          }
+          backHref="/alumni"
+          backLabel={locale === "ar" ? "رجوع" : "Back"}
+          icon={<Compass className="h-6 w-6 text-white" aria-hidden />}
+          breadcrumb={[
+            { label: locale === "ar" ? "الخريجون" : "Alumni", href: "/alumni" },
+            { label: locale === "ar" ? "البحث" : "Search" },
+          ]}
+          dir={dir}
+        />
+
+        <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-[0_16px_50px_-28px_rgba(15,23,42,0.25)] sm:p-6">
+          <label className="flex items-center gap-2 text-xs font-bold text-slate-500" htmlFor="unified-search-input">
+            <SearchIcon className="h-4 w-4 text-primary" aria-hidden />
             {locale === "ar" ? "كلمة البحث" : "Search query"}
           </label>
           <input
@@ -262,7 +276,7 @@ function UnifiedSearchPageInner() {
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder={locale === "ar" ? "مثال: هندسة كهربائية، بوسطن، أرامكو…" : "e.g. electrical engineering, Boston, Aramco…"}
-            className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-900 outline-none ring-primary/30 focus:ring-2"
+            className="mt-3 w-full rounded-2xl border border-slate-200 bg-slate-50/90 px-4 py-3.5 text-sm font-medium text-slate-900 outline-none ring-primary/25 focus:ring-2"
             autoComplete="off"
             aria-label={locale === "ar" ? "حقل البحث الموحد" : "Unified search field"}
           />
@@ -300,26 +314,25 @@ function UnifiedSearchPageInner() {
           )}
         </div>
 
-        <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <h2 className="text-lg font-black text-slate-900">{locale === "ar" ? "النتائج" : "Results"}</h2>
-            {tab !== "global" && totalEstimate > 0 ? (
-              <span className="text-xs font-bold text-slate-500 tabular-nums">
-                {locale === "ar" ? `تقدير: ${totalEstimate}` : `Estimate: ${totalEstimate}`}
-              </span>
-            ) : null}
-          </div>
+        <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-[0_16px_50px_-28px_rgba(15,23,42,0.2)] sm:p-6">
+          <h2 className="text-lg font-black text-slate-900">{locale === "ar" ? "النتائج" : "Results"}</h2>
 
           {loading ? (
             <div className="mt-6">
               <SkeletonList />
             </div>
           ) : tab === "global" && !globalData ? (
-            <div className="mt-8 rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-8 text-center text-sm text-slate-600">
-              {locale === "ar" ? "تعذر تحميل نتائج البحث الشامل." : "Could not load blended search results."}
+            <div className="mt-6">
+              <AlumniEmptyState
+                title={locale === "ar" ? "تعذر تحميل البحث الشامل" : "Could not load blended results"}
+                description={
+                  locale === "ar" ? "أعد المحاولة بعد قليل أو غيّر نطاق البحث." : "Retry shortly or change the search scope."
+                }
+                dir={dir}
+              />
             </div>
           ) : tab === "global" && globalData ? (
-            <div className="mt-6 space-y-8">
+            <div className="mt-6 space-y-10">
               {(
                 [
                   ["alumni", globalData.alumni],
@@ -331,27 +344,28 @@ function UnifiedSearchPageInner() {
                 ] as const
               ).map(([key, list]) => (
                 <div key={key}>
-                  <div className="mb-3 flex items-center justify-between">
-                    <h3 className="text-sm font-black uppercase text-slate-700">{key}</h3>
-                    <span className="text-xs text-slate-400 tabular-nums">
-                      {globalData.totals?.[key as keyof typeof globalData.totals] ?? list.length}
-                    </span>
-                  </div>
+                  <h3 className="mb-4 border-b border-slate-100 pb-2 text-sm font-black uppercase tracking-wide text-slate-800">
+                    {key}
+                  </h3>
                   {list.length === 0 ? (
                     <p className="text-sm text-slate-500">{locale === "ar" ? "لا نتائج في هذا القسم" : "No matches in this bucket"}</p>
                   ) : (
-                    <ul className="grid gap-3 sm:grid-cols-2">{list.map((h) => renderHit(h))}</ul>
+                    <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{list.map((h) => renderHit(h))}</ul>
                   )}
                 </div>
               ))}
             </div>
           ) : tab !== "global" && hits.length === 0 ? (
-            <div className="mt-8 rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-8 text-center">
-              <p className="text-base font-bold text-slate-800">{emptyTitle}</p>
-              <p className="mt-2 text-sm text-slate-600">{emptyHint}</p>
+            <div className="mt-6">
+              <AlumniEmptyState
+                icon={<SearchIcon className="h-8 w-8 text-primary" aria-hidden />}
+                title={emptyTitle}
+                description={emptyHint}
+                dir={dir}
+              />
             </div>
           ) : (
-            <ul className="mt-6 grid gap-3 sm:grid-cols-2">{hits.map((h) => renderHit(h))}</ul>
+            <ul className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{hits.map((h) => renderHit(h))}</ul>
           )}
         </section>
 

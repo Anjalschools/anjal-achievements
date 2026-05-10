@@ -4,7 +4,6 @@ import { memo, useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { getLocale } from "@/lib/i18n";
-import { tokenPreviewForLogs } from "@/lib/get-base-url";
 import type { UserPublicPortfolioPayload } from "@/lib/user-public-portfolio-types";
 import { ExternalLink, Copy, Download, Loader2, QrCode, ShieldOff } from "lucide-react";
 
@@ -179,15 +178,6 @@ const StudentPublicPortfolioCardInner = ({
             </div>
           ) : data.publicUrl ? (
             <p className="text-xs text-slate-500">{isAr ? "جاري تجهيز رمز QR…" : "Preparing QR…"}</p>
-          ) : null}
-          {process.env.NODE_ENV !== "production" && data.enabled ? (
-            <p
-              className="mt-4 max-w-full break-all font-mono text-[10px] leading-relaxed text-slate-400"
-              dir="ltr"
-            >
-              [dev] slug={data.slug ?? "—"} | token=
-              {data.token ? tokenPreviewForLogs(data.token) : "—"} | publicUrl={data.publicUrl ?? "—"}
-            </p>
           ) : null}
         </div>
       )}

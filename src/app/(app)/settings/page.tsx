@@ -32,7 +32,7 @@ export default function SettingsPage() {
   }
 
   if (user.role === "student") {
-    return <StudentSettings />;
+    return <StudentSettings alumniAccount={user.accountType === "alumni"} />;
   }
 
   /* admin, supervisor, schoolAdmin, judge, teacher, … — not the student form */
