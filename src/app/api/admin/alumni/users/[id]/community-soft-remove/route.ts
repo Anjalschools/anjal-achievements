@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import mongoose from "mongoose";
-import { requireAdminUserManager } from "@/lib/admin-user-management-auth";
+import { requireAlumniAdministrationActor } from "@/lib/admin-user-management-auth";
 import { sanitizeMongoShape } from "@/lib/sanitize-input";
 import { executeCommunitySoftRemove } from "@/lib/alumni/admin-alumni-removal";
 import type { IUser } from "@/models/User";
@@ -8,7 +8,7 @@ import type { IUser } from "@/models/User";
 export const dynamic = "force-dynamic";
 
 export async function POST(request: NextRequest, ctx: { params: Promise<{ id: string }> }) {
-  const gate = await requireAdminUserManager();
+  const gate = await requireAlumniAdministrationActor();
   if (!gate.ok) return gate.response;
 
   try {

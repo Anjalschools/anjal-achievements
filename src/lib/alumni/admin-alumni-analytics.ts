@@ -4,8 +4,13 @@ import AlumniEventRsvp from "@/models/AlumniEventRsvp";
 import AlumniStory from "@/models/AlumniStory";
 import AlumniOpportunity from "@/models/AlumniOpportunity";
 import { getAlumniIntelCached, setAlumniIntelCached } from "@/lib/alumni/alumni-intelligence-cache";
+import { alumniCommunityActiveUserClause } from "@/lib/alumni/alumni-community-active";
 
 const TTL_MS = 60_000;
+
+const activeAlumniMatch = (): Record<string, unknown> => ({
+  $and: [{ accountType: "alumni" }, alumniCommunityActiveUserClause()],
+});
 
 const cached = async <T>(key: string, fn: () => Promise<T>): Promise<T> => {
   const hit = getAlumniIntelCached<T>(key);
@@ -40,8 +45,14 @@ export const getAdminAlumniOverview = () =>
       opportunitiesByType,
       storiesPublished,
     ] = await Promise.all([
-      User.countDocuments({ accountType: "alumni" }),
-      User.countDocuments({ accountType: "alumni", "alumniProfile.isVerifiedAlumni": true }),
+      User.countDocuments(activeAlumniMatch()),
+      User.countDocuments({
+        $and: [
+          { accountType: "alumni" },
+          alumniCommunityActiveUserClause(),
+          { "alumniProfile.isVerifiedAlumni": true },
+        ],
+      }),
       AlumniMentorshipRequest.countDocuments({}),
       AlumniMentorshipRequest.aggregate<{ _id: string; count: number }>([
         { $group: { _id: "$status", count: { $sum: 1 } } },
@@ -50,8 +61,11 @@ export const getAdminAlumniOverview = () =>
       User.aggregate<{ _id: string; count: number; verifiedCount: number }>([
         {
           $match: {
-            accountType: "alumni",
-            "alumniProfile.universityName": { $exists: true, $nin: [null, ""] },
+            $and: [
+              { accountType: "alumni" },
+              alumniCommunityActiveUserClause(),
+              { "alumniProfile.universityName": { $exists: true, $nin: [null, ""] } },
+            ],
           },
         },
         {
@@ -67,8 +81,11 @@ export const getAdminAlumniOverview = () =>
       User.aggregate<{ _id: string; count: number }>([
         {
           $match: {
-            accountType: "alumni",
-            "alumniProfile.industry": { $exists: true, $nin: [null, ""] },
+            $and: [
+              { accountType: "alumni" },
+              alumniCommunityActiveUserClause(),
+              { "alumniProfile.industry": { $exists: true, $nin: [null, ""] } },
+            ],
           },
         },
         { $group: { _id: "$alumniProfile.industry", count: { $sum: 1 } } },
@@ -78,8 +95,11 @@ export const getAdminAlumniOverview = () =>
       User.aggregate<{ _id: number; count: number }>([
         {
           $match: {
-            accountType: "alumni",
-            "alumniProfile.graduationYear": { $exists: true, $type: "number" },
+            $and: [
+              { accountType: "alumni" },
+              alumniCommunityActiveUserClause(),
+              { "alumniProfile.graduationYear": { $exists: true, $type: "number" } },
+            ],
           },
         },
         { $group: { _id: "$alumniProfile.graduationYear", count: { $sum: 1 } } },
@@ -130,8 +150,11 @@ export const getAdminAlumniUniversitiesIntel = () =>
     }>([
       {
         $match: {
-          accountType: "alumni",
-          "alumniProfile.universityName": { $exists: true, $nin: [null, ""] },
+          $and: [
+            { accountType: "alumni" },
+            alumniCommunityActiveUserClause(),
+            { "alumniProfile.universityName": { $exists: true, $nin: [null, ""] } },
+          ],
         },
       },
       {
@@ -180,8 +203,11 @@ export const getAdminAlumniCareersIntel = () =>
       User.aggregate<{ _id: string; count: number }>([
         {
           $match: {
-            accountType: "alumni",
-            "alumniProfile.currentCompany": { $exists: true, $nin: [null, ""] },
+            $and: [
+              { accountType: "alumni" },
+              alumniCommunityActiveUserClause(),
+              { "alumniProfile.currentCompany": { $exists: true, $nin: [null, ""] } },
+            ],
           },
         },
         { $group: { _id: "$alumniProfile.currentCompany", count: { $sum: 1 } } },
@@ -191,8 +217,11 @@ export const getAdminAlumniCareersIntel = () =>
       User.aggregate<{ _id: string; count: number }>([
         {
           $match: {
-            accountType: "alumni",
-            "alumniProfile.industry": { $exists: true, $nin: [null, ""] },
+            $and: [
+              { accountType: "alumni" },
+              alumniCommunityActiveUserClause(),
+              { "alumniProfile.industry": { $exists: true, $nin: [null, ""] } },
+            ],
           },
         },
         { $group: { _id: "$alumniProfile.industry", count: { $sum: 1 } } },
@@ -202,8 +231,11 @@ export const getAdminAlumniCareersIntel = () =>
       User.aggregate<{ _id: string; count: number }>([
         {
           $match: {
-            accountType: "alumni",
-            "alumniProfile.currentPosition": { $exists: true, $nin: [null, ""] },
+            $and: [
+              { accountType: "alumni" },
+              alumniCommunityActiveUserClause(),
+              { "alumniProfile.currentPosition": { $exists: true, $nin: [null, ""] } },
+            ],
           },
         },
         { $group: { _id: "$alumniProfile.currentPosition", count: { $sum: 1 } } },
@@ -246,7 +278,7 @@ export const getAdminAlumniEngagementIntel = () =>
       mentorshipHotCategories,
       mentorCompleted,
     ] = await Promise.all([
-      User.find({ accountType: "alumni" })
+      User.find(activeAlumniMatch())
         .select("fullName alumniProfile.reputationScore alumniProfile.isVerifiedAlumni")
         .sort({ "alumniProfile.reputationScore": -1 })
         .limit(12)

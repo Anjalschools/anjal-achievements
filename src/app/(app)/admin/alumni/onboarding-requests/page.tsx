@@ -77,8 +77,11 @@ const AlumniOnboardingAdminPage = () => {
       try {
         const res = await fetch("/api/user/profile", { cache: "no-store" });
         if (!res.ok) return setAllowed(false);
-        const json = (await res.json()) as { role?: string };
-        setAllowed(String(json.role || "") === "admin");
+        const json = (await res.json()) as { role?: string; alumniAdministrationAccess?: boolean };
+        const access =
+          json.alumniAdministrationAccess === true ||
+          (json.alumniAdministrationAccess === undefined && String(json.role || "") === "admin");
+        setAllowed(access);
       } catch {
         setAllowed(false);
       }
@@ -189,11 +192,19 @@ const AlumniOnboardingAdminPage = () => {
         ar: "اكتب DELETE أو حذف نهائي بالضبط للتأكيد.",
         en: 'Type exactly DELETE or "حذف نهائي" to confirm.',
       },
+      SELF_DELETE_FORBIDDEN: { ar: "لا يمكنك حذف حسابك الحالي.", en: "You cannot delete your own account." },
       CANNOT_DELETE_SELF: { ar: "لا يمكنك حذف حسابك الحالي.", en: "You cannot delete your own account." },
       FORBIDDEN_ADMIN_TARGET: { ar: "لا يمكن حذف حساب مدير النظام.", en: "Cannot purge a system admin account." },
+      FORBIDDEN: {
+        ar: "لا تملك صلاحية الحذف النهائي أو إدارة طلبات الخريجين.",
+        en: "You do not have permission for this alumni administration action.",
+      },
     };
     const row = map[code];
     if (row) return isAr ? row.ar : row.en;
+    if (code === "NOT_ALUMNI_ACCOUNT") {
+      return isAr ? "تعذر حذف الخريج — الحساب غير مرتبط بخريج في النظام." : "Could not delete: account is not alumni-linked.";
+    }
     return code;
   };
 
@@ -325,20 +336,29 @@ const AlumniOnboardingAdminPage = () => {
       const json = (await response.json().catch(() => ({}))) as {
         ok?: boolean;
         alreadyPurged?: boolean;
+        alreadyDeleted?: boolean;
         error?: string;
+        reason?: string;
       };
       if (!response.ok) {
-        setToast({ kind: "error", message: mapRemovalApiError(json.error) });
+        const fallback =
+          json.error === "FORBIDDEN"
+            ? isAr
+              ? "لا تملك صلاحية الحذف النهائي."
+              : "You do not have permission to run a permanent delete."
+            : mapRemovalApiError(json.error);
+        setToast({ kind: "error", message: fallback });
         return;
       }
+      const wasAlready = json.alreadyDeleted === true || json.alreadyPurged === true;
       setToast({
-        kind: json.alreadyPurged ? "info" : "success",
-        message: json.alreadyPurged
+        kind: wasAlready ? "info" : "success",
+        message: wasAlready
           ? isAr
-            ? "تم تنفيذ الحذف النهائي مسبقًا لهذا الحساب."
-            : "Permanent purge was already applied for this account."
+            ? "تم حذف الخريج مسبقًا — لا حاجة لإعادة التنفيذ."
+            : "This alumni was already permanently purged."
           : isAr
-            ? "تم تنفيذ الحذف النهائي لبيانات الخريج بنجاح."
+            ? "تم تنفيذ الحذف النهائي بنجاح."
             : "Permanent alumni data purge completed successfully.",
       });
       setSelected(null);

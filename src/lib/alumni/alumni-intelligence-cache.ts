@@ -17,3 +17,8 @@ export const setAlumniIntelCached = <T>(key: string, value: T, ttlMs: number = D
 export const deleteAlumniIntelCacheKey = (key: string): void => {
   slots.delete(key);
 };
+
+/** Clears all in-process alumni intel slots (analytics + CRM previews). Use after destructive alumni admin writes. */
+export const clearAlumniIntelCache = (): void => {
+  slots.clear();
+};

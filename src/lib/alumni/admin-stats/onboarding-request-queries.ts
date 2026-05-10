@@ -4,6 +4,18 @@ import { alumniCommunityActiveUserClause } from "@/lib/alumni/alumni-community-a
 
 export const escapeRegExpForOnboarding = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
+/** Rows still linked to a live alumni identity (excludes permanent purge). */
+export const onboardingIdentityActiveClause = (): Record<string, unknown> => ({
+  $or: [{ alumniIdentityPurgedAt: { $exists: false } }, { alumniIdentityPurgedAt: null }],
+});
+
+export const mergeOnboardingAdminFilters = (parts: Record<string, unknown>[]): Record<string, unknown> => {
+  const nonEmpty = parts.filter((p) => p && Object.keys(p).length > 0);
+  if (nonEmpty.length === 0) return {};
+  if (nonEmpty.length === 1) return nonEmpty[0] as Record<string, unknown>;
+  return { $and: nonEmpty };
+};
+
 export const buildOnboardingScopeFilter = (params: {
   q: string;
   activationParam: string | null;
@@ -46,6 +58,7 @@ export const computeOnboardingAdminStats = async (
       ...alumniCommunityActiveUserClause(),
     }),
     AlumniOnboardingRequest.aggregate<{ _id: string }>([
+      { $match: onboardingIdentityActiveClause() },
       { $group: { _id: "$email", c: { $sum: 1 } } },
       { $match: { c: { $gt: 1 } } },
     ]),

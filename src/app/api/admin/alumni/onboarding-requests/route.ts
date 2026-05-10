@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import mongoose from "mongoose";
 import connectDB from "@/lib/mongodb";
 import AlumniOnboardingRequest from "@/models/AlumniOnboardingRequest";
-import { requireAdminUserManager } from "@/lib/admin-user-management-auth";
+import { requireAlumniAdministrationActor } from "@/lib/admin-user-management-auth";
 import { sanitizeMongoShape } from "@/lib/sanitize-input";
 import { sanitizeUserText } from "@/lib/sanitize-html";
 import type {
@@ -13,6 +13,8 @@ import { ALUMNI_ACTIVATION_STATUS_VALUES } from "@/lib/alumni/alumni-activation-
 import {
   buildOnboardingScopeFilter,
   computeOnboardingAdminStats,
+  mergeOnboardingAdminFilters,
+  onboardingIdentityActiveClause,
 } from "@/lib/alumni/admin-stats";
 import { normalizeAlumniOnboardingEmail } from "@/lib/alumni/account-activation/activation-types";
 
@@ -74,7 +76,7 @@ const serializeRow = (
 };
 
 export async function GET(request: NextRequest) {
-  const gate = await requireAdminUserManager();
+  const gate = await requireAlumniAdministrationActor();
   if (!gate.ok) return gate.response;
 
   try {
@@ -95,8 +97,13 @@ export async function GET(request: NextRequest) {
       isValidActivation: isValidActivationFilter,
     });
 
-    const fullFilter: Record<string, unknown> = { ...scopeFilter };
-    if (isValidStatus(statusParam)) fullFilter.status = statusParam;
+    const listable = onboardingIdentityActiveClause();
+    const fullFilter = mergeOnboardingAdminFilters([
+      listable,
+      scopeFilter,
+      ...(isValidStatus(statusParam) ? [{ status: statusParam } as Record<string, unknown>] : []),
+    ]);
+    const statsScopeFilter = mergeOnboardingAdminFilters([listable, scopeFilter]);
 
     await connectDB();
 
@@ -114,7 +121,7 @@ export async function GET(request: NextRequest) {
         .skip(skip)
         .limit(limit)
         .lean<Record<string, unknown>[]>(),
-      computeOnboardingAdminStats(fullFilter, scopeFilter),
+      computeOnboardingAdminStats(fullFilter, statsScopeFilter),
     ]);
 
     const dupSet = new Set(adminStats.duplicateRequestEmails.map((e) => e.toLowerCase()));
@@ -141,7 +148,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function PATCH(request: NextRequest) {
-  const gate = await requireAdminUserManager();
+  const gate = await requireAlumniAdministrationActor();
   if (!gate.ok) return gate.response;
 
   try {

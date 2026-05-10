@@ -18,6 +18,7 @@ import {
   normalizeStudentPortfolioContentFromDoc,
   parseStudentPortfolioContentInput,
 } from "@/lib/student-portfolio-content";
+import { userMayAdministerAlumni } from "@/lib/alumni/alumni-administration-access";
 
 export const dynamic = "force-dynamic";
 
@@ -77,6 +78,7 @@ export async function GET(request: NextRequest) {
     const organizationalAccess = buildOrganizationalAccessPayload(user as IUser);
     const ap = (user as IUser).alumniProfile || {};
     const completedAt = (user as IUser).completedAlumniOnboardingAt;
+    const alumniAdministrationAccess = await userMayAdministerAlumni(user as IUser);
 
     return NextResponse.json({
       id: user._id.toString(),
@@ -100,6 +102,7 @@ export async function GET(request: NextRequest) {
       guardianNationalId: user.guardianNationalId || "",
       profilePhoto: user.profilePhoto,
       role: user.role,
+      alumniAdministrationAccess,
       preferredLanguage: user.preferredLanguage,
       notifications: mergeNotificationPrefs(nu.notificationPreferences),
       privacy: mergePrivacyPrefs(nu.privacyPreferences),
