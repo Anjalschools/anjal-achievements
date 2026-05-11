@@ -1,12 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Loader2, Mail, MessageCirclePlus, Send } from "lucide-react";
+import { Loader2, Mail, MessageCirclePlus, Search, Send } from "lucide-react";
 import { useAppSession } from "@/contexts/AppSessionContext";
 import { getLocale } from "@/lib/i18n";
 import AlumniPageHeader from "@/components/alumni/AlumniPageHeader";
 import AlumniEmptyState from "@/components/alumni/AlumniEmptyState";
+import MessagesEmptyIllustration from "@/components/alumni/MessagesEmptyIllustration";
 
 type Thread = {
   id: string;
@@ -33,6 +34,28 @@ export default function AlumniInboxPage() {
   const [newSubject, setNewSubject] = useState("");
   const [newBody, setNewBody] = useState("");
   const [showNewThread, setShowNewThread] = useState(false);
+  const [threadQuery, setThreadQuery] = useState("");
+
+  const formatThreadTime = useCallback(
+    (raw: string | null) => {
+      if (!raw) return "";
+      const d = new Date(raw);
+      if (!Number.isNaN(d.getTime())) {
+        return d.toLocaleString(isAr ? "ar-SA" : "en-GB", { dateStyle: "short", timeStyle: "short" });
+      }
+      return raw;
+    },
+    [isAr]
+  );
+
+  const filteredThreads = useMemo(() => {
+    const q = threadQuery.trim().toLowerCase();
+    if (!q) return threads;
+    return threads.filter(
+      (row) =>
+        row.subject.toLowerCase().includes(q) || (row.lastMessagePreview || "").toLowerCase().includes(q)
+    );
+  }, [threads, threadQuery]);
 
   const loadThreads = useCallback(async () => {
     const res = await fetch("/api/alumni/inbox", { credentials: "include" });
@@ -150,19 +173,36 @@ export default function AlumniInboxPage() {
           { label: isAr ? "الرسائل" : "Messages" },
         ]}
         dir={dir}
-        actions={
-          <button
-            type="button"
-            onClick={() => setShowNewThread((v) => !v)}
-            className="inline-flex items-center gap-2 rounded-xl border border-white/25 bg-white/10 px-4 py-2.5 text-sm font-bold text-white backdrop-blur-sm transition hover:bg-white/15"
-            tabIndex={0}
-            aria-expanded={showNewThread}
-          >
-            <MessageCirclePlus className="h-4 w-4 shrink-0" aria-hidden />
-            {isAr ? "محادثة جديدة" : "New conversation"}
-          </button>
-        }
       />
+
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+        <div className="relative min-w-0 flex-1">
+          <Search
+            className={`pointer-events-none absolute top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 ${isAr ? "right-3" : "left-3"}`}
+            aria-hidden
+          />
+          <input
+            type="search"
+            value={threadQuery}
+            onChange={(e) => setThreadQuery(e.target.value)}
+            placeholder={isAr ? "ابحث في المحادثات…" : "Search conversations…"}
+            className={`h-11 w-full rounded-2xl border border-slate-200 bg-white py-2 text-sm text-slate-900 shadow-sm outline-none ring-primary/20 focus:ring-2 ${
+              isAr ? "pr-10 pl-4" : "pl-10 pr-4"
+            }`}
+            aria-label={isAr ? "بحث المحادثات" : "Search threads"}
+          />
+        </div>
+        <button
+          type="button"
+          onClick={() => setShowNewThread((v) => !v)}
+          className="inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-2xl bg-primary px-5 text-sm font-black text-white shadow-md shadow-primary/25 transition hover:opacity-95"
+          tabIndex={0}
+          aria-expanded={showNewThread}
+        >
+          <MessageCirclePlus className="h-4 w-4 shrink-0" aria-hidden />
+          {isAr ? "محادثة جديدة" : "New conversation"}
+        </button>
+      </div>
 
       {showNewThread ? (
         <div className="mb-4 rounded-3xl border border-slate-200 bg-white p-4 shadow-md sm:p-5">
@@ -215,21 +255,26 @@ export default function AlumniInboxPage() {
               <div className="px-1 py-4">
                 <AlumniEmptyState
                   className="!py-10"
+                  illustration={<MessagesEmptyIllustration />}
                   icon={<Mail className="h-8 w-8" aria-hidden />}
                   title={isAr ? "لا توجد محادثات بعد" : "No conversations yet"}
                   description={
                     isAr
-                      ? "ابدأ محادثة جديدة مع الإدارة عند الحاجة."
-                      : "Start a new thread with administration when you need support."
+                      ? "ابدأ محادثة جديدة مع فريق مجتمع الخريجين عند الحاجة."
+                      : "Start a new thread with the alumni community team when you need support."
                   }
                   ctaLabel={isAr ? "محادثة جديدة" : "New conversation"}
                   onCtaClick={() => setShowNewThread(true)}
                   dir={dir}
                 />
               </div>
+            ) : filteredThreads.length === 0 ? (
+              <p className="px-3 py-8 text-center text-sm text-slate-500">
+                {isAr ? "لا نتائج مطابقة للبحث." : "No threads match your search."}
+              </p>
             ) : (
               <ul className="mt-1 max-h-[45vh] space-y-1 overflow-y-auto lg:max-h-none lg:flex-1" role="list">
-                {threads.map((t) => (
+                {filteredThreads.map((t) => (
                   <li key={t.id}>
                     <button
                       type="button"
@@ -240,22 +285,28 @@ export default function AlumniInboxPage() {
                           : "hover:bg-slate-50"
                       }`}
                     >
-                      <span className="line-clamp-2">{t.subject}</span>
-                      {t.lastMessagePreview ? (
-                        <span className="line-clamp-1 text-xs font-normal text-slate-500">
-                          {t.lastMessagePreview}
-                        </span>
-                      ) : null}
-                      <span className="flex flex-wrap items-center gap-2">
+                      <div className="flex items-start justify-between gap-2">
+                        <span className="line-clamp-2 min-w-0 flex-1">{t.subject}</span>
                         {t.unread > 0 ? (
-                          <span className="inline-flex min-w-[1.5rem] items-center justify-center rounded-full bg-primary px-2 py-0.5 text-[10px] font-black text-white">
+                          <span className="inline-flex min-w-[1.35rem] shrink-0 items-center justify-center rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-black text-white">
                             {t.unread}
                           </span>
                         ) : null}
-                        {t.updatedAt ? (
-                          <span className="text-[10px] font-medium text-slate-400">{t.updatedAt}</span>
-                        ) : null}
-                      </span>
+                      </div>
+                      {t.lastMessagePreview ? (
+                        <span className="line-clamp-2 text-xs font-normal leading-relaxed text-slate-500">
+                          {t.lastMessagePreview}
+                        </span>
+                      ) : (
+                        <span className="text-xs italic text-slate-400">
+                          {isAr ? "لا معاينة بعد — اكتب أول رسالة" : "No preview yet"}
+                        </span>
+                      )}
+                      {t.updatedAt ? (
+                        <span className="text-[10px] font-medium text-slate-400">
+                          {formatThreadTime(t.updatedAt)}
+                        </span>
+                      ) : null}
                     </button>
                   </li>
                 ))}
@@ -269,12 +320,13 @@ export default function AlumniInboxPage() {
             <div className="flex flex-1 items-center justify-center p-6">
               <AlumniEmptyState
                 className="w-full max-w-md border-0 bg-transparent shadow-none"
+                illustration={<MessagesEmptyIllustration className="mx-auto h-28 w-full max-w-[200px]" />}
                 icon={<MessageCirclePlus className="h-8 w-8 text-primary" aria-hidden />}
                 title={isAr ? "اختر محادثة" : "Select a conversation"}
                 description={
                   isAr
-                    ? "اختر من القائمة أو أنشئ محادثة جديدة."
-                    : "Pick a thread from the list or start a new one."
+                    ? "اختر من القائمة أو أنشئ محادثة جديدة مع فريق المجتمع المهني."
+                    : "Pick a thread from the list or start one with the alumni team."
                 }
                 ctaLabel={threads.length === 0 ? undefined : isAr ? "محادثة جديدة" : "New conversation"}
                 onCtaClick={threads.length === 0 ? undefined : () => setShowNewThread(true)}
@@ -290,28 +342,40 @@ export default function AlumniInboxPage() {
                     className="rounded-2xl border border-slate-100 bg-slate-50/90 px-4 py-3 text-sm text-slate-800 shadow-sm"
                   >
                     <p className="whitespace-pre-wrap leading-relaxed">{m.body}</p>
-                    <p className="mt-2 text-[10px] text-slate-400">{m.createdAt || ""}</p>
+                    <p className="mt-2 text-[10px] text-slate-400">{formatThreadTime(m.createdAt)}</p>
                   </div>
                 ))}
               </div>
-              <div className="flex gap-2 border-t border-slate-100 p-3">
+              <div className="relative border-t border-slate-100 p-3">
                 <textarea
                   value={reply}
                   onChange={(e) => setReply(e.target.value)}
                   rows={2}
-                  className="flex-1 rounded-2xl border border-slate-200 px-3 py-2 text-sm outline-none ring-primary/20 focus:ring-2"
-                  placeholder={isAr ? "اكتب رسالتك…" : "Write a message…"}
+                  className="w-full rounded-2xl border border-slate-200 px-3 py-2 pb-8 text-sm outline-none ring-primary/20 focus:ring-2"
+                  placeholder={isAr ? "اكتب رسالتك…" : "Type your message…"}
                   aria-label={isAr ? "ردك" : "Your reply"}
                 />
-                <button
-                  type="button"
-                  onClick={() => void handleSend()}
-                  disabled={sending || !reply.trim()}
-                  className="inline-flex h-11 shrink-0 items-center gap-2 self-end rounded-2xl bg-primary px-4 text-sm font-bold text-white disabled:opacity-50"
-                  aria-label={isAr ? "إرسال" : "Send"}
+                <span
+                  className={`pointer-events-none absolute bottom-5 flex items-center gap-0.5 text-[10px] font-medium text-slate-400 ${
+                    isAr ? "right-5" : "left-5"
+                  }`}
+                  aria-hidden
                 >
-                  {sending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Send className="h-4 w-4" aria-hidden />}
-                </button>
+                  <span className="inline-block h-1 w-1 animate-pulse rounded-full bg-slate-400" />
+                  <span className="inline-block h-1 w-1 animate-pulse rounded-full bg-slate-400 [animation-delay:180ms]" />
+                  <span className="inline-block h-1 w-1 animate-pulse rounded-full bg-slate-400 [animation-delay:360ms]" />
+                </span>
+                <div className="mt-2 flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void handleSend()}
+                    disabled={sending || !reply.trim()}
+                    className="inline-flex h-11 shrink-0 items-center gap-2 rounded-2xl bg-primary px-4 text-sm font-bold text-white disabled:opacity-50"
+                    aria-label={isAr ? "إرسال" : "Send"}
+                  >
+                    {sending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Send className="h-4 w-4" aria-hidden />}
+                  </button>
+                </div>
               </div>
             </div>
           )}

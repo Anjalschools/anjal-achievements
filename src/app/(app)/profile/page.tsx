@@ -7,6 +7,8 @@ import SectionCard from "@/components/layout/SectionCard";
 import StatCard from "@/components/layout/StatCard";
 import StudentPublicPortfolioCard from "@/components/profile/StudentPublicPortfolioCard";
 import type { UserPublicPortfolioPayload } from "@/lib/user-public-portfolio-types";
+import type { StudentPortfolioContent } from "@/lib/student-portfolio-content";
+import type { AccountType } from "@/lib/account-type";
 import { Edit, Trophy, Award, Calendar, User, PlusCircle, ArrowRight, Phone, Mail, Star } from "lucide-react";
 import Link from "next/link";
 import AuthGuardLink from "@/components/auth/AuthGuardLink";
@@ -120,6 +122,13 @@ const ProfilePage = () => {
   const [insights, setInsights] = useState<ProfileInsights>(emptyInsights);
   const [totalScore, setTotalScore] = useState(0);
   const [userRole, setUserRole] = useState("");
+  const [accountType, setAccountType] = useState<AccountType>("student");
+  const [alumniPrefill, setAlumniPrefill] = useState({
+    universityName: "",
+    major: "",
+    industry: "",
+  });
+  const [studentPortfolioContent, setStudentPortfolioContent] = useState<StudentPortfolioContent | null>(null);
   const [publicPortfolio, setPublicPortfolio] = useState<UserPublicPortfolioPayload | null>(null);
   const [publicPortfolioError, setPublicPortfolioError] = useState<string | null>(null);
   const [profileLoading, setProfileLoading] = useState(true);
@@ -214,6 +223,7 @@ const ProfilePage = () => {
         const profileData = (await profileResponse.json()) as Record<string, unknown>;
         const resolvedRole = String(profileData.role || "");
         setUserRole(resolvedRole);
+        setAccountType(profileData.accountType === "alumni" ? "alumni" : "student");
         setUserData({
           fullName: String(profileData.fullName || ""),
           email: String(profileData.email || ""),
@@ -230,6 +240,8 @@ const ProfilePage = () => {
         });
 
         if (isAchievementReviewerRole(resolvedRole)) {
+          setStudentPortfolioContent(null);
+          setAlumniPrefill({ universityName: "", major: "", industry: "" });
           setReviewerProfile({
             fullName: String(profileData.fullName || ""),
             email: String(profileData.email || ""),
@@ -274,6 +286,23 @@ const ProfilePage = () => {
         setAdminDashboard(null);
         setAdminDashboardError(null);
 
+        const spcRaw = profileData.studentPortfolioContent;
+        setStudentPortfolioContent(
+          spcRaw && typeof spcRaw === "object" ? (spcRaw as StudentPortfolioContent) : null
+        );
+
+        const apRaw = profileData.alumniOnboardingPrefill;
+        if (apRaw && typeof apRaw === "object") {
+          const ap = apRaw as Record<string, unknown>;
+          setAlumniPrefill({
+            universityName: String(ap.universityName || ""),
+            major: String(ap.major || ""),
+            industry: String(ap.industry || ""),
+          });
+        } else {
+          setAlumniPrefill({ universityName: "", major: "", industry: "" });
+        }
+
         const [statsResponse, achievementsResponse, portfolioResponse] = await Promise.all([
           fetch("/api/user/stats", { cache: "no-store", credentials: "same-origin", signal }),
           fetch("/api/achievements", { cache: "no-store", credentials: "same-origin", signal }),
@@ -302,7 +331,8 @@ const ProfilePage = () => {
           setRecentAchievementsList([]);
         }
 
-        if (resolvedRole !== "student") {
+        const eligiblePublicPortfolio = resolvedRole === "student";
+        if (!eligiblePublicPortfolio) {
           setPublicPortfolio(null);
           setPublicPortfolioError(null);
         } else if (portfolioResponse.status === 403) {
@@ -311,14 +341,6 @@ const ProfilePage = () => {
         } else if (portfolioResponse.ok) {
           const pj = (await portfolioResponse.json()) as UserPublicPortfolioPayload;
           setPublicPortfolio(pj);
-          if (process.env.NODE_ENV === "development") {
-            console.info("[profile-page] public portfolio payload ready", {
-              enabled: pj.enabled,
-              slug: pj.slug ?? null,
-              hasToken: Boolean(pj.token && String(pj.token).trim()),
-              publicUrl: pj.publicUrl ?? null,
-            });
-          }
         } else if (!silent) {
           const j = (await portfolioResponse.json().catch(() => ({}))) as { error?: string };
           setPublicPortfolioError(
@@ -453,7 +475,13 @@ const ProfilePage = () => {
               </div>
               <div>
                 <p className="mb-1 text-xs font-medium text-text-light">
-                  {locale === "ar" ? "رقم الطالب" : "Student ID"}
+                  {accountType === "alumni"
+                    ? locale === "ar"
+                      ? "معرّف العضوية"
+                      : "Member ID"
+                    : locale === "ar"
+                      ? "رقم الطالب"
+                      : "Student ID"}
                 </p>
                 <p className="text-sm font-semibold text-text">{userData.studentId || "-"}</p>
               </div>
@@ -473,22 +501,47 @@ const ProfilePage = () => {
                   {userData.gender ? getGenderLabel(userData.gender, loc) : "-"}
                 </p>
               </div>
-              <div>
-                <p className="mb-1 text-xs font-medium text-text-light">
-                  {locale === "ar" ? "الصف" : "Grade"}
-                </p>
-                <p className="text-sm font-semibold text-text">
-                  {userData.grade ? getGradeLabel(userData.grade, locale) : "-"}
-                </p>
-              </div>
-              <div>
-                <p className="mb-1 text-xs font-medium text-text-light">
-                  {locale === "ar" ? "القسم" : "Section"}
-                </p>
-                <p className="text-sm font-semibold text-text">
-                  {userData.section ? getSectionLabel(userData.section, loc) : "-"}
-                </p>
-              </div>
+              {accountType === "student" ? (
+                <>
+                  <div>
+                    <p className="mb-1 text-xs font-medium text-text-light">
+                      {locale === "ar" ? "الصف" : "Grade"}
+                    </p>
+                    <p className="text-sm font-semibold text-text">
+                      {userData.grade ? getGradeLabel(userData.grade, locale) : "-"}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="mb-1 text-xs font-medium text-text-light">
+                      {locale === "ar" ? "القسم" : "Section"}
+                    </p>
+                    <p className="text-sm font-semibold text-text">
+                      {userData.section ? getSectionLabel(userData.section, loc) : "-"}
+                    </p>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div>
+                    <p className="mb-1 text-xs font-medium text-text-light">
+                      {locale === "ar" ? "الجامعة" : "University"}
+                    </p>
+                    <p className="text-sm font-semibold text-text">{alumniPrefill.universityName || "-"}</p>
+                  </div>
+                  <div>
+                    <p className="mb-1 text-xs font-medium text-text-light">
+                      {locale === "ar" ? "التخصص" : "Major / field"}
+                    </p>
+                    <p className="text-sm font-semibold text-text">{alumniPrefill.major || "-"}</p>
+                  </div>
+                  <div>
+                    <p className="mb-1 text-xs font-medium text-text-light">
+                      {locale === "ar" ? "المجال المهني" : "Professional field"}
+                    </p>
+                    <p className="text-sm font-semibold text-text">{alumniPrefill.industry || "-"}</p>
+                  </div>
+                </>
+              )}
               <div>
                 <p className="mb-1 text-xs font-medium text-text-light">
                   {locale === "ar" ? "رقم الجوال" : "Phone"}
@@ -498,15 +551,15 @@ const ProfilePage = () => {
                   {userData.phone || "-"}
                 </p>
               </div>
-              {userData.guardianName && (
+              {accountType === "student" && userData.guardianName ? (
                 <div>
                   <p className="mb-1 text-xs font-medium text-text-light">
                     {locale === "ar" ? "اسم ولي الأمر" : "Parent Name"}
                   </p>
                   <p className="text-sm font-semibold text-text">{userData.guardianName}</p>
                 </div>
-              )}
-              {userData.guardianPhone && (
+              ) : null}
+              {accountType === "student" && userData.guardianPhone ? (
                 <div>
                   <p className="mb-1 text-xs font-medium text-text-light">
                     {locale === "ar" ? "جوال ولي الأمر" : "Parent Phone"}
@@ -516,7 +569,7 @@ const ProfilePage = () => {
                     {userData.guardianPhone}
                   </p>
                 </div>
-              )}
+              ) : null}
             </div>
 
             {/* Edit Button */}
@@ -540,6 +593,26 @@ const ProfilePage = () => {
             loading={profileLoading}
             error={publicPortfolioError}
             onRetry={handlePublicPortfolioRetry}
+            heroSummary={
+              publicPortfolio?.enabled
+                ? {
+                    fullName: userData.fullName,
+                    avatarUrl: showAvatar ? avatarSrc : undefined,
+                    initials: getInitials(userData.fullName),
+                    isAlumni: accountType === "alumni",
+                    technicalSkills: studentPortfolioContent?.technicalSkills ?? [],
+                    personalSkills: studentPortfolioContent?.personalSkills ?? [],
+                    bioPreview: (() => {
+                      const b = (studentPortfolioContent?.bio || "").trim();
+                      if (!b) return undefined;
+                      return b.length > 160 ? `${b.slice(0, 160)}…` : b;
+                    })(),
+                    totalAchievements: stats.totalAchievements,
+                    featuredAchievements: stats.featuredAchievements,
+                    highlightLevelLabel: insights.maxLevelRaw ? maxLevelLabel : undefined,
+                  }
+                : null
+            }
           />
         </div>
       ) : null}

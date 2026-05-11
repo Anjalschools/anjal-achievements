@@ -38,6 +38,7 @@ import {
   Users,
   Activity,
   Search,
+  Images,
 } from "lucide-react";
 import { useUnreadNotificationCount } from "@/hooks/useUnreadNotificationCount";
 import { getLocale } from "@/lib/i18n";
@@ -151,10 +152,22 @@ const AppSidebar = () => {
     icon: GraduationCap,
     label: locale === "ar" ? "الإرشاد" : "Mentorship",
   };
+  const alumniMemoriesNavItem = {
+    href: "/alumni/dashboard#alumni-memories",
+    icon: Images,
+    label: locale === "ar" ? "ذكرياتي في الأنجال" : "My school memories",
+  };
   const alumniAssistantNavItem = {
     href: "/alumni/assistant",
     icon: Bot,
-    label: locale === "ar" ? "المرشد الأكاديمي الذكي" : "Smart academic advisor",
+    label:
+      profile?.accountType === "alumni"
+        ? locale === "ar"
+          ? "المرشد المهني الذكي"
+          : "Smart career advisor"
+        : locale === "ar"
+          ? "المرشد الأكاديمي الذكي"
+          : "Smart academic advisor",
   };
   const addAchievementItem = {
     href: "/achievements/new",
@@ -348,7 +361,7 @@ const AppSidebar = () => {
         .map(({ capability: _omit, ...rest }) => rest)
     : [
         ...(isAlumniAccount
-          ? [alumniDashboardNavItem, alumniInboxNavItem, alumniMentorshipNavItem]
+          ? [alumniDashboardNavItem, alumniInboxNavItem, alumniMentorshipNavItem, alumniMemoriesNavItem]
           : [studentDashboardItem]),
         ...(showAcademicAdvisorNav ? [alumniAssistantNavItem] : []),
         ...(!isAlumniAccount ? [hallOfFameItem] : []),
@@ -455,6 +468,9 @@ const AppSidebar = () => {
     }
     if (href === "/search") {
       return pathname === "/search" || pathname?.startsWith("/search/");
+    }
+    if (href === "/alumni/dashboard#alumni-memories") {
+      return pathname === "/alumni/dashboard";
     }
     return pathname?.startsWith(href);
   };

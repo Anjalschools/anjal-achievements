@@ -5,6 +5,8 @@ import type { ReactNode } from "react";
 
 export type AlumniEmptyStateProps = {
   icon?: ReactNode;
+  /** Large decorative area above title (e.g. inline SVG illustration) */
+  illustration?: ReactNode;
   title: string;
   description?: string;
   ctaLabel?: string;
@@ -16,6 +18,7 @@ export type AlumniEmptyStateProps = {
 
 const AlumniEmptyState = ({
   icon,
+  illustration,
   title,
   description,
   ctaLabel,
@@ -29,14 +32,23 @@ const AlumniEmptyState = ({
   return (
     <div
       dir={dir}
-      className={`relative overflow-hidden rounded-3xl border border-slate-200/90 bg-gradient-to-br from-slate-50 via-white to-sky-50/80 px-6 py-14 text-center shadow-[0_12px_40px_-24px_rgba(15,23,42,0.35)] ${className}`}
+      className={`relative overflow-hidden rounded-3xl border border-slate-200/90 bg-gradient-to-br from-slate-50 via-white to-sky-50/80 px-6 py-12 text-center shadow-[0_12px_40px_-24px_rgba(15,23,42,0.35)] sm:py-14 ${className}`}
       role="status"
     >
       <div
         className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top,_rgba(30,58,138,0.08),_transparent_55%)] motion-safe:animate-pulse"
         aria-hidden
       />
-      <div className={`relative mx-auto flex max-w-md flex-col items-center gap-4 ${isRtl ? "" : ""}`}>
+      <div
+        className="pointer-events-none absolute -end-8 -top-12 h-40 w-40 rounded-full bg-secondary/10 blur-3xl"
+        aria-hidden
+      />
+      <div className={`relative mx-auto flex max-w-md flex-col items-center gap-5 ${isRtl ? "" : ""}`}>
+        {illustration ? (
+          <div className="flex w-full max-w-[220px] justify-center text-primary/90 motion-safe:transition motion-safe:duration-500 motion-safe:hover:scale-[1.02]">
+            {illustration}
+          </div>
+        ) : null}
         {icon ? (
           <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10 text-primary ring-1 ring-primary/15 motion-safe:transition motion-safe:duration-500 motion-safe:hover:scale-[1.03]">
             {icon}

@@ -10,6 +10,7 @@ import { AlumniCommunityAccessGate } from "@/components/alumni/AlumniCommunityAc
 import AlumniPageHeader from "@/components/alumni/AlumniPageHeader";
 import AlumniEmptyState from "@/components/alumni/AlumniEmptyState";
 import { Compass, Search as SearchIcon } from "lucide-react";
+import { AlumniNetworkDiscoveryCard } from "@/components/alumni/AlumniNetworkDiscoveryCard";
 
 const RECENT_KEY = "alumni-unified-search-recent-v1";
 
@@ -200,43 +201,56 @@ function UnifiedSearchPageInner() {
 
   const t = (row: { ar: string; en: string }) => (locale === "en" ? row.en : row.ar);
 
-  const renderHit = (h: SearchHit) => (
-    <li key={`${h.type}-${h.id}`} className="break-words">
-      <Link
-        href={hitHref(h)}
-        className="group flex h-full flex-col gap-2 rounded-3xl border border-slate-200/90 bg-white p-5 shadow-[0_12px_40px_-28px_rgba(15,23,42,0.35)] transition hover:-translate-y-0.5 hover:border-primary/35 hover:shadow-[0_20px_50px_-24px_rgba(30,58,138,0.35)]"
-      >
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wide text-primary">
-            {h.type}
-          </span>
-          {h.rankHighlights?.length ? (
-            <span className="flex flex-wrap gap-1">
-              {h.rankHighlights.slice(0, 3).map((x) => (
-                <span
-                  key={x}
-                  className="rounded-full border border-slate-200/80 bg-slate-50 px-2 py-0.5 text-[10px] font-semibold text-slate-600"
-                >
-                  {x}
-                </span>
-              ))}
+  const renderHit = (h: SearchHit) => {
+    if (h.type === "alumni" || h.type === "mentor") {
+      return (
+        <AlumniNetworkDiscoveryCard
+          key={`${h.type}-${h.id}`}
+          hit={h}
+          query={debounced}
+          profileHref={hitHref(h)}
+          isAr={locale === "ar"}
+        />
+      );
+    }
+    return (
+      <li key={`${h.type}-${h.id}`} className="break-words">
+        <Link
+          href={hitHref(h)}
+          className="group flex h-full flex-col gap-2 rounded-3xl border border-slate-200/90 bg-white p-5 shadow-[0_12px_40px_-28px_rgba(15,23,42,0.35)] transition hover:-translate-y-0.5 hover:border-primary/35 hover:shadow-[0_20px_50px_-24px_rgba(30,58,138,0.35)]"
+        >
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wide text-primary">
+              {h.type}
             </span>
-          ) : null}
-        </div>
-        <p className="text-base font-black leading-snug text-slate-900">
-          <Highlight text={h.title} query={debounced} />
-        </p>
-        {h.subtitle ? (
-          <p className="line-clamp-3 text-sm leading-relaxed text-slate-600">
-            <Highlight text={h.subtitle} query={debounced} />
+            {h.rankHighlights?.length ? (
+              <span className="flex flex-wrap gap-1">
+                {h.rankHighlights.slice(0, 3).map((x) => (
+                  <span
+                    key={x}
+                    className="rounded-full border border-slate-200/80 bg-slate-50 px-2 py-0.5 text-[10px] font-semibold text-slate-600"
+                  >
+                    {x}
+                  </span>
+                ))}
+              </span>
+            ) : null}
+          </div>
+          <p className="text-base font-black leading-snug text-slate-900">
+            <Highlight text={h.title} query={debounced} />
           </p>
-        ) : null}
-        {h.meta ? (
-          <p className="mt-auto pt-2 text-xs font-medium text-slate-400">{h.meta}</p>
-        ) : null}
-      </Link>
-    </li>
-  );
+          {h.subtitle ? (
+            <p className="line-clamp-3 text-sm leading-relaxed text-slate-600">
+              <Highlight text={h.subtitle} query={debounced} />
+            </p>
+          ) : null}
+          {h.meta ? (
+            <p className="mt-auto pt-2 text-xs font-medium text-slate-400">{h.meta}</p>
+          ) : null}
+        </Link>
+      </li>
+    );
+  };
 
   const emptyTitle = locale === "ar" ? "ابدأ بالبحث في مجتمع الخريجين" : "Start searching the alumni network";
   const emptyHint =

@@ -5,13 +5,28 @@ import Image from "next/image";
 import Link from "next/link";
 import { getLocale } from "@/lib/i18n";
 import type { UserPublicPortfolioPayload } from "@/lib/user-public-portfolio-types";
-import { ExternalLink, Copy, Download, Loader2, QrCode, ShieldOff } from "lucide-react";
+import { Award, Briefcase, ExternalLink, Copy, Download, Loader2, QrCode, ShieldOff, Sparkles } from "lucide-react";
+
+export type PublicPortfolioHeroSummary = {
+  fullName: string;
+  avatarUrl?: string;
+  initials: string;
+  isAlumni: boolean;
+  technicalSkills: string[];
+  personalSkills: string[];
+  bioPreview?: string;
+  totalAchievements: number;
+  featuredAchievements: number;
+  highlightLevelLabel?: string;
+};
 
 export type StudentPublicPortfolioCardProps = {
   data: UserPublicPortfolioPayload | null;
   loading: boolean;
   error: string | null;
   onRetry: () => void;
+  /** Rich preview when the public portfolio is enabled — data already on the profile payload. */
+  heroSummary?: PublicPortfolioHeroSummary | null;
 };
 
 const StudentPublicPortfolioCardInner = ({
@@ -19,19 +34,12 @@ const StudentPublicPortfolioCardInner = ({
   loading,
   error,
   onRetry,
+  heroSummary,
 }: StudentPublicPortfolioCardProps) => {
   const locale = getLocale();
   const isAr = locale === "ar";
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
   const [copyError, setCopyError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (process.env.NODE_ENV === "development") {
-      console.info("[student-public-portfolio-card] mounted");
-      return () => console.info("[student-public-portfolio-card] unmounted");
-    }
-    return undefined;
-  }, []);
 
   useEffect(() => {
     const v = data?.qrValue?.trim();
@@ -77,25 +85,118 @@ const StudentPublicPortfolioCardInner = ({
     a.click();
   };
 
+  const skillChips = heroSummary
+    ? [...heroSummary.technicalSkills, ...heroSummary.personalSkills].filter(Boolean).slice(0, 12)
+    : [];
+
   return (
     <section
-      className="rounded-2xl border border-sky-200/90 bg-gradient-to-br from-sky-50/90 to-white p-5 shadow-sm"
+      className="relative overflow-hidden rounded-2xl border border-sky-200/90 bg-gradient-to-br from-sky-50/90 via-white to-indigo-50/40 p-5 shadow-[0_20px_50px_-24px_rgba(15,23,42,0.25)] ring-1 ring-sky-100/80"
       dir={isAr ? "rtl" : "ltr"}
       aria-labelledby="student-public-portfolio-heading"
     >
-      <div className="flex flex-wrap items-start justify-between gap-3">
+      <div
+        className="pointer-events-none absolute -start-24 -top-24 h-48 w-48 rounded-full bg-sky-300/25 blur-3xl"
+        aria-hidden
+      />
+      <div className="relative flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 id="student-public-portfolio-heading" className="text-lg font-bold text-slate-900">
-            {isAr ? "ملف الإنجاز العام" : "Public achievement portfolio"}
+            {isAr ? "الملف العام للإنجاز" : "Public achievement portfolio"}
           </h2>
           <p className="mt-1 max-w-xl text-sm leading-relaxed text-slate-600">
             {isAr
-              ? "رابط يعرض إنجازاتك المعتمدة المنشورة للعامة. يُدار التفعيل من إدارة المنصة."
-              : "A link that shows your published approved achievements. Activation is managed by the platform administration."}
+              ? "بوابة احترافية تعرض إنجازاتك المعتمدة للعامة. يُدار التفعيل من إدارة المنصة."
+              : "A professional gateway that showcases your approved achievements publicly. Activation is managed by platform administration."}
           </p>
         </div>
         <QrCode className="h-10 w-10 shrink-0 text-sky-800 opacity-90" aria-hidden />
       </div>
+
+      {data?.enabled && heroSummary ? (
+        <div className="relative mt-6 overflow-hidden rounded-2xl border border-slate-200/80 bg-gradient-to-br from-[#0a2744] via-slate-900 to-slate-800 p-5 text-white shadow-inner">
+          <div
+            className="pointer-events-none absolute -bottom-8 end-0 h-32 w-32 rounded-full bg-sky-400/20 blur-2xl"
+            aria-hidden
+          />
+          <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex min-w-0 flex-1 items-center gap-4">
+              <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-2xl border border-white/20 bg-white/10 shadow-lg ring-2 ring-sky-400/30">
+                {heroSummary.avatarUrl ? (
+                  <Image
+                    src={heroSummary.avatarUrl}
+                    alt=""
+                    width={64}
+                    height={64}
+                    className="h-full w-full object-cover"
+                    unoptimized={
+                      heroSummary.avatarUrl.startsWith("data:") ||
+                      heroSummary.avatarUrl.startsWith("http://") ||
+                      heroSummary.avatarUrl.startsWith("https://")
+                    }
+                  />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center text-lg font-black text-white/90">
+                    {heroSummary.initials}
+                  </div>
+                )}
+              </div>
+              <div className="min-w-0">
+                <p className="truncate text-lg font-black tracking-tight">{heroSummary.fullName}</p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-400/20 px-2.5 py-0.5 text-[11px] font-bold text-emerald-100 ring-1 ring-emerald-300/40">
+                    <Sparkles className="h-3 w-3" aria-hidden />
+                    {isAr ? "منشور للعامة" : "Live portfolio"}
+                  </span>
+                  {heroSummary.isAlumni ? (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-amber-400/15 px-2.5 py-0.5 text-[11px] font-bold text-amber-100 ring-1 ring-amber-300/35">
+                      <Briefcase className="h-3 w-3" aria-hidden />
+                      {isAr ? "خريج" : "Alumni"}
+                    </span>
+                  ) : null}
+                  {heroSummary.highlightLevelLabel ? (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-white/10 px-2.5 py-0.5 text-[11px] font-bold text-sky-100 ring-1 ring-white/20">
+                      <Award className="h-3 w-3" aria-hidden />
+                      {heroSummary.highlightLevelLabel}
+                    </span>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+            <div className="grid shrink-0 grid-cols-2 gap-3 sm:text-end">
+              <div className="rounded-xl bg-white/10 px-3 py-2 ring-1 ring-white/15">
+                <p className="text-[10px] font-bold uppercase tracking-wide text-sky-100/90">
+                  {isAr ? "إنجازات" : "Achievements"}
+                </p>
+                <p className="text-xl font-black tabular-nums">{heroSummary.totalAchievements}</p>
+              </div>
+              <div className="rounded-xl bg-white/10 px-3 py-2 ring-1 ring-white/15">
+                <p className="text-[10px] font-bold uppercase tracking-wide text-sky-100/90">
+                  {isAr ? "مميزة" : "Featured"}
+                </p>
+                <p className="text-xl font-black tabular-nums">{heroSummary.featuredAchievements}</p>
+              </div>
+            </div>
+          </div>
+          {heroSummary.bioPreview ? (
+            <p className="relative mt-4 line-clamp-2 text-sm leading-relaxed text-sky-100/90">
+              {heroSummary.bioPreview}
+            </p>
+          ) : null}
+          {skillChips.length > 0 ? (
+            <div className="relative mt-4 flex flex-wrap gap-2">
+              {skillChips.map((s) => (
+                <span
+                  key={s}
+                  className="rounded-lg bg-white/10 px-2.5 py-1 text-[11px] font-semibold text-white ring-1 ring-white/15"
+                >
+                  {s}
+                </span>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
 
       {loading ? (
         <div className="mt-6 flex items-center gap-2 text-sm text-slate-600">

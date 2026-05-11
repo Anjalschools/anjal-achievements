@@ -510,12 +510,12 @@ const StudentSettings = ({ alumniAccount = false }: StudentSettingsProps) => {
   const pwdBarColor = (i: number) => (pwdStrength.score > i ? "bg-primary" : "bg-gray-200");
 
   return (
-    <PageContainer className="!max-w-4xl py-6 md:py-8">
+    <PageContainer className={`!max-w-5xl py-6 md:py-8 ${alumniAccount ? "!pb-28 lg:!pb-10" : ""}`}>
       {toast ? (
         <div
-          className={`fixed bottom-6 left-1/2 z-50 flex -translate-x-1/2 items-center gap-2 rounded-xl px-4 py-3 text-sm font-medium shadow-lg ${
+          className={`fixed bottom-6 left-1/2 z-50 flex -translate-x-1/2 items-center gap-2 rounded-xl px-4 py-3 text-sm font-medium shadow-lg motion-safe:transition motion-safe:duration-300 ${
             toast.kind === "ok"
-              ? "border border-emerald-200 bg-emerald-50 text-emerald-900"
+              ? "border border-emerald-200 bg-emerald-50 text-emerald-900 motion-safe:animate-[pulse_0.6s_ease-in-out_1] ring-2 ring-emerald-200/60"
               : "border border-red-200 bg-red-50 text-red-900"
           }`}
           role="status"
@@ -611,36 +611,36 @@ const StudentSettings = ({ alumniAccount = false }: StudentSettingsProps) => {
         </div>
       ) : null}
 
-      {alumniAccount ? (
-        <nav
-          className="mb-6 flex flex-wrap gap-2 rounded-2xl border border-gray-200 bg-white p-2 shadow-sm"
-          aria-label={isAr ? "أقسام الإعدادات" : "Settings sections"}
-        >
-          {(
-            [
-              { id: "alumni-settings-account", ar: "الحساب", en: "Account" },
-              { id: "alumni-settings-security", ar: "الأمان", en: "Security" },
-              { id: "alumni-settings-portfolio", ar: "الملف المهني", en: "Portfolio" },
-              { id: "alumni-settings-language", ar: "اللغة", en: "Language" },
-              { id: "alumni-settings-notifications", ar: "الإشعارات", en: "Notifications" },
-              { id: "alumni-settings-privacy", ar: "الخصوصية", en: "Privacy" },
-            ] as const
-          ).map((row) => (
-            <button
-              key={row.id}
-              type="button"
-              className="rounded-xl px-3 py-2 text-xs font-bold text-text transition hover:bg-primary/10 sm:text-sm"
-              onClick={() =>
-                document.getElementById(row.id)?.scrollIntoView({ behavior: "smooth", block: "start" })
-              }
-            >
-              {isAr ? row.ar : row.en}
-            </button>
-          ))}
-        </nav>
-      ) : null}
-
-      <div className="space-y-8">
+      <div className={alumniAccount ? "flex flex-col gap-6 lg:flex-row lg:items-start lg:gap-8" : ""}>
+        {alumniAccount ? (
+          <nav
+            className="flex flex-wrap gap-2 rounded-2xl border border-gray-200 bg-white p-2 shadow-sm lg:sticky lg:top-24 lg:max-h-[min(100vh-6rem,760px)] lg:w-56 lg:shrink-0 lg:flex-col lg:overflow-y-auto lg:p-3"
+            aria-label={isAr ? "أقسام الإعدادات" : "Settings sections"}
+          >
+            {(
+              [
+                { id: "alumni-settings-account", ar: "الحساب", en: "Account" },
+                { id: "alumni-settings-portfolio", ar: "الملف المهني", en: "Professional profile" },
+                { id: "alumni-settings-privacy", ar: "الخصوصية", en: "Privacy" },
+                { id: "alumni-settings-notifications", ar: "الإشعارات", en: "Notifications" },
+                { id: "alumni-settings-security", ar: "الأمان", en: "Security" },
+                { id: "alumni-settings-language", ar: "اللغة والعرض", en: "Language & display" },
+              ] as const
+            ).map((row) => (
+              <button
+                key={row.id}
+                type="button"
+                className="rounded-xl px-3 py-2 text-start text-xs font-bold text-text transition hover:bg-primary/10 sm:text-sm lg:w-full"
+                onClick={() =>
+                  document.getElementById(row.id)?.scrollIntoView({ behavior: "smooth", block: "start" })
+                }
+              >
+                {isAr ? row.ar : row.en}
+              </button>
+            ))}
+          </nav>
+        ) : null}
+        <div className={alumniAccount ? "min-w-0 flex-1 space-y-8" : "space-y-8"}>
         <SectionCard id="alumni-settings-account">
           <div className="mb-6 flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
@@ -1614,7 +1614,28 @@ const StudentSettings = ({ alumniAccount = false }: StudentSettingsProps) => {
             ))}
           </div>
         </SectionCard>
+        </div>
       </div>
+
+      {alumniAccount ? (
+        <div className="fixed inset-x-0 bottom-0 z-40 border-t border-gray-200/90 bg-white/95 px-4 py-3 shadow-[0_-12px_40px_-16px_rgba(15,23,42,0.15)] backdrop-blur-md lg:hidden">
+          <div className="mx-auto flex max-w-5xl justify-end">
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={isSaving || passwordMismatch}
+              className="inline-flex min-w-[140px] items-center justify-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-bold text-white shadow-md transition hover:bg-primary-dark disabled:opacity-50"
+            >
+              {isSaving ? (
+                <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+              ) : (
+                <Save className="h-4 w-4" />
+              )}
+              <span>{t.settings.save}</span>
+            </button>
+          </div>
+        </div>
+      ) : null}
     </PageContainer>
   );
 };
