@@ -35,6 +35,9 @@ export type SearchHit = {
   slug?: string;
   /** Cohort graduation year when type === cohort */
   cohortYear?: number;
+  /** Alumni / mentor discovery — from profile when available */
+  isVerifiedAlumni?: boolean;
+  major?: string | null;
 };
 
 const clampPage = (p: number) => Math.max(1, Math.min(500, p));
@@ -85,6 +88,7 @@ const mapUserToAlumniRow = (row: any): AlumniSearchRow => {
     position: p.currentPosition ?? null,
     industry: p.industry ?? null,
     graduationYear: p.graduationYear ?? null,
+    major: p.major ?? null,
     country: p.country ?? null,
     city: p.city ?? null,
     bio: p.bio ?? null,
@@ -113,6 +117,8 @@ const toAlumniHits = (
     meta: r.graduationYear ? String(r.graduationYear) : r.industry || "",
     rankScore: r.rankScore,
     rankHighlights: r.rankHighlights,
+    isVerifiedAlumni: r.isVerifiedAlumni === true,
+    major: r.major ?? null,
   }));
 
 export const searchAlumni = async (nq: NormalizedQuery, pag: Pagination, options?: AlumniSearchOptions) => {
@@ -192,6 +198,8 @@ export const searchMentors = async (nq: NormalizedQuery, pag: Pagination, option
       meta: r.industry || "",
       rankScore: r.rankScore,
       rankHighlights: r.rankHighlights,
+      isVerifiedAlumni: r.isVerifiedAlumni === true,
+      major: r.major ?? null,
     })),
     totalEstimate: ranked.length,
   };

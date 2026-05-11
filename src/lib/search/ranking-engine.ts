@@ -10,6 +10,7 @@ export type AlumniSearchRow = {
   position?: string | null;
   industry?: string | null;
   graduationYear?: number | null;
+  major?: string | null;
   country?: string | null;
   city?: string | null;
   bio?: string | null;
@@ -31,8 +32,9 @@ export const scoreAlumniRow = (tokens: string[], row: AlumniSearchRow): { score:
   const co = norm(row.company);
   const pos = norm(row.position);
   const ind = norm(row.industry);
+  const maj = norm(row.major);
   const bio = norm(row.bio);
-  const blob = [name, uni, co, pos, ind, bio, ...(row.interests || []).map(norm)].join(" ");
+  const blob = [name, uni, co, pos, ind, maj, bio, ...(row.interests || []).map(norm)].join(" ");
 
   for (const t of tokens) {
     const tl = t.toLowerCase();
@@ -55,6 +57,10 @@ export const scoreAlumniRow = (tokens: string[], row: AlumniSearchRow): { score:
     if (ind.includes(tl)) {
       score += 32;
       highlights.push("industry");
+    }
+    if (maj.includes(tl)) {
+      score += 34;
+      highlights.push("major");
     }
     if (bio.includes(tl)) {
       score += 18;

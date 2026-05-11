@@ -25,6 +25,10 @@ import { getLocale } from "@/lib/i18n";
 import { isEligibleForAcademicAdvisor } from "@/lib/alumni/isEligibleForAcademicAdvisor";
 import { canAccessAlumniCommunity } from "@/lib/alumni/canAccessAlumniCommunity";
 import AlumniMemoriesIllustration from "@/components/alumni/AlumniMemoriesIllustration";
+import { AlumniCommunityActivityFeed } from "@/components/alumni/AlumniCommunityActivityFeed";
+import { AlumniCommunityInsightsPanel } from "@/components/alumni/AlumniCommunityInsightsPanel";
+import { AlumniMemoriesDashboardWidget } from "@/components/alumni/AlumniMemoriesDashboardWidget";
+import type { CommunityFeedItem, CommunityInsights } from "@/lib/alumni/community-activation-types";
 
 type Summary = {
   profile: {
@@ -109,9 +113,6 @@ export default function AlumniDashboardPage() {
     () => ({
       hub: isAr ? "شبكة خريجي الأنجال" : "Al-Anjal alumni network",
       welcome: isAr ? "مرحباً" : "Welcome",
-      subtitle: isAr
-        ? "مسارك المهني، شبكتك، وفرصك — في تجربة خريجين احترافية."
-        : "Your career path, network, and opportunities — in one professional alumni experience.",
       loading: isAr ? "جاري التحميل…" : "Loading…",
       alumniOnly: isAr ? "هذه اللوحة مخصّصة لحسابات الخريجين المعتمدة." : "This hub is for approved alumni accounts.",
       backDash: isAr ? "العودة إلى لوحة التحكم" : "Back to dashboard",
@@ -135,6 +136,7 @@ export default function AlumniDashboardPage() {
         events: isAr ? "فعاليات قادمة" : "Upcoming events",
       },
       verified: isAr ? "خريج موثّق" : "Verified alumni",
+      activityTitle: isAr ? "آخر نشاطات المجتمع" : "Latest community activity",
     }),
     [isAr]
   );
@@ -147,6 +149,10 @@ export default function AlumniDashboardPage() {
   const [recOpps, setRecOpps] = useState<RecOpp[]>([]);
   const [recPeers, setRecPeers] = useState<RecPeer[]>([]);
   const [memoryFlag, setMemoryFlag] = useState(false);
+  const [memorySubmitted, setMemorySubmitted] = useState(false);
+  const [communityFeed, setCommunityFeed] = useState<CommunityFeedItem[]>([]);
+  const [communityInsights, setCommunityInsights] = useState<CommunityInsights | null>(null);
+  const [activationLoading, setActivationLoading] = useState(true);
 
   const showAdvisor = useMemo(
     () =>
@@ -215,28 +221,51 @@ export default function AlumniDashboardPage() {
     if (profile?.accountType !== "alumni") return;
     let m = true;
     void (async () => {
+      setActivationLoading(true);
       try {
-        const [rMe, rm, ro, rn] = await Promise.all([
+        const [rMe, rm, ro, rn, rAct, rMem] = await Promise.all([
           fetch("/api/alumni/profile/me", { credentials: "include", cache: "no-store" }),
           fetch("/api/alumni/recommendations/mentors", { credentials: "include" }),
           fetch("/api/alumni/recommendations/opportunities", { credentials: "include" }),
           fetch("/api/alumni/recommendations/network", { credentials: "include" }),
+          fetch("/api/alumni/community-activation", { credentials: "include", cache: "no-store" }),
+          fetch("/api/alumni/memories", { credentials: "include", cache: "no-store" }),
         ]);
         const jMe = (await rMe.json()) as { ok?: boolean; item?: MeProfile };
-        const [jm, jo, jn] = await Promise.all([rm.json(), ro.json(), rn.json()]);
+        const [jm, jo, jn, jAct, jMem] = await Promise.all([rm.json(), ro.json(), rn.json(), rAct.json(), rMem.json()]);
         if (!m) return;
         if (jMe.ok && jMe.item) setMe(jMe.item);
         if (jm.ok && jm.items) setRecMentors(jm.items);
         if (jo.ok && jo.items) setRecOpps(jo.items);
         if (jn.ok && jn.items) setRecPeers(jn.items);
+        if (jAct.ok && Array.isArray(jAct.feed)) setCommunityFeed(jAct.feed as CommunityFeedItem[]);
+        if (jAct.ok && jAct.insights) setCommunityInsights(jAct.insights as CommunityInsights);
+        if (jMem.ok && jMem.counts && typeof jMem.counts.total === "number") {
+          setMemorySubmitted(jMem.counts.total > 0);
+        }
       } catch {
         /* optional */
+      } finally {
+        if (m) setActivationLoading(false);
       }
     })();
     return () => {
       m = false;
     };
   }, [profile?.accountType]);
+
+  const handleActivationRefresh = useCallback(() => {
+    void (async () => {
+      try {
+        const rAct = await fetch("/api/alumni/community-activation", { credentials: "include", cache: "no-store" });
+        const jAct = (await rAct.json()) as { ok?: boolean; feed?: CommunityFeedItem[]; insights?: CommunityInsights };
+        if (jAct.ok && Array.isArray(jAct.feed)) setCommunityFeed(jAct.feed);
+        if (jAct.ok && jAct.insights) setCommunityInsights(jAct.insights);
+      } catch {
+        /* ignore */
+      }
+    })();
+  }, []);
 
   const handleMemoriesExplore = useCallback(() => {
     if (typeof window !== "undefined") {
@@ -261,7 +290,10 @@ export default function AlumniDashboardPage() {
       { done: Boolean(photoPreview), label: isAr ? "أكمل الصورة الشخصية" : "Add a profile photo" },
       { done: Boolean(universityPreview), label: isAr ? "أضف الجامعة" : "Add your university" },
       { done: Boolean(companyPreview || jobPreview), label: isAr ? "أضف الوظيفة الحالية" : "Add your current role" },
-      { done: memoryFlag, label: isAr ? "استكشف ذكرياتك في الأنجال" : "Explore your school memories" },
+      {
+        done: memoryFlag || memorySubmitted,
+        label: isAr ? "أضف أو استكشف ذكرياتك في الأنجال" : "Add or explore your Al-Anjal memories",
+      },
       { done: skillsOk, label: isAr ? "أضف اهتمامات أو نبذة مهنية" : "Add interests or a short bio" },
     ];
   }, [
@@ -271,6 +303,7 @@ export default function AlumniDashboardPage() {
     companyPreview,
     jobPreview,
     memoryFlag,
+    memorySubmitted,
     apPreview.bio,
     apPreview.interests,
     isAr,
@@ -384,6 +417,24 @@ export default function AlumniDashboardPage() {
   const company = (p?.currentCompany || ap.currentCompany || "").trim();
   const verified = ap.isVerifiedAlumni === true;
 
+  const firstName = (displayName.split(/\s+/).filter(Boolean)[0] || displayName).trim();
+  const hour = new Date().getHours();
+  const dynamicWelcomeLine1 = isAr
+    ? `يسعدنا عودتك${firstName ? ` يا ${firstName}` : ""} 👋${university ? ` — ${university}` : ""}${major ? ` — ${major}` : ""}${gradYear ? ` — دفعة ${gradYear}` : ""}.`
+    : `Great to see you again${firstName ? `, ${firstName}` : ""} 👋${university ? ` — ${university}` : ""}${major ? ` — ${major}` : ""}${gradYear ? ` — Class of ${gradYear}` : ""}.`;
+  const dynamicWelcomeLine2 =
+    isAr
+      ? hour < 12
+        ? "شبكة خريجي الأنجال تنمو بوجودك — ابدأ يومك بتواصل خفيف مع المجتمع المهني."
+        : hour < 18
+          ? "المجتمع المهني يتحرك كل يوم — استكشف الفرص والرسائل عندما يسمح وقتك."
+          : "مساء الخير — تابع زملاءك وذكرياتك في الأنجال في أي وقت."
+      : hour < 12
+        ? "The alumni network grows with you — start the day with a light touch of community."
+        : hour < 18
+          ? "The community moves daily — explore opportunities and messages when you have a moment."
+          : "Good evening — reconnect with peers and memories at your pace.";
+
   return (
     <div dir={dir} className="alumni-mobile-shell mx-auto max-w-6xl space-y-10 px-4 py-6 sm:py-10">
       {/* Hero */}
@@ -403,9 +454,10 @@ export default function AlumniDashboardPage() {
             <div className="min-w-0 text-center sm:text-start">
               <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-sky-200/80">{t.hub}</p>
               <h1 className="mt-1 text-2xl font-black text-white sm:text-4xl">
-                {t.welcome}، {displayName}
+                {t.welcome}، {firstName || displayName}
               </h1>
-              <p className="mt-2 max-w-xl text-sm leading-relaxed text-slate-200/90">{t.subtitle}</p>
+              <p className="mt-2 max-w-xl text-sm font-semibold leading-relaxed text-slate-100">{dynamicWelcomeLine1}</p>
+              <p className="mt-1 max-w-xl text-sm leading-relaxed text-slate-200/90">{dynamicWelcomeLine2}</p>
               <div className="mt-4 flex flex-wrap items-center justify-center gap-2 sm:justify-start">
                 {verified ? (
                   <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/20 px-3 py-1 text-xs font-black text-emerald-100 ring-1 ring-emerald-400/30">
@@ -507,10 +559,18 @@ export default function AlumniDashboardPage() {
         </div>
       </div>
 
+      <div className="grid gap-6 xl:grid-cols-3">
+        <div className="min-w-0 space-y-3 xl:col-span-2">
+          <h2 className="text-sm font-black uppercase tracking-wide text-slate-500">{t.activityTitle}</h2>
+          <AlumniCommunityActivityFeed items={communityFeed} loading={activationLoading} isAr={isAr} />
+        </div>
+        <AlumniCommunityInsightsPanel insights={communityInsights} isAr={isAr} majorHint={major} />
+      </div>
+
       {/* Memories spotlight */}
       <section
         id="alumni-memories"
-        className="scroll-mt-24 overflow-hidden rounded-[2rem] border border-slate-200/80 bg-gradient-to-br from-slate-50 via-white to-sky-50/50 p-6 shadow-[0_20px_50px_-30px_rgba(30,58,138,0.35)] sm:p-8"
+        className="scroll-mt-24 space-y-6 overflow-hidden rounded-[2rem] border border-slate-200/80 bg-gradient-to-br from-slate-50 via-white to-sky-50/50 p-6 shadow-[0_20px_50px_-30px_rgba(30,58,138,0.35)] sm:p-8"
       >
         <div className="flex flex-col gap-6 lg:flex-row lg:items-center">
           <div className="flex-1 space-y-3">
@@ -541,6 +601,13 @@ export default function AlumniDashboardPage() {
             <AlumniMemoriesIllustration className="h-32 w-full max-w-[240px] sm:h-36" />
           </div>
         </div>
+        <AlumniMemoriesDashboardWidget
+          isAr={isAr}
+          onMemorySubmitted={() => {
+            setMemorySubmitted(true);
+            handleActivationRefresh();
+          }}
+        />
       </section>
 
       {recMentors.length > 0 || recOpps.length > 0 || recPeers.length > 0 ? (

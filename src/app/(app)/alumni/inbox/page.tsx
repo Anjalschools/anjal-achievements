@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Loader2, Mail, MessageCirclePlus, Search, Send } from "lucide-react";
+import { Calendar, Loader2, Mail, MessageCirclePlus, Search, Send, Sparkles } from "lucide-react";
+import { formatRelativeTime } from "@/lib/alumni/format-relative-time";
 import { useAppSession } from "@/contexts/AppSessionContext";
 import { getLocale } from "@/lib/i18n";
 import AlumniPageHeader from "@/components/alumni/AlumniPageHeader";
@@ -304,6 +305,9 @@ export default function AlumniInboxPage() {
                       )}
                       {t.updatedAt ? (
                         <span className="text-[10px] font-medium text-slate-400">
+                          {isAr ? "آخر نشاط: " : "Last activity: "}
+                          {formatRelativeTime(t.updatedAt, isAr)}
+                          <span className="mx-1 opacity-40">·</span>
                           {formatThreadTime(t.updatedAt)}
                         </span>
                       ) : null}
@@ -335,6 +339,44 @@ export default function AlumniInboxPage() {
             </div>
           ) : (
             <div className="flex h-full min-h-[320px] flex-col">
+              <div className="border-b border-slate-100 bg-gradient-to-br from-slate-50/90 to-white px-4 py-3">
+                <p className="text-sm font-black text-slate-900">
+                  {threads.find((x) => x.id === activeId)?.subject || (isAr ? "محادثة" : "Conversation")}
+                </p>
+                {(() => {
+                  const th = threads.find((x) => x.id === activeId);
+                  if (!th?.updatedAt) return null;
+                  return (
+                    <p className="mt-1 text-[11px] font-semibold text-slate-500">
+                      {isAr ? "آخر نشاط في المحادثة: " : "Last activity: "}
+                      {formatRelativeTime(th.updatedAt, isAr)}
+                    </p>
+                  );
+                })()}
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Link
+                    href="/alumni/opportunities"
+                    className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-bold text-slate-700 shadow-sm transition hover:border-primary/30 hover:text-primary"
+                  >
+                    <Sparkles className="h-3 w-3" aria-hidden />
+                    {isAr ? "فرص" : "Opportunities"}
+                  </Link>
+                  <Link
+                    href="/search"
+                    className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-bold text-slate-700 shadow-sm transition hover:border-primary/30 hover:text-primary"
+                  >
+                    <Search className="h-3 w-3" aria-hidden />
+                    {isAr ? "شبكة" : "Network"}
+                  </Link>
+                  <Link
+                    href="/alumni/events"
+                    className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-bold text-slate-700 shadow-sm transition hover:border-primary/30 hover:text-primary"
+                  >
+                    <Calendar className="h-3 w-3" aria-hidden />
+                    {isAr ? "فعاليات" : "Events"}
+                  </Link>
+                </div>
+              </div>
               <div className="flex-1 space-y-3 overflow-y-auto p-4 pb-2">
                 {messages.map((m) => (
                   <div

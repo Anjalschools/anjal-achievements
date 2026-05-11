@@ -5,12 +5,24 @@ import Link from "next/link";
 import PageContainer from "@/components/layout/PageContainer";
 import PageHeader from "@/components/layout/PageHeader";
 import { getLocale } from "@/lib/i18n";
-import { Loader2, ExternalLink, Inbox } from "lucide-react";
+import { Loader2, ExternalLink, Inbox, Award, Bell, FileWarning, Shield, Sparkles, Star, Trash2 } from "lucide-react";
+import { formatRelativeTime } from "@/lib/alumni/format-relative-time";
 import { dispatchNotificationsUpdated } from "@/hooks/useUnreadNotificationCount";
 import type { NotificationApiItem } from "@/lib/notification-serialize";
 import { isAchievementReviewerRole } from "@/lib/achievement-reviewer-roles";
 import { getNotificationTypeLabel } from "@/lib/achievement-display-labels";
 import { notificationMatchesFilter } from "@/lib/notification-category";
+
+const notificationIcon = (type: string) => {
+  if (type.startsWith("achievement_approved")) return Award;
+  if (type.startsWith("achievement_needs_revision")) return FileWarning;
+  if (type.startsWith("achievement_rejected") || type.startsWith("achievement_deleted")) return Trash2;
+  if (type.startsWith("achievement_featured")) return Star;
+  if (type === "certificate_issued") return Shield;
+  if (type === "ai_flag_notice") return Sparkles;
+  if (type.startsWith("achievement_submitted") || type.startsWith("achievement_updated")) return Bell;
+  return Bell;
+};
 
 const typeBadgeClass: Record<string, string> = {
   achievement_approved: "bg-emerald-100 text-emerald-900",
@@ -206,26 +218,28 @@ const NotificationsPage = () => {
             <p className="text-sm text-text-light">{isAr ? "جاري تحميل الإشعارات…" : "Loading notifications…"}</p>
           </div>
         ) : filteredItems.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-gray-300 bg-white px-6 py-16 text-center">
-            <Inbox className="mx-auto mb-4 h-14 w-14 text-gray-300" aria-hidden />
-            <p className="text-base font-semibold text-text">
+          <div className="relative overflow-hidden rounded-3xl border border-dashed border-primary/20 bg-gradient-to-br from-sky-50/80 via-white to-sky-50/40 px-6 py-16 text-center shadow-[0_20px_50px_-36px_rgba(30,58,138,0.35)]">
+            <div className="pointer-events-none absolute -end-10 -top-10 h-32 w-32 rounded-full bg-primary/10 blur-3xl" aria-hidden />
+            <Inbox className="relative mx-auto mb-4 h-14 w-14 text-primary/35" aria-hidden />
+            <p className="relative text-base font-bold text-text">
               {isAr ? "لا توجد إشعارات في هذا القسم" : "No notifications in this view"}
             </p>
-            <p className="mt-2 text-sm text-text-light">
+            <p className="relative mt-2 text-sm text-text-light">
               {items.length === 0
                 ? isAr
-                  ? "سيظهر هنا أي تحديث يخص إنجازاتك أو مراجعاتك."
-                  : "Achievement and review updates will appear here."
+                  ? "سيظهر هنا أي تحديث يخص إنجازاتك أو مراجعاتك — تابع مسارك بثقة."
+                  : "Achievement and review updates will appear here — stay on top of your journey."
                 : isAr
                   ? "جرّب فلترًا آخر أو عرض «الكل»."
                   : "Try another filter or view “All”."}
             </p>
           </div>
         ) : (
-          <ul className="space-y-3">
+          <ul className="space-y-4">
             {filteredItems.map((n) => {
               const badge = typeBadgeClass[n.type] || "bg-gray-100 text-gray-800";
               const busy = busyId === n.id;
+              const Icon = notificationIcon(n.type);
               const dateStr = (() => {
                 try {
                   return new Date(n.createdAt).toLocaleString(isAr ? "ar-SA" : "en-US", {
@@ -236,14 +250,25 @@ const NotificationsPage = () => {
                   return n.createdAt;
                 }
               })();
+              const rel = formatRelativeTime(n.createdAt, isAr);
               return (
                 <li
                   key={n.id}
-                  className={`rounded-2xl border p-4 shadow-sm ${
-                    n.isRead ? "border-gray-200 bg-white" : "border-primary/25 bg-primary/[0.04]"
+                  className={`group relative overflow-hidden rounded-3xl border p-4 shadow-[0_14px_40px_-28px_rgba(15,23,42,0.2)] transition hover:-translate-y-0.5 hover:shadow-[0_20px_44px_-24px_rgba(30,58,138,0.22)] ${
+                    n.isRead ? "border-gray-200/90 bg-white" : "border-primary/25 bg-gradient-to-br from-sky-50/50 to-white"
                   }`}
                 >
-                  <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div
+                    className="pointer-events-none absolute inset-0 opacity-0 transition group-hover:opacity-100"
+                    style={{
+                      background: "linear-gradient(120deg, rgba(59,130,246,0.06), rgba(212,175,55,0.04))",
+                    }}
+                    aria-hidden
+                  />
+                  <div className="relative flex flex-wrap items-start gap-3">
+                    <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary ring-1 ring-primary/15">
+                      <Icon className="h-5 w-5" aria-hidden />
+                    </span>
                     <div className="min-w-0 flex-1">
                       <div className="mb-1 flex flex-wrap items-center gap-2">
                         <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${badge}`}>
@@ -255,15 +280,19 @@ const NotificationsPage = () => {
                       </div>
                       <h2 className="text-base font-bold text-text">{n.title}</h2>
                       <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-text-light">{n.message}</p>
-                      <p className="mt-2 text-xs text-text-muted">{dateStr}</p>
+                      <p className="mt-2 text-xs font-semibold text-text-muted">
+                        <span className="text-primary/80">{rel}</span>
+                        <span className="mx-1 opacity-40">·</span>
+                        {dateStr}
+                      </p>
                     </div>
-                    <div className="flex shrink-0 flex-col gap-2">
+                    <div className="relative flex shrink-0 flex-col gap-2">
                       {!n.isRead ? (
                         <button
                           type="button"
                           disabled={busy}
                           onClick={() => handleMarkRead(n.id)}
-                          className="rounded-lg bg-gray-100 px-3 py-1.5 text-xs font-semibold text-text hover:bg-gray-200 disabled:opacity-50"
+                          className="rounded-xl bg-gray-100 px-3 py-2 text-xs font-semibold text-text hover:bg-gray-200 disabled:opacity-50"
                         >
                           {isAr ? "تعليم كمقروء" : "Mark read"}
                         </button>
@@ -271,7 +300,7 @@ const NotificationsPage = () => {
                       {n.actionHref ? (
                         <Link
                           href={n.actionHref}
-                          className="inline-flex items-center justify-center gap-1 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white hover:opacity-95"
+                          className="inline-flex items-center justify-center gap-1 rounded-xl bg-primary px-3 py-2 text-xs font-bold text-white shadow-md shadow-primary/20 hover:opacity-95"
                         >
                           <ExternalLink className="h-3.5 w-3.5" aria-hidden />
                           {isAr ? "انتقال" : "Open"}

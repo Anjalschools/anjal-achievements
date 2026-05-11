@@ -44,6 +44,16 @@ export type AlumniProfile = {
   alumniServices?: AlumniServices;
   /** Phase 6 — alumni-controlled visibility (optional; defaults = open in app layer). */
   privacySettings?: AlumniPrivacySettings;
+  /** Alumni-submitted school memory photos (moderation: pending → approved/rejected). */
+  memoryPosts?: Array<{
+    _id?: Types.ObjectId;
+    imageUrl: string;
+    caption?: string;
+    memoryYear?: number;
+    status?: "pending" | "approved" | "rejected";
+    submittedAt?: Date;
+    reviewedAt?: Date;
+  }>;
   /** Phase 4 — verified ecosystem tier (admin / verification center). */
   verificationTier?: "basic" | "academic" | "career" | "institution" | "global";
   /** Phase 4 — composite trust 0–100 (reputation + verification + activity). */
@@ -227,6 +237,22 @@ const AlumniPrivacySettingsSchema = new Schema(
   { _id: false }
 );
 
+const AlumniMemoryPostSchema = new Schema(
+  {
+    imageUrl: { type: String, required: true, trim: true, maxlength: 2000 },
+    caption: { type: String, trim: true, maxlength: 500 },
+    memoryYear: { type: Number, min: 1970, max: 2100 },
+    status: {
+      type: String,
+      enum: ["pending", "approved", "rejected"],
+      default: "pending",
+    },
+    submittedAt: { type: Date, default: () => new Date() },
+    reviewedAt: { type: Date },
+  },
+  { _id: true }
+);
+
 const AlumniProfileSchema = new Schema(
   {
     graduationYear: { type: Number, min: 1950, max: 2100 },
@@ -278,6 +304,7 @@ const AlumniProfileSchema = new Schema(
       ],
       required: false,
     },
+    memoryPosts: { type: [AlumniMemoryPostSchema], default: undefined },
   },
   { _id: false }
 );

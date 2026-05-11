@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { memo, useMemo } from "react";
-import { MessageCircle, User } from "lucide-react";
+import { BadgeCheck, BookOpen, MessageCircle, User } from "lucide-react";
 import type { SearchHit } from "@/lib/search/global-search";
 import { escapeRegExp } from "@/lib/search/query-normalizer";
 
@@ -69,6 +69,8 @@ const AlumniNetworkDiscoveryCardInner = ({
   const yearFromMeta = /^\d{4}$/.test(fieldLine) ? fieldLine : "";
   const industryOrField = yearFromMeta ? "" : fieldLine;
   const interestChips = (hit.rankHighlights || []).slice(0, 4);
+  const major = hit.major?.trim() || "";
+  const verified = hit.isVerifiedAlumni === true;
 
   return (
     <li className="break-words">
@@ -98,9 +100,18 @@ const AlumniNetworkDiscoveryCardInner = ({
                   {isAr ? "خريج" : "Alumni"}
                 </span>
               )}
+              {verified ? (
+                <span className="inline-flex items-center gap-0.5 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-black text-amber-950 ring-1 ring-amber-200/80">
+                  <BadgeCheck className="h-3 w-3" aria-hidden />
+                  {isAr ? "موثّق" : "Verified"}
+                </span>
+              ) : null}
             </div>
             {university ? (
-              <p className="mt-1.5 text-sm font-semibold text-slate-700">
+              <p className="mt-1.5 inline-flex max-w-full items-center gap-1 text-sm font-semibold text-slate-700">
+                <span className="truncate rounded-md bg-slate-100 px-1.5 py-0.5 text-[11px] font-bold text-slate-700 ring-1 ring-slate-200/80">
+                  {isAr ? "جامعة" : "University"}
+                </span>
                 <Highlight text={university} query={query} />
               </p>
             ) : null}
@@ -113,6 +124,12 @@ const AlumniNetworkDiscoveryCardInner = ({
               {yearFromMeta ? (
                 <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-[11px] font-bold text-slate-700">
                   {isAr ? `تخرج ${yearFromMeta}` : `Class of ${yearFromMeta}`}
+                </span>
+              ) : null}
+              {major ? (
+                <span className="inline-flex items-center gap-0.5 rounded-full border border-violet-200 bg-violet-50 px-2.5 py-0.5 text-[11px] font-bold text-violet-900">
+                  <BookOpen className="h-3 w-3 shrink-0" aria-hidden />
+                  <span className="max-w-[120px] truncate">{major}</span>
                 </span>
               ) : null}
               {industryOrField ? (
