@@ -314,6 +314,7 @@ export const ADMIN_ROUTE_REQUIRED_CAPABILITY: Array<{
   { prefix: "/admin/alumni/opportunities", capability: "userManagement" },
   { prefix: "/admin/alumni/announcements", capability: "userManagement" },
   { prefix: "/admin/alumni/cohorts", capability: "userManagement" },
+  { prefix: "/admin/alumni/reports", capability: "userManagement" },
   { prefix: "/admin/alumni/analytics", capability: "userManagement" },
   { prefix: "/admin/alumni/campaigns", capability: "userManagement" },
   { prefix: "/admin/alumni/crm", capability: "userManagement" },

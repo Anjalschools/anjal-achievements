@@ -39,6 +39,7 @@ import {
   Activity,
   Search,
   Images,
+  FileSpreadsheet,
 } from "lucide-react";
 import { useUnreadNotificationCount } from "@/hooks/useUnreadNotificationCount";
 import { getLocale } from "@/lib/i18n";
@@ -121,6 +122,11 @@ const AppSidebar = () => {
     href: "/admin/alumni/analytics",
     icon: BarChart3,
     label: locale === "ar" ? "تحليلات الخريجين" : "Alumni analytics",
+  };
+  const alumniReportsAdminItem = {
+    href: "/admin/alumni/reports",
+    icon: FileSpreadsheet,
+    label: locale === "ar" ? "تقارير الخريجين" : "Alumni reports",
   };
   const alumniCampaignsAdminItem = {
     href: "/admin/alumni/campaigns",
@@ -333,6 +339,7 @@ const AppSidebar = () => {
     { ...alumniAnnouncementsAdminItem, capability: "userManagement" },
     { ...alumniCohortsAdminItem, capability: "userManagement" },
     { ...alumniAnalyticsAdminItem, capability: "userManagement" },
+    { ...alumniReportsAdminItem, capability: "userManagement" },
     { ...alumniCampaignsAdminItem, capability: "userManagement" },
     { ...alumniCrmAdminItem, capability: "userManagement" },
     { ...alumniPlatformHealthAdminItem, capability: "userManagement" },
