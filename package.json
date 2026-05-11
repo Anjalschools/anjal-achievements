@@ -15,6 +15,7 @@
     "make-admin": "tsx scripts/make-admin.ts",
     "migrate:achievement-media:dry": "tsx scripts/migrate-achievement-legacy-media.ts --dry-run --mode=all",
     "migrate:achievement-media": "tsx scripts/migrate-achievement-legacy-media.ts --apply --mode=all",
+    "verify:alumni-community-smoke": "tsx scripts/alumni-community-smoke.ts",
     "verify:r2-env": "tsx scripts/verify-r2-env.ts",
     "verify:achievement-media-migration": "tsx scripts/verify-achievement-media-migration.ts"
   },

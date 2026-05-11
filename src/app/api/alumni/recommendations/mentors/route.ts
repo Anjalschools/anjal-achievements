@@ -1,6 +1,9 @@
+import mongoose from "mongoose";
 import { NextRequest, NextResponse } from "next/server";
 import connectDB from "@/lib/mongodb";
 import User from "@/models/User";
+import { computeAlumniBadgesLight } from "@/lib/alumni/compute-alumni-badges";
+import { fetchMentorTrustStatsMap, mergeLastActivityIso } from "@/lib/alumni/mentor-trust-stats";
 import { requireSessionUser } from "@/lib/alumni/require-alumni";
 import { requireAlumniCommunityForAuthedUser } from "@/lib/alumni/require-alumni-community-access";
 import { buildViewerMatchProfile } from "@/lib/alumni/matching/viewer-profile";
@@ -51,18 +54,41 @@ export async function GET(request: NextRequest) {
     });
 
     const ranked = rankMentors(viewer, mentors, uid, 12);
+    const mentorIds = ranked.map((m) => new mongoose.Types.ObjectId(m.id));
+    const statsMap = await fetchMentorTrustStatsMap(mentorIds);
+    const byId = new Map(rows.map((row: any) => [row._id.toString(), row]));
 
     return NextResponse.json({
       ok: true,
-      items: ranked.map((m) => ({
-        id: m.id,
-        fullName: m.fullName,
-        universityName: m.universityName,
-        company: null,
-        expertise: m.major,
-        matchScore: m.matchScore,
-        matchReasons: m.matchReasons,
-      })),
+      items: ranked.map((m) => {
+        const row = byId.get(m.id) as any;
+        const p = row?.alumniProfile || {};
+        const interestList = Array.isArray(p.interests) ? p.interests : [];
+        const expertiseAreas = [m.major, p.industry, ...interestList]
+          .map((x: unknown) => (x != null ? String(x).trim() : ""))
+          .filter(Boolean);
+        const uniqueExpertise = [...new Set(expertiseAreas)].slice(0, 6);
+        const st = statsMap.get(m.id);
+        return {
+          id: m.id,
+          fullName: m.fullName,
+          universityName: m.universityName,
+          company: null,
+          expertise: m.major,
+          expertiseAreas: uniqueExpertise,
+          trustBadges: computeAlumniBadgesLight({
+            isVerifiedAlumni: m.isVerifiedAlumni === true,
+            mentoring: true,
+            lastLoginAt: row?.lastLoginAt ?? null,
+            updatedAt: row?.updatedAt ?? null,
+          }),
+          mentorshipSessionCount: st?.mentorshipSessionCount ?? 0,
+          responseRateApprox: st?.responseRateApprox ?? null,
+          lastActivityAt: mergeLastActivityIso(st?.lastMentorshipActivityIso ?? null, row?.lastLoginAt, row?.updatedAt),
+          matchScore: m.matchScore,
+          matchReasons: m.matchReasons,
+        };
+      }),
     });
   } catch (error) {
     console.error("[GET /api/alumni/recommendations/mentors]", error);

@@ -2,7 +2,9 @@
 
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { useRouter } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
+import { ALUMNI_DASHBOARD_FALLBACK_HREF } from "@/lib/alumni/getAlumniBackHref";
 
 export type AlumniBreadcrumbItem = { label: string; href?: string };
 
@@ -10,6 +12,9 @@ export type AlumniPageHeaderProps = {
   title: string;
   description?: string;
   backHref?: string;
+  /** Uses `router.back()` when possible; falls back to `smartBackFallbackHref` or `/alumni/dashboard` (deep links). */
+  smartBack?: boolean;
+  smartBackFallbackHref?: string;
   backLabel?: string;
   icon?: ReactNode;
   breadcrumb?: AlumniBreadcrumbItem[];
@@ -22,6 +27,8 @@ const AlumniPageHeader = ({
   title,
   description,
   backHref,
+  smartBack,
+  smartBackFallbackHref,
   backLabel,
   icon,
   breadcrumb,
@@ -30,6 +37,15 @@ const AlumniPageHeader = ({
   dir = "rtl",
 }: AlumniPageHeaderProps) => {
   const isRtl = dir === "rtl";
+  const router = useRouter();
+  const fallback = (smartBackFallbackHref && smartBackFallbackHref.trim()) || ALUMNI_DASHBOARD_FALLBACK_HREF;
+  const handleSmartBack = () => {
+    if (typeof window !== "undefined" && window.history.length > 1) {
+      router.back();
+      return;
+    }
+    router.push(fallback);
+  };
 
   return (
     <header
@@ -47,7 +63,23 @@ const AlumniPageHeader = ({
       />
       <div className="relative flex flex-col gap-4 p-5 sm:flex-row sm:items-start sm:justify-between sm:p-7">
         <div className="min-w-0 flex-1 space-y-3 text-white">
-          {backHref ? (
+          {smartBack ? (
+            <button
+              type="button"
+              onClick={handleSmartBack}
+              className={`inline-flex max-w-full items-center gap-2 rounded-xl bg-white/10 px-3 py-2 text-xs font-bold text-white ring-1 ring-white/15 backdrop-blur-sm transition hover:bg-white/15 ${
+                isRtl ? "flex-row-reverse" : ""
+              }`}
+              tabIndex={0}
+              aria-label={backLabel || (isRtl ? "رجوع" : "Back")}
+            >
+              <ChevronLeft
+                className={`h-4 w-4 shrink-0 ${isRtl ? "rotate-180" : ""}`}
+                aria-hidden
+              />
+              <span className="truncate">{backLabel || (isRtl ? "رجوع" : "Back")}</span>
+            </button>
+          ) : backHref ? (
             <Link
               href={backHref}
               className={`inline-flex max-w-full items-center gap-2 rounded-xl bg-white/10 px-3 py-2 text-xs font-bold text-white ring-1 ring-white/15 backdrop-blur-sm transition hover:bg-white/15 ${

@@ -1,11 +1,15 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Loader2 } from "lucide-react";
+import { Loader2, Share2 } from "lucide-react";
+import { getLocale } from "@/lib/i18n";
+import AlumniPageHeader from "@/components/alumni/AlumniPageHeader";
 
 type Row = { label: string; count: number };
 
 export default function AlumniNetworkCareersPage() {
+  const isAr = getLocale() === "ar";
+  const dir = isAr ? "rtl" : "ltr";
   const [axis, setAxis] = useState("industry");
   const [items, setItems] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
@@ -28,8 +32,25 @@ export default function AlumniNetworkCareersPage() {
   }, [axis]);
 
   return (
-    <div dir="rtl" className="mx-auto max-w-3xl px-4 py-12">
-      <h1 className="text-3xl font-black text-slate-900">المسارات المهنية</h1>
+    <div dir={dir} className="mx-auto max-w-3xl space-y-8 px-4 py-10 sm:py-12">
+      <AlumniPageHeader
+        title={isAr ? "المسارات المهنية" : "Career paths"}
+        description={
+          isAr
+            ? "عرض تجميعي لمسارات الخريجين حسب القطاع أو الشركة أو المسمى."
+            : "Aggregated alumni career paths by industry, company, or role."
+        }
+        smartBack
+        backLabel={isAr ? "رجوع" : "Back"}
+        icon={<Share2 className="h-6 w-6 text-white" aria-hidden />}
+        breadcrumb={[
+          { label: isAr ? "الخريجون" : "Alumni", href: "/alumni" },
+          { label: isAr ? "الشبكة" : "Network" },
+          { label: isAr ? "المسارات" : "Careers" },
+        ]}
+        dir={dir}
+      />
+      <h1 className="sr-only">{isAr ? "المسارات المهنية" : "Career paths"}</h1>
       <div className="mt-4 flex gap-2">
         {[
           ["industry", "القطاع"],

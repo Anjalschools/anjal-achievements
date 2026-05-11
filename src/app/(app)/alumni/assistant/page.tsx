@@ -144,7 +144,7 @@ const AssistantShell = () => {
               ? "إرشاد داخلي سريع: بحث في بيانات المنصة، مرشدون مقترحون، فرص، وجامعات."
               : "Fast in-platform guidance: search platform data, suggested mentors, opportunities, and universities."
         }
-        backHref="/alumni/dashboard"
+        smartBack
         backLabel={isAr ? "رجوع" : "Back"}
         icon={<Sparkles className="h-6 w-6 text-amber-200" aria-hidden />}
         breadcrumb={[

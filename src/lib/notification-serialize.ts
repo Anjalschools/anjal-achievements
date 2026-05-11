@@ -11,6 +11,8 @@ export type NotificationApiItem = {
   relatedCertificateToken: string | null;
   metadata: Record<string, unknown> | null;
   actionHref: string | null;
+  /** Short CTA label from metadata (e.g. alumni community actions). */
+  actionLabel: string | null;
 };
 
 const asPlain = (n: INotification | Record<string, unknown>): Record<string, unknown> => {
@@ -57,6 +59,9 @@ export const serializeNotification = (doc: INotification | Record<string, unknow
     actionHref = `/achievements/${relatedAchievementId}`;
   }
 
+  const actionLabel =
+    meta && typeof meta.actionLabel === "string" && meta.actionLabel.trim() ? meta.actionLabel.trim() : null;
+
   const createdAt =
     plain.createdAt instanceof Date
       ? plain.createdAt.toISOString()
@@ -75,5 +80,6 @@ export const serializeNotification = (doc: INotification | Record<string, unknow
     relatedCertificateToken,
     metadata: meta,
     actionHref,
+    actionLabel,
   };
 };

@@ -310,6 +310,7 @@ export const ADMIN_ROUTE_REQUIRED_CAPABILITY: Array<{
   { prefix: "/admin/alumni/verification-center", capability: "userManagement" },
   { prefix: "/admin/alumni/onboarding-requests", capability: "userManagement" },
   { prefix: "/admin/alumni/stories", capability: "userManagement" },
+  { prefix: "/admin/alumni/memories", capability: "userManagement" },
   { prefix: "/admin/alumni/opportunities", capability: "userManagement" },
   { prefix: "/admin/alumni/announcements", capability: "userManagement" },
   { prefix: "/admin/alumni/cohorts", capability: "userManagement" },

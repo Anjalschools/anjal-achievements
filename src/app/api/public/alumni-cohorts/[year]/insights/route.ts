@@ -7,6 +7,7 @@ import { rankCohortPeers, type CohortPeer } from "@/lib/alumni/matching/cohort-m
 import { getCurrentDbUser } from "@/lib/auth";
 import { blockIneligibleStudentOnPublicCommunityApi } from "@/lib/alumni/public-community-session-guard";
 import { rankOpportunities, type OpportunityCandidate } from "@/lib/alumni/matching/opportunity-matching";
+import { publicAlumniOpportunityListingFilter } from "@/lib/alumni/normalize-opportunity-status";
 
 export const dynamic = "force-dynamic";
 
@@ -69,11 +70,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ year: strin
 
     const now = new Date();
     const opRows = await AlumniOpportunity.find({
-      published: true,
-      $and: [
-        { $or: [{ archivedAt: null }, { archivedAt: { $exists: false } }] },
-        { $or: [{ expiresAt: { $exists: false } }, { expiresAt: null }, { expiresAt: { $gt: now } }] },
-      ],
+      ...publicAlumniOpportunityListingFilter(now),
     })
       .select("title description type company location featured")
       .limit(40)

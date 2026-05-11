@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { memo, useMemo } from "react";
+import { memo, useMemo, useState } from "react";
 import type { CommunityFeedItem, CommunityFeedKind } from "@/lib/alumni/community-activation-types";
 import { formatRelativeTime } from "@/lib/alumni/format-relative-time";
 import {
@@ -64,13 +64,20 @@ type Props = {
   items: CommunityFeedItem[];
   isAr: boolean;
   loading?: boolean;
+  /** Initial visible count (performance on long feeds). */
+  maxItems?: number;
 };
 
-export const AlumniCommunityActivityFeed = memo(({ items, isAr, loading }: Props) => {
+export const AlumniCommunityActivityFeed = memo(({ items, isAr, loading, maxItems }: Props) => {
   const dir = isAr ? "rtl" : "ltr";
+  const [expanded, setExpanded] = useState(false);
+  const visibleItems = useMemo(() => {
+    if (!maxItems || expanded || items.length <= maxItems) return items;
+    return items.slice(0, maxItems);
+  }, [items, maxItems, expanded]);
 
   const lines = useMemo(() => {
-    return items.map((it) => {
+    return visibleItems.map((it) => {
       const Icon = kindIcon(it.kind);
       const { title, cta } = kindLabel(it.kind, isAr, it.meta);
       const rel = formatRelativeTime(it.at, isAr);
@@ -119,7 +126,7 @@ export const AlumniCommunityActivityFeed = memo(({ items, isAr, loading }: Props
         </li>
       );
     });
-  }, [items, isAr, dir]);
+  }, [visibleItems, isAr, dir]);
 
   if (loading) {
     return (
@@ -148,10 +155,23 @@ export const AlumniCommunityActivityFeed = memo(({ items, isAr, loading }: Props
     );
   }
 
+  const showExpand = Boolean(maxItems && !expanded && items.length > maxItems);
+
   return (
-    <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3" dir={dir}>
-      {lines}
-    </ul>
+    <div className="space-y-3">
+      <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3" dir={dir}>
+        {lines}
+      </ul>
+      {showExpand ? (
+        <button
+          type="button"
+          onClick={() => setExpanded(true)}
+          className="w-full rounded-2xl border border-slate-200 bg-white py-2.5 text-xs font-black text-primary transition hover:bg-slate-50"
+        >
+          {isAr ? `عرض المزيد (${items.length - (maxItems || 0)})` : `Show more (${items.length - (maxItems || 0)})`}
+        </button>
+      ) : null}
+    </div>
   );
 });
 AlumniCommunityActivityFeed.displayName = "AlumniCommunityActivityFeed";

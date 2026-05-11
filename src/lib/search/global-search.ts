@@ -1,10 +1,14 @@
 import User from "@/models/User";
+import { computeAlumniBadgesLight } from "@/lib/alumni/compute-alumni-badges";
 import { alumniCommunityActiveUserClause } from "@/lib/alumni/alumni-community-active";
 import AlumniOpportunity from "@/models/AlumniOpportunity";
 import AlumniReunionEvent from "@/models/AlumniReunionEvent";
 import AlumniStory from "@/models/AlumniStory";
 import AlumniCohort from "@/models/AlumniCohort";
 import { escapeRegExp, type NormalizedQuery } from "./query-normalizer";
+import { buildAlumniSearchRegexPattern } from "@/lib/alumni/arabic-search-normalize";
+import { parseGraduationYearToken } from "@/lib/alumni/normalize-arabic-digits";
+import { publicApprovedOpportunityClause } from "@/lib/alumni/normalize-opportunity-status";
 import { rankAlumniRows, type AlumniSearchRow } from "./ranking-engine";
 
 export type Pagination = { page: number; pageSize: number };
@@ -38,6 +42,8 @@ export type SearchHit = {
   /** Alumni / mentor discovery — from profile when available */
   isVerifiedAlumni?: boolean;
   major?: string | null;
+  /** Computed trust/engagement badges for alumni & mentor hits */
+  badges?: string[];
 };
 
 const clampPage = (p: number) => Math.max(1, Math.min(500, p));
@@ -56,11 +62,17 @@ const mentorDiscoverableMatch = (): Record<string, unknown> => ({
   ],
 });
 
+const searchTokenRegex = (t: string): RegExp => {
+  const pattern = buildAlumniSearchRegexPattern(t);
+  return pattern ? new RegExp(pattern, "iu") : new RegExp(escapeRegExp(t), "i");
+};
+
 const tokenOrClause = (tokens: string[]): Record<string, unknown>[] => {
   if (!tokens.length) return [];
   return tokens.flatMap((t) => {
-    const re = new RegExp(escapeRegExp(t), "i");
-    return [
+    const re = searchTokenRegex(t);
+    const year = parseGraduationYearToken(t);
+    const base: Record<string, unknown>[] = [
       { fullName: re },
       { fullNameAr: re },
       { fullNameEn: re },
@@ -75,6 +87,10 @@ const tokenOrClause = (tokens: string[]): Record<string, unknown>[] => {
       { "alumniProfile.studyCountry": re },
       { "alumniProfile.interests": re },
     ];
+    if (year !== undefined) {
+      base.push({ "alumniProfile.graduationYear": year });
+    }
+    return base;
   });
 };
 
@@ -119,6 +135,12 @@ const toAlumniHits = (
     rankHighlights: r.rankHighlights,
     isVerifiedAlumni: r.isVerifiedAlumni === true,
     major: r.major ?? null,
+    badges: computeAlumniBadgesLight({
+      isVerifiedAlumni: r.isVerifiedAlumni === true,
+      mentoring: r.mentoring === true,
+      lastLoginAt: r.lastLoginAt ?? null,
+      updatedAt: r.updatedAt ?? null,
+    }),
   }));
 
 export const searchAlumni = async (nq: NormalizedQuery, pag: Pagination, options?: AlumniSearchOptions) => {
@@ -200,12 +222,19 @@ export const searchMentors = async (nq: NormalizedQuery, pag: Pagination, option
       rankHighlights: r.rankHighlights,
       isVerifiedAlumni: r.isVerifiedAlumni === true,
       major: r.major ?? null,
+      badges: computeAlumniBadgesLight({
+        isVerifiedAlumni: r.isVerifiedAlumni === true,
+        mentoring: true,
+        lastLoginAt: r.lastLoginAt ?? null,
+        updatedAt: r.updatedAt ?? null,
+      }),
     })),
     totalEstimate: ranked.length,
   };
 };
 
 const oppMatch = (tokens: string[]) => {
+  const visibility = publicApprovedOpportunityClause();
   const baseAnd = [
     { $or: [{ archivedAt: null }, { archivedAt: { $exists: false } }] },
     {
@@ -213,13 +242,13 @@ const oppMatch = (tokens: string[]) => {
     },
   ];
   if (!tokens.length) {
-    return { published: true, $and: baseAnd } as Record<string, unknown>;
+    return { ...visibility, $and: baseAnd } as Record<string, unknown>;
   }
   const or = tokens.flatMap((t) => {
-    const re = new RegExp(escapeRegExp(t), "i");
+    const re = searchTokenRegex(t);
     return [{ title: re }, { description: re }, { company: re }, { location: re }, { type: re }];
   });
-  return { published: true, $and: [...baseAnd, { $or: or }] } as Record<string, unknown>;
+  return { ...visibility, $and: [...baseAnd, { $or: or }] } as Record<string, unknown>;
 };
 
 export const searchOpportunities = async (nq: NormalizedQuery, pag: Pagination) => {
@@ -250,7 +279,7 @@ export const searchOpportunities = async (nq: NormalizedQuery, pag: Pagination) 
 const eventMatch = (tokens: string[]) => {
   if (!tokens.length) return { published: true } as Record<string, unknown>;
   const or = tokens.flatMap((t) => {
-    const re = new RegExp(escapeRegExp(t), "i");
+    const re = searchTokenRegex(t);
     return [{ title: re }, { summary: re }, { location: re }, { slug: re }];
   });
   return { published: true, $or: or };
@@ -285,7 +314,7 @@ export const searchEvents = async (nq: NormalizedQuery, pag: Pagination) => {
 const storyMatch = (tokens: string[]) => {
   if (!tokens.length) return { published: true } as Record<string, unknown>;
   const or = tokens.flatMap((t) => {
-    const re = new RegExp(escapeRegExp(t), "i");
+    const re = searchTokenRegex(t);
     return [{ title: re }, { excerpt: re }, { universityName: re }, { currentCompany: re }];
   });
   return { published: true, $or: or };
@@ -320,11 +349,12 @@ export const searchStories = async (nq: NormalizedQuery, pag: Pagination) => {
 const cohortMatch = (tokens: string[]): Record<string, unknown> => {
   if (!tokens.length) return {};
   const or = tokens.flatMap((t) => {
-    const n = Number(t);
-    if (Number.isFinite(n) && n > 1950 && n < 2100) {
-      return [{ graduationYear: n }, { label: new RegExp(escapeRegExp(t), "i") }];
+    const y = parseGraduationYearToken(t);
+    const labRx = searchTokenRegex(t);
+    if (y !== undefined) {
+      return [{ graduationYear: y }, { label: labRx }];
     }
-    return [{ label: new RegExp(escapeRegExp(t), "i") }];
+    return [{ label: labRx }];
   });
   return { $or: or };
 };

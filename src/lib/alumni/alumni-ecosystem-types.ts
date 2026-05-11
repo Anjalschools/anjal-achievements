@@ -60,4 +60,11 @@ export type AlumniMentorItem = {
   isVerifiedAlumni?: boolean;
   verificationTier?: "basic" | "academic" | "career" | "institution" | "global";
   trustScore?: number | null;
+  /** Trust / engagement badges (computed; additive API field). */
+  trustBadges?: string[];
+  /** Distinct expertise chips (major, industry, interests). */
+  expertiseAreas?: string[];
+  mentorshipSessionCount?: number;
+  responseRateApprox?: number | null;
+  lastActivityAt?: string | null;
 };

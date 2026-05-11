@@ -17,7 +17,11 @@ export async function GET(request: NextRequest) {
 
   try {
     await connectDB();
-    const me = await User.findById(gate.userId).select("fullName alumniProfile updatedAt lastLoginAt").lean();
+    const me = await User.findById(gate.userId)
+      .select(
+        "fullName alumniProfile.universityName alumniProfile.major alumniProfile.industry alumniProfile.country alumniProfile.studyCountry alumniProfile.graduationYear alumniProfile.bio alumniProfile.interests alumniProfile.updatedAt alumniProfile.lastLoginAt updatedAt lastLoginAt"
+      )
+      .lean();
     const sp = request.nextUrl.searchParams;
 
     const { peers } = await loadCareerGraphPeers({

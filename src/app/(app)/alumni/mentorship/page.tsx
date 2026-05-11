@@ -72,7 +72,7 @@ const MentorshipForm = () => {
             ? "اختر مرشدًا وأرسل رسالة قصيرة. تابع الطلبات من صفحة المتابعة."
             : "Choose a mentor and send a short message. Track requests from the follow-up page."
         }
-        backHref="/alumni/dashboard"
+        smartBack
         backLabel={isAr ? "رجوع" : "Back"}
         icon={<UserRoundSearch className="h-6 w-6 text-white" aria-hidden />}
         breadcrumb={[

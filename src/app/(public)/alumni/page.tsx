@@ -24,6 +24,7 @@ import { AlumniEliteSection } from "@/components/alumni/AlumniEliteSection";
 export default function AlumniLandingPage() {
   const [locale, setLocale] = useState<AlumniLocale>("ar");
   const [summaryStats, setSummaryStats] = useState<AlumniPublicSummaryStats | null>(null);
+  const [statsLoading, setStatsLoading] = useState(true);
   const [featuredAlumni, setFeaturedAlumni] = useState<FeaturedAlumniItem[]>([]);
   const [universities, setUniversities] = useState<AlumniUniversityCountItem[]>([]);
   const [fields, setFields] = useState<AlumniFieldCountItem[]>([]);
@@ -48,13 +49,18 @@ export default function AlumniLandingPage() {
   useEffect(() => {
     let isMounted = true;
     const loadData = async () => {
-      const result = await fetchAlumniPublicClientData();
-      if (!isMounted) return;
-      setSummaryStats(result.summary);
-      setFeaturedAlumni(result.featured);
-      setUniversities(result.universities);
-      setFields(result.fields);
-      setStories(result.stories);
+      setStatsLoading(true);
+      try {
+        const result = await fetchAlumniPublicClientData();
+        if (!isMounted) return;
+        setSummaryStats(result.summary);
+        setFeaturedAlumni(result.featured);
+        setUniversities(result.universities);
+        setFields(result.fields);
+        setStories(result.stories);
+      } finally {
+        if (isMounted) setStatsLoading(false);
+      }
     };
     void loadData();
     return () => {
@@ -67,7 +73,7 @@ export default function AlumniLandingPage() {
   const sections = useMemo(
     () => [
       <AlumniHero key="hero" locale={locale} />,
-      <AlumniStatsSection key="stats" locale={locale} stats={summaryStats} />,
+      <AlumniStatsSection key="stats" locale={locale} stats={summaryStats} loading={statsLoading} />,
       <AlumniFeaturedSection key="featured" locale={locale} featured={featuredAlumni} />,
       <AlumniEliteSection key="elite" locale={locale} />,
       <AlumniStoriesSection key="stories" locale={locale} stories={stories} />,
@@ -76,7 +82,7 @@ export default function AlumniLandingPage() {
       <AlumniCooperationSection key="coop" locale={locale} />,
       <AlumniJoinCta key="join" locale={locale} />,
     ],
-    [locale, summaryStats, featuredAlumni, universities, fields, stories]
+    [locale, summaryStats, statsLoading, featuredAlumni, universities, fields, stories]
   );
 
   return (

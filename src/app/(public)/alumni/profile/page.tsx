@@ -90,7 +90,7 @@ const AlumniProfilePage = () => {
             ? "عرض احترافي لمسارك بعد الأنجال — حدّث التفاصيل من الإعدادات."
             : "A professional view of your path after Al-Anjal — update details in settings."
         }
-        backHref="/alumni"
+        smartBack
         backLabel={isAr ? "رجوع" : "Back"}
         icon={<Sparkles className="h-6 w-6 text-white" aria-hidden />}
         breadcrumb={[

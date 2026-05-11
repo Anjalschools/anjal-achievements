@@ -23,6 +23,8 @@ export type MentorCandidate = {
   country?: string | null;
   studyCountry?: string | null;
   graduationYear?: number | null;
+  /** Interest tags from profile — used for mutual-interest matches. */
+  interests?: string[] | null;
   bio?: string | null;
   updatedAt?: Date | null;
   lastLoginAt?: Date | null;
@@ -103,9 +105,25 @@ export const scoreMentor = (
 
   if (viewer.graduationYear && mentor.graduationYear) {
     const diff = Math.abs(viewer.graduationYear - mentor.graduationYear);
-    if (diff <= 3) {
+    if (viewer.graduationYear === mentor.graduationYear) {
+      score += 12;
+      reasons.push("same_graduation_year");
+    } else if (diff <= 3) {
       score += 5;
       reasons.push("grad_year_proximity");
+    }
+  }
+
+  const viewerInterestSet = new Set((viewer.interests || []).map(norm).filter(Boolean));
+  const mentorInterestSet = new Set((mentor.interests || []).map(norm).filter(Boolean));
+  if (viewerInterestSet.size && mentorInterestSet.size) {
+    let overlap = 0;
+    for (const t of viewerInterestSet) {
+      if (mentorInterestSet.has(t)) overlap += 1;
+    }
+    if (overlap > 0) {
+      score += Math.min(18, overlap * 6);
+      reasons.push("mutual_interests");
     }
   }
 

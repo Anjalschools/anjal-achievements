@@ -5,6 +5,16 @@ import AlumniStory from "@/models/AlumniStory";
 import { requireAdminUserManager } from "@/lib/admin-user-management-auth";
 import { sanitizeMongoShape } from "@/lib/sanitize-input";
 import { sanitizeUserText } from "@/lib/sanitize-html";
+import { invalidateAlumniSummaryCache } from "@/lib/alumni/alumni-public-cache";
+import {
+  alumniStoryContentEmptyIssue,
+  alumniStoryTitleRequiredIssue,
+} from "@/lib/alumni/alumni-story-field-issues";
+import {
+  alumniStoryBodyHasVisibleText,
+  normalizeAlumniStoryBody,
+  stripHtmlNoiseForEmptyCheck,
+} from "@/lib/alumni/alumni-story-input";
 
 type RouteParams = { params: Promise<{ id: string }> };
 
@@ -22,6 +32,7 @@ export async function DELETE(_request: NextRequest, ctx: RouteParams) {
     await connectDB();
     const res = await AlumniStory.deleteOne({ _id: id });
     if (res.deletedCount === 0) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
+    invalidateAlumniSummaryCache("admin:alumni-story:delete");
     return NextResponse.json({ ok: true });
   } catch (error) {
     console.error("[DELETE /api/admin/alumni/stories/[id]]", error);
@@ -40,9 +51,40 @@ export async function PATCH(request: NextRequest, ctx: RouteParams) {
     }
     const body = sanitizeMongoShape((await request.json()) as Record<string, unknown>);
     const updates: Record<string, unknown> = {};
-    if (body.title !== undefined) updates.title = sanitizeUserText(String(body.title || ""));
-    if (body.excerpt !== undefined) updates.excerpt = sanitizeUserText(String(body.excerpt || "")) || undefined;
-    if (body.content !== undefined) updates.content = sanitizeUserText(String(body.content || "")) || undefined;
+    if (body.title !== undefined) {
+      const tNorm = normalizeAlumniStoryBody(stripHtmlNoiseForEmptyCheck(String(body.title || "")));
+      const t2 = sanitizeUserText(tNorm).slice(0, 220);
+      if (!t2 || t2.length < 2) {
+        return NextResponse.json(
+          {
+            ok: false,
+            success: false,
+            error: "INVALID_INPUT",
+            issues: alumniStoryTitleRequiredIssue,
+          },
+          { status: 400 }
+        );
+      }
+      updates.title = t2;
+    }
+    if (body.excerpt !== undefined) {
+      updates.excerpt = sanitizeUserText(normalizeAlumniStoryBody(String(body.excerpt || ""))) || undefined;
+    }
+    if (body.content !== undefined) {
+      const cNorm = normalizeAlumniStoryBody(stripHtmlNoiseForEmptyCheck(String(body.content || "")));
+      if (!alumniStoryBodyHasVisibleText(cNorm)) {
+        return NextResponse.json(
+          {
+            ok: false,
+            success: false,
+            error: "INVALID_INPUT",
+            issues: alumniStoryContentEmptyIssue,
+          },
+          { status: 400 }
+        );
+      }
+      updates.content = sanitizeUserText(cNorm) || undefined;
+    }
     if (body.coverImage !== undefined) updates.coverImage = sanitizeUserText(String(body.coverImage || "")) || undefined;
     if (body.graduationYear !== undefined) updates.graduationYear = Number(body.graduationYear) || undefined;
     if (body.universityName !== undefined) updates.universityName = sanitizeUserText(String(body.universityName || "")) || undefined;
@@ -61,6 +103,7 @@ export async function PATCH(request: NextRequest, ctx: RouteParams) {
       .select("_id")
       .lean();
     if (!row) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
+    invalidateAlumniSummaryCache("admin:alumni-story:patch");
     return NextResponse.json({ ok: true });
   } catch (error) {
     console.error("[PATCH /api/admin/alumni/stories/[id]]", error);

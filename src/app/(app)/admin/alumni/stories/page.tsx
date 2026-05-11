@@ -56,8 +56,27 @@ const AdminAlumniStoriesPage = () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ title, excerpt, content, published: true }),
       });
-      const json = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(json.error || "Failed");
+      const json = (await response.json().catch(() => ({}))) as {
+        error?: string;
+        issues?: {
+          fieldErrors?: Record<string, { ar: string; en: string } | string[]>;
+        };
+      };
+      if (!response.ok) {
+        const fe = json.issues?.fieldErrors;
+        const parts: string[] = [];
+        if (fe) {
+          for (const v of Object.values(fe)) {
+            if (v && typeof v === "object" && !Array.isArray(v) && "ar" in v && "en" in v) {
+              parts.push(isAr ? v.ar : v.en);
+            } else if (Array.isArray(v)) {
+              parts.push(v.join(", "));
+            }
+          }
+        }
+        const detail = parts.filter(Boolean).join(" · ");
+        throw new Error(detail || json.error || "Failed");
+      }
       setTitle("");
       setExcerpt("");
       setContent("");

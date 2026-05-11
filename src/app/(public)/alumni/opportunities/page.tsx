@@ -48,7 +48,7 @@ const AlumniOpportunitiesPage = () => {
             ? "فرص إرشاد وتدريب وعمل وشراكات بإشراف إداري."
             : "Mentorship, internship, jobs, and partnerships under admin moderation."
         }
-        backHref="/alumni"
+        smartBack
         backLabel={isAr ? "رجوع" : "Back"}
         icon={<Briefcase className="h-6 w-6 text-white" aria-hidden />}
         breadcrumb={[

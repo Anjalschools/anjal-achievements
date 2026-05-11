@@ -3,8 +3,11 @@ import AlumniMentorshipRequest from "@/models/AlumniMentorshipRequest";
 import AlumniEventRsvp from "@/models/AlumniEventRsvp";
 import AlumniStory from "@/models/AlumniStory";
 import AlumniOpportunity from "@/models/AlumniOpportunity";
+import AlumniVerificationRequest from "@/models/AlumniVerificationRequest";
 import { getAlumniIntelCached, setAlumniIntelCached } from "@/lib/alumni/alumni-intelligence-cache";
 import { alumniCommunityActiveUserClause } from "@/lib/alumni/alumni-community-active";
+import { publicAlumniOpportunityListingFilter } from "@/lib/alumni/normalize-opportunity-status";
+import { buildVerificationRequestStatusMongoFilter } from "@/lib/alumni/normalizeVerificationStatus";
 
 const TTL_MS = 60_000;
 
@@ -30,6 +33,10 @@ export type AdminAlumniOverview = {
   cohortSizes: { year: number; count: number }[];
   opportunitiesByType: { type: string; count: number }[];
   storiesPublished: number;
+  memoryStatusCounts: { pending: number; approved: number; rejected: number };
+  opportunityCounts: { pendingReview: number; approvedPublic: number; rejected: number; archived: number };
+  /** AlumniVerificationRequest documents by canonical status (legacy strings included via Mongo filter). */
+  verificationTicketCounts: { pending: number; approved: number; rejected: number };
 };
 
 export const getAdminAlumniOverview = () =>
@@ -44,6 +51,14 @@ export const getAdminAlumniOverview = () =>
       cohortSizes,
       opportunitiesByType,
       storiesPublished,
+      memoryStatusAgg,
+      pendingReviewOpps,
+      approvedPublicOpps,
+      rejectedOpps,
+      archivedOpps,
+      verificationTicketsPending,
+      verificationTicketsApproved,
+      verificationTicketsRejected,
     ] = await Promise.all([
       User.countDocuments(activeAlumniMatch()),
       User.countDocuments({
@@ -107,12 +122,42 @@ export const getAdminAlumniOverview = () =>
         { $limit: 15 },
       ]),
       AlumniOpportunity.aggregate<{ _id: string; count: number }>([
-        { $match: { published: true } },
+        { $match: publicAlumniOpportunityListingFilter() },
         { $group: { _id: "$type", count: { $sum: 1 } } },
         { $sort: { count: -1 } },
       ]),
       AlumniStory.countDocuments({ published: true }),
+      User.aggregate<{ _id: string; c: number }>([
+        { $match: { "alumniProfile.memoryPosts": { $exists: true, $ne: [] } } },
+        { $unwind: "$alumniProfile.memoryPosts" },
+        { $group: { _id: "$alumniProfile.memoryPosts.status", c: { $sum: 1 } } },
+      ]),
+      AlumniOpportunity.countDocuments({
+        $and: [
+          { $or: [{ archivedAt: null }, { archivedAt: { $exists: false } }] },
+          {
+            $or: [
+              { reviewStatus: "pending_review" },
+              {
+                published: false,
+                $or: [{ reviewStatus: { $exists: false } }, { reviewStatus: null }],
+              },
+            ],
+          },
+        ],
+      }),
+      AlumniOpportunity.countDocuments({ ...publicAlumniOpportunityListingFilter() }),
+      AlumniOpportunity.countDocuments({
+        reviewStatus: "rejected",
+        $or: [{ archivedAt: null }, { archivedAt: { $exists: false } }],
+      }),
+      AlumniOpportunity.countDocuments({ archivedAt: { $ne: null } }),
+      AlumniVerificationRequest.countDocuments(buildVerificationRequestStatusMongoFilter("pending")),
+      AlumniVerificationRequest.countDocuments(buildVerificationRequestStatusMongoFilter("approved")),
+      AlumniVerificationRequest.countDocuments(buildVerificationRequestStatusMongoFilter("rejected")),
     ]);
+
+    const memMap = Object.fromEntries(memoryStatusAgg.map((r) => [String(r._id || "unknown"), r.c]));
 
     return {
       alumniCount,
@@ -128,6 +173,22 @@ export const getAdminAlumniOverview = () =>
       cohortSizes: cohortSizes.map((r) => ({ year: r._id, count: r.count })),
       opportunitiesByType: opportunitiesByType.map((r) => ({ type: r._id, count: r.count })),
       storiesPublished,
+      memoryStatusCounts: {
+        pending: memMap.pending || 0,
+        approved: memMap.approved || 0,
+        rejected: memMap.rejected || 0,
+      },
+      opportunityCounts: {
+        pendingReview: pendingReviewOpps,
+        approvedPublic: approvedPublicOpps,
+        rejected: rejectedOpps,
+        archived: archivedOpps,
+      },
+      verificationTicketCounts: {
+        pending: verificationTicketsPending,
+        approved: verificationTicketsApproved,
+        rejected: verificationTicketsRejected,
+      },
     };
   });
 

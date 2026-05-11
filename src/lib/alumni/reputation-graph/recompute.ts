@@ -6,6 +6,7 @@ import AlumniEventRsvp from "@/models/AlumniEventRsvp";
 import AlumniStory from "@/models/AlumniStory";
 import AlumniOpportunity from "@/models/AlumniOpportunity";
 import type { AlumniReputationTierName } from "@/models/AlumniReputation";
+import { publicApprovedOpportunityClause } from "@/lib/alumni/normalize-opportunity-status";
 
 export type AlumniReputationSnapshot = {
   userId: string;
@@ -98,7 +99,10 @@ export const recomputeAlumniReputationGraph = async (
 
   const [storiesN, oppsN] = await Promise.all([
     AlumniStory.countDocuments({ relatedUserId: userId, published: true }),
-    AlumniOpportunity.countDocuments({ createdByUserId: userId, published: true }),
+    AlumniOpportunity.countDocuments({
+      createdByUserId: userId,
+      ...publicApprovedOpportunityClause(),
+    }),
   ]);
   const contentContributionScore = Math.min(150, storiesN * 35 + oppsN * 25);
 

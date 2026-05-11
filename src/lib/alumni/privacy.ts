@@ -43,6 +43,9 @@ export const redactAlumniProfileForPublic = (ap?: unknown): Record<string, unkno
   if (!e.publicProfile) return null;
   const out: Record<string, unknown> = { ...(ap as Record<string, unknown>) };
   delete out.privacySettings;
+  /** Memories & manual badge storage are not public payloads; APIs expose curated fields only. */
+  delete out.memoryPosts;
+  delete out.badges;
   if (!e.showLinkedIn) delete out.linkedinUrl;
   if (!e.showCompany) {
     delete out.currentCompany;

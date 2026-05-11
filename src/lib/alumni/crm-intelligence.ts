@@ -12,6 +12,7 @@ import AlumniRelationshipScore, {
 import { weightSignals, type EngagementSignals } from "@/lib/alumni/automation/engagement-engine";
 import { getAlumniIntelCached, setAlumniIntelCached } from "@/lib/alumni/alumni-intelligence-cache";
 import { alumniCommunityActiveUserClause } from "@/lib/alumni/alumni-community-active";
+import { publicApprovedOpportunityClause } from "@/lib/alumni/normalize-opportunity-status";
 
 const SEG_TTL_MS = 45_000;
 
@@ -73,7 +74,10 @@ export const computeAlumniRelationshipScore = async (
       AlumniMentorshipRequest.countDocuments({ mentorId: userId, status: "accepted" }),
       AlumniEventRsvp.countDocuments({ userId, status: "going" }),
       AlumniInboxThread.countDocuments({ participantIds: userId }),
-      AlumniOpportunity.countDocuments({ createdByUserId: userId, published: true }),
+      AlumniOpportunity.countDocuments({
+        createdByUserId: userId,
+        ...publicApprovedOpportunityClause(),
+      }),
       AlumniCampaignRecipient.countDocuments({ userId, status: { $in: ["opened", "clicked"] } }),
     ]);
 

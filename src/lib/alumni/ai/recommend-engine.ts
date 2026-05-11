@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import User from "@/models/User";
 import AlumniOpportunity from "@/models/AlumniOpportunity";
+import { publicAlumniOpportunityListingFilter } from "@/lib/alumni/normalize-opportunity-status";
 import type { MatchProfileInput } from "@/lib/alumni/matching/mentor-matching";
 import {
   rankMentors,
@@ -67,11 +68,7 @@ const loadMentorPool = async (excludeId?: string): Promise<MentorCandidate[]> =>
 const loadOpportunities = async (): Promise<OpportunityCandidate[]> => {
   const now = new Date();
   const rows = await AlumniOpportunity.find({
-    published: true,
-    $and: [
-      { $or: [{ archivedAt: null }, { archivedAt: { $exists: false } }] },
-      { $or: [{ expiresAt: { $exists: false } }, { expiresAt: null }, { expiresAt: { $gt: now } }] },
-    ],
+    ...publicAlumniOpportunityListingFilter(now),
   })
     .select("title description type company location featured")
     .sort({ featured: -1, updatedAt: -1 })

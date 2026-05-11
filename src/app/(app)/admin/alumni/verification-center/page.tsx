@@ -5,6 +5,9 @@ import { ExternalLink, Loader2 } from "lucide-react";
 import PageContainer from "@/components/layout/PageContainer";
 import PageHeader from "@/components/layout/PageHeader";
 import { getLocale } from "@/lib/i18n";
+import { getAlumniVerificationChannel } from "@/lib/alumni/alumni-verification-ui";
+import { getVerificationTicketStatusLabel, normalizeVerificationStatus } from "@/lib/alumni/normalizeVerificationStatus";
+import { getVerificationSourceLabel } from "@/lib/alumni/verification-source-label";
 
 type VerificationStatus = "pending" | "approved" | "rejected";
 
@@ -19,9 +22,39 @@ type ListItem = {
   aiValidationScore?: number;
   aiNotes?: string;
   reviewerNotes?: string;
-  createdAt: string;
+  createdAt?: string | Date;
   currentTier: string | null;
   isVerifiedAlumni: boolean;
+  /** Row synthesized from verified User profile with no AlumniVerificationRequest document */
+  isProfileOnly?: boolean;
+  /** Stored on User.alumniProfile when available */
+  verificationSource?: string | null;
+};
+
+const verificationChannelBadge = (
+  row: ListItem,
+  isAr: boolean
+): { key: string; className: string; label: string } => {
+  const ch = getAlumniVerificationChannel(row);
+  if (ch === "request") {
+    return {
+      key: "req",
+      className: "bg-sky-100 text-sky-900 ring-sky-200",
+      label: isAr ? "موثّق عبر طلب" : "Verified via request",
+    };
+  }
+  if (ch === "manual") {
+    return {
+      key: "man",
+      className: "bg-violet-100 text-violet-900 ring-violet-200",
+      label: isAr ? "موثّق يدويًا من الإدارة" : "Manual admin verification",
+    };
+  }
+  return {
+    key: "auto",
+    className: "bg-emerald-100 text-emerald-900 ring-emerald-200",
+    label: isAr ? "موثّق تلقائيًا" : "Auto / non-ticket verification",
+  };
 };
 
 const tierLabel = (code: string, isAr: boolean): string => {
@@ -75,11 +108,19 @@ const VerificationCenterPage = () => {
       sp.set("limit", "30");
       const response = await fetch(`/api/admin/alumni/verification-requests?${sp.toString()}`, {
         cache: "no-store",
+        credentials: "include",
       });
-      const json = (await response.json()) as { ok?: boolean; items?: ListItem[]; pendingCount?: number; error?: string };
+      const json = (await response.json()) as {
+        ok?: boolean;
+        success?: boolean;
+        items?: ListItem[];
+        pendingCount?: number;
+        count?: number;
+        error?: string;
+      };
       if (!response.ok) throw new Error(json.error || "Failed");
       setItems(Array.isArray(json.items) ? json.items : []);
-      setPendingCount(Number(json.pendingCount || 0));
+      setPendingCount(Number(json.pendingCount ?? 0));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error");
       setItems([]);
@@ -106,8 +147,10 @@ const VerificationCenterPage = () => {
     [items.length, pendingCount]
   );
 
+  const detailChannel = selected ? verificationChannelBadge(selected, isAr) : null;
+
   const handleDecision = async (status: "approved" | "rejected") => {
-    if (!selected) return;
+    if (!selected || selected.isProfileOnly) return;
     setSaving(true);
     setError(null);
     try {
@@ -184,7 +227,11 @@ const VerificationCenterPage = () => {
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder={isAr ? "بحث بالاسم أو معرف المستخدم…" : "Search by name or user id…"}
+          placeholder={
+            isAr
+              ? "بحث: الاسم (عربي/إنجليزي)، البريد، اسم المستخدم، الجامعة، سنة التخرج…"
+              : "Search: name (AR/EN), email, username, university, graduation year…"
+          }
           className="w-full max-w-md rounded-lg border border-gray-200 px-3 py-2 text-sm sm:w-72"
         />
       </div>
@@ -204,7 +251,9 @@ const VerificationCenterPage = () => {
             <p className="text-sm text-muted-foreground">{isAr ? "لا توجد نتائج." : "No rows."}</p>
           ) : (
             <ul className="max-h-[480px] space-y-2 overflow-y-auto pe-1">
-              {items.map((row) => (
+              {items.map((row) => {
+                const vch = verificationChannelBadge(row, isAr);
+                return (
                 <li key={row.id}>
                   <button
                     type="button"
@@ -220,12 +269,22 @@ const VerificationCenterPage = () => {
                   >
                     <div className="font-medium text-text">{row.fullName || row.email}</div>
                     <div className="text-xs text-muted-foreground">
-                      {tierLabel(row.requestedLevel, isAr)} · {row.status}
+                      <span className={`me-1 inline-block rounded px-1.5 py-0.5 font-semibold ring-1 ${vch.className}`}>
+                        {vch.label}
+                      </span>
+                      {row.isProfileOnly ? (
+                        <span className="me-1 rounded bg-slate-200 px-1.5 py-0.5 font-semibold text-slate-800 ring-1 ring-slate-300">
+                          {isAr ? "بدون تذكرة" : "No ticket"}
+                        </span>
+                      ) : null}
+                      {tierLabel(row.requestedLevel, isAr)} ·{" "}
+                      {getVerificationTicketStatusLabel(row.status, isAr ? "ar" : "en")}
                       {typeof row.aiValidationScore === "number" ? ` · AI ${Math.round(row.aiValidationScore * 100)}%` : ""}
                     </div>
                   </button>
                 </li>
-              ))}
+              );
+              })}
             </ul>
           )}
         </div>
@@ -242,6 +301,18 @@ const VerificationCenterPage = () => {
                   {isAr ? "المستوى المطلوب:" : "Requested level:"}{" "}
                   <span className="font-medium">{tierLabel(selected.requestedLevel, isAr)}</span>
                 </p>
+                {detailChannel ? (
+                  <p className="mt-1 flex flex-wrap gap-1.5 text-xs">
+                    <span className={`rounded px-2 py-0.5 font-semibold ring-1 ${detailChannel.className}`}>
+                      {detailChannel.label}
+                    </span>
+                    {selected.verificationSource ? (
+                      <span className="rounded bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-700 ring-1 ring-slate-200">
+                        {getVerificationSourceLabel(selected.verificationSource, isAr ? "ar" : "en")}
+                      </span>
+                    ) : null}
+                  </p>
+                ) : null}
                 <p className="text-xs text-muted-foreground">
                   {isAr ? "الحالة الحالية:" : "Current profile:"}{" "}
                   {selected.isVerifiedAlumni ? (isAr ? "موثّق" : "Verified") : isAr ? "غير موثّق" : "Not verified"}
@@ -259,22 +330,26 @@ const VerificationCenterPage = () => {
 
               <div>
                 <h3 className="mb-2 text-sm font-semibold">{isAr ? "المستندات" : "Attachments"}</h3>
-                <ul className="space-y-2">
-                  {selected.attachments.map((a, i) => (
-                    <li key={`${a.url}-${i}`}>
-                      <a
-                        href={a.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 text-sm text-primary underline-offset-4 hover:underline"
-                      >
-                        {a.type}
-                        {a.label ? ` — ${a.label}` : ""}
-                        <ExternalLink className="h-3.5 w-3.5" aria-hidden />
-                      </a>
-                    </li>
-                  ))}
-                </ul>
+                {selected.attachments.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">{isAr ? "لا مرفقات في هذا السجل." : "No attachments."}</p>
+                ) : (
+                  <ul className="space-y-2">
+                    {selected.attachments.map((a, i) => (
+                      <li key={`${a.url}-${i}`}>
+                        <a
+                          href={a.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 text-sm text-primary underline-offset-4 hover:underline"
+                        >
+                          {a.type}
+                          {a.label ? ` — ${a.label}` : ""}
+                          <ExternalLink className="h-3.5 w-3.5" aria-hidden />
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
 
               <label className="block text-sm">
@@ -287,7 +362,15 @@ const VerificationCenterPage = () => {
                 />
               </label>
 
-              {selected.status === "pending" ? (
+              {selected.isProfileOnly ? (
+                <p className="rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-700 ring-1 ring-slate-100">
+                  {isAr
+                    ? "هذا السجل موثّق إداريًا دون طلب رسمي في النظام — لا يتطلب اعتمادًا من هذه القائمة."
+                    : "This record is verified administratively without a formal ticket — no action needed here."}
+                </p>
+              ) : null}
+
+              {!selected.isProfileOnly && normalizeVerificationStatus(selected.status) === "pending" ? (
                 <div className="flex flex-wrap gap-2">
                   <button
                     type="button"
@@ -306,11 +389,11 @@ const VerificationCenterPage = () => {
                     {isAr ? "رفض" : "Reject"}
                   </button>
                 </div>
-              ) : (
+              ) : !selected.isProfileOnly ? (
                 <p className="text-sm text-muted-foreground">
                   {isAr ? "تمت معالجة هذا الطلب." : "This request was already processed."}
                 </p>
-              )}
+              ) : null}
             </div>
           )}
         </div>

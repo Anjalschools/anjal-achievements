@@ -52,3 +52,12 @@ export const setAlumniFieldsCached = (
 ) => {
   alumniFieldsCache = { value, expiresAt: Date.now() + ttlMs };
 };
+
+/** Clears in-memory aggregate for `/api/public/alumni-summary` (call after alumni/story/profile mutations). */
+export const invalidateAlumniSummaryCache = (reason = "unspecified"): void => {
+  alumniSummaryCache = null;
+  if (process.env.ALUMNI_DEBUG === "1") {
+    const timestamp = new Date().toISOString();
+    console.info("[alumni-cache-invalidated]", { reason, timestamp });
+  }
+};

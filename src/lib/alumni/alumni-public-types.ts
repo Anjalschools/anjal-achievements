@@ -12,6 +12,8 @@ export type AlumniPublicSummaryStats = {
 
 export type AlumniSummaryResponse = {
   ok: true;
+  /** Additive — public hero consumers may prefer `success`. */
+  success?: true;
   stats: AlumniPublicSummaryStats;
 };
 

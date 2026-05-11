@@ -3,6 +3,7 @@ import connectDB from "@/lib/mongodb";
 import { parseSearchRequest } from "@/lib/search/search-params";
 import { searchAlumni } from "@/lib/search/global-search";
 import { semanticSearchOverlay } from "@/lib/search/semantic/semantic-search";
+import { logUnifiedSearchRequest } from "@/lib/search/search-api-debug";
 import { requireAlumniCommunityAccess } from "@/lib/alumni/require-alumni-community-access";
 
 export const dynamic = "force-dynamic";
@@ -16,6 +17,11 @@ export async function GET(request: NextRequest) {
     const verifiedOnly = request.nextUrl.searchParams.get("verified") === "1";
     const { items, totalEstimate } = await searchAlumni(nq, pag, { verifiedOnly });
     const itemsOut = await semanticSearchOverlay(nq, items);
+    logUnifiedSearchRequest("alumni", nq, pag, {
+      resultCount: itemsOut.length,
+      totalEstimate,
+      verifiedOnly,
+    });
     return NextResponse.json({ ok: true, data: { items: itemsOut, totalEstimate } });
   } catch (e) {
     console.error("[GET /api/search/alumni]", e);

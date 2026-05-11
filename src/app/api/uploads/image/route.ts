@@ -2,11 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { getCloudinary, isCloudinaryConfigured } from "@/lib/cloudinary";
 import { getCurrentDbUser } from "@/lib/auth";
 import { jsonInternalServerError } from "@/lib/api-safe-response";
+import { checkRateLimit } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 
 const MAX_BYTES = 5 * 1024 * 1024;
 const FOLDER = "achievements/images";
+
+const ALLOWED_IMAGE_MIMES = new Set(["image/jpeg", "image/jpg", "image/png", "image/webp", "image/gif"]);
 
 type UploadOkBody = {
   ok: true;
@@ -25,6 +28,9 @@ export async function POST(request: NextRequest) {
     if (!user) {
       return NextResponse.json({ error: "Unauthorized - Please login" }, { status: 401 });
     }
+
+    const limited = await checkRateLimit(request, "/api/uploads/image");
+    if (limited) return limited;
 
     if (!isCloudinaryConfigured()) {
       return NextResponse.json(
@@ -46,9 +52,9 @@ export async function POST(request: NextRequest) {
     }
 
     const mime = (file.type || "").trim().toLowerCase();
-    if (!mime.startsWith("image/")) {
+    if (!mime.startsWith("image/") || !ALLOWED_IMAGE_MIMES.has(mime)) {
       return NextResponse.json(
-        { error: "File must be an image (mime must start with image/)" },
+        { error: "Unsupported image type. Use JPEG, PNG, WebP, GIF, or HEIC." },
         { status: 400 }
       );
     }

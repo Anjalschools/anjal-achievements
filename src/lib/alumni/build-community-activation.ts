@@ -3,7 +3,13 @@ import User from "@/models/User";
 import Achievement from "@/models/Achievement";
 import AlumniOpportunity from "@/models/AlumniOpportunity";
 import { alumniCommunityActiveUserClause } from "@/lib/alumni/alumni-community-active";
-import type { CommunityFeedItem, CommunityInsights } from "@/lib/alumni/community-activation-types";
+import { publicAlumniOpportunityListingFilter } from "@/lib/alumni/normalize-opportunity-status";
+import type {
+  CommunityFeedItem,
+  CommunityInsights,
+  PlatformMetricsStrip,
+  WeeklyAlumniDigest,
+} from "@/lib/alumni/community-activation-types";
 
 const baseAlumni = (): Record<string, unknown> => ({
   accountType: "alumni",
@@ -40,8 +46,7 @@ export const buildCommunityInsights = async (): Promise<CommunityInsights> => {
       { $limit: 6 },
     ]),
     AlumniOpportunity.find({
-      published: true,
-      $or: [{ archivedAt: { $exists: false } }, { archivedAt: null }],
+      ...publicAlumniOpportunityListingFilter(),
     })
       .sort({ featured: -1, updatedAt: -1 })
       .limit(5)
@@ -283,4 +288,99 @@ export const buildCommunityFeed = async (): Promise<CommunityFeedItem[]> => {
   }
 
   return deduped;
+};
+
+const weekAgo = (): Date => {
+  const d = new Date();
+  d.setDate(d.getDate() - 7);
+  return d;
+};
+
+const daysAgo = (n: number): Date => {
+  const d = new Date();
+  d.setDate(d.getDate() - n);
+  return d;
+};
+
+export const buildWeeklyAlumniDigest = async (): Promise<WeeklyAlumniDigest> => {
+  const since = weekAgo();
+  const match = { ...baseAlumni(), ...privacySearchable() };
+  const insights = await buildCommunityInsights();
+
+  const [newAlumniCount, memAgg, newOpportunitiesCount, mentorsActiveCount] = await Promise.all([
+    User.countDocuments({
+      ...match,
+      $or: [{ completedAlumniOnboardingAt: { $gte: since } }, { createdAt: { $gte: since } }],
+    }),
+    User.aggregate<{ c: number }>([
+      { $match: { ...match, "alumniProfile.memoryPosts": { $exists: true, $ne: [] } } },
+      { $unwind: "$alumniProfile.memoryPosts" },
+      {
+        $match: {
+          "alumniProfile.memoryPosts.status": "approved",
+          "alumniProfile.memoryPosts.submittedAt": { $gte: since },
+        },
+      },
+      { $count: "c" },
+    ]),
+    AlumniOpportunity.countDocuments({
+      ...publicAlumniOpportunityListingFilter(),
+      createdAt: { $gte: since },
+    }),
+    User.countDocuments({
+      ...match,
+      "alumniProfile.alumniServices.mentoring": true,
+      updatedAt: { $gte: since },
+    }),
+  ]);
+
+  return {
+    periodLabel: "7d",
+    sinceIso: since.toISOString(),
+    newAlumniCount,
+    newApprovedMemoriesCount: memAgg[0]?.c ?? 0,
+    newOpportunitiesCount,
+    mentorsActiveCount,
+    trendingMajors: insights.topMajors.slice(0, 5),
+  };
+};
+
+export const buildPlatformMetricsStrip = async (): Promise<PlatformMetricsStrip> => {
+  const match = { ...baseAlumni(), ...privacySearchable() };
+  const since30 = daysAgo(30);
+
+  const [
+    activeAlumni30d,
+    uniAgg,
+    majAgg,
+    jobOpportunitiesCount,
+    mentorCount,
+  ] = await Promise.all([
+    User.countDocuments({ ...match, lastLoginAt: { $gte: since30 } }),
+    User.aggregate<{ c: number }>([
+      { $match: { ...match, "alumniProfile.universityName": { $nin: [null, ""] } } },
+      { $group: { _id: { $trim: { input: "$alumniProfile.universityName" } } } },
+      { $match: { _id: { $nin: [null, ""] } } },
+      { $count: "c" },
+    ]),
+    User.aggregate<{ c: number }>([
+      { $match: { ...match, "alumniProfile.major": { $nin: [null, ""] } } },
+      { $group: { _id: { $trim: { input: "$alumniProfile.major" } } } },
+      { $match: { _id: { $nin: [null, ""] } } },
+      { $count: "c" },
+    ]),
+    AlumniOpportunity.countDocuments({
+      ...publicAlumniOpportunityListingFilter(),
+      type: "job",
+    }),
+    User.countDocuments({ ...match, "alumniProfile.alumniServices.mentoring": true }),
+  ]);
+
+  return {
+    activeAlumni30d,
+    universityCount: uniAgg[0]?.c ?? 0,
+    majorCount: majAgg[0]?.c ?? 0,
+    jobOpportunitiesCount,
+    mentorCount,
+  };
 };

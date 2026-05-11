@@ -24,3 +24,21 @@ export type CommunityInsights = {
   topIndustries: { name: string; count: number }[];
   opportunities: { id: string; title: string; type: string }[];
 };
+
+export type WeeklyAlumniDigest = {
+  periodLabel: string;
+  sinceIso: string;
+  newAlumniCount: number;
+  newApprovedMemoriesCount: number;
+  newOpportunitiesCount: number;
+  mentorsActiveCount: number;
+  trendingMajors: { name: string; count: number }[];
+};
+
+export type PlatformMetricsStrip = {
+  activeAlumni30d: number;
+  universityCount: number;
+  majorCount: number;
+  jobOpportunitiesCount: number;
+  mentorCount: number;
+};

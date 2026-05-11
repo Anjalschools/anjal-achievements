@@ -28,6 +28,15 @@ export type AppSessionProfile = {
   /** ISO timestamps when admin removed alumni from community visibility. */
   alumniCommunityRemovedAt?: string | null;
   alumniPermanentlyPurgedAt?: string | null;
+  /** Computed trust badges for alumni (from GET /api/user/profile). */
+  alumniBadges?: string[];
+  /** Weighted profile completion for alumni hub (from GET /api/user/profile). */
+  alumniProfileCompletion?: {
+    pct: number;
+    filled: number;
+    total: number;
+    breakdown: Record<string, boolean>;
+  };
 };
 
 type AppSessionValue = {
@@ -86,6 +95,25 @@ export const AppSessionProvider = ({ children }: { children: ReactNode }) => {
             data.alumniPermanentlyPurgedAt != null && String(data.alumniPermanentlyPurgedAt) !== ""
               ? String(data.alumniPermanentlyPurgedAt)
               : null,
+          alumniBadges: Array.isArray(data.alumniBadges)
+            ? (data.alumniBadges as unknown[]).map((b) => String(b)).filter(Boolean)
+            : undefined,
+          alumniProfileCompletion:
+            data.alumniProfileCompletion &&
+            typeof data.alumniProfileCompletion === "object" &&
+            data.alumniProfileCompletion !== null &&
+            typeof (data.alumniProfileCompletion as { pct?: unknown }).pct === "number"
+              ? {
+                  pct: Math.round(Number((data.alumniProfileCompletion as { pct: number }).pct)),
+                  filled: Number((data.alumniProfileCompletion as { filled?: number }).filled) || 0,
+                  total: Number((data.alumniProfileCompletion as { total?: number }).total) || 0,
+                  breakdown:
+                    ((data.alumniProfileCompletion as { breakdown?: Record<string, boolean> }).breakdown as Record<
+                      string,
+                      boolean
+                    >) || {},
+                }
+              : undefined,
         });
       } catch {
         setProfile(null);

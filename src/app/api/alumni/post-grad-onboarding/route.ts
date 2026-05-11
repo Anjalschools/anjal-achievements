@@ -6,6 +6,7 @@ import User from "@/models/User";
 import { sanitizeUserText } from "@/lib/sanitize-html";
 import { sanitizeMongoShape } from "@/lib/sanitize-input";
 import { invalidateSessionUserCache } from "@/lib/auth-session-cache";
+import { invalidateAlumniSummaryCache } from "@/lib/alumni/alumni-public-cache";
 import type { IUser } from "@/models/User";
 
 export const dynamic = "force-dynamic";
@@ -94,6 +95,7 @@ export async function POST(request: NextRequest) {
     }
 
     invalidateSessionUserCache(uid, email);
+    invalidateAlumniSummaryCache("alumni:post-grad-onboarding");
 
     return NextResponse.json({ ok: true });
   } catch (error) {

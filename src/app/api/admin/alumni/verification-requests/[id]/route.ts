@@ -6,6 +6,8 @@ import User from "@/models/User";
 import { requireAdminUserManager } from "@/lib/admin-user-management-auth";
 import { sanitizeUserText } from "@/lib/sanitize-html";
 import { recomputeAlumniReputationGraph } from "@/lib/alumni/reputation-graph/recompute";
+import { invalidateAlumniSummaryCache } from "@/lib/alumni/alumni-public-cache";
+import { isVerificationRequestPendingRaw } from "@/lib/alumni/normalizeVerificationStatus";
 
 export const dynamic = "force-dynamic";
 
@@ -31,7 +33,7 @@ export async function PATCH(request: NextRequest, ctx: { params: Promise<{ id: s
     if (!row) {
       return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
     }
-    if (row.status !== "pending") {
+    if (!isVerificationRequestPendingRaw(row.status)) {
       return NextResponse.json({ error: "already_reviewed" }, { status: 409 });
     }
 
@@ -49,7 +51,7 @@ export async function PATCH(request: NextRequest, ctx: { params: Promise<{ id: s
           $set: {
             "alumniProfile.isVerifiedAlumni": true,
             "alumniProfile.verificationTier": tier,
-            "alumniProfile.verificationSource": "admin",
+            "alumniProfile.verificationSource": "verification_request",
             "alumniProfile.verifiedAt": new Date(),
             "alumniProfile.verifiedById": gate.user._id,
           },
@@ -61,6 +63,8 @@ export async function PATCH(request: NextRequest, ctx: { params: Promise<{ id: s
         console.warn("[verification approve] reputation recompute", reErr);
       }
     }
+
+    invalidateAlumniSummaryCache("admin:alumni-verification-request:patch");
 
     return NextResponse.json({ ok: true });
   } catch (e) {

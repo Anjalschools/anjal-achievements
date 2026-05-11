@@ -92,10 +92,20 @@ const AppSidebar = () => {
     icon: PanelsTopLeft,
     label: locale === "ar" ? "قصص الخريجين" : "Alumni stories",
   };
+  const alumniMemoriesAdminItem = {
+    href: "/admin/alumni/memories",
+    icon: Images,
+    label: locale === "ar" ? "مراجعة الذكريات" : "Memories review",
+  };
   const alumniOpportunitiesAdminItem = {
     href: "/admin/alumni/opportunities",
     icon: Briefcase,
     label: locale === "ar" ? "فرص الخريجين" : "Alumni opportunities",
+  };
+  const alumniOpportunityReviewAdminItem = {
+    href: "/admin/alumni/opportunities/review",
+    icon: ClipboardCheck,
+    label: locale === "ar" ? "مراجعة الفرص" : "Opportunities review",
   };
   const alumniAnnouncementsAdminItem = {
     href: "/admin/alumni/announcements",
@@ -317,7 +327,9 @@ const AppSidebar = () => {
     { ...alumniOnboardingAdminItem, capability: "userManagement" },
     { ...alumniVerificationCenterItem, capability: "userManagement" },
     { ...alumniStoriesAdminItem, capability: "userManagement" },
+    { ...alumniMemoriesAdminItem, capability: "userManagement" },
     { ...alumniOpportunitiesAdminItem, capability: "userManagement" },
+    { ...alumniOpportunityReviewAdminItem, capability: "userManagement" },
     { ...alumniAnnouncementsAdminItem, capability: "userManagement" },
     { ...alumniCohortsAdminItem, capability: "userManagement" },
     { ...alumniAnalyticsAdminItem, capability: "userManagement" },

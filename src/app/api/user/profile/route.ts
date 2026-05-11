@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import connectDB, { logDbReadyState, pingMongo } from "@/lib/mongodb";
 import { getCurrentDbUser } from "@/lib/auth";
 import User from "@/models/User";
+import Achievement from "@/models/Achievement";
+import AlumniMentorshipRequest from "@/models/AlumniMentorshipRequest";
+import { computeAlumniBadges } from "@/lib/alumni/compute-alumni-badges";
+import { computeAlumniProfileCompletionPct } from "@/lib/alumni/compute-profile-completion";
 import { normalizeGrade, getGradeLabel } from "@/constants/grades";
 import { perfElapsed, perfLog, perfNow } from "@/lib/perf-debug";
 import { invalidateSessionUserCache } from "@/lib/auth-session-cache";
@@ -80,6 +84,80 @@ export async function GET(request: NextRequest) {
     const completedAt = (user as IUser).completedAlumniOnboardingAt;
     const alumniAdministrationAccess = await userMayAdministerAlumni(user as IUser);
 
+    const accountTypeVal = getAccountType(user as IUser);
+    let alumniBadges: string[] | undefined;
+    let alumniProfileCompletion:
+      | {
+          pct: number;
+          filled: number;
+          total: number;
+          breakdown: Record<string, boolean>;
+        }
+      | undefined;
+
+    if (accountTypeVal === "alumni") {
+      const [certificateCount, mentorshipParticipationCount] = await Promise.all([
+        Achievement.countDocuments({
+          userId: user._id,
+          approved: true,
+          certificateIssuedAt: { $exists: true, $ne: null },
+        }),
+        AlumniMentorshipRequest.countDocuments({
+          requesterId: user._id,
+          status: { $in: ["pending", "accepted", "completed"] },
+        }),
+      ]);
+
+      const spc = normalizeStudentPortfolioContentFromDoc(
+        (user as unknown as { studentPortfolioContent?: unknown }).studentPortfolioContent
+      );
+
+      alumniBadges = computeAlumniBadges(
+        {
+          createdAt: u.createdAt,
+          profilePhoto: user.profilePhoto,
+          lastLoginAt: u.lastLoginAt,
+          updatedAt: (user as unknown as { updatedAt?: Date }).updatedAt,
+          completedAlumniOnboardingAt: completedAt,
+          accountType: "alumni",
+          alumniProfile: {
+            ...ap,
+            memoryPosts: Array.isArray((ap as { memoryPosts?: { status?: string }[] }).memoryPosts)
+              ? (ap as { memoryPosts: { status?: string }[] }).memoryPosts
+              : undefined,
+            badges: Array.isArray((ap as { badges?: string[] }).badges)
+              ? (ap as { badges?: string[] }).badges
+              : undefined,
+          },
+          studentPortfolioContent: spc || undefined,
+        },
+        { certificateCount, mentorshipParticipationCount }
+      );
+
+      const comp = computeAlumniProfileCompletionPct(
+        {
+          profilePhoto: user.profilePhoto,
+          alumniProfile: {
+            universityName: ap.universityName,
+            major: ap.major,
+            currentCompany: ap.currentCompany,
+            currentPosition: ap.currentPosition,
+            bio: ap.bio,
+            linkedinUrl: ap.linkedinUrl,
+            interests: Array.isArray(ap.interests) ? ap.interests : [],
+          },
+          studentPortfolioContent: spc || undefined,
+        },
+        certificateCount
+      );
+      alumniProfileCompletion = {
+        pct: comp.pct,
+        filled: comp.filled,
+        total: comp.total,
+        breakdown: comp.breakdown as Record<string, boolean>,
+      };
+    }
+
     return NextResponse.json({
       id: user._id.toString(),
       accountType: getAccountType(user as IUser),
@@ -137,6 +215,8 @@ export async function GET(request: NextRequest) {
         (user as IUser).alumniPermanentlyPurgedAt instanceof Date
           ? (user as IUser).alumniPermanentlyPurgedAt!.toISOString()
           : null,
+      alumniBadges,
+      alumniProfileCompletion,
     });
   } catch (error) {
     const err = error instanceof Error ? error : new Error(String(error));

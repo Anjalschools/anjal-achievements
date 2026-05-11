@@ -1,7 +1,6 @@
 import User from "@/models/User";
+import { buildAlumniSearchRegexPattern, normalizeAlumniSearchToken } from "@/lib/alumni/arabic-search-normalize";
 import type { AlumniSearchHit } from "./types";
-
-const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 const toHits = (rows: any[]): AlumniSearchHit[] =>
   rows.map((row) => {
@@ -20,19 +19,21 @@ const toHits = (rows: any[]): AlumniSearchHit[] =>
 
 /** Tokenized OR search across common alumni profile fields (no external AI). */
 export const searchAlumniDirectory = async (raw: string, limit = 18): Promise<AlumniSearchHit[]> => {
-  const q = raw.trim();
-  if (q.length < 2) return [];
+  const trimmed = String(raw ?? "").trim();
+  if (trimmed.length < 2) return [];
 
-  const parts = q
+  const parts = trimmed
     .split(/[\s,،]+/u)
-    .map((s) => s.trim())
+    .map((s) => normalizeAlumniSearchToken(s))
     .filter((s) => s.length >= 2)
     .slice(0, 8);
 
   if (!parts.length) return [];
 
-  const clauses = parts.map((p) => {
-    const re = new RegExp(escapeRegExp(p), "i");
+  const clauses = parts.flatMap((p) => {
+    const pat = buildAlumniSearchRegexPattern(p);
+    if (!pat) return [];
+    const re = new RegExp(pat, "i");
     return [
       { fullName: re },
       { "alumniProfile.universityName": re },
@@ -45,9 +46,11 @@ export const searchAlumniDirectory = async (raw: string, limit = 18): Promise<Al
     ];
   });
 
+  if (!clauses.length) return [];
+
   const rows = await User.find({
     accountType: "alumni",
-    $or: clauses.flat(),
+    $or: clauses,
   })
     .select("fullName alumniProfile")
     .limit(limit)

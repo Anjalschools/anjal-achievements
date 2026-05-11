@@ -9,6 +9,8 @@ export type AlumniEmptyStateProps = {
   illustration?: ReactNode;
   title: string;
   description?: string;
+  /** Extra actions or hint chips below the description */
+  children?: ReactNode;
   ctaLabel?: string;
   ctaHref?: string;
   onCtaClick?: () => void;
@@ -21,6 +23,7 @@ const AlumniEmptyState = ({
   illustration,
   title,
   description,
+  children,
   ctaLabel,
   ctaHref,
   onCtaClick,
@@ -58,6 +61,7 @@ const AlumniEmptyState = ({
           <p className="text-lg font-black text-slate-900">{title}</p>
           {description ? <p className="mt-2 text-sm leading-relaxed text-slate-600">{description}</p> : null}
         </div>
+        {children ? <div className="w-full max-w-md text-start">{children}</div> : null}
         {ctaLabel && ctaHref ? (
           <Link
             href={ctaHref}

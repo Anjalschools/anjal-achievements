@@ -3,6 +3,8 @@ import connectDB from "@/lib/mongodb";
 import AlumniOpportunity from "@/models/AlumniOpportunity";
 import { blockIneligibleStudentOnPublicCommunityApi } from "@/lib/alumni/public-community-session-guard";
 import type { AlumniOpportunityType } from "@/models/AlumniOpportunity";
+import { publicAlumniOpportunityListingFilter } from "@/lib/alumni/normalize-opportunity-status";
+import { escapeRegExp } from "@/lib/search/query-normalizer";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 60;
@@ -30,17 +32,13 @@ export async function GET(request: NextRequest) {
 
     const now = new Date();
     const filter: Record<string, unknown> = {
-      published: true,
-      $and: [
-        { $or: [{ archivedAt: null }, { archivedAt: { $exists: false } }] },
-        {
-          $or: [{ expiresAt: { $exists: false } }, { expiresAt: null }, { expiresAt: { $gte: now } }],
-        },
-      ],
+      ...publicAlumniOpportunityListingFilter(now),
     };
     if (TYPES.has(type)) filter.type = type;
     if (remote === "1") filter.remote = true;
-    if (company) filter.company = company;
+    if (company) {
+      filter.company = new RegExp(escapeRegExp(company), "i");
+    }
 
     await connectDB();
     const [rows, total] = await Promise.all([

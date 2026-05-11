@@ -21,6 +21,7 @@ import { getAccountType } from "@/lib/account-type";
 import { invalidateSessionUserCache } from "@/lib/auth-session-cache";
 import { logAuditEvent, actorFromUser } from "@/lib/audit-log-service";
 import { clearAlumniIntelCache } from "@/lib/alumni/alumni-intelligence-cache";
+import { invalidateAlumniSummaryCache } from "@/lib/alumni/alumni-public-cache";
 
 const actor = (u: IUser & { _id: mongoose.Types.ObjectId }) => actorFromUser(u);
 
@@ -44,6 +45,7 @@ export const isPermanentPurgeProtectedTarget = (
 
 const invalidateAlumniCaches = (userId: string, email: string): void => {
   clearAlumniIntelCache();
+  invalidateAlumniSummaryCache("admin:alumni-user-removal");
   invalidateSessionUserCache(userId, email);
 };
 

@@ -18,6 +18,7 @@ export const leanUserToMentorCandidate = (row: unknown): MentorCandidate => {
     country: (p.country as string) ?? null,
     studyCountry: (p.studyCountry as string) ?? null,
     graduationYear: typeof p.graduationYear === "number" ? p.graduationYear : null,
+    interests: Array.isArray(p.interests) ? (p.interests as string[]) : null,
     bio: (p.bio as string) ?? null,
     updatedAt: r.updatedAt ? new Date(String(r.updatedAt)) : null,
     lastLoginAt: r.lastLoginAt ? new Date(String(r.lastLoginAt)) : null,
@@ -78,7 +79,9 @@ export const loadCareerGraphPeers = async (input: {
     accountType: "alumni",
     _id: { $ne: new mongoose.Types.ObjectId(input.selfUserId) },
   })
-    .select("fullName alumniProfile updatedAt lastLoginAt")
+    .select(
+      "fullName alumniProfile.updatedAt alumniProfile.lastLoginAt alumniProfile.universityName alumniProfile.major alumniProfile.industry alumniProfile.country alumniProfile.studyCountry alumniProfile.graduationYear alumniProfile.bio alumniProfile.interests alumniProfile.isVerifiedAlumni alumniProfile.reputationScore updatedAt lastLoginAt"
+    )
     .sort({ updatedAt: -1 })
     .limit(poolLimit)
     .lean();

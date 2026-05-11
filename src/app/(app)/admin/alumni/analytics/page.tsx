@@ -141,19 +141,39 @@ export default function AdminAlumniAnalyticsPage() {
       </div>
 
       {ov ? (
-        <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {[
-            { label: "الخريجون", value: ov.alumniCount },
-            { label: "خريجون موثّقون", value: ov.alumniVerifiedCount },
-            { label: "طلبات الإرشاد", value: ov.mentorshipTotal },
-            { label: "قصص منشورة", value: ov.storiesPublished },
-          ].map((c) => (
-            <div key={c.label} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-              <p className="text-xs font-bold text-slate-500">{c.label}</p>
-              <p className="mt-2 text-3xl font-black tabular-nums text-slate-900">{c.value}</p>
+        <>
+          <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {[
+              { label: "الخريجون", value: ov.alumniCount },
+              { label: "خريجون موثّقون", value: ov.alumniVerifiedCount },
+              { label: "طلبات الإرشاد", value: ov.mentorshipTotal },
+              { label: "قصص منشورة", value: ov.storiesPublished },
+            ].map((c) => (
+              <div key={c.label} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                <p className="text-xs font-bold text-slate-500">{c.label}</p>
+                <p className="mt-2 text-3xl font-black tabular-nums text-slate-900">{c.value}</p>
+              </div>
+            ))}
+          </section>
+          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <h2 className="text-lg font-black text-slate-900">تذاكر توثيق الخريجين</h2>
+            <p className="mt-1 text-xs text-slate-500">
+              أعداد موحّدة تشمل القيم القديمة في الحقل status (معتمد / قيد المراجعة / مرفوض).
+            </p>
+            <div className="mt-4 grid gap-4 sm:grid-cols-3">
+              {[
+                { label: "قيد المراجعة", value: ov.verificationTicketCounts.pending },
+                { label: "معتمدة", value: ov.verificationTicketCounts.approved },
+                { label: "مرفوضة", value: ov.verificationTicketCounts.rejected },
+              ].map((c) => (
+                <div key={c.label} className="rounded-xl border border-slate-100 bg-slate-50/80 p-4">
+                  <p className="text-xs font-bold text-slate-500">{c.label}</p>
+                  <p className="mt-2 text-2xl font-black tabular-nums text-slate-900">{c.value}</p>
+                </div>
+              ))}
             </div>
-          ))}
-        </section>
+          </section>
+        </>
       ) : null}
 
       <div className="grid gap-6 lg:grid-cols-2">

@@ -1,11 +1,15 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Loader2 } from "lucide-react";
+import { GraduationCap, Loader2 } from "lucide-react";
+import { getLocale } from "@/lib/i18n";
+import AlumniPageHeader from "@/components/alumni/AlumniPageHeader";
 
 type Row = { name: string; count: number };
 
 export default function AlumniNetworkUniversitiesPage() {
+  const isAr = getLocale() === "ar";
+  const dir = isAr ? "rtl" : "ltr";
   const [items, setItems] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -27,15 +31,30 @@ export default function AlumniNetworkUniversitiesPage() {
 
   if (loading) {
     return (
-      <div className="flex min-h-[40vh] items-center justify-center">
+      <div dir={dir} className="flex min-h-[40vh] items-center justify-center px-4">
         <Loader2 className="h-8 w-8 animate-spin text-primary" aria-hidden />
       </div>
     );
   }
 
   return (
-    <div dir="rtl" className="mx-auto max-w-3xl px-4 py-12">
-      <h1 className="text-3xl font-black text-slate-900">شبكة الجامعات</h1>
+    <div dir={dir} className="mx-auto max-w-3xl space-y-8 px-4 py-10 sm:py-12">
+      <AlumniPageHeader
+        title={isAr ? "شبكة الجامعات" : "University network"}
+        description={
+          isAr ? "أكثر الجامعات التي يدرس بها خريجو الأنجال وفق البيانات المتاحة." : "Universities where Al-Anjal alumni study, based on available data."
+        }
+        smartBack
+        backLabel={isAr ? "رجوع" : "Back"}
+        icon={<GraduationCap className="h-6 w-6 text-white" aria-hidden />}
+        breadcrumb={[
+          { label: isAr ? "الخريجون" : "Alumni", href: "/alumni" },
+          { label: isAr ? "الشبكة" : "Network" },
+          { label: isAr ? "الجامعات" : "Universities" },
+        ]}
+        dir={dir}
+      />
+      <h1 className="sr-only">{isAr ? "شبكة الجامعات" : "University network"}</h1>
       <ul className="mt-8 grid gap-3 sm:grid-cols-2">
         {items.map((r) => (
           <li key={r.name} className="rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">

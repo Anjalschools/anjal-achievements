@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { initLocale, getLocale } from "@/lib/i18n";
 import type { SearchHit } from "@/lib/search/global-search";
@@ -129,11 +129,17 @@ function UnifiedSearchPageInner() {
   const [tab, setTab] = useState<TabId>("global");
   const [q, setQ] = useState("");
   const [debounced, setDebounced] = useState("");
+  const searchAbortRef = useRef<AbortController | null>(null);
   const [loading, setLoading] = useState(false);
   const [verifiedOnly, setVerifiedOnly] = useState(false);
   const [recent, setRecent] = useState<string[]>([]);
   const [hits, setHits] = useState<SearchHit[]>([]);
   const [globalData, setGlobalData] = useState<GlobalBundle | null>(null);
+  const [searchHints, setSearchHints] = useState<{
+    trendingMajors: { name: string; count: number }[];
+    trendingUniversities: { name: string; count: number }[];
+  } | null>(null);
+  const [searchError, setSearchError] = useState<string | null>(null);
 
   useEffect(() => {
     initLocale();
@@ -142,11 +148,50 @@ function UnifiedSearchPageInner() {
   }, []);
 
   useEffect(() => {
-    const t = setTimeout(() => setDebounced(q), 320);
+    let m = true;
+    void (async () => {
+      try {
+        const res = await fetch("/api/alumni/search-hints", { credentials: "include", cache: "no-store" });
+        if (!res.ok) return;
+        const j = (await res.json()) as {
+          ok?: boolean;
+          trendingMajors?: { name: string; count: number }[];
+          trendingUniversities?: { name: string; count: number }[];
+        };
+        if (m && j.ok) {
+          setSearchHints({
+            trendingMajors: Array.isArray(j.trendingMajors) ? j.trendingMajors : [],
+            trendingUniversities: Array.isArray(j.trendingUniversities) ? j.trendingUniversities : [],
+          });
+        }
+      } catch {
+        /* optional — hints require alumni session */
+      }
+    })();
+    return () => {
+      m = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(q), 420);
     return () => clearTimeout(t);
   }, [q]);
 
+  useEffect(() => {
+    return () => {
+      searchAbortRef.current?.abort();
+    };
+  }, []);
+
   const suggestions = useMemo(() => smartSearchSuggestions(), []);
+
+  const datalistOptions = useMemo(() => {
+    const majors = searchHints?.trendingMajors?.map((x) => x.name).filter(Boolean) ?? [];
+    const unis = searchHints?.trendingUniversities?.map((x) => x.name).filter(Boolean) ?? [];
+    const merged = [...suggestions, ...majors, ...unis];
+    return [...new Set(merged)].slice(0, 48);
+  }, [searchHints, suggestions]);
 
   const labels: Record<TabId, { ar: string; en: string }> = {
     global: { ar: "الكل", en: "All" },
@@ -162,6 +207,9 @@ function UnifiedSearchPageInner() {
 
   const runSearch = useCallback(async () => {
     const query = debounced.trim();
+    searchAbortRef.current?.abort();
+    const ac = new AbortController();
+    searchAbortRef.current = ac;
     setLoading(true);
     try {
       const params = new URLSearchParams();
@@ -171,13 +219,20 @@ function UnifiedSearchPageInner() {
       if ((tab === "alumni" || tab === "mentors") && verifiedOnly) params.set("verified", "1");
 
       const path = tabToPath[tab];
-      const res = await fetch(`${path}?${params.toString()}`, { cache: "no-store" });
+      const res = await fetch(`${path}?${params.toString()}`, {
+        cache: "no-store",
+        credentials: "include",
+        signal: ac.signal,
+      });
       const j = await res.json();
-      if (!j.ok) {
+      if (ac.signal.aborted) return;
+      if (!res.ok || !j.ok) {
+        setSearchError(locale === "ar" ? "تعذر تنفيذ البحث. تحقق من الجلسة أو حاول لاحقًا." : "Search could not run. Check your session or try again.");
         setHits([]);
         setGlobalData(null);
         return;
       }
+      setSearchError(null);
       if (tab === "global") {
         setGlobalData(j.data as GlobalBundle);
         setHits([]);
@@ -190,10 +245,15 @@ function UnifiedSearchPageInner() {
         writeRecent(query);
         setRecent(readRecent());
       }
+    } catch (e) {
+      if (e instanceof DOMException && e.name === "AbortError") return;
+      setSearchError(locale === "ar" ? "تعذر تنفيذ البحث." : "Search was cancelled or failed.");
+      setHits([]);
+      setGlobalData(null);
     } finally {
-      setLoading(false);
+      if (searchAbortRef.current === ac) setLoading(false);
     }
-  }, [debounced, tab, verifiedOnly]);
+  }, [debounced, locale, tab, verifiedOnly]);
 
   useEffect(() => {
     void runSearch();
@@ -257,6 +317,12 @@ function UnifiedSearchPageInner() {
     locale === "ar"
       ? "جرّب الاسم، الجامعة، الشركة، السنة، أو مجال العمل."
       : "Try a name, university, company, graduation year, or industry.";
+  const noMatchTitle = locale === "ar" ? "لا توجد نتائج مطابقة" : "No matching results";
+  const noMatchHint =
+    locale === "ar"
+      ? "جرّب كلمات أخرى، أو غيّر نطاق البحث (الكل، الخريجون، الدفعات…)."
+      : "Try different words or change the search scope (All, Alumni, Cohorts…).";
+  const hasQuery = debounced.trim().length >= 1;
 
   const dir = locale === "ar" ? "rtl" : "ltr";
 
@@ -270,7 +336,7 @@ function UnifiedSearchPageInner() {
               ? "جمع النتائج من الملفات، الفعاليات، الفرص، القصص، والإرشاد — مع ترتيب ذكي وخصوصية محترمة."
               : "Search profiles, events, opportunities, stories, and mentorship with ranked results and privacy-aware visibility."
           }
-          backHref="/alumni"
+          smartBack
           backLabel={locale === "ar" ? "رجوع" : "Back"}
           icon={<Compass className="h-6 w-6 text-white" aria-hidden />}
           breadcrumb={[
@@ -287,6 +353,7 @@ function UnifiedSearchPageInner() {
           </label>
           <input
             id="unified-search-input"
+            list="alumni-unified-search-hints"
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder={locale === "ar" ? "مثال: هندسة كهربائية، بوسطن، أرامكو…" : "e.g. electrical engineering, Boston, Aramco…"}
@@ -294,6 +361,11 @@ function UnifiedSearchPageInner() {
             autoComplete="off"
             aria-label={locale === "ar" ? "حقل البحث الموحد" : "Unified search field"}
           />
+          <datalist id="alumni-unified-search-hints">
+            {datalistOptions.map((opt) => (
+              <option key={opt} value={opt} />
+            ))}
+          </datalist>
 
           <div className="mt-4 flex flex-wrap gap-2 overflow-x-auto pb-1" role="tablist" aria-label={locale === "ar" ? "أنواع البحث" : "Search scopes"}>
             {(Object.keys(tabToPath) as TabId[]).map((id) => {
@@ -369,21 +441,66 @@ function UnifiedSearchPageInner() {
                 </div>
               ))}
             </div>
+          ) : searchError ? (
+            <div className="mt-6">
+              <AlumniEmptyState
+                title={locale === "ar" ? "حدث خطأ في البحث" : "Search error"}
+                description={searchError}
+                dir={dir}
+              />
+            </div>
           ) : tab !== "global" && hits.length === 0 ? (
             <div className="mt-6">
               <AlumniEmptyState
                 icon={<SearchIcon className="h-8 w-8 text-primary" aria-hidden />}
-                title={emptyTitle}
-                description={emptyHint}
+                title={hasQuery ? noMatchTitle : emptyTitle}
+                description={hasQuery ? noMatchHint : emptyHint}
                 dir={dir}
-              />
+              >
+                <div className="mt-4 flex flex-col gap-2 text-sm text-slate-600">
+                  <p className="font-bold text-slate-800">
+                    {locale === "ar" ? "جرّب أحد الخيارات:" : "Try one of these:"}
+                  </p>
+                  <ul className="list-inside list-disc space-y-1 text-start">
+                    <li>
+                      {locale === "ar"
+                        ? "غيّر سنة التخرج أو الجامعة في استعلامك."
+                        : "Try another graduation year or university in your query."}
+                    </li>
+                    <li>
+                      {locale === "ar"
+                        ? "أزل التبويب الضيق أو فلتر «موثّقون فقط» إن كان مفعّلًا."
+                        : "Broaden the tab scope or turn off “verified only” if it is on."}
+                    </li>
+                    <li>
+                      {locale === "ar" ? (
+                        <>
+                          استكشف الخريجين المميزين من{" "}
+                          <Link href="/alumni" className="font-bold text-primary underline-offset-2 hover:underline">
+                            الصفحة الرئيسية للخريجين
+                          </Link>
+                          .
+                        </>
+                      ) : (
+                        <>
+                          Explore featured paths from the{" "}
+                          <Link href="/alumni" className="font-bold text-primary underline-offset-2 hover:underline">
+                            alumni home
+                          </Link>
+                          .
+                        </>
+                      )}
+                    </li>
+                  </ul>
+                </div>
+              </AlumniEmptyState>
             </div>
           ) : (
             <ul className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{hits.map((h) => renderHit(h))}</ul>
           )}
         </section>
 
-        <section className="grid gap-6 md:grid-cols-2">
+        <section className="grid gap-6 lg:grid-cols-3">
           <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
             <h3 className="text-sm font-black text-slate-900">{locale === "ar" ? "اقتراحات ذكية" : "Smart suggestions"}</h3>
             <div className="mt-3 flex flex-wrap gap-2">
@@ -413,6 +530,55 @@ function UnifiedSearchPageInner() {
                   </li>
                 ))}
               </ul>
+            )}
+          </div>
+          <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+            <h3 className="text-sm font-black text-slate-900">
+              {locale === "ar" ? "تخصصات رائجة · جامعات شائعة" : "Trending majors · Popular universities"}
+            </h3>
+            {!searchHints ? (
+              <p className="mt-3 text-sm text-slate-500">
+                {locale === "ar" ? "سجّل دخولك كخريج لعرض اقتراحات المجتمع." : "Sign in as alumni to load community hints."}
+              </p>
+            ) : (
+              <div className="mt-3 space-y-3">
+                <div>
+                  <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                    {locale === "ar" ? "تخصصات" : "Majors"}
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {searchHints.trendingMajors.slice(0, 8).map((x) => (
+                      <button
+                        key={x.name}
+                        type="button"
+                        className="rounded-full bg-violet-50 px-3 py-1 text-xs font-bold text-violet-900 ring-1 ring-violet-100 hover:bg-violet-100"
+                        onClick={() => setQ(x.name)}
+                      >
+                        {x.name}
+                        <span className="ms-1 tabular-nums text-violet-600">({x.count})</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                    {locale === "ar" ? "جامعات" : "Universities"}
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {searchHints.trendingUniversities.slice(0, 8).map((x) => (
+                      <button
+                        key={x.name}
+                        type="button"
+                        className="rounded-full bg-sky-50 px-3 py-1 text-xs font-bold text-sky-900 ring-1 ring-sky-100 hover:bg-sky-100"
+                        onClick={() => setQ(x.name)}
+                      >
+                        {x.name}
+                        <span className="ms-1 tabular-nums text-sky-600">({x.count})</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
             )}
           </div>
         </section>

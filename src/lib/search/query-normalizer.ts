@@ -1,5 +1,7 @@
 /** Shared tokenization for Mongo-safe search (no external search engine). */
 
+import { normalizeAlumniSearchToken } from "@/lib/alumni/arabic-search-normalize";
+
 export const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 export type NormalizedQuery = {
@@ -13,7 +15,7 @@ export const normalizeSearchQuery = (input: string | null | undefined): Normaliz
   if (!raw) return { raw: "", tokens: [], joined: "" };
   const tokens = raw
     .split(/[\s,،؛]+/u)
-    .map((t) => t.trim())
+    .map((t) => normalizeAlumniSearchToken(t.trim()))
     .filter((t) => t.length >= 2)
     .slice(0, 14);
   return { raw, tokens, joined: tokens.join(" ").toLowerCase() };

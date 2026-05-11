@@ -8,6 +8,13 @@ export type AlumniOpportunityType =
   | "speaking"
   | "partnership";
 
+export type AlumniOpportunityReviewEvent = {
+  at: Date;
+  actorUserId?: Types.ObjectId;
+  action: string;
+  notes?: string;
+};
+
 export interface IAlumniOpportunity extends Document {
   title: string;
   description?: string;
@@ -18,7 +25,16 @@ export interface IAlumniOpportunity extends Document {
   contactEmail?: string;
   applicationUrl?: string;
   createdByUserId?: Types.ObjectId;
+  /** Who submitted (alumni vs admin) — audit. */
+  submittedByRole?: "alumni" | "admin" | "system";
   published: boolean;
+  /** Moderation lifecycle (alumni-submitted opportunities start as pending_review). */
+  reviewStatus?: "pending_review" | "approved" | "rejected" | "archived";
+  reviewedBy?: Types.ObjectId;
+  reviewedAt?: Date;
+  reviewNotes?: string;
+  /** Append-only moderation / publish trail. */
+  reviewTimeline?: AlumniOpportunityReviewEvent[];
   featured: boolean;
   expiresAt?: Date;
   /** When set, hidden from default admin/public listings (archived). */
@@ -43,7 +59,36 @@ const AlumniOpportunitySchema = new Schema<IAlumniOpportunity>(
     contactEmail: { type: String, trim: true, lowercase: true, maxlength: 320 },
     applicationUrl: { type: String, trim: true, maxlength: 1000 },
     createdByUserId: { type: Schema.Types.ObjectId, ref: "User", index: true, sparse: true },
+    submittedByRole: {
+      type: String,
+      enum: ["alumni", "admin", "system"],
+      required: false,
+      index: true,
+    },
     published: { type: Boolean, default: false, index: true },
+    reviewStatus: {
+      type: String,
+      enum: ["pending_review", "approved", "rejected", "archived"],
+      required: false,
+      index: true,
+    },
+    reviewedBy: { type: Schema.Types.ObjectId, ref: "User", sparse: true },
+    reviewedAt: { type: Date, sparse: true },
+    reviewNotes: { type: String, trim: true, maxlength: 4000 },
+    reviewTimeline: {
+      type: [
+        new Schema(
+          {
+            at: { type: Date, required: true },
+            actorUserId: { type: Schema.Types.ObjectId, ref: "User", sparse: true },
+            action: { type: String, required: true, trim: true, maxlength: 160 },
+            notes: { type: String, trim: true, maxlength: 4000 },
+          },
+          { _id: false }
+        ),
+      ],
+      default: undefined,
+    },
     featured: { type: Boolean, default: false, index: true },
     expiresAt: { type: Date, index: true },
     archivedAt: { type: Date, default: null, index: true },

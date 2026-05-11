@@ -6,6 +6,7 @@ import { requireSessionUser } from "@/lib/alumni/require-alumni";
 import { requireAlumniCommunityForAuthedUser } from "@/lib/alumni/require-alumni-community-access";
 import { buildViewerMatchProfile } from "@/lib/alumni/matching/viewer-profile";
 import { rankOpportunities, type OpportunityCandidate } from "@/lib/alumni/matching/opportunity-matching";
+import { publicAlumniOpportunityListingFilter } from "@/lib/alumni/normalize-opportunity-status";
 
 export const dynamic = "force-dynamic";
 
@@ -22,11 +23,7 @@ export async function GET(request: NextRequest) {
 
     const now = new Date();
     const rows = await AlumniOpportunity.find({
-      published: true,
-      $and: [
-        { $or: [{ archivedAt: null }, { archivedAt: { $exists: false } }] },
-        { $or: [{ expiresAt: { $exists: false } }, { expiresAt: null }, { expiresAt: { $gt: now } }] },
-      ],
+      ...publicAlumniOpportunityListingFilter(now),
     })
       .select("title description type company location featured")
       .sort({ featured: -1, updatedAt: -1 })

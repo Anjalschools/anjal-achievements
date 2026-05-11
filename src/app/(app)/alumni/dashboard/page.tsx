@@ -19,6 +19,8 @@ import {
   ArrowRight,
   BadgeCheck,
   BookOpen,
+  TrendingUp,
+  Library,
 } from "lucide-react";
 import { useAppSession } from "@/contexts/AppSessionContext";
 import { getLocale } from "@/lib/i18n";
@@ -28,7 +30,15 @@ import AlumniMemoriesIllustration from "@/components/alumni/AlumniMemoriesIllust
 import { AlumniCommunityActivityFeed } from "@/components/alumni/AlumniCommunityActivityFeed";
 import { AlumniCommunityInsightsPanel } from "@/components/alumni/AlumniCommunityInsightsPanel";
 import { AlumniMemoriesDashboardWidget } from "@/components/alumni/AlumniMemoriesDashboardWidget";
-import type { CommunityFeedItem, CommunityInsights } from "@/lib/alumni/community-activation-types";
+import { AlumniBadgeStrip } from "@/components/alumni/AlumniBadgeStrip";
+import { AlumniProfileCompletionRing } from "@/components/alumni/AlumniProfileCompletionRing";
+import type {
+  CommunityFeedItem,
+  CommunityInsights,
+  WeeklyAlumniDigest,
+  PlatformMetricsStrip,
+} from "@/lib/alumni/community-activation-types";
+import { formatRelativeTime } from "@/lib/alumni/format-relative-time";
 
 type Summary = {
   profile: {
@@ -60,7 +70,17 @@ type MeProfile = {
   };
 };
 
-type RecMentor = { id: string; fullName: string; universityName?: string | null; matchScore: number };
+type RecMentor = {
+  id: string;
+  fullName: string;
+  universityName?: string | null;
+  matchScore: number;
+  trustBadges?: string[];
+  mentorshipSessionCount?: number;
+  responseRateApprox?: number | null;
+  lastActivityAt?: string | null;
+  expertiseAreas?: string[];
+};
 type RecOpp = { id: string; title: string; type: string; matchScore: number };
 type RecPeer = { id: string; fullName: string; universityName?: string | null; matchScore: number };
 
@@ -152,7 +172,10 @@ export default function AlumniDashboardPage() {
   const [memorySubmitted, setMemorySubmitted] = useState(false);
   const [communityFeed, setCommunityFeed] = useState<CommunityFeedItem[]>([]);
   const [communityInsights, setCommunityInsights] = useState<CommunityInsights | null>(null);
+  const [weeklyDigest, setWeeklyDigest] = useState<WeeklyAlumniDigest | null>(null);
+  const [platformMetrics, setPlatformMetrics] = useState<PlatformMetricsStrip | null>(null);
   const [activationLoading, setActivationLoading] = useState(true);
+  const [visitContext, setVisitContext] = useState<{ returning: boolean; days: number }>({ returning: false, days: 0 });
 
   const showAdvisor = useMemo(
     () =>
@@ -198,6 +221,20 @@ export default function AlumniDashboardPage() {
   }, [refreshMemoryFlag]);
 
   useEffect(() => {
+    if (profile?.accountType !== "alumni" || typeof window === "undefined") return;
+    const key = "alumni-dashboard-last-visit-iso-v1";
+    const prev = localStorage.getItem(key);
+    if (prev) {
+      const ms = Date.now() - new Date(prev).getTime();
+      const days = ms / 86_400_000;
+      if (days >= 3 && Number.isFinite(days)) {
+        setVisitContext({ returning: true, days: Math.min(365, Math.floor(days)) });
+      }
+    }
+    localStorage.setItem(key, new Date().toISOString());
+  }, [profile?.accountType]);
+
+  useEffect(() => {
     let mounted = true;
     const run = async () => {
       try {
@@ -235,11 +272,13 @@ export default function AlumniDashboardPage() {
         const [jm, jo, jn, jAct, jMem] = await Promise.all([rm.json(), ro.json(), rn.json(), rAct.json(), rMem.json()]);
         if (!m) return;
         if (jMe.ok && jMe.item) setMe(jMe.item);
-        if (jm.ok && jm.items) setRecMentors(jm.items);
+        if (jm.ok && jm.items) setRecMentors(jm.items as RecMentor[]);
         if (jo.ok && jo.items) setRecOpps(jo.items);
         if (jn.ok && jn.items) setRecPeers(jn.items);
         if (jAct.ok && Array.isArray(jAct.feed)) setCommunityFeed(jAct.feed as CommunityFeedItem[]);
         if (jAct.ok && jAct.insights) setCommunityInsights(jAct.insights as CommunityInsights);
+        if (jAct.ok && jAct.weeklyDigest) setWeeklyDigest(jAct.weeklyDigest as WeeklyAlumniDigest);
+        if (jAct.ok && jAct.platformMetrics) setPlatformMetrics(jAct.platformMetrics as PlatformMetricsStrip);
         if (jMem.ok && jMem.counts && typeof jMem.counts.total === "number") {
           setMemorySubmitted(jMem.counts.total > 0);
         }
@@ -258,9 +297,17 @@ export default function AlumniDashboardPage() {
     void (async () => {
       try {
         const rAct = await fetch("/api/alumni/community-activation", { credentials: "include", cache: "no-store" });
-        const jAct = (await rAct.json()) as { ok?: boolean; feed?: CommunityFeedItem[]; insights?: CommunityInsights };
+        const jAct = (await rAct.json()) as {
+          ok?: boolean;
+          feed?: CommunityFeedItem[];
+          insights?: CommunityInsights;
+          weeklyDigest?: WeeklyAlumniDigest;
+          platformMetrics?: PlatformMetricsStrip;
+        };
         if (jAct.ok && Array.isArray(jAct.feed)) setCommunityFeed(jAct.feed);
         if (jAct.ok && jAct.insights) setCommunityInsights(jAct.insights);
+        if (jAct.ok && jAct.weeklyDigest) setWeeklyDigest(jAct.weeklyDigest);
+        if (jAct.ok && jAct.platformMetrics) setPlatformMetrics(jAct.platformMetrics);
       } catch {
         /* ignore */
       }
@@ -422,6 +469,11 @@ export default function AlumniDashboardPage() {
   const dynamicWelcomeLine1 = isAr
     ? `يسعدنا عودتك${firstName ? ` يا ${firstName}` : ""} 👋${university ? ` — ${university}` : ""}${major ? ` — ${major}` : ""}${gradYear ? ` — دفعة ${gradYear}` : ""}.`
     : `Great to see you again${firstName ? `, ${firstName}` : ""} 👋${university ? ` — ${university}` : ""}${major ? ` — ${major}` : ""}${gradYear ? ` — Class of ${gradYear}` : ""}.`;
+  const welcomeHeadline = visitContext.returning
+    ? isAr
+      ? `مرحبًا بعودتك بعد ${visitContext.days} يومًا — تفقد الجديد في لوحتك ومجتمع الخريجين.`
+      : `Welcome back after ${visitContext.days} days — catch up on what is new in your hub and the alumni community.`
+    : dynamicWelcomeLine1;
   const dynamicWelcomeLine2 =
     isAr
       ? hour < 12
@@ -456,7 +508,7 @@ export default function AlumniDashboardPage() {
               <h1 className="mt-1 text-2xl font-black text-white sm:text-4xl">
                 {t.welcome}، {firstName || displayName}
               </h1>
-              <p className="mt-2 max-w-xl text-sm font-semibold leading-relaxed text-slate-100">{dynamicWelcomeLine1}</p>
+              <p className="mt-2 max-w-xl text-sm font-semibold leading-relaxed text-slate-100">{welcomeHeadline}</p>
               <p className="mt-1 max-w-xl text-sm leading-relaxed text-slate-200/90">{dynamicWelcomeLine2}</p>
               <div className="mt-4 flex flex-wrap items-center justify-center gap-2 sm:justify-start">
                 {verified ? (
@@ -487,9 +539,32 @@ export default function AlumniDashboardPage() {
                   </span>
                 ) : null}
               </div>
+              {profile?.alumniBadges?.length ? (
+                <AlumniBadgeStrip
+                  badges={profile.alumniBadges}
+                  isAr={isAr}
+                  max={6}
+                  className="mt-3 justify-center sm:justify-start"
+                />
+              ) : null}
             </div>
           </div>
-          <div className="flex flex-col gap-2 sm:flex-row lg:flex-col">
+          <div className="flex flex-col items-center gap-3 sm:flex-row lg:flex-col lg:items-end">
+            {profile?.alumniProfileCompletion && profile.alumniProfileCompletion.pct < 100 ? (
+              <AlumniProfileCompletionRing
+                pct={profile.alumniProfileCompletion.pct}
+                isAr={isAr}
+                size="sm"
+                subtitle={
+                  profile.alumniProfileCompletion.pct < 72
+                    ? isAr
+                      ? "أكمل ملفك لزيادة فرص الترشيح والإرشاد."
+                      : "Complete your profile to improve matching and mentorship opportunities."
+                    : undefined
+                }
+              />
+            ) : null}
+          <div className="flex w-full flex-col gap-2 sm:flex-row lg:flex-col">
             <Link
               href="/settings"
               className="inline-flex items-center justify-center gap-2 rounded-2xl bg-white px-5 py-3 text-sm font-black text-primary shadow-lg transition hover:bg-sky-50"
@@ -512,8 +587,111 @@ export default function AlumniDashboardPage() {
               {t.memories}
             </Link>
           </div>
+          </div>
         </div>
       </section>
+
+      {platformMetrics ? (
+        <section
+          className="rounded-3xl border border-slate-200/90 bg-white px-4 py-5 shadow-[0_16px_44px_-28px_rgba(15,23,42,0.35)] sm:px-6"
+          aria-label={isAr ? "مؤشرات المجتمع" : "Community metrics"}
+        >
+          <div className="mb-3 flex items-center gap-2 text-primary">
+            <TrendingUp className="h-5 w-5" aria-hidden />
+            <h2 className="text-sm font-black text-slate-900">
+              {isAr ? "ثقة المجتمع — لقطة سريعة" : "Community pulse — trust snapshot"}
+            </h2>
+          </div>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+            {[
+              {
+                label: isAr ? "خريجون نشطون" : "Active alumni",
+                value: platformMetrics.activeAlumni30d,
+                icon: Users,
+              },
+              {
+                label: isAr ? "جامعات" : "Universities",
+                value: platformMetrics.universityCount,
+                icon: Library,
+              },
+              {
+                label: isAr ? "تخصصات" : "Majors",
+                value: platformMetrics.majorCount,
+                icon: BookOpen,
+              },
+              {
+                label: isAr ? "فرص عمل" : "Job posts",
+                value: platformMetrics.jobOpportunitiesCount,
+                icon: Briefcase,
+              },
+              {
+                label: isAr ? "مرشدون" : "Mentors",
+                value: platformMetrics.mentorCount,
+                icon: GraduationCap,
+              },
+            ].map((cell) => (
+              <div
+                key={cell.label}
+                className="rounded-2xl border border-slate-100 bg-gradient-to-br from-slate-50 to-white p-3 text-center shadow-sm"
+              >
+                <cell.icon className="mx-auto mb-1 h-4 w-4 text-primary/80" aria-hidden />
+                <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">{cell.label}</p>
+                <p className="mt-1 text-xl font-black tabular-nums text-slate-900">{cell.value}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {weeklyDigest ? (
+        <section
+          className="rounded-3xl border border-primary/15 bg-gradient-to-br from-primary/5 via-white to-sky-50/40 p-5 shadow-[0_18px_48px_-30px_rgba(30,58,138,0.35)] sm:p-6"
+          aria-label={isAr ? "ملخص أسبوعي" : "Weekly digest"}
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-base font-black text-slate-900">
+              {isAr ? "ملخص أسبوع الخريجين" : "Weekly alumni digest"}
+            </h2>
+            <span className="text-[11px] font-bold text-slate-500">{weeklyDigest.periodLabel}</span>
+          </div>
+          <ul className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            <li className="rounded-2xl border border-white/80 bg-white/90 px-3 py-2 text-sm font-semibold text-slate-800 shadow-sm">
+              {isAr ? "خريجون جدد: " : "New alumni: "}
+              <span className="font-black text-primary">{weeklyDigest.newAlumniCount}</span>
+            </li>
+            <li className="rounded-2xl border border-white/80 bg-white/90 px-3 py-2 text-sm font-semibold text-slate-800 shadow-sm">
+              {isAr ? "ذكريات معتمدة: " : "Approved memories: "}
+              <span className="font-black text-primary">{weeklyDigest.newApprovedMemoriesCount}</span>
+            </li>
+            <li className="rounded-2xl border border-white/80 bg-white/90 px-3 py-2 text-sm font-semibold text-slate-800 shadow-sm">
+              {isAr ? "فرص جديدة: " : "New opportunities: "}
+              <span className="font-black text-primary">{weeklyDigest.newOpportunitiesCount}</span>
+            </li>
+            <li className="rounded-2xl border border-white/80 bg-white/90 px-3 py-2 text-sm font-semibold text-slate-800 shadow-sm">
+              {isAr ? "مرشدون نشطون: " : "Active mentors: "}
+              <span className="font-black text-primary">{weeklyDigest.mentorsActiveCount}</span>
+            </li>
+          </ul>
+          {weeklyDigest.trendingMajors?.length ? (
+            <div className="mt-4">
+              <p className="text-xs font-black uppercase tracking-wide text-slate-500">
+                {isAr ? "تخصصات متحركة" : "Trending majors"}
+              </p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {weeklyDigest.trendingMajors.slice(0, 6).map((m) => (
+                  <span
+                    key={m.name}
+                    className="rounded-full border border-violet-200 bg-violet-50 px-2.5 py-1 text-[11px] font-bold text-violet-900"
+                  >
+                    {m.name}
+                    <span className="ms-1 tabular-nums text-violet-600">({m.count})</span>
+                  </span>
+                ))}
+              </div>
+            </div>
+          ) : null}
+        </section>
+      ) : null}
 
       {/* Onboarding progress */}
       {onboardingPct < 100 ? (
@@ -562,7 +740,7 @@ export default function AlumniDashboardPage() {
       <div className="grid gap-6 xl:grid-cols-3">
         <div className="min-w-0 space-y-3 xl:col-span-2">
           <h2 className="text-sm font-black uppercase tracking-wide text-slate-500">{t.activityTitle}</h2>
-          <AlumniCommunityActivityFeed items={communityFeed} loading={activationLoading} isAr={isAr} />
+          <AlumniCommunityActivityFeed items={communityFeed} loading={activationLoading} isAr={isAr} maxItems={9} />
         </div>
         <AlumniCommunityInsightsPanel insights={communityInsights} isAr={isAr} majorHint={major} />
       </div>
@@ -617,9 +795,9 @@ export default function AlumniDashboardPage() {
               <Users className="h-5 w-5 shrink-0" aria-hidden />
               <h3 className="text-sm font-black">{t.recMentors}</h3>
             </div>
-            <ul className="mt-3 space-y-2 text-sm">
+            <ul className="mt-3 space-y-3 text-sm">
               {recMentors.slice(0, 4).map((x) => (
-                <li key={x.id}>
+                <li key={x.id} className="rounded-2xl border border-slate-100 bg-slate-50/50 p-3">
                   <Link
                     href={`/alumni/mentorship?mentor=${encodeURIComponent(x.id)}`}
                     className="font-bold text-slate-900 hover:text-primary"
@@ -627,6 +805,30 @@ export default function AlumniDashboardPage() {
                     {x.fullName}
                   </Link>
                   {x.universityName ? <p className="text-xs text-slate-500">{x.universityName}</p> : null}
+                  {x.trustBadges?.length ? (
+                    <AlumniBadgeStrip badges={x.trustBadges} isAr={isAr} max={3} dense className="mt-2" />
+                  ) : null}
+                  <div className="mt-2 flex flex-wrap gap-2 text-[11px] font-semibold text-slate-600">
+                    <span>
+                      {isAr ? "جلسات ≈ " : "Sessions ≈ "}
+                      {x.mentorshipSessionCount ?? 0}
+                    </span>
+                    {x.responseRateApprox != null ? (
+                      <span>
+                        {isAr ? "استجابة ≈ " : "Response ≈ "}
+                        {x.responseRateApprox}%
+                      </span>
+                    ) : null}
+                    {x.lastActivityAt ? (
+                      <span>
+                        {isAr ? "نشاط " : ""}
+                        {formatRelativeTime(x.lastActivityAt, isAr)}
+                      </span>
+                    ) : null}
+                  </div>
+                  {x.expertiseAreas?.length ? (
+                    <p className="mt-1 line-clamp-2 text-[11px] text-slate-500">{x.expertiseAreas.slice(0, 4).join(" · ")}</p>
+                  ) : null}
                 </li>
               ))}
             </ul>
@@ -712,6 +914,19 @@ export default function AlumniDashboardPage() {
           {isAr ? "الإعلانات" : "Announcements"}
         </Link>
       </div>
+
+      {(profile?.alumniProfileCompletion?.pct ?? 100) < 72 ? (
+        <div className="pointer-events-none fixed inset-x-0 bottom-0 z-40 max-sm:block sm:hidden">
+          <div className="pointer-events-auto mx-auto max-w-lg border-t border-primary/15 bg-white/95 p-3 shadow-[0_-8px_30px_-12px_rgba(15,23,42,0.35)] backdrop-blur-md">
+            <Link
+              href="/settings"
+              className="block text-center text-xs font-black leading-snug text-primary underline-offset-2 hover:underline"
+            >
+              {isAr ? "أكمل ملفك لزيادة فرص الترشيح والإرشاد." : "Complete your profile to improve matching and mentorship."}
+            </Link>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

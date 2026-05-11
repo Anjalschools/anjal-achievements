@@ -5,6 +5,7 @@ import { memo, useMemo } from "react";
 import { BadgeCheck, BookOpen, MessageCircle, User } from "lucide-react";
 import type { SearchHit } from "@/lib/search/global-search";
 import { escapeRegExp } from "@/lib/search/query-normalizer";
+import { AlumniBadgeStrip } from "@/components/alumni/AlumniBadgeStrip";
 
 const avatarGradient = (seed: string) => {
   const hues = [210, 225, 200, 260, 190];
@@ -107,6 +108,11 @@ const AlumniNetworkDiscoveryCardInner = ({
                 </span>
               ) : null}
             </div>
+            {hit.badges?.length ? (
+              <div className="mt-2">
+                <AlumniBadgeStrip badges={hit.badges} isAr={isAr} max={4} dense />
+              </div>
+            ) : null}
             {university ? (
               <p className="mt-1.5 inline-flex max-w-full items-center gap-1 text-sm font-semibold text-slate-700">
                 <span className="truncate rounded-md bg-slate-100 px-1.5 py-0.5 text-[11px] font-bold text-slate-700 ring-1 ring-slate-200/80">

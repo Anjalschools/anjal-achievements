@@ -9,6 +9,7 @@ import { getLocale } from "@/lib/i18n";
 import AlumniPageHeader from "@/components/alumni/AlumniPageHeader";
 import AlumniEmptyState from "@/components/alumni/AlumniEmptyState";
 import MessagesEmptyIllustration from "@/components/alumni/MessagesEmptyIllustration";
+import { AlumniBadgeStrip } from "@/components/alumni/AlumniBadgeStrip";
 
 type Thread = {
   id: string;
@@ -166,7 +167,7 @@ export default function AlumniInboxPage() {
             ? "تواصل آمن مع الإدارة — محادثاتك محفوظة ومرتبة."
             : "Secure messaging with administration — organized threads."
         }
-        backHref="/alumni/dashboard"
+        smartBack
         backLabel={isAr ? "رجوع" : "Back"}
         icon={<Mail className="h-6 w-6 text-white" aria-hidden />}
         breadcrumb={[
@@ -175,6 +176,15 @@ export default function AlumniInboxPage() {
         ]}
         dir={dir}
       />
+
+      {profile?.alumniBadges?.length ? (
+        <div className="mb-4 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+          <p className="mb-2 text-[11px] font-black uppercase tracking-wide text-slate-500">
+            {isAr ? "ملفك — شارات الثقة" : "Your trust badges"}
+          </p>
+          <AlumniBadgeStrip badges={profile.alumniBadges} isAr={isAr} max={8} />
+        </div>
+      ) : null}
 
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
         <div className="relative min-w-0 flex-1">

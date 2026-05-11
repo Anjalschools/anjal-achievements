@@ -11,7 +11,15 @@ export type AlumniServices = {
   sponsorship?: boolean;
 };
 
-export type AlumniVerificationSource = "linkedin" | "admin" | "university_email" | "career";
+export type AlumniVerificationSource =
+  | "linkedin"
+  | "admin"
+  | "university_email"
+  | "career"
+  | "manual_admin"
+  | "verification_request"
+  | "imported"
+  | "legacy";
 
 export type AlumniProfile = {
   graduationYear?: number;
@@ -44,15 +52,20 @@ export type AlumniProfile = {
   alumniServices?: AlumniServices;
   /** Phase 6 — alumni-controlled visibility (optional; defaults = open in app layer). */
   privacySettings?: AlumniPrivacySettings;
+  /** Trust & retention badges (optional manual entries merged with computed badges in API). */
+  badges?: string[];
   /** Alumni-submitted school memory photos (moderation: pending → approved/rejected). */
   memoryPosts?: Array<{
     _id?: Types.ObjectId;
-    imageUrl: string;
+    imageUrl?: string;
     caption?: string;
     memoryYear?: number;
-    status?: "pending" | "approved" | "rejected";
+    status?: "draft" | "pending" | "approved" | "rejected";
     submittedAt?: Date;
     reviewedAt?: Date;
+    likeCount?: number;
+    likedUserIds?: Types.ObjectId[];
+    viewCount?: number;
   }>;
   /** Phase 4 — verified ecosystem tier (admin / verification center). */
   verificationTier?: "basic" | "academic" | "career" | "institution" | "global";
@@ -239,16 +252,19 @@ const AlumniPrivacySettingsSchema = new Schema(
 
 const AlumniMemoryPostSchema = new Schema(
   {
-    imageUrl: { type: String, required: true, trim: true, maxlength: 2000 },
+    imageUrl: { type: String, trim: true, maxlength: 2000 },
     caption: { type: String, trim: true, maxlength: 500 },
     memoryYear: { type: Number, min: 1970, max: 2100 },
     status: {
       type: String,
-      enum: ["pending", "approved", "rejected"],
+      enum: ["draft", "pending", "approved", "rejected"],
       default: "pending",
     },
     submittedAt: { type: Date, default: () => new Date() },
     reviewedAt: { type: Date },
+    likeCount: { type: Number, default: 0, min: 0 },
+    likedUserIds: [{ type: Schema.Types.ObjectId, ref: "User" }],
+    viewCount: { type: Number, default: 0, min: 0 },
   },
   { _id: true }
 );
@@ -274,7 +290,16 @@ const AlumniProfileSchema = new Schema(
     verifiedById: { type: Schema.Types.ObjectId, ref: "User", sparse: true },
     verificationSource: {
       type: String,
-      enum: ["linkedin", "admin", "university_email", "career"],
+      enum: [
+        "linkedin",
+        "admin",
+        "university_email",
+        "career",
+        "manual_admin",
+        "verification_request",
+        "imported",
+        "legacy",
+      ],
       required: false,
     },
     reputationScore: { type: Number, min: 0, max: 10_000, sparse: true },
@@ -303,6 +328,10 @@ const AlumniProfileSchema = new Schema(
         "failed",
       ],
       required: false,
+    },
+    badges: {
+      type: [{ type: String, trim: true, maxlength: 64 }],
+      default: undefined,
     },
     memoryPosts: { type: [AlumniMemoryPostSchema], default: undefined },
   },

@@ -5,10 +5,20 @@ import User from "@/models/User";
 import { requireAdminUserManager } from "@/lib/admin-user-management-auth";
 import type { AlumniVerificationSource } from "@/models/User";
 import { logAuditEvent, actorFromUser } from "@/lib/audit-log-service";
+import { invalidateAlumniSummaryCache } from "@/lib/alumni/alumni-public-cache";
 
 export const dynamic = "force-dynamic";
 
-const SOURCES: AlumniVerificationSource[] = ["linkedin", "admin", "university_email", "career"];
+const SOURCES: AlumniVerificationSource[] = [
+  "linkedin",
+  "admin",
+  "university_email",
+  "career",
+  "manual_admin",
+  "verification_request",
+  "imported",
+  "legacy",
+];
 
 export async function POST(request: Request) {
   const gate = await requireAdminUserManager();
@@ -46,7 +56,7 @@ export async function POST(request: Request) {
             "alumniProfile.isVerifiedAlumni": true,
             "alumniProfile.verifiedAt": new Date(),
             "alumniProfile.verifiedById": gate.user._id,
-            "alumniProfile.verificationSource": src || "admin",
+            "alumniProfile.verificationSource": src || "manual_admin",
           },
         }
       );
@@ -69,10 +79,12 @@ export async function POST(request: Request) {
       entityType: "User",
       entityId: String(userId),
       descriptionAr: verified ? "تم توثيق الخريج من لوحة الإدارة" : "تم إلغاء توثيق الخريج",
-      metadata: { verified, verificationSource: src || "admin" },
+      metadata: { verified, verificationSource: src || "manual_admin" },
       actor: actorFromUser(gate.user),
       outcome: "success",
     });
+
+    invalidateAlumniSummaryCache("admin:alumni-verification:patch");
 
     return NextResponse.json({ ok: true });
   } catch (error) {

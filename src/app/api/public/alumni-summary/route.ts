@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
 import connectDB from "@/lib/mongodb";
 import User from "@/models/User";
-import { blockIneligibleStudentOnPublicCommunityApi } from "@/lib/alumni/public-community-session-guard";
 import {
   getAlumniSummaryCached,
   setAlumniSummaryCached,
 } from "@/lib/alumni/alumni-public-cache";
 import type { AlumniSummaryResponse } from "@/lib/alumni/alumni-public-types";
+import { alumniDebugLog } from "@/lib/alumni/alumni-debug-log";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 60;
@@ -40,6 +40,7 @@ const ALUMNI_SCOPE_FILTER = {
 
 const EMPTY_STATS: AlumniSummaryResponse = {
   ok: true,
+  success: true,
   stats: {
     totalAlumni: 0,
     universities: 0,
@@ -53,11 +54,11 @@ const EMPTY_STATS: AlumniSummaryResponse = {
 
 export async function GET() {
   try {
-    const blocked = await blockIneligibleStudentOnPublicCommunityApi();
-    if (blocked) return blocked;
+    /** Fully public aggregate counts — must not 403 for logged-in students viewing /alumni. */
     const hit = getAlumniSummaryCached();
     if (hit) {
-      return NextResponse.json(hit, JSON_HEADERS);
+      alumniDebugLog("alumni-summary", { stats: hit.stats, cacheHit: true });
+      return NextResponse.json({ ...hit, success: true as const }, JSON_HEADERS);
     }
 
     await connectDB();
@@ -97,6 +98,10 @@ export async function GET() {
             { $match: { "alumniProfile.alumniServices.mentoring": true } },
             { $count: "count" },
           ],
+          globalParticipation: [
+            { $match: { "alumniProfile.studyCountry": { $exists: true, $nin: [null, ""] } } },
+            { $count: "count" },
+          ],
         },
       },
       {
@@ -114,6 +119,7 @@ export async function GET() {
 
     const body: AlumniSummaryResponse = {
       ok: true,
+      success: true,
       stats: {
         totalAlumni: Number(counts?.totalAlumni ?? 0),
         universities: Number(counts?.universities ?? 0),
@@ -124,6 +130,11 @@ export async function GET() {
         featuredAlumni: Number(counts?.featuredAlumni ?? 0),
       },
     };
+
+    alumniDebugLog("alumni-summary", {
+      stats: body.stats,
+      cacheHit: false,
+    });
 
     setAlumniSummaryCached(body, CACHE_TTL_MS);
     return NextResponse.json(body, JSON_HEADERS);
