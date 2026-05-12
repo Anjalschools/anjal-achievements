@@ -3,7 +3,7 @@ import mongoose from "mongoose";
 import connectDB from "@/lib/mongodb";
 import AlumniVerificationRequest from "@/models/AlumniVerificationRequest";
 import User from "@/models/User";
-import { requireAdminUserManager } from "@/lib/admin-user-management-auth";
+import { requireAlumniAdministrationActor } from "@/lib/admin-user-management-auth";
 import { sanitizeUserText } from "@/lib/sanitize-html";
 import { recomputeAlumniReputationGraph } from "@/lib/alumni/reputation-graph/recompute";
 import { invalidateAlumniSummaryCache } from "@/lib/alumni/alumni-public-cache";
@@ -12,7 +12,7 @@ import { isVerificationRequestPendingRaw } from "@/lib/alumni/normalizeVerificat
 export const dynamic = "force-dynamic";
 
 export async function PATCH(request: NextRequest, ctx: { params: Promise<{ id: string }> }) {
-  const gate = await requireAdminUserManager();
+  const gate = await requireAlumniAdministrationActor();
   if (!gate.ok) return gate.response;
 
   const { id } = await ctx.params;

@@ -106,7 +106,7 @@ export interface IUser extends Document {
   grade: string;
   /** Student: enrolled in Mawhiba (gifted) program classes. Omitted/false for legacy accounts. */
   isMawhibaStudent?: boolean;
-  role: "student" | "admin" | "teacher" | "supervisor" | "judge" | "schoolAdmin";
+  role: "student" | "admin" | "teacher" | "supervisor" | "judge" | "schoolAdmin" | "alumniAdmin";
   status: "active" | "inactive" | "suspended";
   preferredLanguage: "ar" | "en";
   /** Set on successful login (optional for legacy rows). */
@@ -439,7 +439,7 @@ const UserSchema: Schema = new Schema(
     },
     role: {
       type: String,
-      enum: ["student", "admin", "teacher", "supervisor", "judge", "schoolAdmin"],
+      enum: ["student", "admin", "teacher", "supervisor", "judge", "schoolAdmin", "alumniAdmin"],
       default: "student",
     },
     status: {

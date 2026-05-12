@@ -59,6 +59,7 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<AppRole, PermissionKey[]> = {
     PERMISSIONS.achievementsReject,
     PERMISSIONS.accessMatrixView,
   ],
+  alumniAdmin: [PERMISSIONS.dashboardView],
 };
 
 export const getRolePermissions = (

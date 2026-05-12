@@ -9,7 +9,7 @@ import { Loader2, ExternalLink, Inbox, Award, Bell, FileWarning, Shield, Sparkle
 import { formatRelativeTime } from "@/lib/alumni/format-relative-time";
 import { dispatchNotificationsUpdated } from "@/hooks/useUnreadNotificationCount";
 import type { NotificationApiItem } from "@/lib/notification-serialize";
-import { isAchievementReviewerRole } from "@/lib/achievement-reviewer-roles";
+import { isAchievementReviewerRole, isAlumniPlatformAdminRole } from "@/lib/achievement-reviewer-roles";
 import { getNotificationTypeLabel } from "@/lib/achievement-display-labels";
 import { notificationMatchesFilter } from "@/lib/notification-category";
 
@@ -37,7 +37,7 @@ const typeBadgeClass: Record<string, string> = {
   system: "bg-gray-100 text-gray-800",
 };
 
-type FilterTab = "all" | "unread" | "reviews" | "certificates" | "system";
+type FilterTab = "all" | "unread" | "reviews" | "certificates" | "system" | "alumni";
 
 const NotificationsPage = () => {
   const locale = getLocale();
@@ -98,7 +98,7 @@ const NotificationsPage = () => {
   }, [load]);
 
   const filteredItems = useMemo(
-    () => items.filter((n) => notificationMatchesFilter(n.type, filter, n.isRead)),
+    () => items.filter((n) => notificationMatchesFilter(n.type, filter, n.isRead, n.metadata)),
     [items, filter]
   );
 
@@ -130,13 +130,17 @@ const NotificationsPage = () => {
     }
   };
 
-  const subtitle = isAchievementReviewerRole(role)
+  const subtitle = isAlumniPlatformAdminRole(role)
     ? isAr
-      ? "تنبيهات اعتماد الإنجازات والشهادات والمراجعة والطوابير الإدارية"
-      : "Alerts for approvals, certificates, reviews, and admin queues"
-    : isAr
-      ? "تنبيهات اعتماد الإنجازات والشهادات والمراجعة"
-      : "Updates on achievements, certificates, and reviews";
+      ? "تنبيهات مجتمع الخريجين والطوابير التشغيلية — دون اعتمادات الإنجاز."
+      : "Alumni community and operational alerts — separate from achievement approvals."
+    : isAchievementReviewerRole(role)
+      ? isAr
+        ? "تنبيهات اعتماد الإنجازات والشهادات والمراجعة والطوابير الإدارية"
+        : "Alerts for approvals, certificates, reviews, and admin queues"
+      : isAr
+        ? "تنبيهات اعتماد الإنجازات والشهادات والمراجعة"
+        : "Updates on achievements, certificates, and reviews";
 
   const tabBtn = (id: FilterTab, labelAr: string, labelEn: string) => (
     <button
@@ -168,6 +172,7 @@ const NotificationsPage = () => {
           {tabBtn("unread", "غير المقروءة", "Unread")}
           {tabBtn("reviews", "المراجعات", "Reviews")}
           {tabBtn("certificates", "الشهادات", "Certificates")}
+          {tabBtn("alumni", "مجتمع الخريجين", "Alumni")}
           {tabBtn("system", "النظام", "System")}
         </div>
 

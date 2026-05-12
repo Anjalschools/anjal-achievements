@@ -3,12 +3,12 @@ import mongoose from "mongoose";
 import connectDB from "@/lib/mongodb";
 import AlumniCampaign from "@/models/AlumniCampaign";
 import AlumniCampaignRecipient from "@/models/AlumniCampaignRecipient";
-import { requireAdminUserManager } from "@/lib/admin-user-management-auth";
+import { requireAlumniAdministrationActor } from "@/lib/admin-user-management-auth";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(_request: NextRequest, ctx: { params: Promise<{ id: string }> }) {
-  const gate = await requireAdminUserManager();
+  const gate = await requireAlumniAdministrationActor();
   if (!gate.ok) return gate.response;
   const { id } = await ctx.params;
   if (!mongoose.isValidObjectId(id)) return NextResponse.json({ error: "INVALID_ID" }, { status: 400 });

@@ -1,14 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import connectDB from "@/lib/mongodb";
 import AlumniCohort from "@/models/AlumniCohort";
-import { requireAdminUserManager } from "@/lib/admin-user-management-auth";
+import { requireAlumniAdministrationActor } from "@/lib/admin-user-management-auth";
 import { sanitizeMongoShape } from "@/lib/sanitize-input";
 import { sanitizeUserText } from "@/lib/sanitize-html";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const gate = await requireAdminUserManager();
+  const gate = await requireAlumniAdministrationActor();
   if (!gate.ok) return gate.response;
   try {
     await connectDB();
@@ -31,7 +31,7 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
-  const gate = await requireAdminUserManager();
+  const gate = await requireAlumniAdministrationActor();
   if (!gate.ok) return gate.response;
   try {
     const body = sanitizeMongoShape((await request.json()) as Record<string, unknown>);

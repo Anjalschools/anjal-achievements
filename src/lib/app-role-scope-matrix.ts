@@ -9,7 +9,8 @@ export type AppRole =
   | "supervisor"
   | "schoolAdmin"
   | "teacher"
-  | "judge";
+  | "judge"
+  | "alumniAdmin";
 
 /** Fine-grained capabilities for APIs + UI. */
 export type RoleCapabilityKey =
@@ -32,7 +33,14 @@ export type RoleCapabilityKey =
   | "accessMatrix"
   | "contactMessages"
   | "homeHighlights"
-  | "letterRequests";
+  | "letterRequests"
+  | "alumniStaffArea"
+  | "alumniManagement"
+  | "alumniReports"
+  | "alumniModeration"
+  | "alumniVerification"
+  | "alumniAnalytics"
+  | "alumniNetworking";
 
 export type ScopeMode = "none" | "full" | "scoped";
 
@@ -65,6 +73,13 @@ const deny: Record<RoleCapabilityKey, boolean> = {
   contactMessages: false,
   homeHighlights: false,
   letterRequests: false,
+  alumniStaffArea: false,
+  alumniManagement: false,
+  alumniReports: false,
+  alumniModeration: false,
+  alumniVerification: false,
+  alumniAnalytics: false,
+  alumniNetworking: false,
 };
 
 const allStaffCaps: Record<RoleCapabilityKey, boolean> = {
@@ -89,6 +104,24 @@ const allStaffCaps: Record<RoleCapabilityKey, boolean> = {
   contactMessages: true,
   homeHighlights: true,
   letterRequests: true,
+  alumniStaffArea: true,
+  alumniManagement: true,
+  alumniReports: true,
+  alumniModeration: true,
+  alumniVerification: true,
+  alumniAnalytics: true,
+  alumniNetworking: true,
+};
+
+const alumniPlatformAdminCaps: Record<RoleCapabilityKey, boolean> = {
+  ...deny,
+  alumniStaffArea: true,
+  alumniManagement: true,
+  alumniReports: true,
+  alumniModeration: true,
+  alumniVerification: true,
+  alumniAnalytics: true,
+  alumniNetworking: true,
 };
 
 export const APP_ROLE_MATRIX: Record<AppRole, RoleDefinition> = {
@@ -218,6 +251,12 @@ export const APP_ROLE_MATRIX: Record<AppRole, RoleDefinition> = {
       homeHighlights: false,
     },
   },
+  alumniAdmin: {
+    labelAr: "مسؤول منصة الخريجين",
+    labelEn: "Alumni platform admin",
+    scopeMode: "none",
+    capabilities: alumniPlatformAdminCaps,
+  },
 };
 
 export const normalizeAppRole = (role: string | null | undefined): AppRole | null => {
@@ -261,6 +300,13 @@ export const ROLE_CAPABILITY_LABELS: Record<RoleCapabilityKey, { ar: string; en:
   contactMessages: { ar: "رسائل التواصل", en: "Contact messages" },
   homeHighlights: { ar: "إبرازات الصفحة الرئيسية", en: "Home page highlights" },
   letterRequests: { ar: "طلبات الإفادة وخطاب التوصية", en: "Testimonials & recommendation letters" },
+  alumniStaffArea: { ar: "لوحة إدارة الخريجين", en: "Alumni admin area" },
+  alumniManagement: { ar: "إدارة مجتمع الخريجين", en: "Alumni community management" },
+  alumniReports: { ar: "تقارير الخريجين", en: "Alumni reports" },
+  alumniModeration: { ar: "مراجعة المحتوى (قصص/ذكريات/فرص)", en: "Alumni content moderation" },
+  alumniVerification: { ar: "توثيق الخريجين والطلبات", en: "Alumni verification" },
+  alumniAnalytics: { ar: "تحليلات الخريجين", en: "Alumni analytics" },
+  alumniNetworking: { ar: "الشبكة المهنية وCRM", en: "Alumni networking & CRM" },
 };
 
 export const ROLE_CAPABILITY_AUDIT_ORDER: RoleCapabilityKey[] = [
@@ -284,6 +330,13 @@ export const ROLE_CAPABILITY_AUDIT_ORDER: RoleCapabilityKey[] = [
   "contactMessages",
   "homeHighlights",
   "letterRequests",
+  "alumniStaffArea",
+  "alumniManagement",
+  "alumniReports",
+  "alumniModeration",
+  "alumniVerification",
+  "alumniAnalytics",
+  "alumniNetworking",
 ];
 
 /** Route prefixes under /admin — must stay in sync with AppSidebar + API guards */
@@ -307,20 +360,23 @@ export const ADMIN_ROUTE_REQUIRED_CAPABILITY: Array<{
   { prefix: "/admin/home-highlights", capability: "homeHighlights" },
   { prefix: "/admin/contact-messages", capability: "contactMessages" },
   { prefix: "/admin/letter-requests", capability: "letterRequests" },
-  { prefix: "/admin/alumni/verification-center", capability: "userManagement" },
-  { prefix: "/admin/alumni/onboarding-requests", capability: "userManagement" },
-  { prefix: "/admin/alumni/stories", capability: "userManagement" },
-  { prefix: "/admin/alumni/memories", capability: "userManagement" },
-  { prefix: "/admin/alumni/opportunities", capability: "userManagement" },
-  { prefix: "/admin/alumni/announcements", capability: "userManagement" },
-  { prefix: "/admin/alumni/cohorts", capability: "userManagement" },
-  { prefix: "/admin/alumni/reports", capability: "userManagement" },
-  { prefix: "/admin/alumni/analytics", capability: "userManagement" },
-  { prefix: "/admin/alumni/campaigns", capability: "userManagement" },
-  { prefix: "/admin/alumni/crm", capability: "userManagement" },
-  { prefix: "/admin/alumni/platform-health", capability: "userManagement" },
-  { prefix: "/admin/alumni/events", capability: "userManagement" },
-  { prefix: "/admin/alumni/inbox", capability: "userManagement" },
+  { prefix: "/admin/alumni/verification-center", capability: "alumniVerification" },
+  { prefix: "/admin/alumni/onboarding-requests", capability: "alumniVerification" },
+  { prefix: "/admin/alumni/verification-requests", capability: "alumniVerification" },
+  { prefix: "/admin/alumni/verification", capability: "alumniVerification" },
+  { prefix: "/admin/alumni/opportunities/review", capability: "alumniModeration" },
+  { prefix: "/admin/alumni/memories", capability: "alumniModeration" },
+  { prefix: "/admin/alumni/memory-submissions", capability: "alumniModeration" },
+  { prefix: "/admin/alumni/stories", capability: "alumniModeration" },
+  { prefix: "/admin/alumni/opportunities", capability: "alumniModeration" },
+  { prefix: "/admin/alumni/reports", capability: "alumniReports" },
+  { prefix: "/admin/alumni/analytics", capability: "alumniAnalytics" },
+  { prefix: "/admin/alumni/platform-health", capability: "alumniAnalytics" },
+  { prefix: "/admin/alumni/monitoring", capability: "alumniAnalytics" },
+  { prefix: "/admin/alumni/reputation", capability: "alumniAnalytics" },
+  { prefix: "/admin/alumni/community-feed", capability: "alumniAnalytics" },
+  { prefix: "/admin/alumni/crm", capability: "alumniNetworking" },
+  { prefix: "/admin/alumni", capability: "alumniManagement" },
   /** Any other /admin/* screen requires at least staff (prevents students from loading admin shell). */
   { prefix: "/admin", capability: "staffArea" },
 ];
@@ -337,7 +393,17 @@ export const getRequiredCapabilityForAdminPath = (pathname: string): RoleCapabil
 };
 
 export const canAccessAdminPath = (role: string | null | undefined, pathname: string): boolean => {
+  const path = pathname.split("?")[0] || "";
+  const r = String(role || "").trim().toLowerCase();
   const req = getRequiredCapabilityForAdminPath(pathname);
   if (!req) return true;
-  return roleHasCapability(role, req);
+  if (roleHasCapability(role, req)) return true;
+  /**
+   * Backward compatibility: legacy staff used `userManagement` for all `/admin/alumni/*` tools.
+   * Platform admin always passes via full capability set.
+   */
+  if (path.startsWith("/admin/alumni") && (r === "admin" || roleHasCapability(role, "userManagement"))) {
+    return true;
+  }
+  return false;
 };

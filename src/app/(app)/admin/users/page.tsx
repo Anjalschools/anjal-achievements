@@ -176,6 +176,7 @@ const AdminUsersPageInner = () => {
       { labelAr: "مديرو المدارس", labelEn: "School admins", value: stats.schoolAdmins, tone: "emerald" },
       { labelAr: "المديرون", labelEn: "Admins", value: stats.admins, tone: "rose" },
       { labelAr: "المشرفون", labelEn: "Supervisors", value: stats.supervisors, tone: "indigo" },
+      { labelAr: "مسؤولو الخريجين", labelEn: "Alumni platform admins", value: stats.alumniAdmins, tone: "teal" },
       { labelAr: "حسابات نشطة", labelEn: "Active", value: stats.active, tone: "emerald" },
       { labelAr: "موقوفة / غير نشطة", labelEn: "Inactive + suspended", value: stats.inactive + stats.suspended, tone: "orange" },
     ];
@@ -189,6 +190,7 @@ const AdminUsersPageInner = () => {
     emerald: "border-emerald-200 bg-emerald-50",
     rose: "border-rose-200 bg-rose-50",
     indigo: "border-indigo-200 bg-indigo-50",
+    teal: "border-teal-200 bg-teal-50",
     orange: "border-orange-200 bg-orange-50",
   };
 

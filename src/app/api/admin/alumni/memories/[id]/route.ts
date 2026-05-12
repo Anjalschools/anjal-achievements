@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import mongoose from "mongoose";
 import connectDB from "@/lib/mongodb";
 import User from "@/models/User";
-import { requireAdminUserManager } from "@/lib/admin-user-management-auth";
+import { requireAlumniAdministrationActor } from "@/lib/admin-user-management-auth";
 import { sanitizeMongoShape } from "@/lib/sanitize-input";
 import { sanitizeUserText } from "@/lib/sanitize-html";
 import { decodeAlumniMemoryAdminId } from "@/lib/alumni/memory-admin-id";
@@ -14,7 +14,7 @@ export const dynamic = "force-dynamic";
 type RouteCtx = { params: Promise<{ id: string }> };
 
 export async function PATCH(request: NextRequest, ctx: RouteCtx) {
-  const gate = await requireAdminUserManager();
+  const gate = await requireAlumniAdministrationActor();
   if (!gate.ok) return gate.response;
 
   const { id: rawId } = await ctx.params;
@@ -84,7 +84,7 @@ export async function PATCH(request: NextRequest, ctx: RouteCtx) {
 }
 
 export async function DELETE(_request: NextRequest, ctx: RouteCtx) {
-  const gate = await requireAdminUserManager();
+  const gate = await requireAlumniAdministrationActor();
   if (!gate.ok) return gate.response;
 
   const { id: rawId } = await ctx.params;

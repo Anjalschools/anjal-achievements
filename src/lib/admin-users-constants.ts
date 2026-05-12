@@ -5,6 +5,7 @@ export const ADMIN_MANAGEABLE_ROLES = [
   "supervisor",
   "judge",
   "schoolAdmin",
+  "alumniAdmin",
 ] as const;
 
 export type AdminManageableRole = (typeof ADMIN_MANAGEABLE_ROLES)[number];

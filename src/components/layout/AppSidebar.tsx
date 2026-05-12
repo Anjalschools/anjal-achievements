@@ -43,7 +43,7 @@ import {
 } from "lucide-react";
 import { useUnreadNotificationCount } from "@/hooks/useUnreadNotificationCount";
 import { getLocale } from "@/lib/i18n";
-import { isReviewerNavRole } from "@/lib/app-navigation-roles";
+import { isStaffAdminNavRole, isAlumniPlatformAdminRole } from "@/lib/app-navigation-roles";
 import { useAppSession } from "@/contexts/AppSessionContext";
 import { roleHasCapability, type RoleCapabilityKey } from "@/lib/app-role-scope-matrix";
 import AuthGuardLink from "@/components/auth/AuthGuardLink";
@@ -59,7 +59,8 @@ const AppSidebar = () => {
   const { profile } = useAppSession();
   const navRole = profile?.role ?? null;
 
-  const isReviewer = isReviewerNavRole(navRole);
+  const isStaffNav = isStaffAdminNavRole(navRole);
+  const isAlumniAdminOnly = isAlumniPlatformAdminRole(navRole);
 
   const can = (key: RoleCapabilityKey) => roleHasCapability(navRole, key);
 
@@ -77,6 +78,11 @@ const AppSidebar = () => {
     href: "/admin/letter-requests",
     icon: ScrollText,
     label: locale === "ar" ? "طلبات الخطابات" : "Letter requests",
+  };
+  const alumniExecutiveHomeItem = {
+    href: "/admin/alumni",
+    icon: LayoutDashboard,
+    label: locale === "ar" ? "لوحة مجتمع الخريجين" : "Alumni executive",
   };
   const alumniOnboardingAdminItem = {
     href: "/admin/alumni/onboarding-requests",
@@ -153,6 +159,12 @@ const AppSidebar = () => {
     icon: MessagesSquare,
     label: locale === "ar" ? "بريد الخريجين" : "Alumni inbox",
   };
+  const alumniCommunityFeedStaffItem = {
+    href: "/admin/alumni/community-feed",
+    icon: LayoutGrid,
+    label: locale === "ar" ? "تغذية المجتمع" : "Community feed",
+    capability: "alumniAnalytics" as const satisfies RoleCapabilityKey,
+  };
   const alumniDashboardNavItem = {
     href: "/alumni/dashboard",
     icon: LayoutDashboard,
@@ -172,6 +184,11 @@ const AppSidebar = () => {
     href: "/alumni/dashboard#alumni-memories",
     icon: Images,
     label: locale === "ar" ? "ذكرياتي في الأنجال" : "My school memories",
+  };
+  const alumniCommunityFeedStudentItem = {
+    href: "/alumni/community",
+    icon: LayoutGrid,
+    label: locale === "ar" ? "مجتمع الخريجين" : "Community feed",
   };
   const alumniAssistantNavItem = {
     href: "/alumni/assistant",
@@ -330,21 +347,22 @@ const AppSidebar = () => {
     { ...aiNewsItem, capability: "aiNews" },
     { ...contactMessagesItem, capability: "contactMessages" },
     { ...letterRequestsAdminItem, capability: "letterRequests" },
-    { ...alumniOnboardingAdminItem, capability: "userManagement" },
-    { ...alumniVerificationCenterItem, capability: "userManagement" },
-    { ...alumniStoriesAdminItem, capability: "userManagement" },
-    { ...alumniMemoriesAdminItem, capability: "userManagement" },
-    { ...alumniOpportunitiesAdminItem, capability: "userManagement" },
-    { ...alumniOpportunityReviewAdminItem, capability: "userManagement" },
-    { ...alumniAnnouncementsAdminItem, capability: "userManagement" },
-    { ...alumniCohortsAdminItem, capability: "userManagement" },
-    { ...alumniAnalyticsAdminItem, capability: "userManagement" },
-    { ...alumniReportsAdminItem, capability: "userManagement" },
-    { ...alumniCampaignsAdminItem, capability: "userManagement" },
-    { ...alumniCrmAdminItem, capability: "userManagement" },
-    { ...alumniPlatformHealthAdminItem, capability: "userManagement" },
-    { ...alumniEventsAdminItem, capability: "userManagement" },
-    { ...alumniInboxAdminItem, capability: "userManagement" },
+    { ...alumniOnboardingAdminItem, capability: "alumniVerification" },
+    { ...alumniVerificationCenterItem, capability: "alumniVerification" },
+    { ...alumniStoriesAdminItem, capability: "alumniModeration" },
+    { ...alumniMemoriesAdminItem, capability: "alumniModeration" },
+    { ...alumniOpportunitiesAdminItem, capability: "alumniModeration" },
+    { ...alumniOpportunityReviewAdminItem, capability: "alumniModeration" },
+    { ...alumniAnnouncementsAdminItem, capability: "alumniManagement" },
+    { ...alumniCohortsAdminItem, capability: "alumniManagement" },
+    { ...alumniAnalyticsAdminItem, capability: "alumniAnalytics" },
+    { ...alumniReportsAdminItem, capability: "alumniReports" },
+    { ...alumniCampaignsAdminItem, capability: "alumniManagement" },
+    { ...alumniCrmAdminItem, capability: "alumniNetworking" },
+    { ...alumniPlatformHealthAdminItem, capability: "alumniAnalytics" },
+    { ...alumniEventsAdminItem, capability: "alumniManagement" },
+    { ...alumniInboxAdminItem, capability: "alumniManagement" },
+    { ...alumniCommunityFeedStaffItem, capability: "alumniAnalytics" },
     { ...auditLogItem, capability: "auditLog" },
     { ...adminSettingsItem, capability: "platformSettings" },
     { ...scoringSettingsItem, capability: "platformSettings" },
@@ -354,7 +372,7 @@ const AppSidebar = () => {
   ];
 
   const showAcademicAdvisorNav =
-    !isReviewer &&
+    !isStaffNav &&
     (profile?.role === "student" || profile?.accountType === "alumni") &&
     isEligibleForAcademicAdvisor({
       accountType: profile?.accountType,
@@ -363,7 +381,7 @@ const AppSidebar = () => {
     });
 
   const showAlumniCommunityNav =
-    !isReviewer &&
+    !isStaffNav &&
     canAccessAlumniCommunity({
       accountType: profile?.accountType,
       grade: profile?.grade,
@@ -374,7 +392,33 @@ const AppSidebar = () => {
 
   const isAlumniAccount = profile?.accountType === "alumni";
 
-  const navItems = isReviewer
+  const alumniCommunityDiscoverAdminItem = {
+    href: "/search",
+    icon: Search,
+    label: locale === "ar" ? "استكشاف المجتمع" : "Community discovery",
+    capability: "alumniNetworking" as const satisfies RoleCapabilityKey,
+  };
+
+  const alumniAdminNavCandidates: Array<{
+    href: string;
+    icon: LucideIcon;
+    label: string;
+    capability: RoleCapabilityKey | null;
+    badgeCount?: number;
+  }> = [
+    { ...alumniExecutiveHomeItem, capability: "alumniManagement" },
+    { ...alumniCommunityDiscoverAdminItem, capability: "alumniNetworking" },
+    ...staffNavCandidates.filter((row) => row.href.startsWith("/admin/alumni")),
+    { ...notificationsItem, capability: null },
+    { ...profileItem, capability: null },
+    { ...settingsItem, capability: null },
+  ];
+
+  const navItems = isAlumniAdminOnly
+    ? alumniAdminNavCandidates
+        .filter((row) => row.capability === null || can(row.capability))
+        .map(({ capability: _omit, ...rest }) => rest)
+    : isStaffNav
     ? staffNavCandidates
         .filter((row) => row.capability === null || can(row.capability))
         .map(({ capability: _omit, ...rest }) => rest)
@@ -384,7 +428,7 @@ const AppSidebar = () => {
           : [studentDashboardItem]),
         ...(showAcademicAdvisorNav ? [alumniAssistantNavItem] : []),
         ...(!isAlumniAccount ? [hallOfFameItem] : []),
-        ...(showAlumniCommunityNav ? [alumniDiscoverySearchItem] : []),
+        ...(showAlumniCommunityNav ? [alumniDiscoverySearchItem, alumniCommunityFeedStudentItem] : []),
         ...(!isAlumniAccount ? [achievementsItem, letterRequestsStudentItem, addAchievementItem] : []),
         notificationsItem,
         profileItem,
@@ -443,14 +487,29 @@ const AppSidebar = () => {
     if (href === "/admin/contact-messages") {
       return pathname === "/admin/contact-messages" || pathname?.startsWith("/admin/contact-messages/");
     }
+    if (href === "/alumni/community") {
+      return pathname === "/alumni/community" || pathname?.startsWith("/alumni/community/");
+    }
+    if (href === "/admin/alumni/community-feed") {
+      return pathname === "/admin/alumni/community-feed" || pathname?.startsWith("/admin/alumni/community-feed/");
+    }
+    if (href === "/admin/alumni") {
+      return pathname === "/admin/alumni" || pathname === "/admin/alumni/";
+    }
     if (href === "/admin/alumni/onboarding-requests") {
       return pathname === "/admin/alumni/onboarding-requests" || pathname?.startsWith("/admin/alumni/onboarding-requests/");
     }
     if (href === "/admin/alumni/verification-center") {
       return pathname === "/admin/alumni/verification-center" || pathname?.startsWith("/admin/alumni/verification-center/");
     }
+    if (href === "/admin/alumni/memories") {
+      return pathname === "/admin/alumni/memories" || pathname?.startsWith("/admin/alumni/memories/");
+    }
     if (href === "/admin/alumni/stories") {
       return pathname === "/admin/alumni/stories" || pathname?.startsWith("/admin/alumni/stories/");
+    }
+    if (href === "/admin/alumni/opportunities/review") {
+      return pathname === "/admin/alumni/opportunities/review" || pathname?.startsWith("/admin/alumni/opportunities/review/");
     }
     if (href === "/admin/alumni/opportunities") {
       return pathname === "/admin/alumni/opportunities" || pathname?.startsWith("/admin/alumni/opportunities/");
@@ -460,6 +519,9 @@ const AppSidebar = () => {
     }
     if (href === "/admin/alumni/cohorts") {
       return pathname === "/admin/alumni/cohorts" || pathname?.startsWith("/admin/alumni/cohorts/");
+    }
+    if (href === "/admin/alumni/reports") {
+      return pathname === "/admin/alumni/reports" || pathname?.startsWith("/admin/alumni/reports/");
     }
     if (href === "/admin/alumni/analytics") {
       return pathname === "/admin/alumni/analytics" || pathname?.startsWith("/admin/alumni/analytics/");
@@ -524,13 +586,17 @@ const AppSidebar = () => {
           {/* Logo/Header */}
           <div className="flex h-16 shrink-0 items-center border-b border-gray-200 px-6">
             <h2 className="text-lg font-bold text-primary">
-              {isAlumniAccount
+              {isAlumniAdminOnly
                 ? locale === "ar"
-                  ? "مجتمع الخريجين"
-                  : "Alumni hub"
-                : locale === "ar"
-                  ? "منصة التميز"
-                  : "Excellence Platform"}
+                  ? "إدارة الخريجين"
+                  : "Alumni administration"
+                : isAlumniAccount
+                  ? locale === "ar"
+                    ? "مجتمع الخريجين"
+                    : "Alumni hub"
+                  : locale === "ar"
+                    ? "منصة التميز"
+                    : "Excellence Platform"}
             </h2>
           </div>
 

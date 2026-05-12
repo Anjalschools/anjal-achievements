@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import mongoose from "mongoose";
 import connectDB from "@/lib/mongodb";
-import { requireAdminUserManager } from "@/lib/admin-user-management-auth";
+import { requireAlumniAdministrationActor } from "@/lib/admin-user-management-auth";
 import { batchRecomputeAlumniReputation, recomputeAlumniReputationGraph } from "@/lib/alumni/reputation-graph/recompute";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(request: NextRequest) {
-  const gate = await requireAdminUserManager();
+  const gate = await requireAlumniAdministrationActor();
   if (!gate.ok) return gate.response;
 
   try {

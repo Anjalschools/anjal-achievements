@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import mongoose from "mongoose";
 import connectDB from "@/lib/mongodb";
 import User from "@/models/User";
-import { requireAdminUserManager } from "@/lib/admin-user-management-auth";
+import { requireAlumniAdministrationActor } from "@/lib/admin-user-management-auth";
 import { sanitizeUserText } from "@/lib/sanitize-html";
 import { encodeAlumniMemoryAdminId } from "@/lib/alumni/memory-admin-id";
 import { alumniDebugLog } from "@/lib/alumni/alumni-debug-log";
@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
 const STATUS_SET = new Set(["all", "draft", "pending", "approved", "rejected"]);
 
 export async function GET(request: NextRequest) {
-  const gate = await requireAdminUserManager();
+  const gate = await requireAlumniAdministrationActor();
   if (!gate.ok) return gate.response;
 
   try {

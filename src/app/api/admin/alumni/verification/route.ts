@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import mongoose from "mongoose";
 import connectDB from "@/lib/mongodb";
 import User from "@/models/User";
-import { requireAdminUserManager } from "@/lib/admin-user-management-auth";
+import { requireAlumniAdministrationActor } from "@/lib/admin-user-management-auth";
 import type { AlumniVerificationSource } from "@/models/User";
 import { logAuditEvent, actorFromUser } from "@/lib/audit-log-service";
 import { invalidateAlumniSummaryCache } from "@/lib/alumni/alumni-public-cache";
@@ -21,7 +21,7 @@ const SOURCES: AlumniVerificationSource[] = [
 ];
 
 export async function POST(request: Request) {
-  const gate = await requireAdminUserManager();
+  const gate = await requireAlumniAdministrationActor();
   if (!gate.ok) return gate.response;
 
   try {

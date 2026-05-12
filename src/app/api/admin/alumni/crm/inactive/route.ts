@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import connectDB from "@/lib/mongodb";
 import User from "@/models/User";
-import { requireAdminUserManager } from "@/lib/admin-user-management-auth";
+import { requireAlumniAdministrationActor } from "@/lib/admin-user-management-auth";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
-  const gate = await requireAdminUserManager();
+  const gate = await requireAlumniAdministrationActor();
   if (!gate.ok) return gate.response;
   try {
     const inactiveDays = Math.min(365, Math.max(30, Number(request.nextUrl.searchParams.get("days")) || 120));

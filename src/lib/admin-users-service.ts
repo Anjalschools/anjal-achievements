@@ -47,6 +47,7 @@ export type AdminUserStats = {
   schoolAdmins: number;
   admins: number;
   supervisors: number;
+  alumniAdmins: number;
   active: number;
   inactive: number;
   suspended: number;
@@ -60,6 +61,7 @@ const emptyStats = (): AdminUserStats => ({
   schoolAdmins: 0,
   admins: 0,
   supervisors: 0,
+  alumniAdmins: 0,
   active: 0,
   inactive: 0,
   suspended: 0,
@@ -82,6 +84,7 @@ export const computeAdminUserStatsFromFacet = (facet: {
     else if (k === "schoolAdmin") out.schoolAdmins += n;
     else if (k === "admin") out.admins += n;
     else if (k === "supervisor") out.supervisors += n;
+    else if (k === "alumniAdmin") out.alumniAdmins += n;
   }
   for (const s of facet.byStatus || []) {
     const k = String(s._id || "");
@@ -321,7 +324,12 @@ export const adminUpdateUser = async (
   const ex = existing as unknown as Record<string, unknown>;
 
   if (id === actorId) {
-    if (input.role && input.role !== "admin" && input.role !== "supervisor") {
+    if (
+      input.role &&
+      input.role !== "admin" &&
+      input.role !== "supervisor" &&
+      input.role !== "alumniAdmin"
+    ) {
       throw new Error("You cannot remove your own admin access");
     }
     if (input.status && input.status !== "active") {

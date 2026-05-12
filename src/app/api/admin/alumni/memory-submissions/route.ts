@@ -2,13 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import mongoose from "mongoose";
 import connectDB from "@/lib/mongodb";
 import User from "@/models/User";
-import { requireAdminUserManager } from "@/lib/admin-user-management-auth";
+import { requireAlumniAdministrationActor } from "@/lib/admin-user-management-auth";
 import { sanitizeMongoShape } from "@/lib/sanitize-input";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const gate = await requireAdminUserManager();
+  const gate = await requireAlumniAdministrationActor();
   if (!gate.ok) return gate.response;
 
   try {
@@ -59,7 +59,7 @@ export async function GET() {
 }
 
 export async function PATCH(request: NextRequest) {
-  const gate = await requireAdminUserManager();
+  const gate = await requireAlumniAdministrationActor();
   if (!gate.ok) return gate.response;
 
   try {

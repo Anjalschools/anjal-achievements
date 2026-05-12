@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import mongoose from "mongoose";
 import connectDB from "@/lib/mongodb";
 import AlumniReunionEvent from "@/models/AlumniReunionEvent";
-import { requireAdminUserManager } from "@/lib/admin-user-management-auth";
+import { requireAlumniAdministrationActor } from "@/lib/admin-user-management-auth";
 import { sanitizeMongoShape } from "@/lib/sanitize-input";
 import { sanitizeUserText } from "@/lib/sanitize-html";
 import { slugifyLatin } from "@/lib/alumni/slugify";
@@ -10,7 +10,7 @@ import { slugifyLatin } from "@/lib/alumni/slugify";
 export const dynamic = "force-dynamic";
 
 export async function PATCH(request: NextRequest, ctx: { params: Promise<{ id: string }> }) {
-  const gate = await requireAdminUserManager();
+  const gate = await requireAlumniAdministrationActor();
   if (!gate.ok) return gate.response;
   try {
     const { id } = await ctx.params;

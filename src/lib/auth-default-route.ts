@@ -11,6 +11,8 @@ const STAFF_ROLES = new Set<string>([
   "judge",
 ]);
 
+const ALUMNI_ADMIN_ROLE = "alumniAdmin";
+
 /** Aliases that may appear from older clients or future schema — map to the same staff landing. */
 const STAFF_ROLE_ALIASES: Record<string, string> = {
   systemAdmin: "admin",
@@ -34,6 +36,7 @@ export const getPostLoginDestination = (input: {
   accountType?: string | null;
 }): string => {
   const r = normalizeRole(input.role);
+  if (r === ALUMNI_ADMIN_ROLE) return "/admin/alumni";
   if (r && STAFF_ROLES.has(r)) return "/admin/dashboard";
   if (String(input.accountType || "").toLowerCase() === "alumni") return "/alumni/dashboard";
   return "/dashboard";
@@ -44,6 +47,7 @@ export const getPostLoginDestination = (input: {
  */
 export const getDefaultRouteByRole = (role: string | undefined | null): string => {
   const r = normalizeRole(role);
+  if (r === ALUMNI_ADMIN_ROLE) return "/admin/alumni";
   if (r === "student") return "/dashboard";
   if (!r) return "/dashboard";
   if (STAFF_ROLES.has(r)) return "/admin/dashboard";

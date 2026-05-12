@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import connectDB from "@/lib/mongodb";
-import { requireAdminUserManager } from "@/lib/admin-user-management-auth";
+import { requireAlumniAdministrationActor } from "@/lib/admin-user-management-auth";
 import { getMetricsSummary } from "@/lib/alumni/monitoring/metrics";
 import { getDeliveryCounters } from "@/lib/alumni/monitoring/delivery-monitor";
 import { snapshotRecommendationCacheEntries } from "@/lib/alumni/monitoring/recommendations-monitor";
@@ -8,7 +8,7 @@ import { snapshotRecommendationCacheEntries } from "@/lib/alumni/monitoring/reco
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const gate = await requireAdminUserManager();
+  const gate = await requireAlumniAdministrationActor();
   if (!gate.ok) return gate.response;
   try {
     await connectDB();

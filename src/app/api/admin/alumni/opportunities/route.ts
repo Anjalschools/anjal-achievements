@@ -3,7 +3,7 @@ import mongoose from "mongoose";
 import connectDB from "@/lib/mongodb";
 import AlumniOpportunity, { type AlumniOpportunityType } from "@/models/AlumniOpportunity";
 import User from "@/models/User";
-import { requireAdminUserManager } from "@/lib/admin-user-management-auth";
+import { requireAlumniAdministrationActor } from "@/lib/admin-user-management-auth";
 import { sanitizeMongoShape } from "@/lib/sanitize-input";
 import { sanitizeUserText } from "@/lib/sanitize-html";
 import { normalizeOpportunityStatus } from "@/lib/alumni/normalize-opportunity-status";
@@ -26,7 +26,7 @@ const REVIEW = new Set(["pending_review", "approved", "rejected", "archived"]);
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
-  const gate = await requireAdminUserManager();
+  const gate = await requireAlumniAdministrationActor();
   if (!gate.ok) return gate.response;
   try {
     await connectDB();
@@ -148,7 +148,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const gate = await requireAdminUserManager();
+  const gate = await requireAlumniAdministrationActor();
   if (!gate.ok) return gate.response;
   try {
     const body = sanitizeMongoShape((await request.json()) as Record<string, unknown>);
@@ -183,7 +183,7 @@ export async function POST(request: NextRequest) {
 }
 
 export async function PATCH(request: NextRequest) {
-  const gate = await requireAdminUserManager();
+  const gate = await requireAlumniAdministrationActor();
   if (!gate.ok) return gate.response;
   try {
     const body = sanitizeMongoShape((await request.json()) as Record<string, unknown>);

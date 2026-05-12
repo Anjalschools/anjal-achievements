@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import connectDB from "@/lib/mongodb";
 import AlumniAutomationJob from "@/models/AlumniAutomationJob";
 import AlumniCampaignRecipient from "@/models/AlumniCampaignRecipient";
-import { requireAdminUserManager } from "@/lib/admin-user-management-auth";
+import { requireAlumniAdministrationActor } from "@/lib/admin-user-management-auth";
 import { checkMongoHealth } from "@/lib/alumni/monitoring/api-health";
 import { getDeliveryCounters } from "@/lib/alumni/monitoring/delivery-monitor";
 import { getMetricsSummary } from "@/lib/alumni/monitoring/metrics";
@@ -11,7 +11,7 @@ import { getQueueHealthSnapshot } from "@/lib/queue/queue-metrics";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const gate = await requireAdminUserManager();
+  const gate = await requireAlumniAdministrationActor();
   if (!gate.ok) return gate.response;
 
   try {

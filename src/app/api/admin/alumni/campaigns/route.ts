@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import connectDB from "@/lib/mongodb";
 import AlumniCampaign, { type AlumniCampaignKind } from "@/models/AlumniCampaign";
-import { requireAdminUserManager } from "@/lib/admin-user-management-auth";
+import { requireAlumniAdministrationActor } from "@/lib/admin-user-management-auth";
 import { sanitizeUserText } from "@/lib/sanitize-html";
 import { sanitizeCampaignHtml } from "@/lib/alumni/sanitize-campaign-html";
 
@@ -28,7 +28,7 @@ const buildSlug = (title: string) => {
 };
 
 export async function GET() {
-  const gate = await requireAdminUserManager();
+  const gate = await requireAlumniAdministrationActor();
   if (!gate.ok) return gate.response;
   try {
     await connectDB();
@@ -64,7 +64,7 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
-  const gate = await requireAdminUserManager();
+  const gate = await requireAlumniAdministrationActor();
   if (!gate.ok) return gate.response;
   try {
     const body = (await request.json()) as {

@@ -27,6 +27,7 @@ const STAFF_ROLES_FOR_MATRIX: AppRole[] = [
   "judge",
   "admin",
   "supervisor",
+  "alumniAdmin",
 ];
 
 const SAMPLE_ADMIN_PATHS = [
@@ -40,6 +41,10 @@ const SAMPLE_ADMIN_PATHS = [
   "/admin/audit-log",
   "/admin/ai/news",
   "/admin/access-matrix",
+  "/admin/alumni",
+  "/admin/alumni/reports",
+  "/admin/alumni/verification-center",
+  "/admin/alumni/community-feed",
 ];
 
 const AccessMatrixPage = () => {
@@ -258,9 +263,13 @@ const AccessMatrixPage = () => {
                         ? isAr
                           ? "نطاق كامل"
                           : "Full scope"
-                        : isAr
-                          ? "نطاق مؤسسي"
-                          : "Organizational scope"}
+                        : role === "alumniAdmin"
+                          ? isAr
+                            ? "مجال الخريجين فقط"
+                            : "Alumni domain only"
+                          : isAr
+                            ? "نطاق مؤسسي"
+                            : "Organizational scope"}
                     </span>
                   </td>
                   {ROLE_CAPABILITY_AUDIT_ORDER.map((key) => (

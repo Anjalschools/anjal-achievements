@@ -5,7 +5,7 @@ import connectDB from "@/lib/mongodb";
 import AlumniCampaign from "@/models/AlumniCampaign";
 import AlumniCampaignRecipient from "@/models/AlumniCampaignRecipient";
 import User from "@/models/User";
-import { requireAdminUserManager } from "@/lib/admin-user-management-auth";
+import { requireAlumniAdministrationActor } from "@/lib/admin-user-management-auth";
 import { resolveAlumniAudience } from "@/lib/alumni/campaign-audience";
 import { queueCampaignEmailJobs, emitCampaignLaunchSignal } from "@/lib/alumni/automation/campaign-trigger-engine";
 import { sendSmtpMail } from "@/lib/mailer";
@@ -14,7 +14,7 @@ import { logAuditEvent, actorFromUser } from "@/lib/audit-log-service";
 export const dynamic = "force-dynamic";
 
 export async function POST(request: NextRequest, ctx: { params: Promise<{ id: string }> }) {
-  const gate = await requireAdminUserManager();
+  const gate = await requireAlumniAdministrationActor();
   if (!gate.ok) return gate.response;
   const { id } = await ctx.params;
   if (!mongoose.isValidObjectId(id)) return NextResponse.json({ error: "INVALID_ID" }, { status: 400 });

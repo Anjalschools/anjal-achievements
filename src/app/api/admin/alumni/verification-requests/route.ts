@@ -3,7 +3,7 @@ import mongoose from "mongoose";
 import connectDB from "@/lib/mongodb";
 import AlumniVerificationRequest from "@/models/AlumniVerificationRequest";
 import User from "@/models/User";
-import { requireAdminUserManager } from "@/lib/admin-user-management-auth";
+import { requireAlumniAdministrationActor } from "@/lib/admin-user-management-auth";
 import { sanitizeUserText } from "@/lib/sanitize-html";
 import { alumniCommunityActiveUserClause } from "@/lib/alumni/alumni-community-active";
 import { alumniDebugLog } from "@/lib/alumni/alumni-debug-log";
@@ -65,7 +65,7 @@ const mapRequestRow = (r: Record<string, unknown>, byId: Map<string, LeanUser>) 
 };
 
 export async function GET(request: NextRequest) {
-  const gate = await requireAdminUserManager();
+  const gate = await requireAlumniAdministrationActor();
   if (!gate.ok) return gate.response;
 
   try {

@@ -10,6 +10,12 @@ export const resolveHeaderAppHome = (
 ): { href: string; label: string } | undefined => {
   const r = String(role || "").toLowerCase();
   const isAr = locale === "ar";
+  if (r === "alumniadmin") {
+    return {
+      href: "/admin/alumni",
+      label: isAr ? "إدارة مجتمع الخريجين" : "Alumni admin",
+    };
+  }
   if (staffRoles.has(r)) {
     return {
       href: "/admin/dashboard",

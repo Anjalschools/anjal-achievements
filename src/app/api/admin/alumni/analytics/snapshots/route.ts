@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import connectDB from "@/lib/mongodb";
-import { requireAdminUserManager } from "@/lib/admin-user-management-auth";
+import { requireAlumniAdministrationActor } from "@/lib/admin-user-management-auth";
 import { listAlumniSnapshots } from "@/lib/alumni/analytics/historical-metrics";
 import type { AlumniSnapshotGranularity } from "@/models/AlumniAnalyticsSnapshot";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
-  const gate = await requireAdminUserManager();
+  const gate = await requireAlumniAdministrationActor();
   if (!gate.ok) return gate.response;
 
   const g = request.nextUrl.searchParams.get("granularity") as AlumniSnapshotGranularity | null;

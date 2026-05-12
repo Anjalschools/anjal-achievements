@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import mongoose from "mongoose";
 import connectDB from "@/lib/mongodb";
 import AlumniStory from "@/models/AlumniStory";
-import { requireAdminUserManager } from "@/lib/admin-user-management-auth";
+import { requireAlumniAdministrationActor } from "@/lib/admin-user-management-auth";
 import { sanitizeMongoShape } from "@/lib/sanitize-input";
 import { sanitizeUserText } from "@/lib/sanitize-html";
 import { alumniDebugLog } from "@/lib/alumni/alumni-debug-log";
@@ -76,7 +76,7 @@ const flattenMongooseValidation = (err: mongoose.Error.ValidationError) => {
 };
 
 export async function GET(request: NextRequest) {
-  const gate = await requireAdminUserManager();
+  const gate = await requireAlumniAdministrationActor();
   if (!gate.ok) return gate.response;
   try {
     const q = sanitizeUserText(String(request.nextUrl.searchParams.get("q") || ""));
@@ -107,7 +107,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const gate = await requireAdminUserManager();
+  const gate = await requireAlumniAdministrationActor();
   if (!gate.ok) return gate.response;
   try {
     const rawBody = (await request.json()) as Record<string, unknown>;

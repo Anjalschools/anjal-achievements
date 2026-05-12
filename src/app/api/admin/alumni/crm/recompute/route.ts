@@ -1,14 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import connectDB from "@/lib/mongodb";
 import User from "@/models/User";
-import { requireAdminUserManager } from "@/lib/admin-user-management-auth";
+import { requireAlumniAdministrationActor } from "@/lib/admin-user-management-auth";
 import { upsertRelationshipScore } from "@/lib/alumni/crm-intelligence";
 import { logAuditEvent, actorFromUser } from "@/lib/audit-log-service";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(request: NextRequest) {
-  const gate = await requireAdminUserManager();
+  const gate = await requireAlumniAdministrationActor();
   if (!gate.ok) return gate.response;
   try {
     const body = (await request.json()) as { limit?: number };

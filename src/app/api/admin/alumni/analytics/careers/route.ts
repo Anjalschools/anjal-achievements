@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
 import connectDB from "@/lib/mongodb";
-import { requireAdminUserManager } from "@/lib/admin-user-management-auth";
+import { requireAlumniAdministrationActor } from "@/lib/admin-user-management-auth";
 import { getAdminAlumniCareersIntel } from "@/lib/alumni/admin-alumni-analytics";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const gate = await requireAdminUserManager();
+  const gate = await requireAlumniAdministrationActor();
   if (!gate.ok) return gate.response;
 
   try {
