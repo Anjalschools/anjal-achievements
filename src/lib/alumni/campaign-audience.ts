@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import User from "@/models/User";
 import type { AlumniCampaignAudienceFilter } from "@/models/AlumniCampaign";
+import { graduationYearMongoInList, mongoMatchAlumniGraduationYearEquals } from "@/lib/alumni/graduation-year-normalize";
 
 export type ResolvedAudience = {
   userIds: mongoose.Types.ObjectId[];
@@ -21,10 +22,12 @@ export const resolveAlumniAudience = async (
   };
 
   if (typeof filter.cohortYear === "number") {
-    q["alumniProfile.graduationYear"] = filter.cohortYear;
+    const m = mongoMatchAlumniGraduationYearEquals(filter.cohortYear);
+    if (m) Object.assign(q, m);
   }
   if (Array.isArray(filter.cohortYears) && filter.cohortYears.length) {
-    q["alumniProfile.graduationYear"] = { $in: filter.cohortYears };
+    const variants = graduationYearMongoInList(filter.cohortYears);
+    if (variants.length) q["alumniProfile.graduationYear"] = { $in: variants };
   }
   if (typeof filter.university === "string" && filter.university.trim()) {
     q["alumniProfile.universityName"] = new RegExp(filter.university.trim(), "i");

@@ -104,6 +104,29 @@ export default function AdminAlumniExecutiveDashboardPage() {
         </div>
       ) : null}
 
+      {dash?.executiveAlerts?.length ? (
+        <section className="mb-6 space-y-2" aria-label={isAr ? "تنبيهات تنفيذية" : "Executive alerts"}>
+          <h2 className="text-xs font-black uppercase tracking-wide text-slate-700">
+            {isAr ? "تنبيهات تنفيذية (من اللقطات الشهرية)" : "Executive alerts (from monthly snapshots)"}
+          </h2>
+          {dash.executiveAlerts.map((a) => (
+            <div
+              key={a.code}
+              className={`rounded-xl border px-3 py-2.5 text-sm font-semibold ${
+                a.severity === "critical"
+                  ? "border-rose-300 bg-rose-50 text-rose-950"
+                  : a.severity === "warning"
+                    ? "border-amber-300 bg-amber-50 text-amber-950"
+                    : "border-slate-200 bg-slate-50 text-slate-800"
+              }`}
+              role="status"
+            >
+              {isAr ? a.messageAr : a.messageEn}
+            </div>
+          ))}
+        </section>
+      ) : null}
+
       {loading || !o ? (
         <div className="py-16 text-center text-sm text-slate-500">{isAr ? "جاري التحميل…" : "Loading…"}</div>
       ) : (

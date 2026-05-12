@@ -6,6 +6,7 @@ import {
   type EngagementIntel,
 } from "@/lib/alumni/admin-alumni-analytics";
 import { listAlumniSnapshots } from "@/lib/alumni/analytics/historical-metrics";
+import { computeExecutiveAlertsFromSnapshots, type ExecutiveAlert } from "@/lib/alumni/analytics/executive-alerts";
 
 const activeAlumniMatch = (): Record<string, unknown> => ({
   $and: [{ accountType: "alumni" }, alumniCommunityActiveUserClause()],
@@ -39,6 +40,7 @@ export type ExecutiveAlumniDashboard = {
     latestWeeklyPeriod: string | null;
   };
   communityHealth: AlumniCommunityHealth;
+  executiveAlerts: ExecutiveAlert[];
 };
 
 export const getExecutiveAlumniDashboard = async (): Promise<ExecutiveAlumniDashboard> => {
@@ -58,7 +60,8 @@ export const getExecutiveAlumniDashboard = async (): Promise<ExecutiveAlumniDash
     regPrev7,
     topCountries,
     dormantCount,
-    snapshots,
+    weeklySnapshots,
+    monthlySnapshots,
   ] = await Promise.all([
     getAdminAlumniOverview(),
     getAdminAlumniEngagementIntel(),
@@ -79,7 +82,7 @@ export const getExecutiveAlumniDashboard = async (): Promise<ExecutiveAlumniDash
         activeAlumniMatch(),
         { "alumniProfile.universityName": { $exists: true, $nin: [null, ""] } },
         { "alumniProfile.major": { $exists: true, $nin: [null, ""] } },
-        { "alumniProfile.graduationYear": { $exists: true, $type: "number" } },
+        { "alumniProfile.graduationYear": { $exists: true, $nin: [null, ""] } },
         { "alumniProfile.currentCompany": { $exists: true, $nin: [null, ""] } },
         { "alumniProfile.industry": { $exists: true, $nin: [null, ""] } },
         {
@@ -132,6 +135,7 @@ export const getExecutiveAlumniDashboard = async (): Promise<ExecutiveAlumniDash
       ],
     }),
     listAlumniSnapshots("weekly", 4),
+    listAlumniSnapshots("monthly", 10),
   ]);
 
   const verificationRatePercent =
@@ -178,8 +182,8 @@ export const getExecutiveAlumniDashboard = async (): Promise<ExecutiveAlumniDash
 
   let alumniCountDelta: number | null = null;
   let latestWeeklyPeriod: string | null = null;
-  if (snapshots.length >= 2) {
-    const sorted = [...snapshots].sort(
+  if (weeklySnapshots.length >= 2) {
+    const sorted = [...weeklySnapshots].sort(
       (a: { periodStart?: Date }, b: { periodStart?: Date }) =>
         new Date(b.periodStart || 0).getTime() - new Date(a.periodStart || 0).getTime()
     );
@@ -192,6 +196,17 @@ export const getExecutiveAlumniDashboard = async (): Promise<ExecutiveAlumniDash
       latestWeeklyPeriod = new Date(sorted[0].periodStart as Date).toISOString().slice(0, 10);
     }
   }
+
+  const monthlySorted = [...monthlySnapshots].sort(
+    (a: { periodStart?: Date }, b: { periodStart?: Date }) =>
+      new Date(b.periodStart || 0).getTime() - new Date(a.periodStart || 0).getTime()
+  );
+  const executiveAlerts = computeExecutiveAlertsFromSnapshots(
+    monthlySorted.map((row: { periodStart?: Date; payload?: unknown }) => ({
+      periodStart: row.periodStart as Date,
+      payload: row.payload as Record<string, unknown>,
+    }))
+  );
 
   return {
     overview,
@@ -219,5 +234,6 @@ export const getExecutiveAlumniDashboard = async (): Promise<ExecutiveAlumniDash
       notesAr,
       notesEn,
     },
+    executiveAlerts,
   };
 };

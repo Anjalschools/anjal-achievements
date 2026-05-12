@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import connectDB from "@/lib/mongodb";
+import User from "@/models/User";
 import { requireAlumniUser } from "@/lib/alumni/require-alumni";
 import { requireAlumniCommunityForAuthedUser } from "@/lib/alumni/require-alumni-community-access";
 import { checkRouteRateLimit, rateLimitExceededResponse } from "@/lib/rate-limit";
 import { buildCommunityFeedItems } from "@/lib/alumni/community-feed-service";
+import { buildViewerMatchProfile } from "@/lib/alumni/matching/viewer-profile";
 
 export const dynamic = "force-dynamic";
 
@@ -22,7 +24,12 @@ export async function GET(request: NextRequest) {
 
   try {
     await connectDB();
-    const items = await buildCommunityFeedItems("alumni", 24);
+    const me = await User.findById(gate.user._id).select("alumniProfile lastLoginAt").lean();
+    const profile = buildViewerMatchProfile(me as never, request.nextUrl.searchParams);
+    const items = await buildCommunityFeedItems("alumni", 24, {
+      userId: String(gate.user._id),
+      profile,
+    });
     return NextResponse.json({ ok: true, items });
   } catch (e) {
     console.error("[GET /api/alumni/community-feed]", e);

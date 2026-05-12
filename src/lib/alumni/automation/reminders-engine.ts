@@ -2,6 +2,7 @@ import User from "@/models/User";
 import AlumniMentorshipRequest from "@/models/AlumniMentorshipRequest";
 import AlumniReunionEvent from "@/models/AlumniReunionEvent";
 import { enqueueAutomationJob } from "./lifecycle-engine";
+import { mongoMatchAlumniGraduationYearEquals } from "@/lib/alumni/graduation-year-normalize";
 
 const MS_DAY = 86_400_000;
 
@@ -49,7 +50,8 @@ export const enqueueUpcomingEventReminders = async (withinDays = 14): Promise<nu
   for (const ev of events) {
     const filter: Record<string, unknown> = { accountType: "alumni" };
     if (typeof ev.cohortYear === "number") {
-      filter["alumniProfile.graduationYear"] = ev.cohortYear;
+      const m = mongoMatchAlumniGraduationYearEquals(ev.cohortYear);
+      if (m) Object.assign(filter, m);
     }
     const alumni = await User.find(filter).select("_id").limit(120).lean();
 

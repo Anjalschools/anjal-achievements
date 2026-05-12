@@ -8,6 +8,7 @@ import { getAlumniIntelCached, setAlumniIntelCached } from "@/lib/alumni/alumni-
 import { alumniCommunityActiveUserClause } from "@/lib/alumni/alumni-community-active";
 import { publicAlumniOpportunityListingFilter } from "@/lib/alumni/normalize-opportunity-status";
 import { buildVerificationRequestStatusMongoFilter } from "@/lib/alumni/normalizeVerificationStatus";
+import { normalizeGraduationYearToNumber } from "@/lib/alumni/graduation-year-normalize";
 
 const TTL_MS = 60_000;
 
@@ -107,20 +108,31 @@ export const getAdminAlumniOverview = () =>
         { $sort: { count: -1 } },
         { $limit: 12 },
       ]),
-      User.aggregate<{ _id: number; count: number }>([
+      User.aggregate<{ _id: unknown; count: number }>([
         {
           $match: {
             $and: [
               { accountType: "alumni" },
               alumniCommunityActiveUserClause(),
-              { "alumniProfile.graduationYear": { $exists: true, $type: "number" } },
+              { "alumniProfile.graduationYear": { $exists: true, $nin: [null, ""] } },
             ],
           },
         },
         { $group: { _id: "$alumniProfile.graduationYear", count: { $sum: 1 } } },
         { $sort: { count: -1 } },
-        { $limit: 15 },
-      ]),
+        { $limit: 40 },
+      ]).then((rows) => {
+        const merged = new Map<number, number>();
+        for (const r of rows) {
+          const y = normalizeGraduationYearToNumber(r._id);
+          if (y == null) continue;
+          merged.set(y, (merged.get(y) || 0) + r.count);
+        }
+        return [...merged.entries()]
+          .sort((a, b) => b[1] - a[1] || b[0] - a[0])
+          .slice(0, 15)
+          .map(([year, count]) => ({ _id: year, count }));
+      }),
       AlumniOpportunity.aggregate<{ _id: string; count: number }>([
         { $match: publicAlumniOpportunityListingFilter() },
         { $group: { _id: "$type", count: { $sum: 1 } } },

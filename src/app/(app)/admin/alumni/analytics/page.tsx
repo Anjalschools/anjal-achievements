@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Loader2 } from "lucide-react";
+import { getLocale } from "@/lib/i18n";
+import type { StrategicSeriesPoint } from "@/lib/alumni/analytics/trend-analysis";
 import type {
   AdminAlumniOverview,
   UniversitiesIntelRow,
@@ -49,9 +51,12 @@ const BarRow = ({ label, value, max }: { label: string; value: number; max: numb
 };
 
 export default function AdminAlumniAnalyticsPage() {
+  const locale = getLocale();
+  const isAr = locale === "ar";
   const [data, setData] = useState<Bundle | null>(null);
   const [loading, setLoading] = useState(true);
   const [hist, setHist] = useState<GrowthPoint[] | null>(null);
+  const [strategic, setStrategic] = useState<StrategicSeriesPoint[] | null>(null);
   const [trends, setTrends] = useState<TrendsData | null>(null);
   const [histLoading, setHistLoading] = useState(true);
 
@@ -86,13 +91,15 @@ export default function AdminAlumniAnalyticsPage() {
     let m = true;
     void (async () => {
       try {
-        const [h, tr] = await Promise.all([
+        const [h, tr, ms] = await Promise.all([
           fetch("/api/admin/alumni/analytics/history?granularity=weekly&limit=24", { credentials: "include" }),
           fetch("/api/admin/alumni/analytics/trends?granularity=weekly&limit=24", { credentials: "include" }),
+          fetch("/api/admin/alumni/analytics/history?granularity=monthly&limit=18", { credentials: "include" }),
         ]);
-        const [hj, trj] = await Promise.all([h.json(), tr.json()]);
+        const [hj, trj, msj] = await Promise.all([h.json(), tr.json(), ms.json()]);
         if (!m) return;
         setHist(hj.ok && hj.data?.series ? (hj.data.series as GrowthPoint[]) : null);
+        setStrategic(msj.ok && msj.data?.strategicSeries ? (msj.data.strategicSeries as StrategicSeriesPoint[]) : null);
         setTrends(trj.ok ? (trj.data as TrendsData) : null);
       } finally {
         if (m) setHistLoading(false);
@@ -120,6 +127,14 @@ export default function AdminAlumniAnalyticsPage() {
     [hist]
   );
 
+  const repMaxStrategic = useMemo(
+    () =>
+      strategic?.length
+        ? Math.max(...strategic.map((x) => (typeof x.avgReputation === "number" ? x.avgReputation : 0)), 1)
+        : 1,
+    [strategic]
+  );
+
   if (loading) {
     return (
       <div className="flex min-h-[40vh] items-center justify-center">
@@ -132,7 +147,7 @@ export default function AdminAlumniAnalyticsPage() {
   const eg = data?.engagement;
 
   return (
-    <div dir="rtl" className="space-y-8 px-4 py-8">
+    <div dir={isAr ? "rtl" : "ltr"} className="space-y-8 px-4 py-8">
       <div>
         <h1 className="text-2xl font-black text-slate-900">تحليلات مجتمع الخريجين</h1>
         <p className="mt-2 text-sm text-slate-600">
@@ -268,6 +283,57 @@ export default function AdminAlumniAnalyticsPage() {
             </ul>
           </div>
         ) : null}
+      </section>
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <h2 className="text-lg font-black text-slate-900">
+          {isAr ? "الذاكرة الاستراتيجية (شهري)" : "Strategic history (monthly)"}
+        </h2>
+        <p className="mt-1 text-xs text-slate-500">
+          {isAr
+            ? "يستند إلى لقطات AlumniAnalyticsSnapshot الشهرية بعد تحديث cron (حمولة v2)."
+            : "Uses monthly AlumniAnalyticsSnapshot rows after cron runs (v2 payload)."}
+        </p>
+        {histLoading ? (
+          <div className="mt-6 flex min-h-[80px] items-center justify-center text-sm text-slate-500">
+            {isAr ? "جاري التحميل…" : "Loading…"}
+          </div>
+        ) : strategic && strategic.length ? (
+          <div className="mt-6 grid gap-6 lg:grid-cols-2">
+            <div>
+              <p className="text-xs font-bold text-slate-700">{isAr ? "متوسط السمعة" : "Avg reputation"}</p>
+              <div className="mt-3 space-y-2">
+                {strategic.slice(-12).map((p) => (
+                  <BarRow
+                    key={`${p.periodStart}-rep`}
+                    label={p.periodStart.slice(0, 10)}
+                    value={p.avgReputation ?? 0}
+                    max={repMaxStrategic}
+                  />
+                ))}
+              </div>
+            </div>
+            <div>
+              <p className="text-xs font-bold text-slate-700">
+                {isAr ? "نسبة التوثيق (من اللقطة)" : "Verified rate (snapshot)"}
+              </p>
+              <div className="mt-3 space-y-2">
+                {strategic.slice(-12).map((p) => (
+                  <BarRow
+                    key={`${p.periodStart}-vr`}
+                    label={p.periodStart.slice(0, 10)}
+                    value={p.verifiedRatePercent ?? 0}
+                    max={100}
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
+        ) : (
+          <p className="mt-4 text-sm text-slate-600">
+            {isAr ? "لا توجد سلاسل شهرية بعد." : "No monthly strategic series yet."}
+          </p>
+        )}
       </section>
 
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">

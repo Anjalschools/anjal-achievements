@@ -5,6 +5,7 @@ import AlumniMentorshipRequest from "@/models/AlumniMentorshipRequest";
 import AlumniEventRsvp from "@/models/AlumniEventRsvp";
 import AlumniStory from "@/models/AlumniStory";
 import AlumniOpportunity from "@/models/AlumniOpportunity";
+import AlumniFeedEngagement from "@/models/AlumniFeedEngagement";
 import type { AlumniReputationTierName } from "@/models/AlumniReputation";
 import { publicApprovedOpportunityClause } from "@/lib/alumni/normalize-opportunity-status";
 
@@ -83,13 +84,26 @@ export const recomputeAlumniReputationGraph = async (
   if (svc.workshops === true) communityContributionScore += 6;
   communityContributionScore = Math.min(120, communityContributionScore);
 
-  const [mentorCompleted, mentorAccepted, mentorPending, asRequesterDone] = await Promise.all([
+  const d120 = new Date(Date.now() - 120 * 86400000);
+  const [mentorCompleted, mentorAccepted, mentorPending, asRequesterDone, mentorCompletedRecent] = await Promise.all([
     AlumniMentorshipRequest.countDocuments({ mentorId: userId, status: "completed" }),
     AlumniMentorshipRequest.countDocuments({ mentorId: userId, status: "accepted" }),
     AlumniMentorshipRequest.countDocuments({ mentorId: userId, status: "pending" }),
     AlumniMentorshipRequest.countDocuments({ requesterId: userId, status: { $in: ["completed", "accepted"] } }),
+    AlumniMentorshipRequest.countDocuments({
+      mentorId: userId,
+      status: "completed",
+      updatedAt: { $gte: d120 },
+    }),
   ]);
-  let mentorshipScore = Math.min(220, mentorCompleted * 14 + mentorAccepted * 10 + mentorPending * 3 + asRequesterDone * 6);
+  let mentorshipScore = Math.min(
+    220,
+    mentorCompleted * 14 +
+      mentorAccepted * 10 +
+      mentorPending * 3 +
+      asRequesterDone * 6 +
+      Math.min(28, mentorCompletedRecent * 7)
+  );
 
   const [eventsGoing, eventsMaybe] = await Promise.all([
     AlumniEventRsvp.countDocuments({ userId, status: "going" }),
@@ -97,14 +111,16 @@ export const recomputeAlumniReputationGraph = async (
   ]);
   const eventParticipationScore = Math.min(100, eventsGoing * 12 + eventsMaybe * 4);
 
-  const [storiesN, oppsN] = await Promise.all([
+  const [storiesN, oppsN, likesReceived] = await Promise.all([
     AlumniStory.countDocuments({ relatedUserId: userId, published: true }),
     AlumniOpportunity.countDocuments({
       createdByUserId: userId,
       ...publicApprovedOpportunityClause(),
     }),
+    AlumniFeedEngagement.countDocuments({ targetOwnerId: userId, action: "like" }),
   ]);
-  const contentContributionScore = Math.min(150, storiesN * 35 + oppsN * 25);
+  const feedEngagementBonus = Math.min(20, likesReceived * 2);
+  const contentContributionScore = Math.min(150, storiesN * 35 + oppsN * 25 + feedEngagementBonus);
 
   let careerImpactScore = 0;
   const fields = [p.universityName, p.major, p.degree, p.currentCompany, p.currentPosition, p.industry, p.country, p.city, p.bio, p.linkedinUrl];

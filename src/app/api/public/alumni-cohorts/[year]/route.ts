@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import connectDB from "@/lib/mongodb";
 import User from "@/models/User";
 import { blockIneligibleStudentOnPublicCommunityApi } from "@/lib/alumni/public-community-session-guard";
+import { mongoMatchAlumniGraduationYearEquals, normalizeGraduationYearToNumber } from "@/lib/alumni/graduation-year-normalize";
 
 export const dynamic = "force-dynamic";
 
@@ -10,13 +11,15 @@ export async function GET(_request: Request, { params }: { params: Promise<{ yea
     const blocked = await blockIneligibleStudentOnPublicCommunityApi();
     if (blocked) return blocked;
     const { year } = await params;
-    const y = Number(year);
-    if (!Number.isFinite(y)) return NextResponse.json({ error: "INVALID_YEAR" }, { status: 400 });
+    const y = normalizeGraduationYearToNumber(year);
+    if (y == null) return NextResponse.json({ error: "INVALID_YEAR" }, { status: 400 });
+    const yearMatch = mongoMatchAlumniGraduationYearEquals(y);
+    if (!yearMatch) return NextResponse.json({ error: "INVALID_YEAR" }, { status: 400 });
 
     await connectDB();
     const rows = await User.find({
       accountType: "alumni",
-      "alumniProfile.graduationYear": y,
+      ...yearMatch,
     })
       .select("fullName alumniProfile.universityName alumniProfile.currentCompany alumniProfile.major profilePhoto")
       .limit(48)

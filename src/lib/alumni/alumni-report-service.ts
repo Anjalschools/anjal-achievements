@@ -25,6 +25,7 @@ import {
   buildAlumniReportPreLookupMatch,
 } from "@/lib/alumni/alumni-report-filters";
 import { getAlumniIntelCached, setAlumniIntelCached } from "@/lib/alumni/alumni-intelligence-cache";
+import { normalizeGraduationYearToNumber } from "@/lib/alumni/graduation-year-normalize";
 
 const META_TTL_MS = 45_000;
 const SUMMARY_CACHE_TTL_MS = 30_000;
@@ -237,9 +238,14 @@ export const getAlumniReportMeta = async (): Promise<AlumniReportMeta> => {
   const active = buildAlumniReportPreLookupMatch(DEFAULT_ALUMNI_REPORT_FILTERS());
 
   const [graduationYears, universities, studyCountries, majors, currentCountries, industries] = await Promise.all([
-    User.distinct("alumniProfile.graduationYear", active).then((arr) =>
-      (arr as number[]).filter((n) => typeof n === "number" && Number.isFinite(n)).sort((a, b) => b - a)
-    ),
+    User.distinct("alumniProfile.graduationYear", active).then((arr) => {
+      const years = new Set<number>();
+      for (const v of arr as unknown[]) {
+        const y = normalizeGraduationYearToNumber(v);
+        if (y != null) years.add(y);
+      }
+      return [...years].sort((a, b) => b - a);
+    }),
     User.distinct("alumniProfile.universityName", active).then((arr) =>
       (arr as string[]).filter((s) => s && String(s).trim()).sort()
     ),
@@ -363,9 +369,8 @@ export const runAlumniOverviewReport = async (args: {
             c: { $sum: 1 },
           },
         },
-        { $match: { _id: { $type: "number" } } },
         { $sort: { c: -1 } },
-        { $limit: 1 },
+        { $limit: 24 },
       ],
       summaryStats: [
         {
@@ -432,7 +437,21 @@ export const runAlumniOverviewReport = async (args: {
     summary = cachedSummary;
   } else {
     const su = ((bucket.summaryUniversities as { _id: string; c: number }[]) || [])[0];
-    const sc = ((bucket.summaryCohort as { _id: number; c: number }[]) || [])[0];
+    const scAll = (bucket.summaryCohort as { _id: unknown; c: number }[]) || [];
+    const mergedCohort = new Map<number, number>();
+    for (const row of scAll) {
+      const y = normalizeGraduationYearToNumber(row._id);
+      if (y == null) continue;
+      mergedCohort.set(y, (mergedCohort.get(y) || 0) + Number(row.c || 0));
+    }
+    let bestCohortY: number | undefined;
+    let bestCohortC = 0;
+    for (const [y, c] of mergedCohort) {
+      if (c > bestCohortC) {
+        bestCohortC = c;
+        bestCohortY = y;
+      }
+    }
     const ss = ((bucket.summaryStats as Record<string, number>[]) || [])[0] || {};
     const distinctUniversitiesAgg = await User.aggregate<{ c: number }>([
       ...pipe,
@@ -451,7 +470,7 @@ export const runAlumniOverviewReport = async (args: {
       distinctUniversities: distinctUniversitiesAgg[0]?.c ?? 0,
       distinctCountries: distinctCountriesAgg[0]?.c ?? 0,
       topUniversity: { n: su?._id, c: su?.c },
-      topCohort: { y: sc?._id, c: sc?.c },
+      topCohort: { y: bestCohortY, c: bestCohortC },
     });
     setAlumniIntelCached(summaryKey, summary, SUMMARY_CACHE_TTL_MS);
   }

@@ -1,5 +1,6 @@
 import User, { type IUser, type AlumniProfile } from "@/models/User";
 import type { AlumniOnboardingActivationRow } from "./activation-types";
+import { normalizeGraduationYearToNumber } from "@/lib/alumni/graduation-year-normalize";
 
 type UserDoc = InstanceType<typeof User>;
 
@@ -14,8 +15,11 @@ export const mergeAlumniProfileFromOnboarding = (
 
   const fromRow = row.services || {};
 
+  const fromRowGy = normalizeGraduationYearToNumber(row.graduationYear);
+  const prevGy = normalizeGraduationYearToNumber(prev?.graduationYear);
+
   return {
-    graduationYear: row.graduationYear ?? prev?.graduationYear,
+    graduationYear: fromRowGy ?? prevGy,
     universityName: row.universityName || prev?.universityName,
     major: row.major || prev?.major,
     degree: resolvedDegree || prev?.degree,

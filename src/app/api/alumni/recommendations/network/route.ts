@@ -41,6 +41,7 @@ export async function GET(request: NextRequest) {
         country: p.country ?? null,
         studyCountry: p.studyCountry ?? null,
         graduationYear: p.graduationYear ?? null,
+        interests: Array.isArray(p.interests) ? p.interests : null,
         bio: p.bio ?? null,
         updatedAt: row.updatedAt ?? null,
         lastLoginAt: row.lastLoginAt ?? null,
@@ -51,8 +52,16 @@ export async function GET(request: NextRequest) {
 
     const scored = candidates
       .map((c) => {
-        const { score, reasons } = scoreMentor(viewer, c, uid);
-        return { ...c, matchScore: score, matchReasons: reasons };
+        const b = scoreMentor(viewer, c, uid);
+        return {
+          ...c,
+          matchScore: b.score,
+          matchReasons: b.reasons,
+          matchWeights: b.weights,
+          matchedSignals: b.matchedSignals,
+          matchConfidence: b.confidence,
+          matchRelevanceScore: b.relevanceScore,
+        };
       })
       .filter((x) => x.matchScore > 0)
       .sort((a, b) => b.matchScore - a.matchScore)
@@ -67,6 +76,10 @@ export async function GET(request: NextRequest) {
         industry: x.industry,
         matchScore: x.matchScore,
         matchReasons: x.matchReasons,
+        matchWeights: x.matchWeights,
+        matchedSignals: x.matchedSignals,
+        matchConfidence: x.matchConfidence,
+        matchRelevanceScore: x.matchRelevanceScore,
       })),
     });
   } catch (error) {

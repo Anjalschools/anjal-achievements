@@ -3,6 +3,7 @@ import connectDB from "@/lib/mongodb";
 import User from "@/models/User";
 import AlumniCohort from "@/models/AlumniCohort";
 import { blockIneligibleStudentOnPublicCommunityApi } from "@/lib/alumni/public-community-session-guard";
+import { normalizeGraduationYearToNumber } from "@/lib/alumni/graduation-year-normalize";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 120;
@@ -16,25 +17,35 @@ export async function GET() {
     const blocked = await blockIneligibleStudentOnPublicCommunityApi();
     if (blocked) return blocked;
     await connectDB();
-    const [fromUsers, cohortDocs] = await Promise.all([
-      User.aggregate<{ _id: number; count: number }>([
+    const [rawYears, cohortDocs] = await Promise.all([
+      User.aggregate<{ _id: unknown; count: number }>([
         { $match: ALUMNI_MATCH },
-        { $match: { "alumniProfile.graduationYear": { $type: "number" } } },
+        { $match: { "alumniProfile.graduationYear": { $exists: true, $nin: [null, ""] } } },
         {
           $group: {
             _id: "$alumniProfile.graduationYear",
             count: { $sum: 1 },
           },
         },
-        { $sort: { _id: -1 as const } },
-        { $limit: 80 },
+        { $limit: 200 },
       ]),
       AlumniCohort.find({}).select("graduationYear track stage label featured").sort({ graduationYear: -1 }).limit(200).lean(),
     ]);
 
+    const merged = new Map<number, number>();
+    for (const row of rawYears) {
+      const y = normalizeGraduationYearToNumber(row._id);
+      if (y == null) continue;
+      merged.set(y, (merged.get(y) || 0) + row.count);
+    }
+    const years = [...merged.entries()]
+      .sort((a, b) => b[1] - a[1] || b[0] - a[0])
+      .slice(0, 80)
+      .map(([year, count]) => ({ year, count }));
+
     return NextResponse.json({
       ok: true,
-      years: fromUsers.map((y) => ({ year: y._id, count: y.count })),
+      years,
       cohorts: cohortDocs.map((c: any) => ({
         graduationYear: c.graduationYear,
         track: c.track || "",

@@ -8,6 +8,7 @@ import AlumniCohort from "@/models/AlumniCohort";
 import { escapeRegExp, type NormalizedQuery } from "./query-normalizer";
 import { buildAlumniSearchRegexPattern } from "@/lib/alumni/arabic-search-normalize";
 import { parseGraduationYearToken } from "@/lib/alumni/normalize-arabic-digits";
+import { mongoMatchAlumniGraduationYearEquals } from "@/lib/alumni/graduation-year-normalize";
 import { publicApprovedOpportunityClause } from "@/lib/alumni/normalize-opportunity-status";
 import { rankAlumniRows, type AlumniSearchRow } from "./ranking-engine";
 
@@ -88,7 +89,8 @@ const tokenOrClause = (tokens: string[]): Record<string, unknown>[] => {
       { "alumniProfile.interests": re },
     ];
     if (year !== undefined) {
-      base.push({ "alumniProfile.graduationYear": year });
+      const m = mongoMatchAlumniGraduationYearEquals(year);
+      if (m) base.push(m);
     }
     return base;
   });

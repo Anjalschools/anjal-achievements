@@ -2,6 +2,8 @@ import type { Types } from "mongoose";
 import User from "@/models/User";
 import { invalidateSessionUserCache } from "@/lib/auth-session-cache";
 import { shouldPromoteStudentToAlumni } from "./should-promote-student";
+import { normalizeGraduationYearToNumber } from "@/lib/alumni/graduation-year-normalize";
+import { touchAlumniCohortForUser } from "@/lib/alumni/batch-service";
 
 export type PromoteSingleResult = "promoted" | "skipped" | "not_found";
 
@@ -29,8 +31,9 @@ export const promoteOneStudentToAlumni = async (
   if (options?.dryRun) return "promoted";
 
   const gradYear =
-    (doc as { alumniProfile?: { graduationYear?: number } }).alumniProfile?.graduationYear ??
-    defaultSecondaryGraduationYear();
+    normalizeGraduationYearToNumber(
+      (doc as { alumniProfile?: { graduationYear?: unknown } }).alumniProfile?.graduationYear
+    ) ?? defaultSecondaryGraduationYear();
 
   const res = await User.updateOne(
     {
@@ -55,5 +58,6 @@ export const promoteOneStudentToAlumni = async (
 
   const email = String((doc as { email?: string }).email || "");
   invalidateSessionUserCache(id, email);
+  void touchAlumniCohortForUser(id);
   return "promoted";
 };

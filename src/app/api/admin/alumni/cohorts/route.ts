@@ -4,6 +4,7 @@ import AlumniCohort from "@/models/AlumniCohort";
 import { requireAlumniAdministrationActor } from "@/lib/admin-user-management-auth";
 import { sanitizeMongoShape } from "@/lib/sanitize-input";
 import { sanitizeUserText } from "@/lib/sanitize-html";
+import { getAdminAlumniCohortListWithIntel } from "@/lib/alumni/batch-service";
 
 export const dynamic = "force-dynamic";
 
@@ -11,17 +12,28 @@ export async function GET() {
   const gate = await requireAlumniAdministrationActor();
   if (!gate.ok) return gate.response;
   try {
-    await connectDB();
-    const rows = await AlumniCohort.find({}).sort({ graduationYear: -1 }).limit(200).lean();
+    const { syncedYears, items } = await getAdminAlumniCohortListWithIntel();
     return NextResponse.json({
       ok: true,
-      items: rows.map((row: any) => ({
-        id: row._id.toString(),
+      syncedYears,
+      items: items.map((row) => ({
+        id: row.id,
         graduationYear: row.graduationYear,
         track: row.track || "",
         stage: row.stage || "",
         label: row.label || "",
         featured: row.featured === true,
+        alumniCount: row.alumniCount,
+        verifiedCount: row.verifiedCount,
+        verificationRatePercent: row.verificationRatePercent,
+        avgReputation: row.avgReputation,
+        mentorCount: row.mentorCount,
+        mentorCases: row.mentorCases,
+        opportunityCount: row.opportunityCount,
+        active30Count: row.active30Count,
+        activityRatePercent: row.activityRatePercent,
+        topUniversityName: row.topUniversityName,
+        topUniversityCount: row.topUniversityCount,
       })),
     });
   } catch (error) {

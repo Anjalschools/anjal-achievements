@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import connectDB from "@/lib/mongodb";
 import { requireAlumniAdministrationActor } from "@/lib/admin-user-management-auth";
 import { listAlumniSnapshots } from "@/lib/alumni/analytics/historical-metrics";
-import { snapshotsToGrowthSeries } from "@/lib/alumni/analytics/trend-analysis";
+import { snapshotsToGrowthSeries, snapshotsToStrategicSeries } from "@/lib/alumni/analytics/trend-analysis";
 import type { AlumniSnapshotGranularity } from "@/models/AlumniAnalyticsSnapshot";
 
 export const dynamic = "force-dynamic";
@@ -20,10 +20,13 @@ export async function GET(request: NextRequest) {
   try {
     await connectDB();
     const items = await listAlumniSnapshots(g, limit);
-    const series = snapshotsToGrowthSeries(
-      items.map((row: any) => ({ periodStart: row.periodStart, payload: row.payload as Record<string, unknown> }))
-    );
-    return NextResponse.json({ ok: true, data: { series } });
+    const mapped = items.map((row: any) => ({
+      periodStart: row.periodStart,
+      payload: row.payload as Record<string, unknown>,
+    }));
+    const series = snapshotsToGrowthSeries(mapped);
+    const strategicSeries = snapshotsToStrategicSeries(mapped);
+    return NextResponse.json({ ok: true, data: { series, strategicSeries } });
   } catch (e) {
     console.error("[GET /api/admin/alumni/analytics/history]", e);
     return NextResponse.json({ error: "INTERNAL_SERVER_ERROR" }, { status: 500 });

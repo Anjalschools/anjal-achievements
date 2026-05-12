@@ -2,6 +2,7 @@ import type { AlumniVerificationSource } from "@/models/User";
 import type { AlumniReportFiltersState, AlumniReportVerificationTicketFilter } from "@/lib/alumni/alumni-report-types";
 import { normalizeAlumniSearchToken, buildAlumniSearchRegexPattern } from "@/lib/alumni/arabic-search-normalize";
 import { alumniCommunityActiveUserClause } from "@/lib/alumni/alumni-community-active";
+import { graduationYearMongoInList, normalizeGraduationYearToNumber } from "@/lib/alumni/graduation-year-normalize";
 
 const parseTriState = (raw: string | null): AlumniReportFiltersState["hasOpportunities"] => {
   const v = String(raw || "all");
@@ -41,8 +42,8 @@ export const parseAlumniReportFiltersFromSearchParams = (
 
   const splitNums = (key: string): number[] =>
     splitList(key)
-      .map((s) => Number(s))
-      .filter((n) => Number.isFinite(n));
+      .map((s) => normalizeGraduationYearToNumber(s))
+      .filter((n): n is number => n != null);
 
   const ticket = String(sp.get("verificationTicket") || "all") as AlumniReportVerificationTicketFilter;
   const safeTicket: AlumniReportVerificationTicketFilter =
@@ -170,7 +171,8 @@ export const buildAlumniReportPreLookupMatch = (f: AlumniReportFiltersState): Re
   if (search) clauses.push(search);
 
   if (f.graduationYears.length) {
-    clauses.push({ "alumniProfile.graduationYear": { $in: f.graduationYears } });
+    const variants = graduationYearMongoInList(f.graduationYears);
+    if (variants.length) clauses.push({ "alumniProfile.graduationYear": { $in: variants } });
   }
   if (f.universities.length) {
     clauses.push({

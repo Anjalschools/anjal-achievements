@@ -10,6 +10,7 @@ import {
   ALUMNI_ONBOARDING_DEGREE_OPTIONS,
   type AlumniOnboardingRequestInput,
 } from "@/lib/alumni/onboarding-types";
+import { normalizeGraduationYearToNumber } from "@/lib/alumni/graduation-year-normalize";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const LINKEDIN_URL_RE = /^https?:\/\/(www\.)?linkedin\.com\/.+/i;
@@ -35,9 +36,9 @@ export async function POST(request: NextRequest) {
 
     const fullName = sanitizeUserText(String(input.fullName || ""));
     const email = String(input.email || "").trim().toLowerCase();
-    const graduationYear = Number(input.graduationYear);
+    const graduationYear = normalizeGraduationYearToNumber(input.graduationYear);
 
-    if (!fullName || !email || !Number.isFinite(graduationYear)) {
+    if (!fullName || !email || graduationYear == null) {
       return NextResponse.json({ error: "MISSING_REQUIRED_FIELDS" }, { status: 400 });
     }
     if (!EMAIL_RE.test(email)) {

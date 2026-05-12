@@ -1,11 +1,11 @@
 import AlumniAnalyticsSnapshot from "@/models/AlumniAnalyticsSnapshot";
 import type { AlumniSnapshotGranularity } from "@/models/AlumniAnalyticsSnapshot";
-import {
-  getAdminAlumniOverview,
-  getAdminAlumniUniversitiesIntel,
-  getAdminAlumniCareersIntel,
-  getAdminAlumniEngagementIntel,
-} from "@/lib/alumni/admin-alumni-analytics";
+import { getAdminAlumniUniversitiesIntel, getAdminAlumniCareersIntel } from "@/lib/alumni/admin-alumni-analytics";
+import { getExecutiveAlumniDashboard } from "@/lib/alumni/executive-alumni-dashboard";
+import { getAlumniReputationHistogram, getAlumniNetworkSnapshotMetrics } from "@/lib/alumni/analytics/snapshot-extra-metrics";
+import { getAlumniNetworkIntelligenceV1 } from "@/lib/alumni/analytics/network-intelligence-metrics";
+
+export const SNAPSHOT_PAYLOAD_VERSION = 2;
 
 export const utcDayBounds = (d: Date) => {
   const start = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
@@ -35,19 +35,38 @@ export const boundsForGranularity = (g: AlumniSnapshotGranularity, ref: Date) =>
   return utcMonthBounds(ref);
 };
 
+/**
+ * Persisted analytics blob (daily / weekly / monthly). Version 2 adds KPIs, health, reputation histogram, and network metrics.
+ */
 export const buildSnapshotPayload = async (): Promise<Record<string, unknown>> => {
-  const [overview, universities, careers, engagement] = await Promise.all([
-    getAdminAlumniOverview(),
-    getAdminAlumniUniversitiesIntel(),
-    getAdminAlumniCareersIntel(),
-    getAdminAlumniEngagementIntel(),
-  ]);
+  const [executive, universities, careers, reputationHistogram, networkMetrics, networkIntelligence] =
+    await Promise.all([
+      getExecutiveAlumniDashboard(),
+      getAdminAlumniUniversitiesIntel(),
+      getAdminAlumniCareersIntel(),
+      getAlumniReputationHistogram(),
+      getAlumniNetworkSnapshotMetrics(),
+      getAlumniNetworkIntelligenceV1(),
+    ]);
+
   return {
+    version: SNAPSHOT_PAYLOAD_VERSION,
     computedAt: new Date().toISOString(),
-    overview,
+    overview: executive.overview,
+    engagement: executive.engagement,
     universitiesTop: universities.items.slice(0, 12),
     careers,
-    engagement,
+    kpis: {
+      verificationRatePercent: executive.verificationRatePercent,
+      avgReputation: executive.avgReputation,
+      profileCompletionRatePercent: executive.profileCompletionRatePercent,
+      registration: executive.registration,
+      topCountries: executive.topCountries,
+    },
+    communityHealth: executive.communityHealth,
+    reputationHistogram,
+    networkMetrics,
+    networkIntelligence,
   };
 };
 
@@ -63,7 +82,7 @@ export const upsertAlumniAnalyticsSnapshot = async (
       $set: {
         periodEnd: end,
         payload,
-        payloadVersion: 1,
+        payloadVersion: SNAPSHOT_PAYLOAD_VERSION,
       },
     },
     { upsert: true, new: true }

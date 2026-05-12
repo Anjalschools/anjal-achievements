@@ -16,7 +16,10 @@ import { alumniReportFiltersToSearchParams } from "@/lib/alumni/alumni-report-fi
 import {
   exportAlumniOverviewExcel,
   exportAlumniOverviewPdfPrint,
+  buildAlumniStrategicPdfAppendixHtml,
 } from "@/lib/alumni/alumni-report-export";
+import type { AlumniPdfExportMode } from "@/lib/pdf/alumni-pdf-layout";
+import type { StrategicSeriesPoint } from "@/lib/alumni/analytics/trend-analysis";
 import MultiSelect from "@/components/ui/multi-select";
 import { ALUMNI_ACTIVATION_STATUS_VALUES } from "@/lib/alumni/alumni-activation-ui";
 import { Loader2, FileSpreadsheet, FileText, Printer, RefreshCw, ChevronLeft, ChevronRight } from "lucide-react";
@@ -62,6 +65,7 @@ const logExportAudit = async (body: {
   scope: "filtered" | "all";
   rowCount: number;
   reportKind: string;
+  pdfMode?: AlumniPdfExportMode;
 }) => {
   try {
     await fetch("/api/admin/alumni/reports/export-audit", {
@@ -92,6 +96,7 @@ const AdminAlumniReportsPage = () => {
   const [error, setError] = useState<string | null>(null);
   const [overview, setOverview] = useState<OverviewPayload | null>(null);
   const [extra, setExtra] = useState<Record<string, unknown> | null>(null);
+  const [pdfExportMode, setPdfExportMode] = useState<AlumniPdfExportMode>("executive");
 
   useEffect(() => {
     let m = true;
@@ -219,6 +224,17 @@ const AdminAlumniReportsPage = () => {
 
   const totalPages = overview ? Math.max(1, Math.ceil(overview.total / pageSize)) : 1;
 
+  const fetchOverviewSummary = useCallback(async (): Promise<AlumniReportSummary | null> => {
+    const sp = alumniReportFiltersToSearchParams(filtersRef.current);
+    sp.set("kind", "overview");
+    sp.set("page", "1");
+    sp.set("pageSize", "1");
+    const res = await fetch(`/api/admin/alumni/reports?${sp.toString()}`, { credentials: "include" });
+    const j = await res.json();
+    if (!res.ok || !j.ok) return null;
+    return (j.summary ?? null) as AlumniReportSummary | null;
+  }, []);
+
   const fetchAllOverviewRows = async (): Promise<AlumniReportRow[]> => {
     const cap = 80;
     const out: AlumniReportRow[] = [];
@@ -260,8 +276,26 @@ const AdminAlumniReportsPage = () => {
           ? overview.rows
           : [];
     const title = isAr ? "تقرير خريجي الأنجال — نظرة عامة" : "Anjal alumni — overview";
-    await logExportAudit({ format: "pdf", scope, rowCount: rows.length, reportKind: kind });
-    await exportAlumniOverviewPdfPrint(rows, title);
+    await logExportAudit({ format: "pdf", scope, rowCount: rows.length, reportKind: kind, pdfMode: pdfExportMode });
+    let appendix = "";
+    try {
+      const res = await fetch("/api/admin/alumni/analytics/history?granularity=monthly&limit=18", {
+        credentials: "include",
+      });
+      const j = (await res.json()) as { ok?: boolean; data?: { strategicSeries?: StrategicSeriesPoint[] } };
+      if (j.ok && j.data?.strategicSeries?.length) {
+        appendix = buildAlumniStrategicPdfAppendixHtml(j.data.strategicSeries, isAr);
+      }
+    } catch {
+      /* appendix optional */
+    }
+    const exportSummary =
+      scope === "filtered" && overview?.summary != null ? overview.summary : await fetchOverviewSummary();
+    await exportAlumniOverviewPdfPrint(rows, title, "/report-header.png", appendix, {
+      mode: pdfExportMode,
+      summary: exportSummary,
+      locale: isAr ? "ar" : "en",
+    });
   };
 
   const handlePrint = () => {
@@ -619,7 +653,21 @@ const AdminAlumniReportsPage = () => {
             <section className="rounded-2xl border border-gray-200 bg-white p-4">
               <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                 <h3 className="text-sm font-bold text-text">{isAr ? "جدول الخريجين" : "Alumni table"}</h3>
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+                  <label className="flex items-center gap-2 text-xs font-semibold text-text">
+                    <span>{isAr ? "تخطيط PDF" : "PDF layout"}</span>
+                    <select
+                      value={pdfExportMode}
+                      onChange={(e) => setPdfExportMode(e.target.value as AlumniPdfExportMode)}
+                      className="rounded-lg border border-gray-300 bg-white px-2 py-1.5 text-xs font-bold text-text"
+                    >
+                      <option value="executive">{isAr ? "تنفيذي (ملخص + جداول مجمّعة)" : "Executive"}</option>
+                      <option value="compact_tables">{isAr ? "جداول مدمجة" : "Compact tables"}</option>
+                      <option value="detailed_cards">{isAr ? "بطاقات تفصيلية" : "Detailed cards"}</option>
+                      <option value="print_friendly">{isAr ? "طباعة أوضح" : "Print-friendly"}</option>
+                    </select>
+                  </label>
+                  <div className="flex flex-wrap gap-2">
                   <button
                     type="button"
                     onClick={() => void handleExportExcel("filtered")}
@@ -652,6 +700,7 @@ const AdminAlumniReportsPage = () => {
                     <Printer className="h-3.5 w-3.5" />
                     {isAr ? "طباعة" : "Print"}
                   </button>
+                </div>
                 </div>
               </div>
               <div className="overflow-x-auto rounded-lg border border-gray-100">

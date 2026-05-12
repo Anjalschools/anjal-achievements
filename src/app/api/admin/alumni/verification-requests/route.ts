@@ -12,6 +12,7 @@ import {
   normalizeVerificationStatus,
   parseVerificationRequestListStatusParam,
 } from "@/lib/alumni/normalizeVerificationStatus";
+import { graduationYearMongoInList } from "@/lib/alumni/graduation-year-normalize";
 
 const TICKET_LEAN = { virtuals: false as const };
 
@@ -99,7 +100,8 @@ export async function GET(request: NextRequest) {
         { "alumniProfile.universityName": rx },
       ];
       if (Number.isFinite(year) && year >= 1950 && year <= 2100) {
-        userOr.push({ "alumniProfile.graduationYear": year });
+        const variants = graduationYearMongoInList([year]);
+        if (variants.length) userOr.push({ "alumniProfile.graduationYear": { $in: variants } });
       }
       if (mongoose.isValidObjectId(q)) {
         userOr.push({ _id: new mongoose.Types.ObjectId(q) });

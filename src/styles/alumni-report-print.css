@@ -1,0 +1,20 @@
+/**
+ * Optional mirror of class names used by alumni PDF HTML (`src/lib/pdf/alumni-pdf-layout.ts`)
+ * for future on-screen print preview or Storybook. The live PDF iframe embeds CSS inline.
+ */
+.pdf-table {
+  border-collapse: collapse;
+  width: 100%;
+}
+.pdf-table th,
+.pdf-table td {
+  border: 1px solid #cbd5e1;
+  text-align: start;
+  word-break: normal;
+  overflow-wrap: break-word;
+}
+.ltr-plain {
+  direction: ltr;
+  unicode-bidi: plaintext;
+  overflow-wrap: anywhere;
+}

@@ -10,6 +10,8 @@ type Body = {
   scope?: "filtered" | "all";
   rowCount?: number;
   reportKind?: string;
+  /** Optional: alumni PDF layout mode (presentation only). */
+  pdfMode?: string;
 };
 
 export async function POST(request: NextRequest) {
@@ -22,12 +24,13 @@ export async function POST(request: NextRequest) {
     const scope = body.scope === "all" ? "all" : "filtered";
     const rowCount = Math.min(50_000, Math.max(0, Number(body.rowCount) || 0));
     const reportKind = String(body.reportKind || "overview").slice(0, 40);
+    const pdfMode = body.pdfMode ? String(body.pdfMode).slice(0, 32) : undefined;
 
     await logAuditEvent({
       actionType: "alumni.reports_export",
       entityType: "alumni_reports",
       descriptionAr: `تصدير تقرير خريجين (${format}) — ${scope === "all" ? "كل النتائج" : "حسب الفلاتر"}`,
-      metadata: { format, scope, rowCount, reportKind },
+      metadata: { format, scope, rowCount, reportKind, ...(pdfMode ? { pdfMode } : {}) },
       actor: actorFromUser(gate.user as unknown as IUser),
       request,
       outcome: "success",

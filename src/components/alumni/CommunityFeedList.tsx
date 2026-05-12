@@ -71,6 +71,10 @@ const CommunityFeedList = ({ items, loading, isAr, emptyLabelAr, emptyLabelEn }:
               </div>
               <p className="truncate font-bold text-slate-900">{row.title}</p>
               {row.subtitle ? <p className="mt-0.5 line-clamp-2 text-xs text-slate-600">{row.subtitle}</p> : null}
+              <p className="mt-1 text-[10px] font-bold text-slate-500 tabular-nums">
+                {isAr ? "إعجاب" : "Like"} {row.likes ?? 0} · {isAr ? "حفظ" : "Save"} {row.saves ?? 0} ·{" "}
+                {isAr ? "مشاركة" : "Share"} {row.shares ?? 0}
+              </p>
               {rel ? <p className="mt-1 text-[11px] font-semibold text-slate-400">{rel}</p> : null}
             </div>
           </div>

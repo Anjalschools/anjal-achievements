@@ -1,4 +1,12 @@
 import type { AlumniReportRow } from "@/lib/alumni/alumni-report-types";
+import type { StrategicSeriesPoint } from "@/lib/alumni/analytics/trend-analysis";
+import {
+  buildAlumniOverviewPdfDocumentHtml,
+  type AlumniPdfFlatRow,
+  type AlumniPdfPrintOptions,
+} from "@/lib/pdf/alumni-pdf-layout";
+
+export type { AlumniPdfExportMode, AlumniPdfPrintOptions, AlumniPdfFlatRow } from "@/lib/pdf/alumni-pdf-layout";
 
 type Cell = string | number | null | undefined;
 
@@ -8,6 +16,77 @@ const escapeHtml = (value: string) =>
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
+
+/** Optional appendix: monthly strategic KPIs (uses persisted snapshots when available). */
+export const buildAlumniStrategicPdfAppendixHtml = (
+  rows: StrategicSeriesPoint[],
+  isAr: boolean
+): string => {
+  if (!rows.length) return "";
+  const title = isAr ? "ملحق: مؤشرات استراتيجية (شهري)" : "Appendix: strategic KPIs (monthly)";
+  const colDate = isAr ? "الفترة" : "Period";
+  const colAlumni = isAr ? "الخريجون" : "Alumni";
+  const colVr = isAr ? "التوثيق %" : "Verified %";
+  const colRep = isAr ? "متوسط السمعة" : "Avg reputation";
+  const colMent = isAr ? "إرشاد 30ي" : "Mentorship 30d";
+  const colAtt = isAr ? "حضور %" : "RSVP %";
+  const colBack = isAr ? "طابور" : "Backlog";
+
+  const maxAlumni = Math.max(...rows.map((r) => r.alumniCount), 1);
+  const maxBack = Math.max(...rows.map((r) => r.moderationBacklog ?? 0), 1);
+
+  const bar = (label: string, value: number, max: number) => {
+    const pct = max > 0 ? Math.min(100, Math.round((value / max) * 100)) : 0;
+    return `<div style="margin:4px 0 8px;font-size:9px;"><div style="display:flex;justify-content:space-between;"><span>${escapeHtml(
+      label
+    )}</span><span>${value}</span></div><div style="height:6px;background:#e2e8f0;border-radius:3px;"><div style="height:6px;width:${pct}%;background:#0f766e;border-radius:3px;"></div></div></div>`;
+  };
+
+  const tableRows = rows
+    .map(
+      (r) =>
+        `<tr><td>${escapeHtml(r.periodStart.slice(0, 10))}</td><td>${r.alumniCount}</td><td>${
+          r.verifiedRatePercent ?? "—"
+        }</td><td>${r.avgReputation ?? "—"}</td><td>${r.mentorshipRequestsLast30d ?? "—"}</td><td>${
+          r.attendanceRatePercent ?? "—"
+        }</td><td>${r.moderationBacklog ?? "—"}</td></tr>`
+    )
+    .join("");
+
+  const trendBlock = rows.map((r) => `${bar(r.periodStart.slice(0, 10), r.alumniCount, maxAlumni)}`).join("");
+
+  const backlogBars = rows
+    .filter((r) => r.moderationBacklog != null)
+    .map((r) => `${bar(`${r.periodStart.slice(0, 10)} — ${colBack}`, r.moderationBacklog || 0, maxBack)}`)
+    .join("");
+
+  return `<section class="pdf-section strategic-appendix" dir="${isAr ? "rtl" : "ltr"}" style="page-break-before:always;">
+    <h2 class="pdf-h2">${escapeHtml(title)}</h2>
+    <p class="pdf-meta" style="margin-bottom:10px;">${
+      isAr
+        ? "يستند إلى لقطات AlumniAnalyticsSnapshot الشهرية عند توفرها."
+        : "Based on monthly AlumniAnalyticsSnapshot rows when cron has populated them."
+    }</p>
+    <table class="pdf-table" role="table" style="margin-bottom:10px;">
+      <thead><tr>
+        <th scope="col">${colDate}</th>
+        <th scope="col">${colAlumni}</th>
+        <th scope="col">${colVr}</th>
+        <th scope="col">${colRep}</th>
+        <th scope="col">${colMent}</th>
+        <th scope="col">${colAtt}</th>
+        <th scope="col">${colBack}</th>
+      </tr></thead>
+      <tbody>${tableRows}</tbody>
+    </table>
+    <div class="appendix-two-col">
+      <div><p class="pdf-h2" style="margin-top:0;">${isAr ? "منحنى الخريجين" : "Alumni growth"}</p>${trendBlock}</div>
+      <div><p class="pdf-h2" style="margin-top:0;">${isAr ? "طابور الإشراف" : "Moderation backlog"}</p>${
+        backlogBars || `<p style="font-size:9px;color:#64748b;">${isAr ? "لا بيانات" : "No data"}</p>`
+      }</div>
+    </div>
+  </section>`;
+};
 
 const downloadBlob = (blob: Blob, filename: string) => {
   const url = URL.createObjectURL(blob);
@@ -166,55 +245,19 @@ export const exportAlumniOverviewExcel = async (
 export const exportAlumniOverviewPdfPrint = async (
   rows: AlumniReportRow[],
   title: string,
-  headerImagePath = "/report-header.png"
+  headerImagePath = "/report-header.png",
+  appendixHtml?: string,
+  printOptions?: AlumniPdfPrintOptions | null
 ) => {
-  const now = new Date().toLocaleString("ar-SA");
-  const headers = [...ALUMNI_OVERVIEW_EXPORT_HEADERS_AR];
-  const safeTitle = escapeHtml(title);
-  const tableHead = headers.map((h) => `<th>${escapeHtml(String(h))}</th>`).join("");
-  const tableBody = rows
-    .map((r) => {
-      const flat = alumniOverviewRowToExport(r);
-      return `<tr>${headers
-        .map((h) => `<td>${escapeHtml(String(flat[h] ?? ""))}</td>`)
-        .join("")}</tr>`;
-    })
-    .join("");
-
-  const html = `<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8" />
-  <title>${safeTitle}</title>
-  <style>
-    @page { size: A4 landscape; margin: 10mm 12mm; }
-    body { font-family: Tahoma, Arial, sans-serif; margin: 0; color: #0f172a; direction: rtl; }
-    .header img { max-width: 100%; height: auto; margin-bottom: 10px; }
-    h1 { font-size: 18px; margin: 0 0 6px 0; }
-    .meta { font-size: 11px; color: #475569; margin-bottom: 10px; }
-    .wrap { margin: 12px 16px 24px; }
-    table { width: 100%; border-collapse: collapse; font-size: 9px; table-layout: fixed; }
-    thead { display: table-header-group; }
-    tfoot { display: table-footer-group; }
-    th, td { border: 1px solid #cbd5e1; padding: 4px 5px; text-align: right; vertical-align: top;
-      word-wrap: break-word; overflow-wrap: anywhere; white-space: normal; }
-    th { background: #e2e8f0; font-weight: 700; }
-    tr { break-inside: avoid; page-break-inside: avoid; }
-    .footer { font-size: 10px; color: #64748b; margin-top: 8px; text-align: center; }
-    @media print {
-      body { margin: 0; }
-      .wrap { margin: 0; }
-    }
-  </style>
-  </head><body>
-    <div class="wrap">
-    <div class="header"><img src="${headerImagePath}" alt="" /></div>
-    <h1>${safeTitle}</h1>
-    <div class="meta">تاريخ التصدير: ${escapeHtml(now)} — تقرير خريجي الأنجال</div>
-    <table>
-      <thead><tr>${tableHead}</tr></thead>
-      <tbody>${tableBody}</tbody>
-      <tfoot><tr><td colspan="${headers.length}" class="footer">مدارس الأنجال الأهلية — وثيقة رسمية — يُراعى السرية عند المشاركة</td></tr></tfoot>
-    </table>
-    </div>
-  </body></html>`;
+  const flatRows = rows.map((r) => alumniOverviewRowToExport(r) as AlumniPdfFlatRow);
+  const locale = printOptions?.locale === "en" ? "en" : "ar";
+  const html = buildAlumniOverviewPdfDocumentHtml({
+    flatRows,
+    title,
+    headerImagePath,
+    appendixHtml: appendixHtml ?? "",
+    printOptions: { ...printOptions, locale },
+  });
 
   const iframe = document.createElement("iframe");
   iframe.style.position = "fixed";
@@ -237,7 +280,7 @@ export const exportAlumniOverviewPdfPrint = async (
   const schedulePrint = () => {
     setTimeout(() => {
       win.print();
-    }, 280);
+    }, 420);
   };
   const img = doc.querySelector("img");
   if (!img) {

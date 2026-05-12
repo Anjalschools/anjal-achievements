@@ -18,6 +18,7 @@ import type {
   AlumniOnboardingActivationRow,
 } from "./activation-types";
 import { normalizeAlumniOnboardingEmail } from "./activation-types";
+import { normalizeGraduationYearToNumber } from "@/lib/alumni/graduation-year-normalize";
 
 const docToRow = (doc: HydratedDocument<IAlumniOnboardingRequest>): AlumniOnboardingActivationRow => ({
   _id: doc._id.toString(),
@@ -25,7 +26,7 @@ const docToRow = (doc: HydratedDocument<IAlumniOnboardingRequest>): AlumniOnboar
   fullName: String(doc.fullName || ""),
   email: String(doc.email || ""),
   phone: doc.phone ? String(doc.phone) : null,
-  graduationYear: Number(doc.graduationYear || 0),
+  graduationYear: normalizeGraduationYearToNumber(doc.graduationYear) ?? 0,
   universityName: doc.universityName ? String(doc.universityName) : null,
   major: doc.major ? String(doc.major) : null,
   degree: doc.degree ? String(doc.degree) : null,
@@ -69,6 +70,13 @@ const runSideEffects = async (userId: string) => {
     });
   } catch (e) {
     console.warn("[alumni onboarding] welcome automation skipped", e);
+  }
+
+  try {
+    const { touchAlumniCohortForUser } = await import("@/lib/alumni/batch-service");
+    await touchAlumniCohortForUser(userId);
+  } catch (e) {
+    console.warn("[alumni onboarding] cohort sync skipped", e);
   }
 };
 

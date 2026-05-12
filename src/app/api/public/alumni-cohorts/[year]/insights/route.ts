@@ -8,6 +8,7 @@ import { getCurrentDbUser } from "@/lib/auth";
 import { blockIneligibleStudentOnPublicCommunityApi } from "@/lib/alumni/public-community-session-guard";
 import { rankOpportunities, type OpportunityCandidate } from "@/lib/alumni/matching/opportunity-matching";
 import { publicAlumniOpportunityListingFilter } from "@/lib/alumni/normalize-opportunity-status";
+import { mongoMatchAlumniGraduationYearEquals, normalizeGraduationYearToNumber } from "@/lib/alumni/graduation-year-normalize";
 
 export const dynamic = "force-dynamic";
 
@@ -16,8 +17,10 @@ export async function GET(request: Request, ctx: { params: Promise<{ year: strin
     const blocked = await blockIneligibleStudentOnPublicCommunityApi();
     if (blocked) return blocked;
     const { year } = await ctx.params;
-    const y = Number(year);
-    if (!Number.isFinite(y)) return NextResponse.json({ error: "INVALID_YEAR" }, { status: 400 });
+    const y = normalizeGraduationYearToNumber(year);
+    if (y == null) return NextResponse.json({ error: "INVALID_YEAR" }, { status: 400 });
+    const yearMatch = mongoMatchAlumniGraduationYearEquals(y);
+    if (!yearMatch) return NextResponse.json({ error: "INVALID_YEAR" }, { status: 400 });
 
     await connectDB();
     const current = await getCurrentDbUser();
@@ -28,7 +31,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ year: strin
 
     const peersRaw = await User.find({
       accountType: "alumni",
-      "alumniProfile.graduationYear": y,
+      ...yearMatch,
     })
       .select("fullName alumniProfile updatedAt")
       .limit(80)

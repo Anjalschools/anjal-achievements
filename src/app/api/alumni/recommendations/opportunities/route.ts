@@ -51,6 +51,10 @@ export async function GET(request: NextRequest) {
         company: o.company,
         matchScore: o.matchScore,
         matchReasons: o.matchReasons,
+        matchWeights: o.matchWeights,
+        matchedSignals: o.matchedSignals,
+        matchConfidence: o.confidence,
+        matchRelevanceScore: o.relevanceScore,
       })),
     });
   } catch (error) {

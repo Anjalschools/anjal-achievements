@@ -45,6 +45,7 @@ export async function GET(request: NextRequest) {
         country: p.country ?? null,
         studyCountry: p.studyCountry ?? null,
         graduationYear: p.graduationYear ?? null,
+        interests: Array.isArray(p.interests) ? p.interests : null,
         bio: p.bio ?? null,
         updatedAt: row.updatedAt ?? null,
         lastLoginAt: row.lastLoginAt ?? null,
@@ -87,6 +88,10 @@ export async function GET(request: NextRequest) {
           lastActivityAt: mergeLastActivityIso(st?.lastMentorshipActivityIso ?? null, row?.lastLoginAt, row?.updatedAt),
           matchScore: m.matchScore,
           matchReasons: m.matchReasons,
+          matchWeights: m.matchWeights,
+          matchedSignals: m.matchedSignals,
+          matchConfidence: m.matchConfidence,
+          matchRelevanceScore: m.matchRelevanceScore,
         };
       }),
     });
