@@ -56,3 +56,23 @@ export type AlumniFieldsResponse = {
   ok: true;
   items: AlumniFieldCountItem[];
 };
+
+/** Public landing: approved alumni memory post (no secrets). */
+export type PublicAlumniMemoryShowcaseItem = {
+  ownerUserId: string;
+  memoryPostId: string;
+  fullName: string;
+  profilePhoto: string | null;
+  imageUrl: string;
+  caption: string;
+  graduationYear: number | null;
+  memoryYear: number | null;
+  likeCount: number;
+  viewCount: number;
+  isHighlighted: boolean;
+};
+
+export type PublicAlumniMemoriesResponse = {
+  ok: true;
+  items: PublicAlumniMemoryShowcaseItem[];
+};

@@ -157,6 +157,15 @@ export const getAlumniSectionTitles = (locale: AlumniLocale) =>
           "سجّل اهتمامك للبقاء على اطلاع بفعاليات التواصل، وفرص الإرشاد، ولقاءات الخريجين — دون أي تغيير على حسابك الحالي كطالب.",
         joinButton: "تواصل معنا للانضمام",
         cooperationIntro: "نؤمن بأن خبرة الخريجين استثمار في الطلاب الحاليين.",
+        memoriesTitle: "ذكريات الخريجين في مدارس الأنجال",
+        memoriesSubtitle: "لحظات صنعت الطموح… وذكريات بقيت مع الخريجين عبر السنوات.",
+        memoriesViewAll: "عرض الكل",
+        memoriesViewMemory: "عرض الذكرى",
+        memoriesEmptyTitle: "لم تُنشر ذكريات بعد",
+        memoriesEmptyBody: "كن أول من يشارك لحظة من مسارك في مدارس الأنجال.",
+        memoriesShareCta: "شارك ذكرياتك",
+        memoryKindLabel: "ذكرى مدرسية",
+        memoriesLikes: "إعجاب",
       }
     : {
         stats: "Figures that reflect our alumni journey",
@@ -170,6 +179,15 @@ export const getAlumniSectionTitles = (locale: AlumniLocale) =>
           "Register your interest for networking events, mentoring opportunities, and alumni gatherings — with no change to your current student account.",
         joinButton: "Contact us to join",
         cooperationIntro: "We believe alumni experience is an investment in today’s students.",
+        memoriesTitle: "Alumni memories at Al-Anjal schools",
+        memoriesSubtitle: "Moments that shaped ambition… memories that stayed with graduates over the years.",
+        memoriesViewAll: "View all",
+        memoriesViewMemory: "View memory",
+        memoriesEmptyTitle: "No memories published yet",
+        memoriesEmptyBody: "Be the first to share a moment from your journey at Al-Anjal schools.",
+        memoriesShareCta: "Share your memories",
+        memoryKindLabel: "School memory",
+        memoriesLikes: "likes",
       };
 
 export const getAlumniCooperationItems = (locale: AlumniLocale) =>

@@ -20,6 +20,7 @@ import { AlumniFieldsSection } from "@/components/alumni/AlumniFieldsSection";
 import { AlumniCooperationSection } from "@/components/alumni/AlumniCooperationSection";
 import { AlumniJoinCta } from "@/components/alumni/AlumniJoinCta";
 import { AlumniEliteSection } from "@/components/alumni/AlumniEliteSection";
+import { AlumniMemoriesShowcase } from "@/components/alumni/landing/AlumniMemoriesShowcase";
 
 export default function AlumniLandingPage() {
   const [locale, setLocale] = useState<AlumniLocale>("ar");
@@ -74,6 +75,7 @@ export default function AlumniLandingPage() {
     () => [
       <AlumniHero key="hero" locale={locale} />,
       <AlumniStatsSection key="stats" locale={locale} stats={summaryStats} loading={statsLoading} />,
+      <AlumniMemoriesShowcase key="memories" locale={locale} />,
       <AlumniFeaturedSection key="featured" locale={locale} featured={featuredAlumni} />,
       <AlumniEliteSection key="elite" locale={locale} />,
       <AlumniStoriesSection key="stories" locale={locale} stories={stories} />,
