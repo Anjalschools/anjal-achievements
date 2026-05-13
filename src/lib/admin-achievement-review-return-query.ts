@@ -27,6 +27,9 @@ export type ParsedReviewQuery = {
   tab?: AdminReviewTab;
   page?: number;
   q?: string;
+  mawhiba?: "yes" | "no";
+  /** Server list order: newest first (default) or oldest first */
+  order?: "newest" | "oldest";
   sort?: AdminAchievementListSortKey;
   sortAsc?: boolean;
   aiSort?: string;
@@ -51,6 +54,13 @@ export const parseReviewListQueryString = (raw: string | null): ParsedReviewQuer
 
   const q = sp.get("q");
   if (q) out.q = q;
+
+  const mawhiba = sp.get("mawhiba");
+  if (mawhiba === "yes" || mawhiba === "no") out.mawhiba = mawhiba;
+
+  const order = sp.get("order");
+  if (order === "oldest") out.order = "oldest";
+  else if (order === "newest") out.order = "newest";
 
   const sort = sp.get("sort");
   if (sort && LIST_SORT_KEYS.has(sort)) out.sort = sort as AdminAchievementListSortKey;
@@ -79,10 +89,26 @@ export const decodeReturnToParam = (returnTo: string | null | undefined): Parsed
   }
 };
 
+/** Compares two query strings ignoring param order (avoids replace loops vs `useSearchParams().toString()`). */
+export const areAchievementReviewListQueriesEqual = (a: string, b: string): boolean => {
+  const norm = (raw: string) => {
+    const s = raw.trim();
+    const body = s.startsWith("?") ? s.slice(1) : s;
+    const sp = new URLSearchParams(body);
+    return [...sp.entries()]
+      .sort(([ka], [kb]) => ka.localeCompare(kb))
+      .map(([k, v]) => `${k}=${v}`)
+      .join("&");
+  };
+  return norm(a) === norm(b);
+};
+
 export type BuildReturnToInput = {
   tab: string;
   page: number;
   q: string;
+  mawhiba?: "all" | "yes" | "no";
+  order?: "newest" | "oldest";
   allListSortKey: AdminAchievementListSortKey;
   allListSortAsc: boolean;
   aiSortKey: string;
@@ -95,6 +121,9 @@ export const buildReturnToQueryString = (input: BuildReturnToInput): string => {
   sp.set("page", String(Math.max(1, input.page)));
   const q = input.q.trim();
   if (q) sp.set("q", q);
+  const mh = input.mawhiba;
+  if (mh === "yes" || mh === "no") sp.set("mawhiba", mh);
+  if (input.order === "oldest") sp.set("order", "oldest");
   if (input.tab === "all" && input.allListSortKey !== "default") {
     sp.set("sort", input.allListSortKey);
     sp.set("sortDir", input.allListSortAsc ? "asc" : "desc");

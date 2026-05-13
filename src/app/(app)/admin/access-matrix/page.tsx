@@ -35,6 +35,7 @@ const SAMPLE_ADMIN_PATHS = [
   "/admin/achievements/review",
   "/admin/achievements/add",
   "/admin/achievements/reports",
+  "/admin/reports/achievement-participation",
   "/admin/analytics",
   "/admin/users",
   "/admin/settings",

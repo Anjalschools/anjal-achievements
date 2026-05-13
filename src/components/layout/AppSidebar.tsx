@@ -242,6 +242,11 @@ const AppSidebar = () => {
     icon: FileBarChart,
     label: locale === "ar" ? "التقارير" : "Reports",
   };
+  const participationAnalyticsItem = {
+    href: "/admin/reports/achievement-participation",
+    icon: BarChart3,
+    label: locale === "ar" ? "إحصائيات المشاركات والإنجازات" : "Participation & achievements analytics",
+  };
   const leaderboardItem = {
     href: "/admin/leaderboard",
     icon: ListOrdered,
@@ -336,6 +341,7 @@ const AppSidebar = () => {
     { ...adminAddAchievementItem, capability: "adminAddAchievement" },
     { ...usersItem, capability: "userManagement" },
     { ...reportsItem, capability: "reports" },
+    { ...participationAnalyticsItem, capability: "reports" },
     { ...leaderboardItem, capability: "reviewAchievements" },
     { ...homeHighlightsItem, capability: "homeHighlights" },
     { ...homeCeremonySettingsItem, capability: "platformSettings" },
@@ -453,6 +459,9 @@ const AppSidebar = () => {
     }
     if (href === "/admin/achievements/reports") {
       return pathname?.startsWith("/admin/achievements/reports");
+    }
+    if (href === "/admin/reports/achievement-participation") {
+      return pathname?.startsWith("/admin/reports/achievement-participation");
     }
     if (href === "/admin/leaderboard") {
       return pathname === "/admin/leaderboard" || pathname?.startsWith("/admin/leaderboard/");

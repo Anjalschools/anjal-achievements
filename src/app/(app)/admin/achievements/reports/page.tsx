@@ -302,6 +302,12 @@ const AdminAchievementReportsPage = () => {
           }
         />
         <Link
+          href="/admin/reports/achievement-participation"
+          className="mb-2 inline-block text-sm font-semibold text-primary hover:underline"
+        >
+          {isAr ? "→ إحصائيات المشاركات والإنجازات (تحليلي)" : "→ Participation & achievements analytics"}
+        </Link>
+        <Link
           href="/admin/achievements/review"
           className="mb-4 inline-block text-sm font-semibold text-primary hover:underline"
         >

@@ -122,10 +122,13 @@ export async function GET(request: NextRequest) {
 
     const total = await Achievement.countDocuments(mongoFilter);
 
+    const orderRaw = String(searchParams.get("order") || "").trim();
+    const dir: 1 | -1 = orderRaw === "oldest" ? 1 : -1;
+
     const sort =
       tab === "pending_re_review"
-        ? ({ lastStudentEditAt: -1, updatedAt: -1, createdAt: -1 } as Record<string, 1 | -1>)
-        : ({ createdAt: -1 } as Record<string, 1 | -1>);
+        ? ({ lastStudentEditAt: dir, updatedAt: dir, createdAt: dir } as Record<string, 1 | -1>)
+        : ({ createdAt: dir } as Record<string, 1 | -1>);
 
     const rows = await Achievement.find(mongoFilter).sort(sort).skip(skip).limit(limit).lean();
 

@@ -1,0 +1,807 @@
+import "server-only";
+import mongoose from "mongoose";
+import connectDB from "@/lib/mongodb";
+import Achievement from "@/models/Achievement";
+import type { AdminReportFilters } from "@/lib/achievement-admin-reports";
+import {
+  formatLocalizedResultLine,
+  getAchievementDisplayName,
+  getAchievementLevelLabel,
+} from "@/lib/achievementDisplay";
+import { getDbAchievementTypeLabel } from "@/lib/achievement-labels";
+import {
+  parseReportCsvParam,
+  resultTokenToMongoCondition,
+  REPORT_CATEGORY_VALUES,
+  REPORT_LEVEL_VALUES,
+  REPORT_RESULT_TOKEN_VALUES,
+} from "@/lib/report-filter-options";
+
+const ALLOW_CATEGORY = new Set<string>([...REPORT_CATEGORY_VALUES]);
+const ALLOW_LEVEL = new Set<string>([...REPORT_LEVEL_VALUES]);
+const ALLOW_RESULT = new Set<string>(REPORT_RESULT_TOKEN_VALUES);
+
+const GRADES_BY_STAGE: Record<string, string[]> = {
+  primary: ["g1", "g2", "g3", "g4", "g5", "g6"],
+  middle: ["g7", "g8", "g9"],
+  secondary: ["g10", "g11", "g12"],
+};
+
+const parseDate = (v: unknown): Date | null => {
+  const s = String(v || "").trim();
+  if (!s) return null;
+  const d = new Date(s);
+  return Number.isNaN(d.getTime()) ? null : d;
+};
+
+const parseAcademicYears = (s: string | undefined): number[] | null => {
+  if (!s || !s.trim()) return null;
+  const years = [...s.matchAll(/20\d{2}/g)].map((m) => parseInt(m[0], 10));
+  if (years.length >= 2) return [...new Set(years)].sort((a, b) => a - b);
+  if (years.length === 1) return [years[0]];
+  return null;
+};
+
+const normalizeCategories = (f: AdminReportFilters): string[] => {
+  const raw =
+    f.categories && f.categories.length > 0
+      ? f.categories
+      : f.category && f.category !== "all"
+        ? [f.category]
+        : [];
+  return raw.map((x) => String(x).trim()).filter((x) => ALLOW_CATEGORY.has(x));
+};
+
+const normalizeLevels = (f: AdminReportFilters): string[] => {
+  const raw =
+    f.levels && f.levels.length > 0 ? f.levels : f.level && f.level !== "all" ? [f.level] : [];
+  return raw.map((x) => String(x).trim()).filter((x) => ALLOW_LEVEL.has(x));
+};
+
+const normalizeResultTokens = (f: AdminReportFilters): string[] => {
+  const raw =
+    f.resultTokens && f.resultTokens.length > 0
+      ? f.resultTokens
+      : f.result && f.result !== "all"
+        ? [f.result]
+        : [];
+  return raw.map((x) => String(x).trim()).filter((x) => ALLOW_RESULT.has(x));
+};
+
+export type ParticipationAnalyticsFilters = AdminReportFilters & {
+  /** arabic | international | all */
+  section?: string;
+  /** achievement.domain or free text */
+  domain?: string;
+  /** achievementClassification exact or contains */
+  classification?: string;
+  /** Regex on achievement.organization */
+  organization?: string;
+  /** achievementYear (single) — overrides academicYear if set */
+  achievementYear?: number;
+};
+
+export type ParticipationActivityRow = {
+  activityKey: string;
+  activityLabelAr: string;
+  activityLabelEn: string;
+  typeKey: string;
+  typeLabelAr: string;
+  typeLabelEn: string;
+  levelKey: string;
+  levelLabelAr: string;
+  levelLabelEn: string;
+  participationResultKey: string;
+  participationResultAr: string;
+  participationResultEn: string;
+  totalParticipations: number;
+  distinctParticipants: number;
+  maleParticipants: number;
+  femaleParticipants: number;
+  arabicParticipants: number;
+  internationalParticipants: number;
+  mawhibaParticipants: number;
+  nonMawhibaParticipants: number;
+  approvedAchievements: number;
+  excellenceRatePct: number;
+};
+
+export type ParticipationAnalyticsPayload = {
+  ok: true;
+  generatedAt: string;
+  filters: ParticipationAnalyticsFilters;
+  kpis: {
+    totalParticipations: number;
+    distinctStudents: number;
+    mawhibaParticipationPct: number;
+    femalePct: number;
+    internationalSectionPct: number;
+    activeProgramsCount: number;
+    topProgramLabelAr: string;
+    topProgramLabelEn: string;
+    topSectionLabelAr: string;
+    topSectionLabelEn: string;
+    goldMedalCount: number;
+    firstPlaceCount: number;
+    nominationCount: number;
+    highestLevelLabelAr: string;
+    highestLevelLabelEn: string;
+    internationalAchievementPct: number;
+    globalAchievementPct: number;
+  };
+  charts: {
+    genderParticipation: { key: string; labelAr: string; labelEn: string; count: number }[];
+    sectionParticipation: { key: string; labelAr: string; labelEn: string; count: number }[];
+    mawhibaSplit: { key: string; labelAr: string; labelEn: string; count: number }[];
+    resultDistribution: { labelAr: string; labelEn: string; count: number }[];
+    levelDistribution: { labelAr: string; labelEn: string; count: number }[];
+    genderResultStack: { gender: string; labelAr: string; labelEn: string; gold: number; silver: number; bronze: number; ranks: number }[];
+    topPrograms: { labelAr: string; labelEn: string; studentCount: number; rows: number }[];
+    activityHorizontal: { labelAr: string; labelEn: string; studentCount: number }[];
+  };
+  table: ParticipationActivityRow[];
+  tableTotal: number;
+  page: number;
+  pageSize: number;
+};
+
+const levelKeyFromMaxRank = (maxRank: number): string => {
+  if (maxRank >= 7) return "global";
+  if (maxRank === 6) return "international";
+  if (maxRank === 5) return "kingdom";
+  if (maxRank === 3) return "province";
+  return "school";
+};
+
+const buildMongoMatch = (filters: ParticipationAnalyticsFilters): Record<string, unknown> => {
+  const query: Record<string, unknown> = {};
+  const rootAnd: Record<string, unknown>[] = [];
+
+  const levels = normalizeLevels(filters);
+  if (levels.length === 1) query.achievementLevel = levels[0];
+  else if (levels.length > 1) query.achievementLevel = { $in: levels };
+
+  if (filters.status && filters.status !== "all") query.status = filters.status;
+
+  if (filters.certificateStatus === "issued") query.certificateIssued = true;
+  if (filters.certificateStatus === "not_issued") query.certificateIssued = { $ne: true };
+
+  if (filters.achievementName && filters.achievementName !== "all") {
+    const esc = String(filters.achievementName).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    query.achievementName = new RegExp(`^${esc}$`, "i");
+  }
+
+  const categories = normalizeCategories(filters);
+  if (categories.length > 0) {
+    rootAnd.push({
+      $or: [{ achievementCategory: { $in: categories } }, { achievementType: { $in: categories } }],
+    });
+  }
+
+  const resultTokens = normalizeResultTokens(filters);
+  const resultConds = resultTokens
+    .map((t) => resultTokenToMongoCondition(t))
+    .filter((c): c is Record<string, unknown> => c != null);
+  if (resultConds.length === 1) rootAnd.push(resultConds[0]);
+  else if (resultConds.length > 1) rootAnd.push({ $or: resultConds });
+
+  const domain = String(filters.domain || "").trim();
+  if (domain) {
+    const rx = new RegExp(domain.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
+    rootAnd.push({
+      $or: [{ domain: rx }, { achievementName: rx }, { inferredField: rx }],
+    });
+  }
+
+  const cls = String(filters.classification || "").trim();
+  if (cls) {
+    query.achievementClassification = cls.includes("*")
+      ? new RegExp(cls.replace(/\*/g, ".*"), "i")
+      : cls;
+  }
+
+  const org = String(filters.organization || "").trim();
+  if (org) {
+    query.organization = new RegExp(org.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
+  }
+
+  const from = parseDate(filters.fromDate);
+  const to = parseDate(filters.toDate);
+  if (from || to) {
+    query.date = {
+      ...(from ? { $gte: from } : {}),
+      ...(to ? { $lte: to } : {}),
+    };
+  }
+
+  const yearFromParam =
+    typeof filters.achievementYear === "number" && Number.isFinite(filters.achievementYear)
+      ? [filters.achievementYear]
+      : null;
+  const yearsFromAcademic = parseAcademicYears(filters.academicYear);
+  const years = yearFromParam ?? yearsFromAcademic;
+  if (years && years.length > 0) {
+    query.achievementYear = years.length > 1 ? { $in: years } : years[0];
+  }
+
+  if (rootAnd.length === 1) {
+    Object.assign(query, rootAnd[0]);
+  } else if (rootAnd.length > 1) {
+    query.$and = rootAnd;
+  }
+
+  return query;
+};
+
+const dominantResultFromCombos = (
+  combos: Array<{ rt?: string; mt?: string; rk?: string }>,
+  loc: "ar" | "en"
+): { key: string; label: string } => {
+  const counts = new Map<string, number>();
+  for (const c of combos) {
+    const rt = String(c.rt || "");
+    const mt = String(c.mt || "");
+    const rk = String(c.rk || "");
+    const k = `${rt}|${mt}|${rk}`;
+    counts.set(k, (counts.get(k) || 0) + 1);
+  }
+  let bestKey = "";
+  let bestN = 0;
+  for (const [k, n] of counts) {
+    if (n > bestN) {
+      bestN = n;
+      bestKey = k;
+    }
+  }
+  if (!bestKey) return { key: "", label: loc === "ar" ? "غير محدد" : "Not specified" };
+  const [rt, mt, rk] = bestKey.split("|");
+  const label = formatLocalizedResultLine(rt, mt, rk, loc);
+  return { key: bestKey, label };
+};
+
+export const buildParticipationAnalytics = async (input: {
+  filters: ParticipationAnalyticsFilters;
+  page?: number;
+  pageSize?: number;
+}): Promise<ParticipationAnalyticsPayload> => {
+  await connectDB();
+  const page = Math.max(1, input.page ?? 1);
+  const pageSize = Math.min(100, Math.max(5, input.pageSize ?? 25));
+  const filters = input.filters;
+
+  const baseMatch = buildMongoMatch(filters);
+
+  const postStages: mongoose.PipelineStage[] = [];
+
+  const stage = String(filters.stage || "").trim();
+  if (stage !== "all" && stage && GRADES_BY_STAGE[stage]) {
+    postStages.push({ $match: { effGrade: { $in: GRADES_BY_STAGE[stage] } } });
+  }
+  const grade = String(filters.grade || "").trim();
+  if (grade && grade !== "all") {
+    postStages.push({ $match: { effGrade: grade.toLowerCase() } });
+  }
+  const gender = String(filters.gender || "").trim();
+  if (gender && gender !== "all") {
+    postStages.push({ $match: { effGender: gender } });
+  }
+  const section = String(filters.section || "").trim();
+  if (section && section !== "all") {
+    postStages.push({ $match: { effSection: section } });
+  }
+  const mh = String(filters.mawhiba || "").trim();
+  if (mh === "yes") postStages.push({ $match: { effMawhiba: true } });
+  if (mh === "no") postStages.push({ $match: { effMawhiba: { $ne: true } } });
+
+  const lookupAndShape: mongoose.PipelineStage[] = [
+    { $match: baseMatch },
+    {
+      $lookup: {
+        from: "users",
+        let: { uid: "$userId" },
+        pipeline: [
+          { $match: { $expr: { $eq: ["$_id", "$$uid"] } } },
+          { $project: { gender: 1, section: 1, isMawhibaStudent: 1, grade: 1 } },
+        ],
+        as: "_uwrap",
+      },
+    },
+    { $addFields: { u: { $first: "$_uwrap" } } },
+    {
+      $addFields: {
+        effGrade: {
+          $toLower: {
+            $trim: {
+              input: { $ifNull: ["$u.grade", { $ifNull: ["$studentSnapshot.grade", ""] }] },
+            },
+          },
+        },
+        effGenderRaw: {
+          $toLower: {
+            $trim: {
+              input: { $ifNull: ["$u.gender", { $ifNull: ["$studentSnapshot.gender", "male"] }] },
+            },
+          },
+        },
+        effSectionRaw: {
+          $toLower: {
+            $trim: {
+              input: { $ifNull: ["$u.section", { $ifNull: ["$studentSnapshot.section", "arabic"] }] },
+            },
+          },
+        },
+        effMawhiba: {
+          $cond: {
+            if: { $eq: [{ $type: "$u.isMawhibaStudent" }, "bool"] },
+            then: "$u.isMawhibaStudent",
+            else: { $eq: [{ $ifNull: ["$studentSnapshot.isMawhibaStudent", false] }, true] },
+          },
+        },
+        participantId: {
+          $ifNull: ["$userId", { $ifNull: ["$studentProfileKey", "$_id"] }],
+        },
+        legacyL: { $toLower: { $ifNull: ["$level", ""] } },
+        activityRaw: {
+          $switch: {
+            branches: [
+              {
+                case: { $gt: [{ $strLenCP: { $ifNull: ["$customAchievementName", ""] } }, 0] },
+                then: "$customAchievementName",
+              },
+              {
+                case: { $gt: [{ $strLenCP: { $ifNull: ["$achievementName", ""] } }, 0] },
+                then: "$achievementName",
+              },
+              {
+                case: { $gt: [{ $strLenCP: { $ifNull: ["$inferredField", ""] } }, 0] },
+                then: "$inferredField",
+              },
+              {
+                case: { $gt: [{ $strLenCP: { $ifNull: ["$customProgramName", ""] } }, 0] },
+                then: "$customProgramName",
+              },
+              {
+                case: { $gt: [{ $strLenCP: { $ifNull: ["$programName", ""] } }, 0] },
+                then: "$programName",
+              },
+              {
+                case: { $gt: [{ $strLenCP: { $ifNull: ["$customCompetitionName", ""] } }, 0] },
+                then: "$customCompetitionName",
+              },
+              {
+                case: { $gt: [{ $strLenCP: { $ifNull: ["$competitionName", ""] } }, 0] },
+                then: "$competitionName",
+              },
+              {
+                case: { $gt: [{ $strLenCP: { $ifNull: ["$exhibitionName", ""] } }, 0] },
+                then: "$exhibitionName",
+              },
+              {
+                case: { $gt: [{ $strLenCP: { $ifNull: ["$customExhibitionName", ""] } }, 0] },
+                then: "$customExhibitionName",
+              },
+              {
+                case: { $gt: [{ $strLenCP: { $ifNull: ["$olympiadMeeting", ""] } }, 0] },
+                then: "$olympiadMeeting",
+              },
+              { case: { $gt: [{ $strLenCP: { $ifNull: ["$nameAr", ""] } }, 0] }, then: "$nameAr" },
+              { case: { $gt: [{ $strLenCP: { $ifNull: ["$title", ""] } }, 0] }, then: "$title" },
+            ],
+            default: "$achievementType",
+          },
+        },
+      },
+    },
+    {
+      $addFields: {
+        effGender: { $cond: [{ $eq: ["$effGenderRaw", "female"] }, "female", "male"] },
+        effSection: { $cond: [{ $eq: ["$effSectionRaw", "international"] }, "international", "arabic"] },
+        levelRank: {
+          $switch: {
+            branches: [
+              { case: { $in: ["$legacyL", ["global", "world"]] }, then: 7 },
+              { case: { $eq: ["$achievementLevel", "international"] }, then: 6 },
+              { case: { $eq: ["$achievementLevel", "kingdom"] }, then: 5 },
+              { case: { $eq: ["$achievementLevel", "province"] }, then: 3 },
+              { case: { $eq: ["$achievementLevel", "school"] }, then: 2 },
+            ],
+            default: 2,
+          },
+        },
+      },
+    },
+    ...postStages,
+  ];
+
+  const facetBody: Record<string, mongoose.PipelineStage[]> = {
+    kpi: [
+      {
+        $group: {
+          _id: null,
+          totalParticipations: { $sum: 1 },
+          students: { $addToSet: "$participantId" },
+          mawhibaRows: { $sum: { $cond: ["$effMawhiba", 1, 0] } },
+          femaleRows: { $sum: { $cond: [{ $eq: ["$effGender", "female"] }, 1, 0] } },
+          internationalRows: { $sum: { $cond: [{ $eq: ["$effSection", "international"] }, 1, 0] } },
+          gold: {
+            $sum: {
+              $cond: [
+                { $and: [{ $eq: ["$resultType", "medal"] }, { $eq: ["$medalType", "gold"] }] },
+                1,
+                0,
+              ],
+            },
+          },
+          first: {
+            $sum: {
+              $cond: [{ $and: [{ $eq: ["$resultType", "rank"] }, { $eq: ["$rank", "first"] }] }, 1, 0],
+            },
+          },
+          nom: { $sum: { $cond: [{ $eq: ["$resultType", "nomination"] }, 1, 0] } },
+          maxLevelRank: { $max: "$levelRank" },
+          intlAch: { $sum: { $cond: [{ $eq: ["$achievementLevel", "international"] }, 1, 0] } },
+          globalAch: {
+            $sum: {
+              $cond: [{ $in: ["$legacyL", ["global", "world"]] }, 1, 0] },
+          },
+          approvedAll: { $sum: { $cond: [{ $eq: ["$status", "approved"] }, 1, 0] } },
+        },
+      },
+    ],
+    genderChart: [{ $group: { _id: "$effGender", count: { $sum: 1 } } }],
+    sectionChart: [{ $group: { _id: "$effSection", count: { $sum: 1 } } }],
+    mawhibaChart: [
+      {
+        $group: {
+          _id: { $cond: ["$effMawhiba", "mawhiba", "non"] },
+          count: { $sum: 1 },
+        },
+      },
+    ],
+    resultDist: [
+      {
+        $group: {
+          _id: { rt: "$resultType", mt: "$medalType", rk: "$rank" },
+          count: { $sum: 1 },
+        },
+      },
+    ],
+    levelDist: [{ $group: { _id: "$achievementLevel", count: { $sum: 1 } } }],
+    genderResult: [
+      {
+        $group: {
+          _id: { g: "$effGender", rt: "$resultType", mt: "$medalType" },
+          count: { $sum: 1 },
+        },
+      },
+    ],
+    activityGroups: [
+      {
+        $group: {
+          _id: { t: "$achievementType", raw: "$activityRaw" },
+          participantIds: { $addToSet: "$participantId" },
+          maleIds: {
+            $addToSet: {
+              $cond: [{ $eq: ["$effGender", "male"] }, "$participantId", "$$REMOVE"],
+            },
+          },
+          femaleIds: {
+            $addToSet: {
+              $cond: [{ $eq: ["$effGender", "female"] }, "$participantId", "$$REMOVE"],
+            },
+          },
+          arabicIds: {
+            $addToSet: {
+              $cond: [{ $eq: ["$effSection", "arabic"] }, "$participantId", "$$REMOVE"],
+            },
+          },
+          internationalIds: {
+            $addToSet: {
+              $cond: [{ $eq: ["$effSection", "international"] }, "$participantId", "$$REMOVE"],
+            },
+          },
+          mawhibaIds: {
+            $addToSet: {
+              $cond: ["$effMawhiba", "$participantId", "$$REMOVE"],
+            },
+          },
+          nonMawhibaIds: {
+            $addToSet: {
+              $cond: [{ $eq: ["$effMawhiba", false] }, "$participantId", "$$REMOVE"],
+            },
+          },
+          approvedAchievements: { $sum: { $cond: [{ $eq: ["$status", "approved"] }, 1, 0] } },
+          totalParticipations: { $sum: 1 },
+          maxLevelRank: { $max: "$levelRank" },
+          levelsSeen: { $addToSet: "$achievementLevel" },
+          resultCombos: { $push: { rt: "$resultType", mt: "$medalType", rk: "$rank" } },
+        },
+      },
+      { $sort: { totalParticipations: -1 } },
+    ],
+  };
+
+  const [facetResult] = await Achievement.aggregate(
+    [...lookupAndShape, { $facet: facetBody }] as mongoose.PipelineStage[]
+  ).allowDiskUse(true);
+
+  const kpiRow = facetResult?.kpi?.[0] as
+    | {
+        totalParticipations?: number;
+        students?: unknown[];
+        mawhibaRows?: number;
+        femaleRows?: number;
+        internationalRows?: number;
+        gold?: number;
+        first?: number;
+        nom?: number;
+        maxLevelRank?: number;
+        intlAch?: number;
+        globalAch?: number;
+        approvedAll?: number;
+      }
+    | undefined;
+
+  const totalParticipations = Number(kpiRow?.totalParticipations || 0);
+  const distinctStudents = Array.isArray(kpiRow?.students) ? kpiRow!.students!.length : 0;
+  const mawhibaRows = Number(kpiRow?.mawhibaRows || 0);
+  const femaleRows = Number(kpiRow?.femaleRows || 0);
+  const internationalRows = Number(kpiRow?.internationalRows || 0);
+  const goldMedalCount = Number(kpiRow?.gold || 0);
+  const firstPlaceCount = Number(kpiRow?.first || 0);
+  const nominationCount = Number(kpiRow?.nom || 0);
+  const maxLevelRank = Number(kpiRow?.maxLevelRank || 2);
+  const intlAch = Number(kpiRow?.intlAch || 0);
+  const globalAch = Number(kpiRow?.globalAch || 0);
+  const approvedAll = Number(kpiRow?.approvedAll || 0);
+
+  const activityGroups = (facetResult?.activityGroups || []) as Array<{
+    _id: { t: string; raw: string };
+    participantIds: unknown[];
+    maleIds: unknown[];
+    femaleIds: unknown[];
+    arabicIds: unknown[];
+    internationalIds: unknown[];
+    mawhibaIds: unknown[];
+    nonMawhibaIds: unknown[];
+    approvedAchievements: number;
+    totalParticipations: number;
+    maxLevelRank: number;
+    levelsSeen: string[];
+    resultCombos: Array<{ rt?: string; mt?: string; rk?: string }>;
+  }>;
+
+  const tableTotal = activityGroups.length;
+  const skip = (page - 1) * pageSize;
+  const pageSlice = activityGroups.slice(skip, skip + pageSize);
+
+  const mapTypeUi = (typeKey: string): { ar: string; en: string } => ({
+    ar: getDbAchievementTypeLabel(typeKey, "ar"),
+    en: getDbAchievementTypeLabel(typeKey, "en"),
+  });
+
+  const table: ParticipationActivityRow[] = pageSlice.map((g) => {
+    const typeKey = String(g._id?.t || "");
+    const raw = String(g._id?.raw || "");
+    const synthetic: Record<string, unknown> = {
+      achievementType: typeKey,
+      achievementName: raw,
+      customAchievementName: raw,
+    };
+    const activityLabelAr = getAchievementDisplayName(synthetic, "ar");
+    const activityLabelEn = getAchievementDisplayName(synthetic, "en");
+    const typeLbl = mapTypeUi(typeKey);
+    const maxRank = Number(g.maxLevelRank || 2);
+    const levelKey = levelKeyFromMaxRank(maxRank);
+    const levelLabelAr = getAchievementLevelLabel(levelKey, "ar");
+    const levelLabelEn = getAchievementLevelLabel(levelKey, "en");
+
+    const domAr = dominantResultFromCombos(g.resultCombos || [], "ar");
+    const domEn = dominantResultFromCombos(g.resultCombos || [], "en");
+
+    const distinctP = Array.isArray(g.participantIds) ? g.participantIds.length : 0;
+    const approved = Number(g.approvedAchievements || 0);
+    const totalRows = Number(g.totalParticipations || 0);
+    const excellenceRatePct =
+      totalRows > 0 ? Math.round((approved / totalRows) * 1000) / 10 : 0;
+
+    return {
+      activityKey: `${typeKey}::${raw}`,
+      activityLabelAr,
+      activityLabelEn,
+      typeKey,
+      typeLabelAr: typeLbl.ar,
+      typeLabelEn: typeLbl.en,
+      levelKey,
+      levelLabelAr,
+      levelLabelEn,
+      participationResultKey: domAr.key,
+      participationResultAr: domAr.label,
+      participationResultEn: domEn.label,
+      totalParticipations: totalRows,
+      distinctParticipants: distinctP,
+      maleParticipants: Array.isArray(g.maleIds) ? g.maleIds.length : 0,
+      femaleParticipants: Array.isArray(g.femaleIds) ? g.femaleIds.length : 0,
+      arabicParticipants: Array.isArray(g.arabicIds) ? g.arabicIds.length : 0,
+      internationalParticipants: Array.isArray(g.internationalIds) ? g.internationalIds.length : 0,
+      mawhibaParticipants: Array.isArray(g.mawhibaIds) ? g.mawhibaIds.length : 0,
+      nonMawhibaParticipants: Array.isArray(g.nonMawhibaIds) ? g.nonMawhibaIds.length : 0,
+      approvedAchievements: approved,
+      excellenceRatePct,
+    };
+  });
+
+  const genderChart = (facetResult?.genderChart || []).map(
+    (r: { _id: string; count: number }) => ({
+      key: r._id,
+      labelAr: r._id === "female" ? "بنات" : "بنين",
+      labelEn: r._id === "female" ? "Female" : "Male",
+      count: r.count,
+    })
+  );
+
+  const sectionChart = (facetResult?.sectionChart || []).map(
+    (r: { _id: string; count: number }) => ({
+      key: r._id,
+      labelAr: r._id === "international" ? "دولي" : "عربي",
+      labelEn: r._id === "international" ? "International" : "Arabic",
+      count: r.count,
+    })
+  );
+
+  const mawhibaSplit = (facetResult?.mawhibaChart || []).map(
+    (r: { _id: string; count: number }) => ({
+      key: r._id,
+      labelAr: r._id === "mawhiba" ? "موهبة" : "غير موهبة",
+      labelEn: r._id === "mawhiba" ? "Mawhiba" : "Non-Mawhiba",
+      count: r.count,
+    })
+  );
+
+  const resultDist = (facetResult?.resultDist || []).map((r: { _id: { rt?: string; mt?: string; rk?: string }; count: number }) => {
+    const labelAr = formatLocalizedResultLine(r._id?.rt, r._id?.mt, r._id?.rk, "ar");
+    const labelEn = formatLocalizedResultLine(r._id?.rt, r._id?.mt, r._id?.rk, "en");
+    return { labelAr, labelEn, count: r.count };
+  });
+
+  const levelDist = (facetResult?.levelDist || []).map((r: { _id: string; count: number }) => ({
+    labelAr: getAchievementLevelLabel(r._id, "ar"),
+    labelEn: getAchievementLevelLabel(r._id, "en"),
+    count: r.count,
+  }));
+
+  const genderResultRaw = facetResult?.genderResult || [];
+  const genderMap = new Map<string, { gold: number; silver: number; bronze: number; ranks: number }>();
+  for (const r of genderResultRaw as Array<{ _id: { g: string; rt: string; mt?: string }; count: number }>) {
+    const g = r._id?.g || "male";
+    const hit = genderMap.get(g) || { gold: 0, silver: 0, bronze: 0, ranks: 0 };
+    if (r._id?.rt === "medal") {
+      if (r._id?.mt === "gold") hit.gold += r.count;
+      else if (r._id?.mt === "silver") hit.silver += r.count;
+      else if (r._id?.mt === "bronze") hit.bronze += r.count;
+    } else if (r._id?.rt === "rank") hit.ranks += r.count;
+    genderMap.set(g, hit);
+  }
+  const genderResultStack = ["male", "female"].map((genderKey) => {
+    const h = genderMap.get(genderKey) || { gold: 0, silver: 0, bronze: 0, ranks: 0 };
+    return {
+      gender: genderKey,
+      labelAr: genderKey === "female" ? "بنات" : "بنين",
+      labelEn: genderKey === "female" ? "Female" : "Male",
+      ...h,
+    };
+  });
+
+  const topPrograms = activityGroups.slice(0, 10).map((g) => {
+    const typeKey = String(g._id?.t || "");
+    const raw = String(g._id?.raw || "");
+    const synthetic: Record<string, unknown> = {
+      achievementType: typeKey,
+      achievementName: raw,
+      customAchievementName: raw,
+    };
+    return {
+      labelAr: getAchievementDisplayName(synthetic, "ar"),
+      labelEn: getAchievementDisplayName(synthetic, "en"),
+      studentCount: Array.isArray(g.participantIds) ? g.participantIds.length : 0,
+      rows: g.totalParticipations,
+    };
+  });
+
+  const activityHorizontal = topPrograms.map((x) => ({
+    labelAr: x.labelAr,
+    labelEn: x.labelEn,
+    studentCount: x.studentCount,
+  }));
+
+  const top = activityGroups[0];
+  let topProgramLabelAr = "—";
+  let topProgramLabelEn = "—";
+  if (top) {
+    const synthetic: Record<string, unknown> = {
+      achievementType: String(top._id?.t || ""),
+      achievementName: String(top._id?.raw || ""),
+      customAchievementName: String(top._id?.raw || ""),
+    };
+    topProgramLabelAr = getAchievementDisplayName(synthetic, "ar");
+    topProgramLabelEn = getAchievementDisplayName(synthetic, "en");
+  }
+
+  let topSectionLabelAr = "—";
+  let topSectionLabelEn = "—";
+  const secMax = [...sectionChart].sort((a, b) => b.count - a.count)[0];
+  if (secMax) {
+    topSectionLabelAr = secMax.labelAr;
+    topSectionLabelEn = secMax.labelEn;
+  }
+
+  const highestLevelKey = levelKeyFromMaxRank(maxLevelRank);
+
+  return {
+    ok: true,
+    generatedAt: new Date().toISOString(),
+    filters,
+    kpis: {
+      totalParticipations,
+      distinctStudents,
+      mawhibaParticipationPct:
+        totalParticipations > 0 ? Math.round((mawhibaRows / totalParticipations) * 1000) / 10 : 0,
+      femalePct: totalParticipations > 0 ? Math.round((femaleRows / totalParticipations) * 1000) / 10 : 0,
+      internationalSectionPct:
+        totalParticipations > 0 ? Math.round((internationalRows / totalParticipations) * 1000) / 10 : 0,
+      activeProgramsCount: tableTotal,
+      topProgramLabelAr,
+      topProgramLabelEn,
+      topSectionLabelAr,
+      topSectionLabelEn,
+      goldMedalCount,
+      firstPlaceCount,
+      nominationCount,
+      highestLevelLabelAr: getAchievementLevelLabel(highestLevelKey, "ar"),
+      highestLevelLabelEn: getAchievementLevelLabel(highestLevelKey, "en"),
+      internationalAchievementPct:
+        totalParticipations > 0 ? Math.round((intlAch / totalParticipations) * 1000) / 10 : 0,
+      globalAchievementPct:
+        totalParticipations > 0 ? Math.round((globalAch / totalParticipations) * 1000) / 10 : 0,
+    },
+    charts: {
+      genderParticipation: genderChart,
+      sectionParticipation: sectionChart,
+      mawhibaSplit,
+      resultDistribution: resultDist,
+      levelDistribution: levelDist,
+      genderResultStack,
+      topPrograms,
+      activityHorizontal,
+    },
+    table,
+    tableTotal,
+    page,
+    pageSize,
+  };
+};
+
+export const parseParticipationFiltersFromSearchParams = (
+  sp: URLSearchParams
+): ParticipationAnalyticsFilters => ({
+  academicYear: String(sp.get("academicYear") || "").trim() || undefined,
+  achievementYear: sp.get("achievementYear")
+    ? parseInt(String(sp.get("achievementYear")), 10)
+    : undefined,
+  gender: String(sp.get("gender") || "all").trim(),
+  mawhiba: String(sp.get("mawhiba") || "all").trim(),
+  stage: String(sp.get("stage") || "all").trim(),
+  grade: String(sp.get("grade") || "all").trim(),
+  section: String(sp.get("section") || "all").trim(),
+  categories: parseReportCsvParam(sp.get("category")),
+  achievementName: String(sp.get("achievementName") || "").trim() || undefined,
+  levels: parseReportCsvParam(sp.get("level")),
+  resultTokens: parseReportCsvParam(sp.get("result")),
+  status: String(sp.get("status") || "all").trim(),
+  certificateStatus: String(sp.get("certificateStatus") || "all").trim(),
+  fromDate: String(sp.get("fromDate") || "").trim() || undefined,
+  toDate: String(sp.get("toDate") || "").trim() || undefined,
+  domain: String(sp.get("domain") || "").trim() || undefined,
+  classification: String(sp.get("classification") || "").trim() || undefined,
+  organization: String(sp.get("organization") || "").trim() || undefined,
+});

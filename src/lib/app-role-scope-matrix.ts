@@ -353,6 +353,7 @@ export const ADMIN_ROUTE_REQUIRED_CAPABILITY: Array<{
   { prefix: "/admin/ai/news", capability: "aiNews" },
   { prefix: "/admin/analytics", capability: "advancedAnalytics" },
   { prefix: "/admin/achievements/add", capability: "adminAddAchievement" },
+  { prefix: "/admin/reports", capability: "reports" },
   { prefix: "/admin/achievements/reports", capability: "reports" },
   { prefix: "/admin/leaderboard", capability: "reviewAchievements" },
   { prefix: "/admin/achievements/review", capability: "reviewAchievements" },

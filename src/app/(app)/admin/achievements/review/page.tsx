@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import AdminAchievementReviewActions from "@/components/admin/AdminAchievementReviewActions";
 import {
+  areAchievementReviewListQueriesEqual,
   buildAchievementDetailHref,
   buildReturnToQueryString,
   parseReviewListQueryString,
@@ -45,6 +46,9 @@ import {
 import { buildAchievementWorkflowRowClassName } from "@/lib/admin-achievement-row-tone";
 import { toneToBadgeClass } from "@/lib/admin-ai-alert-review-view-model";
 import { Loader2, RefreshCw, Sparkles } from "lucide-react";
+import { AchievementReviewPagination } from "@/components/admin/AchievementReviewPagination";
+
+const REVIEW_LIST_PAGE_SIZE = 20;
 
 const AdminAchievementsReviewPageContent = () => {
   const router = useRouter();
@@ -58,6 +62,7 @@ const AdminAchievementsReviewPageContent = () => {
   const [q, setQ] = useState("");
   const [debouncedQ, setDebouncedQ] = useState("");
   const [mawhiba, setMawhiba] = useState<"all" | "yes" | "no">("all");
+  const [listOrder, setListOrder] = useState<"newest" | "oldest">("newest");
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [items, setItems] = useState<Row[]>([]);
@@ -118,10 +123,11 @@ const AdminAchievementsReviewPageContent = () => {
       const params = new URLSearchParams({
         tab,
         page: String(page),
-        limit: "20",
+        limit: String(REVIEW_LIST_PAGE_SIZE),
       });
       if (debouncedQ) params.set("q", debouncedQ);
       if (mawhiba !== "all") params.set("mawhiba", mawhiba);
+      if (listOrder === "oldest") params.set("order", "oldest");
       const res = await fetch(`/api/admin/achievements?${params}`, { cache: "no-store" });
       if (res.status === 401) {
         router.push("/login");
@@ -137,7 +143,12 @@ const AdminAchievementsReviewPageContent = () => {
       }
       const data = await res.json();
       setItems(Array.isArray(data.items) ? data.items : []);
-      setTotal(typeof data.total === "number" ? data.total : 0);
+      const nextTotal = typeof data.total === "number" ? data.total : 0;
+      setTotal(nextTotal);
+      const totalPages = Math.max(1, Math.ceil(nextTotal / REVIEW_LIST_PAGE_SIZE));
+      if (page > totalPages) {
+        setPage(totalPages);
+      }
       if (data.meta && typeof data.meta.aiReviewUiEnabled === "boolean") {
         setAiReviewUiEnabled(data.meta.aiReviewUiEnabled);
       }
@@ -150,7 +161,7 @@ const AdminAchievementsReviewPageContent = () => {
     } finally {
       setLoading(false);
     }
-  }, [tab, page, debouncedQ, mawhiba, router]);
+  }, [tab, page, debouncedQ, mawhiba, listOrder, router]);
 
   const applyListPatch = useCallback(
     (id: string, patch: Record<string, unknown>) => {
@@ -192,6 +203,12 @@ const AdminAchievementsReviewPageContent = () => {
       setQ(parsed.q);
       setDebouncedQ(parsed.q);
     }
+    setListOrder(parsed.order === "oldest" ? "oldest" : "newest");
+    if (parsed.mawhiba === "yes" || parsed.mawhiba === "no") {
+      setMawhiba(parsed.mawhiba);
+    } else {
+      setMawhiba("all");
+    }
     if (parsed.sort) setAllListSortKey(parsed.sort);
     if (parsed.sortAsc === true) setAllListSortAsc(true);
     if (parsed.sortAsc === false) setAllListSortAsc(false);
@@ -199,6 +216,36 @@ const AdminAchievementsReviewPageContent = () => {
     if (parsed.aiSortAsc === true) setAiAlertSortAsc(true);
     if (parsed.aiSortAsc === false) setAiAlertSortAsc(false);
   }, [searchParams]);
+
+  useEffect(() => {
+    if (allowed !== true) return;
+    const qs = buildReturnToQueryString({
+      tab,
+      page,
+      q: debouncedQ,
+      mawhiba,
+      order: listOrder,
+      allListSortKey,
+      allListSortAsc,
+      aiSortKey: aiAlertSortKey,
+      aiSortAsc: aiAlertSortAsc,
+    });
+    if (areAchievementReviewListQueriesEqual(qs, searchParams.toString())) return;
+    router.replace(`/admin/achievements/review?${qs}`, { scroll: false });
+  }, [
+    allowed,
+    tab,
+    page,
+    debouncedQ,
+    mawhiba,
+    listOrder,
+    allListSortKey,
+    allListSortAsc,
+    aiAlertSortKey,
+    aiAlertSortAsc,
+    router,
+    searchParams,
+  ]);
 
   const tableItems = useMemo(() => {
     if (tab !== "all" || allListSortKey === "default") return items;
@@ -215,13 +262,15 @@ const AdminAchievementsReviewPageContent = () => {
           tab,
           page,
           q: debouncedQ,
+          mawhiba,
+          order: listOrder,
           allListSortKey,
           allListSortAsc,
           aiSortKey: aiAlertSortKey,
           aiSortAsc: aiAlertSortAsc,
         })
       ),
-    [tab, page, debouncedQ, allListSortKey, allListSortAsc, aiAlertSortKey, aiAlertSortAsc]
+    [tab, page, debouncedQ, mawhiba, listOrder, allListSortKey, allListSortAsc, aiAlertSortKey, aiAlertSortAsc]
   );
 
   const submitAdminWorkflow = async (
@@ -759,6 +808,24 @@ const AdminAchievementsReviewPageContent = () => {
               <option value="yes">{isAr ? "طلاب موهبة" : "Mawhiba"}</option>
               <option value="no">{isAr ? "غير موهبة" : "Non‑Mawhiba"}</option>
             </select>
+            <div className="flex flex-wrap items-center gap-2">
+              <label htmlFor="review-list-order" className="text-sm font-semibold text-text whitespace-nowrap">
+                {isAr ? "ترتيب النتائج" : "Result order"}
+              </label>
+              <select
+                id="review-list-order"
+                value={listOrder}
+                onChange={(e) => {
+                  setListOrder(e.target.value as "newest" | "oldest");
+                  setPage(1);
+                }}
+                className="rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-sm"
+                aria-label={isAr ? "ترتيب النتائج" : "Result order"}
+              >
+                <option value="newest">{isAr ? "الأحدث أولًا" : "Newest first"}</option>
+                <option value="oldest">{isAr ? "الأقدم أولًا" : "Oldest first"}</option>
+              </select>
+            </div>
             <button
               type="button"
               onClick={() => fetchList()}
@@ -933,28 +1000,15 @@ const AdminAchievementsReviewPageContent = () => {
           </>
         )}
 
-        {!loading && total > 20 ? (
-          <div className="mt-4 flex justify-center gap-2">
-            <button
-              type="button"
-              disabled={page <= 1}
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-              className="rounded-lg border border-gray-300 px-4 py-2 text-sm disabled:opacity-40"
-            >
-              {isAr ? "السابق" : "Prev"}
-            </button>
-            <span className="px-3 py-2 text-sm text-text-light">
-              {page} / {Math.max(1, Math.ceil(total / 20))}
-            </span>
-            <button
-              type="button"
-              disabled={page >= Math.ceil(total / 20)}
-              onClick={() => setPage((p) => p + 1)}
-              className="rounded-lg border border-gray-300 px-4 py-2 text-sm disabled:opacity-40"
-            >
-              {isAr ? "التالي" : "Next"}
-            </button>
-          </div>
+        {!loading && total > REVIEW_LIST_PAGE_SIZE ? (
+          <AchievementReviewPagination
+            locale={loc}
+            page={page}
+            total={total}
+            pageSize={REVIEW_LIST_PAGE_SIZE}
+            loading={loading}
+            onPageChange={setPage}
+          />
         ) : null}
 
         {rejectOpen ? (
