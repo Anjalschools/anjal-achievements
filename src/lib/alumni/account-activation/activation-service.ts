@@ -42,7 +42,8 @@ const docToRow = (doc: HydratedDocument<IAlumniOnboardingRequest>): AlumniOnboar
   services: doc.services || null,
 });
 
-const runSideEffects = async (userId: string) => {
+/** Shared post-activation hooks (cohorts, notifications, welcome automation). */
+export const runAlumniPortalAccountSideEffects = async (userId: string) => {
   try {
     const { canSendSystemNotification } = await import("@/lib/alumni/consent");
     const { createStudentNotification } = await import("@/lib/student-notifications");
@@ -169,7 +170,7 @@ export const runAlumniOnboardingActivation = async (params: {
   doc.alumniActivationStatus = emailDispatched ? "activation_sent" : "failed";
   doc.alumniActivationLastError = emailDispatched ? undefined : "activation_email_not_sent";
 
-  await runSideEffects(resolvedUserId);
+  await runAlumniPortalAccountSideEffects(resolvedUserId);
 
   return {
     ok: true,

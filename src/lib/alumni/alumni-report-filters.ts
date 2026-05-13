@@ -23,6 +23,7 @@ const VERIFICATION_SOURCES: AlumniVerificationSource[] = [
   "verification_request",
   "imported",
   "legacy",
+  "self_registration",
 ];
 
 const isVerificationSource = (v: string): v is AlumniVerificationSource =>

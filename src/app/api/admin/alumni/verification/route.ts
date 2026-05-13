@@ -18,6 +18,7 @@ const SOURCES: AlumniVerificationSource[] = [
   "verification_request",
   "imported",
   "legacy",
+  "self_registration",
 ];
 
 export async function POST(request: Request) {

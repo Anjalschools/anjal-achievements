@@ -9,6 +9,9 @@ import {
   Loader2,
   Sparkles,
   UserRound,
+  Lock,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import { getLocale } from "@/lib/i18n";
 import {
@@ -16,10 +19,12 @@ import {
   type AlumniOnboardingRequestInput,
 } from "@/lib/alumni/onboarding-types";
 import AlumniJoinSuccess from "@/components/alumni/AlumniJoinSuccess";
+import { getPostLoginDestination } from "@/lib/auth-default-route";
 
-type SubmitState = "idle" | "submitting" | "success" | "error" | "duplicate";
+type SubmitState = "idle" | "submitting" | "success" | "error";
 
 const DEGREE_OTHER = "أخرى";
+const MIN_PASSWORD_LEN = 8;
 
 /** Form draft allows unset graduation year until the user selects from the dropdown. */
 type JoinFormState = Omit<AlumniOnboardingRequestInput, "graduationYear"> & {
@@ -33,6 +38,8 @@ const MAX_GRAD_SELECT = currentYear + 2;
 const emptyForm = (): JoinFormState => ({
   fullName: "",
   email: "",
+  password: "",
+  passwordConfirm: "",
   phone: "",
   universityName: "",
   major: "",
@@ -62,6 +69,10 @@ const JoinAlumniPage = () => {
   const [state, setState] = useState<SubmitState>("idle");
   const [errorText, setErrorText] = useState("");
   const [form, setForm] = useState<JoinFormState>(() => emptyForm());
+  const [successEmail, setSuccessEmail] = useState("");
+  const [successShowLoginHint, setSuccessShowLoginHint] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showPasswordConfirm, setShowPasswordConfirm] = useState(false);
 
   const copy = useMemo(
     () =>
@@ -69,14 +80,20 @@ const JoinAlumniPage = () => {
         ? {
             title: "انضم إلى مجتمع خريجي الأنجال",
             subtitle:
-              "أكمل طلب الانضمام ليتم مراجعته من إدارة المنصة، وبعد الموافقة يتم تفعيل حسابك كخريج.",
-            submit: "إرسال طلب الانضمام",
+              "أنشئ حسابك كخريج فورًا — بدون انتظار اعتماد. استخدم بريدك كاسم مستخدم وكلمة مرورك الخاصة.",
+            submit: "إنشاء الحساب والانضمام",
+            pwdSection: "كلمة المرور",
+            pwd: "كلمة المرور *",
+            pwdConfirm: "تأكيد كلمة المرور *",
           }
         : {
             title: "Join Al-Anjal Alumni Community",
             subtitle:
-              "Submit your onboarding request for admin review. Once approved, your account can be activated as alumni.",
-            submit: "Submit onboarding request",
+              "Create your alumni account instantly — no admin wait. Your email is your username; choose your own password.",
+            submit: "Create account & join",
+            pwdSection: "Password",
+            pwd: "Password *",
+            pwdConfirm: "Confirm password *",
           },
     [isAr]
   );
@@ -132,15 +149,44 @@ const JoinAlumniPage = () => {
       }
     }
 
+    const pwd = String(form.password || "");
+    const pwd2 = String(form.passwordConfirm || "");
+    if (!pwd || !pwd2) {
+      setErrorText(isAr ? "يرجى إدخال كلمة المرور وتأكيدها." : "Please enter and confirm your password.");
+      setState("error");
+      return;
+    }
+    if (pwd.length < MIN_PASSWORD_LEN) {
+      setErrorText(
+        isAr
+          ? `كلمة المرور يجب أن تكون ${MIN_PASSWORD_LEN} أحرف على الأقل.`
+          : `Password must be at least ${MIN_PASSWORD_LEN} characters.`
+      );
+      setState("error");
+      return;
+    }
+    if (pwd !== pwd2) {
+      setErrorText(isAr ? "كلمتا المرور غير متطابقتين." : "Passwords do not match.");
+      setState("error");
+      return;
+    }
+
     setState("submitting");
     setErrorText("");
-    const { graduationYear: _yearUnset, ...rest } = form;
+    const { graduationYear: _yearUnset, password: plainPassword, passwordConfirm: _pc, ...rest } = form;
     void _yearUnset;
+    void _pc;
+    const emailForLogin = String(form.email || "")
+      .trim()
+      .toLowerCase();
+
     const payload: AlumniOnboardingRequestInput = {
       ...rest,
       graduationYear: gy,
       degree: deg,
       customDegree: deg === DEGREE_OTHER ? String(form.customDegree || "").trim() : undefined,
+      password: plainPassword,
+      passwordConfirm: pwd2,
     };
     try {
       const response = await fetch("/api/alumni/onboarding-request", {
@@ -149,8 +195,32 @@ const JoinAlumniPage = () => {
         body: JSON.stringify(payload),
       });
       const json = (await response.json().catch(() => ({}))) as { error?: string };
-      if (response.status === 409 && json.error === "ALREADY_PENDING") {
-        setState("duplicate");
+      if (response.status === 409 && json.error === "EMAIL_ALREADY_EXISTS") {
+        setErrorText(
+          isAr
+            ? "هذا البريد الإلكتروني مسجّل مسبقًا. سجّل الدخول أو استخدم بريدًا آخر."
+            : "This email is already registered. Sign in or use a different email."
+        );
+        setState("error");
+        return;
+      }
+      if (response.status === 400 && json.error === "PASSWORD_MISMATCH") {
+        setErrorText(isAr ? "كلمتا المرور غير متطابقتين." : "Passwords do not match.");
+        setState("error");
+        return;
+      }
+      if (response.status === 400 && json.error === "PASSWORD_TOO_SHORT") {
+        setErrorText(
+          isAr
+            ? `كلمة المرور قصيرة جدًا (الحد الأدنى ${MIN_PASSWORD_LEN}).`
+            : `Password is too short (minimum ${MIN_PASSWORD_LEN}).`
+        );
+        setState("error");
+        return;
+      }
+      if (response.status === 400 && json.error === "MISSING_PASSWORD") {
+        setErrorText(isAr ? "يرجى إدخال كلمة المرور." : "Please enter a password.");
+        setState("error");
         return;
       }
       if (response.status === 400 && json.error === "CUSTOM_DEGREE_REQUIRED") {
@@ -164,11 +234,43 @@ const JoinAlumniPage = () => {
         return;
       }
       if (!response.ok) {
-        setErrorText(isAr ? "تعذر إرسال الطلب. تأكد من البيانات ثم حاول مجددًا." : "Unable to submit request. Check inputs and try again.");
+        setErrorText(isAr ? "تعذر إتمام التسجيل. تأكد من البيانات ثم حاول مجددًا." : "Unable to complete signup. Check inputs and try again.");
         setState("error");
         return;
       }
+
       setForm(emptyForm());
+      setShowPassword(false);
+      setShowPasswordConfirm(false);
+
+      try {
+        const loginRes = await fetch("/api/auth/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            identifier: emailForLogin,
+            password: plainPassword,
+            rememberMe: true,
+          }),
+        });
+        const loginJson = (await loginRes.json().catch(() => ({}))) as {
+          user?: { role?: string; accountType?: string; mustChangePassword?: boolean };
+        };
+
+        if (loginRes.ok && loginJson.user && loginJson.user.mustChangePassword !== true) {
+          const dest = getPostLoginDestination({
+            role: loginJson.user.role,
+            accountType: loginJson.user.accountType,
+          });
+          window.location.href = dest;
+          return;
+        }
+      } catch {
+        /* fall through to success screen with manual sign-in */
+      }
+
+      setSuccessEmail(emailForLogin);
+      setSuccessShowLoginHint(true);
       setState("success");
     } catch {
       setErrorText(isAr ? "حدث خطأ غير متوقع أثناء الإرسال." : "Unexpected submission error.");
@@ -177,7 +279,9 @@ const JoinAlumniPage = () => {
   };
 
   if (state === "success") {
-    return <AlumniJoinSuccess isAr={isAr} />;
+    return (
+      <AlumniJoinSuccess isAr={isAr} email={successEmail} showLoginHint={successShowLoginHint} />
+    );
   }
 
   return (
@@ -206,6 +310,9 @@ const JoinAlumniPage = () => {
             <Link href="/alumni" className="rounded-full border border-white/20 px-4 py-2 font-semibold text-white/90 hover:bg-white/10">
               {isAr ? "العودة لصفحة الخريجين" : "Back to alumni page"}
             </Link>
+            <Link href="/login/alumni" className="rounded-full border border-white/20 px-4 py-2 font-semibold text-white/90 hover:bg-white/10">
+              {isAr ? "لديك حساب؟ تسجيل الدخول" : "Already have an account? Sign in"}
+            </Link>
           </div>
         </section>
 
@@ -217,7 +324,7 @@ const JoinAlumniPage = () => {
             </h2>
             <div className="mt-4 grid gap-4 sm:grid-cols-2">
               <input required value={form.fullName} onChange={(e) => setField("fullName", e.target.value)} placeholder={isAr ? "الاسم الكامل *" : "Full name *"} className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none ring-primary/20 focus:ring" />
-              <input required type="email" value={form.email} onChange={(e) => setField("email", e.target.value)} placeholder={isAr ? "البريد الإلكتروني *" : "Email *"} className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none ring-primary/20 focus:ring" />
+              <input required type="email" value={form.email} onChange={(e) => setField("email", e.target.value)} placeholder={isAr ? "البريد الإلكتروني *" : "Email *"} className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none ring-primary/20 focus:ring" autoComplete="email" />
               <input value={form.phone || ""} onChange={(e) => setField("phone", e.target.value)} placeholder={isAr ? "رقم الجوال" : "Phone"} className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none ring-primary/20 focus:ring" />
               <select
                 required
@@ -236,6 +343,62 @@ const JoinAlumniPage = () => {
                   </option>
                 ))}
               </select>
+            </div>
+          </section>
+
+          <section className="rounded-2xl border border-slate-200/90 bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.08)] sm:p-5">
+            <h2 className="inline-flex items-center gap-2 text-lg font-black text-slate-900">
+              <Lock className="h-4 w-4 text-primary" aria-hidden />
+              {copy.pwdSection}
+            </h2>
+            <p className="mt-2 text-xs text-slate-600 sm:text-sm">
+              {isAr
+                ? "سيصبح بريدك الإلكتروني اسم المستخدم. احتفظ بكلمة مرور قوية ولا تشاركها."
+                : "Your email will be your username. Use a strong password and keep it private."}
+            </p>
+            <div className="mt-4 grid gap-4 sm:grid-cols-2">
+              <div className="relative sm:col-span-1">
+                <input
+                  required
+                  type={showPassword ? "text" : "password"}
+                  value={form.password || ""}
+                  onChange={(e) => setField("password", e.target.value)}
+                  placeholder={copy.pwd}
+                  autoComplete="new-password"
+                  className="w-full rounded-xl border border-slate-200 py-2.5 pe-11 ps-3 text-sm outline-none ring-primary/20 focus:ring"
+                  aria-label={copy.pwd}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((v) => !v)}
+                  className="absolute end-2 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-800"
+                  aria-label={showPassword ? (isAr ? "إخفاء كلمة المرور" : "Hide password") : isAr ? "إظهار كلمة المرور" : "Show password"}
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+              <div className="relative sm:col-span-1">
+                <input
+                  required
+                  type={showPasswordConfirm ? "text" : "password"}
+                  value={form.passwordConfirm || ""}
+                  onChange={(e) => setField("passwordConfirm", e.target.value)}
+                  placeholder={copy.pwdConfirm}
+                  autoComplete="new-password"
+                  className="w-full rounded-xl border border-slate-200 py-2.5 pe-11 ps-3 text-sm outline-none ring-primary/20 focus:ring"
+                  aria-label={copy.pwdConfirm}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPasswordConfirm((v) => !v)}
+                  className="absolute end-2 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-800"
+                  aria-label={
+                    showPasswordConfirm ? (isAr ? "إخفاء التأكيد" : "Hide confirm password") : isAr ? "إظهار التأكيد" : "Show confirm password"
+                  }
+                >
+                  {showPasswordConfirm ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
             </div>
           </section>
 
@@ -328,13 +491,6 @@ const JoinAlumniPage = () => {
             <textarea value={form.bio || ""} onChange={(e) => setField("bio", e.target.value)} rows={5} placeholder={isAr ? "اكتب نبذة مختصرة عن رحلتك الأكاديمية والمهنية..." : "Write a short bio about your academic and professional journey..."} className="mt-4 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none ring-primary/20 focus:ring" />
           </section>
 
-          {state === "duplicate" ? (
-            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-amber-900">
-              {isAr
-                ? "لديك طلب قيد المراجعة بالفعل. سنوافيك بالتحديث حال اعتماد الطلب."
-                : "You already have a pending request. We will update you after review."}
-            </div>
-          ) : null}
           {state === "error" ? (
             <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-red-900">{errorText}</div>
           ) : null}

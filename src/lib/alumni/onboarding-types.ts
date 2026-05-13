@@ -25,6 +25,9 @@ export type AlumniOnboardingServicesInput = {
 export type AlumniOnboardingRequestInput = {
   fullName: string;
   email: string;
+  /** Required for public self-registration (instant activation). */
+  password?: string;
+  passwordConfirm?: string;
   phone?: string;
   graduationYear: number;
   universityName?: string;

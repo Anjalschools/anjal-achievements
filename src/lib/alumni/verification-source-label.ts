@@ -10,6 +10,7 @@ const LABELS: Record<string, { ar: string; en: string }> = {
   university_email: { ar: "بريد جامعي", en: "University email" },
   career: { ar: "مسار مهني", en: "Career path" },
   manual: { ar: "موثّق يدويًا", en: "Manual entry" },
+  self_registration: { ar: "تسجيل ذاتي فوري", en: "Self-registration (instant)" },
 };
 
 /** Human-readable label for `User.alumniProfile.verificationSource` (never raw keys in UI). */

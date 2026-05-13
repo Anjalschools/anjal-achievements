@@ -19,7 +19,8 @@ export type AlumniVerificationSource =
   | "manual_admin"
   | "verification_request"
   | "imported"
-  | "legacy";
+  | "legacy"
+  | "self_registration";
 
 export type AlumniProfile = {
   graduationYear?: number;
@@ -299,6 +300,7 @@ const AlumniProfileSchema = new Schema(
         "verification_request",
         "imported",
         "legacy",
+        "self_registration",
       ],
       required: false,
     },

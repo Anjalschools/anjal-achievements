@@ -43,6 +43,7 @@ const VERIFICATION_SOURCES: Array<{ value: string; labelAr: string }> = [
   { value: "verification_request", labelAr: "طلب توثيق" },
   { value: "imported", labelAr: "مستورد" },
   { value: "legacy", labelAr: "قديم" },
+  { value: "self_registration", labelAr: "تسجيل ذاتي فوري" },
 ];
 
 const BarRow = ({ label, value, max }: { label: string; value: number; max: number }) => {

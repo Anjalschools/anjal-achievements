@@ -70,6 +70,63 @@ export type LinkedAlumniAccountEmailInput = {
   services?: AlumniOnboardingServices | null;
 };
 
+export type SelfRegisteredAlumniWelcomeEmailInput = {
+  to: string;
+  recipientName: string;
+  services?: AlumniOnboardingServices | null;
+};
+
+/**
+ * Instant self-registration: welcome only — no credentials in email.
+ */
+export const sendSelfRegisteredAlumniWelcomeEmail = async (
+  input: SelfRegisteredAlumniWelcomeEmailInput
+): Promise<boolean> => {
+  const to = String(input.to || "").trim().toLowerCase();
+  if (!to.includes("@")) return false;
+
+  const base = getBaseUrl();
+  const loginUrl = `${base}/login/alumni`;
+  const dashboardUrl = `${base}/alumni/dashboard`;
+  const logoUrl = `${base}/logow.png`;
+  const name = input.recipientName.trim() || "خريجنا الكريم";
+
+  const inner = `
+          <p style="margin:0;color:#0f172a;font-size:17px;line-height:1.8;font-weight:600;">عزيزي/عزيزتي ${name}،</p>
+          <p style="margin:16px 0 0;color:#334155;font-size:16px;line-height:1.9;">مرحبًا بك في <strong>مجتمع خريجي مدارس الأنجال الأهلية</strong>. تم <strong>تفعيل حسابك مباشرة</strong> — يمكنك تسجيل الدخول باستخدام <strong>البريد الإلكتروني</strong> و<strong>كلمة المرور التي اخترتها</strong> عند التسجيل.</p>
+          <p style="margin:12px 0 0;color:#475569;font-size:15px;line-height:1.85;">لا يُرسل هذا البريد أي كلمة مرور. احتفظ بكلمة مرورك آمنة ولا تشاركها.</p>
+
+          <h2 style="margin:28px 0 10px;color:#1e3a8a;font-size:17px;font-weight:800;">مساهماتك المختارة</h2>
+          ${buildContributionsHtml(input.services)}
+
+          ${buttonPrimary(dashboardUrl, "الانتقال إلى لوحة الخريجين")}
+          ${subtleLink(loginUrl, "رابط تسجيل الدخول (خريجين):")}
+  `;
+
+  const html = wrapAlumniEmail({ base, logoUrl, innerHtml: inner });
+
+  const text = [
+    `مرحبًا بك في مجتمع خريجي الأنجال — ${name}`,
+    ``,
+    `تم تفعيل حسابك مباشرة.`,
+    `سجّل الدخول بالبريد وكلمة المرور التي اخترتها عند التسجيل.`,
+    `لوحة الخريجين: ${dashboardUrl}`,
+    `بوابة الدخول: ${loginUrl}`,
+    ``,
+    `لم يُرسل في هذه الرسالة أي كلمة مرور.`,
+    ``,
+    `إدارة مدارس الأنجال الأهلية`,
+  ].join("\n");
+
+  const result = await sendSmtpMail({
+    to,
+    subject: "مرحبًا بك في مجتمع خريجي الأنجال",
+    text,
+    html,
+  });
+  return result.ok;
+};
+
 /**
  * CASE A — حساب جديد: يتضمن اسم المستخدم وكلمة المرور المؤقتة (في جسم البريد فقط — لا تُسجَّل).
  */
