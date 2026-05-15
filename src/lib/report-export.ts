@@ -147,7 +147,12 @@ export const exportLandscapeExecutivePdfView = async (
   rows: ExportRow[],
   headers: string[],
   title: string,
-  headerImagePath = "/report-header.png"
+  headerImagePath = "/report-header.png",
+  extras?: {
+    subtitle?: string;
+    /** Pre-escaped small HTML fragments (KPI grids, chart summaries) inserted before the main table */
+    blocksHtml?: string;
+  }
 ) => {
   const now = new Date().toLocaleString("ar-SA");
   const safeTitle = escapeHtml(title);
@@ -163,6 +168,11 @@ export const exportLandscapeExecutivePdfView = async (
   const summaryHtml = summaryLines
     .map((line) => `<li style="margin:0 0 6px 0;">${escapeHtml(line)}</li>`)
     .join("");
+
+  const subtitleHtml = extras?.subtitle
+    ? `<h2 style="font-size:15px;margin:10px 0 6px 0;color:#0f172a">${escapeHtml(extras.subtitle)}</h2>`
+    : "";
+  const blocks = extras?.blocksHtml ? extras.blocksHtml : "";
 
   const html = `<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8" />
   <title>${safeTitle}</title>
@@ -183,7 +193,9 @@ export const exportLandscapeExecutivePdfView = async (
     <div class="header"><img src="${headerImagePath}" alt="" /></div>
     <h1>${safeTitle}</h1>
     <div class="meta">تاريخ التصدير: ${escapeHtml(now)}</div>
+    ${subtitleHtml}
     <div class="exec"><strong>ملخص تنفيذي</strong><ul>${summaryHtml}</ul></div>
+    ${blocks}
     <table><thead><tr>${tableHead}</tr></thead><tbody>${tableBody}</tbody></table>
   </body></html>`;
 

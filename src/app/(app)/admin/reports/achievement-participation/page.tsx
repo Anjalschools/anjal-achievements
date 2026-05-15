@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import PageContainer from "@/components/layout/PageContainer";
@@ -21,11 +21,15 @@ const MiniHBar = ({
   value,
   max,
   isAr,
+  barClassName,
+  barStyle,
 }: {
   label: string;
   value: number;
   max: number;
   isAr: boolean;
+  barClassName?: string;
+  barStyle?: CSSProperties;
 }) => {
   const pct = max > 0 ? Math.min(100, Math.round((value / max) * 100)) : 0;
   return (
@@ -35,7 +39,10 @@ const MiniHBar = ({
         <span className="tabular-nums text-slate-900">{value}</span>
       </div>
       <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100" dir={isAr ? "rtl" : "ltr"}>
-        <div className="h-full rounded-full bg-primary transition-[width]" style={{ width: `${pct}%` }} />
+        <div
+          className={barClassName ?? "h-full rounded-full bg-primary transition-[width]"}
+          style={{ width: `${pct}%`, ...barStyle }}
+        />
       </div>
     </div>
   );
@@ -58,6 +65,9 @@ const AdminParticipationAnalyticsPage = () => {
     grade: "all",
     section: "all",
     categories: [] as string[],
+    primaryType: "all",
+    focusType: "",
+    focusRaw: "",
     levels: [] as string[],
     resultTokens: [] as string[],
     status: "all",
@@ -99,6 +109,11 @@ const AdminParticipationAnalyticsPage = () => {
     sp.set("grade", f.grade);
     sp.set("section", f.section);
     if (f.categories.length) sp.set("category", f.categories.join(","));
+    if (f.primaryType && f.primaryType !== "all") sp.set("primaryType", f.primaryType);
+    if (f.focusType) {
+      sp.set("focusType", f.focusType);
+      sp.set("focusRaw", f.focusRaw);
+    }
     if (f.levels.length) sp.set("level", f.levels.join(","));
     if (f.resultTokens.length) sp.set("result", f.resultTokens.join(","));
     sp.set("status", f.status);
@@ -153,26 +168,34 @@ const AdminParticipationAnalyticsPage = () => {
     () =>
       isAr
         ? [
-            "النشاط",
-            "النوع",
+            "اسم النشاط",
+            "النوع الرئيسي",
+            "التصنيف الفرعي",
             "المستوى",
-            "نتيجة المشاركة",
-            "إجمالي المشاركين",
+            "النتيجة",
+            "مشاركون فريدون",
             "بنين",
             "بنات",
             "عربي",
             "دولي",
             "موهبة",
             "غير موهبة",
+            "ذهبية",
+            "فضية",
+            "برونزية",
+            "مراكز",
+            "ترشيحات",
+            "مشاركة فقط",
             "نسبة التميز %",
-            "إنجازات معتمدة",
-            "مشاركات",
+            "معتمد",
+            "إجمالي السجلات",
           ]
         : [
-            "Activity",
-            "Type",
+            "Activity name",
+            "Primary type",
+            "Sub-classification",
             "Level",
-            "Participation result",
+            "Result",
             "Distinct participants",
             "Boys",
             "Girls",
@@ -180,9 +203,15 @@ const AdminParticipationAnalyticsPage = () => {
             "International",
             "Mawhiba",
             "Non‑Mawhiba",
+            "Gold",
+            "Silver",
+            "Bronze",
+            "Ranks",
+            "Nominations",
+            "Participation only",
             "Excellence rate %",
-            "Approved achievements",
-            "Total rows",
+            "Approved",
+            "Total records",
           ],
     [isAr]
   );
@@ -192,26 +221,34 @@ const AdminParticipationAnalyticsPage = () => {
     return data.table.map((r: ParticipationActivityRow) => {
       const base = isAr
         ? {
-            النشاط: r.activityLabelAr,
-            النوع: r.typeLabelAr,
+            "اسم النشاط": r.activityLabelAr,
+            "النوع الرئيسي": r.typeLabelAr,
+            "التصنيف الفرعي": r.classificationLabelAr,
             المستوى: r.levelLabelAr,
-            "نتيجة المشاركة": r.participationResultAr,
-            "إجمالي المشاركين": r.distinctParticipants,
+            النتيجة: r.participationResultAr,
+            "مشاركون فريدون": r.distinctParticipants,
             بنين: r.maleParticipants,
             بنات: r.femaleParticipants,
             عربي: r.arabicParticipants,
             دولي: r.internationalParticipants,
             موهبة: r.mawhibaParticipants,
             "غير موهبة": r.nonMawhibaParticipants,
+            ذهبية: r.goldMedalCount,
+            فضية: r.silverMedalCount,
+            برونزية: r.bronzeMedalCount,
+            مراكز: r.rankCount,
+            ترشيحات: r.nominationCount,
+            "مشاركة فقط": r.participationOnlyCount,
             "نسبة التميز %": r.excellenceRatePct,
-            "إنجازات معتمدة": r.approvedAchievements,
-            مشاركات: r.totalParticipations,
+            معتمد: r.approvedAchievements,
+            "إجمالي السجلات": r.totalParticipations,
           }
         : {
-            Activity: r.activityLabelEn,
-            Type: r.typeLabelEn,
+            "Activity name": r.activityLabelEn,
+            "Primary type": r.typeLabelEn,
+            "Sub-classification": r.classificationLabelEn,
             Level: r.levelLabelEn,
-            "Participation result": r.participationResultEn,
+            Result: r.participationResultEn,
             "Distinct participants": r.distinctParticipants,
             Boys: r.maleParticipants,
             Girls: r.femaleParticipants,
@@ -219,11 +256,17 @@ const AdminParticipationAnalyticsPage = () => {
             International: r.internationalParticipants,
             Mawhiba: r.mawhibaParticipants,
             "Non‑Mawhiba": r.nonMawhibaParticipants,
+            Gold: r.goldMedalCount,
+            Silver: r.silverMedalCount,
+            Bronze: r.bronzeMedalCount,
+            Ranks: r.rankCount,
+            Nominations: r.nominationCount,
+            "Participation only": r.participationOnlyCount,
             "Excellence rate %": r.excellenceRatePct,
-            "Approved achievements": r.approvedAchievements,
-            "Total rows": r.totalParticipations,
+            Approved: r.approvedAchievements,
+            "Total records": r.totalParticipations,
           };
-    return base as unknown as Record<string, string | number>;
+      return base as unknown as Record<string, string | number>;
     });
   }, [data, isAr]);
 
@@ -231,7 +274,7 @@ const AdminParticipationAnalyticsPage = () => {
 
   const summaryLines = useMemo(() => {
     if (!kpi) return [];
-    return isAr
+    const lines = isAr
       ? [
           `إجمالي المشاركات: ${kpi.totalParticipations}`,
           `طلاب مشاركون (فريدون): ${kpi.distinctStudents}`,
@@ -242,7 +285,7 @@ const AdminParticipationAnalyticsPage = () => {
           `مراكز أولى: ${kpi.firstPlaceCount}`,
           `ترشيحات: ${kpi.nominationCount}`,
           `أعلى مستوى: ${kpi.highestLevelLabelAr}`,
-          `برامج نشطة في الجدول: ${kpi.activeProgramsCount}`,
+          `أنشطة في الجدول: ${kpi.activeProgramsCount}`,
         ]
       : [
           `Total participation records: ${kpi.totalParticipations}`,
@@ -254,14 +297,56 @@ const AdminParticipationAnalyticsPage = () => {
           `First places: ${kpi.firstPlaceCount}`,
           `Nominations: ${kpi.nominationCount}`,
           `Highest level: ${kpi.highestLevelLabelEn}`,
-          `Active programs (table): ${kpi.activeProgramsCount}`,
+          `Rows in table: ${kpi.activeProgramsCount}`,
         ];
-  }, [kpi, isAr]);
+    if (data?.focusedActivity) {
+      lines.unshift(
+        isAr
+          ? `نطاق التحليل: نشاط واحد — ${data.focusedActivity.labelAr}`
+          : `Analytics scope: single activity — ${data.focusedActivity.labelEn}`
+      );
+    }
+    return lines;
+  }, [kpi, isAr, data?.focusedActivity]);
+
+  const reportTitle = useMemo(() => {
+    if (!data?.focusedActivity) return title;
+    return isAr ? `${title} — ${data.focusedActivity.labelAr}` : `${title} — ${data.focusedActivity.labelEn}`;
+  }, [data?.focusedActivity, isAr, title]);
 
   const handleExcel = () =>
-    void exportRowsToExcelWorkbook(tableRows, headers, title, "participation-analytics", { rtlSheet: isAr });
+    void exportRowsToExcelWorkbook(tableRows, headers, reportTitle, "participation-analytics", { rtlSheet: isAr });
 
-  const handlePdf = () => void exportLandscapeExecutivePdfView(summaryLines, tableRows, headers, title, "/report-header.png");
+  const handlePdf = () => {
+    const esc = (t: string) =>
+      t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+    let blocks = "";
+    if (data?.charts?.resultOutcomeCompare?.length) {
+      blocks += `<div style="margin-bottom:14px;font-size:11px"><strong>${esc(isAr ? "مقارنة النتائج (نطاق الفلاتر)" : "Result comparison (filter scope)")}</strong><table style="width:100%;margin-top:6px;border-collapse:collapse"><tr>`;
+      blocks += data.charts.resultOutcomeCompare
+        .map(
+          (r) =>
+            `<td style="border:1px solid #cbd5e1;padding:4px;text-align:right">${esc(isAr ? r.labelAr : r.labelEn)}: ${r.count}</td>`
+        )
+        .join("");
+      blocks += `</tr></table></div>`;
+    }
+    if (data?.charts?.yearTrend?.length) {
+      blocks += `<div style="margin-bottom:14px;font-size:11px"><strong>${esc(isAr ? "تطور السنوات" : "Year-over-year")}</strong><table style="width:100%;margin-top:6px;border-collapse:collapse">`;
+      for (const y of data.charts.yearTrend) {
+        blocks += `<tr><td style="border:1px solid #cbd5e1;padding:4px">${y.year}</td><td style="border:1px solid #cbd5e1;padding:4px">${esc(isAr ? "سجلات" : "Records")}: ${y.totalRows}</td><td style="border:1px solid #cbd5e1;padding:4px">${esc(isAr ? "طلاب" : "Students")}: ${y.distinctStudents}</td><td style="border:1px solid #cbd5e1;padding:4px">Gold: ${y.goldMedals}</td></tr>`;
+      }
+      blocks += `</table></div>`;
+    }
+    void exportLandscapeExecutivePdfView(summaryLines, tableRows, headers, reportTitle, "/report-header.png", {
+      subtitle: data?.focusedActivity
+        ? isAr
+          ? data.focusedActivity.labelAr
+          : data.focusedActivity.labelEn
+        : undefined,
+      blocksHtml: blocks || undefined,
+    });
+  };
 
   const genderMax = useMemo(
     () => Math.max(1, ...(data?.charts.genderParticipation.map((x) => x.count) || [0])),
@@ -276,6 +361,14 @@ const AdminParticipationAnalyticsPage = () => {
   const levelMax = useMemo(() => Math.max(1, ...(data?.charts.levelDistribution.map((x) => x.count) || [0])), [data]);
   const horizMax = useMemo(
     () => Math.max(1, ...(data?.charts.activityHorizontal.map((x) => x.studentCount) || [0])),
+    [data]
+  );
+  const resultCompareMax = useMemo(
+    () => Math.max(1, ...(data?.charts.resultOutcomeCompare.map((x) => x.count) || [0])),
+    [data]
+  );
+  const yearTrendMax = useMemo(
+    () => Math.max(1, ...(data?.charts.yearTrend.map((x) => x.totalRows) || [0])),
     [data]
   );
 
@@ -298,8 +391,8 @@ const AdminParticipationAnalyticsPage = () => {
           title={title}
           subtitle={
             isAr
-              ? "إحصائيات المشاركات حسب النشاط مع مقارنات الجنس والقسم وموهبة، وعرض المستوى ونتيجة المشاركة."
-              : "Participation metrics by activity with gender, section, and Mawhiba splits, plus level and result summaries."
+              ? "تحليل فعلي لكل نشاط مسجّل (مسابقة، برنامج، اختبار…) مع فلاتر ذكية، رسوم مقارنة، وتصدير تنفيذي."
+              : "Concrete activities as recorded (competition, program, test, …) with smart filters, comparison charts, and executive export."
           }
           actions={
             <div className="flex flex-wrap gap-2">
@@ -348,7 +441,65 @@ const AdminParticipationAnalyticsPage = () => {
 
         <section className="mb-4 rounded-2xl border border-slate-200 bg-white p-4 print:hidden">
           <h2 className="text-sm font-black text-slate-900">{isAr ? "الفلاتر" : "Filters"}</h2>
+          <p className="mt-1 text-xs text-slate-500">
+            {isAr
+              ? "اختر نوع النشاط ثم الاسم الفعلي المسجّل (كانجارو، SAT، برنامج إثرائي…). التحليل والتصدير يتبعان النطاق الحالي."
+              : "Pick a primary type, then the concrete name as recorded (Kangaroo, SAT, enrichment program, …). Analytics and export follow the current scope."}
+          </p>
           <div className="mt-3 grid gap-3 md:grid-cols-2 lg:grid-cols-4">
+            <label className="flex flex-col text-xs font-semibold text-slate-600 lg:col-span-2">
+              {isAr ? "نوع النشاط (رئيسي)" : "Primary activity type"}
+              <select
+                value={f.primaryType}
+                onChange={(e) => {
+                  setPage(1);
+                  setF((p) => ({
+                    ...p,
+                    primaryType: e.target.value,
+                    focusType: "",
+                    focusRaw: "",
+                  }));
+                }}
+                className="mt-1 rounded-lg border border-slate-200 px-2 py-2 text-sm"
+                aria-label={isAr ? "نوع النشاط" : "Primary activity type"}
+              >
+                <option value="all">{isAr ? "الكل" : "All"}</option>
+                {categoryOptions.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex flex-col text-xs font-semibold text-slate-600 lg:col-span-2">
+              {isAr ? "اسم النشاط (المسابقة / البرنامج / الاختبار)" : "Activity name (competition / program / test)"}
+              <select
+                value={f.focusType ? `${f.focusType}\u001f${f.focusRaw}` : ""}
+                onChange={(e) => {
+                  setPage(1);
+                  const v = e.target.value;
+                  if (!v) {
+                    setF((p) => ({ ...p, focusType: "", focusRaw: "" }));
+                    return;
+                  }
+                  const idx = v.indexOf("\u001f");
+                  const tk = idx === -1 ? v : v.slice(0, idx);
+                  const rk = idx === -1 ? "" : v.slice(idx + 1);
+                  setF((p) => ({ ...p, focusType: tk, focusRaw: rk }));
+                }}
+                className="mt-1 rounded-lg border border-slate-200 px-2 py-2 text-sm"
+                aria-label={isAr ? "اسم النشاط" : "Activity name"}
+              >
+                <option value="">{isAr ? "— كل الأنشطة —" : "— All activities —"}</option>
+                {(data?.activityOptions ?? [])
+                  .filter((o) => f.primaryType === "all" || o.typeKey === f.primaryType)
+                  .map((o) => (
+                    <option key={`${o.typeKey}\u001f${o.rawKey}`} value={`${o.typeKey}\u001f${o.rawKey}`}>
+                      {(isAr ? o.labelAr : o.labelEn) + ` · ${o.count}`}
+                    </option>
+                  ))}
+              </select>
+            </label>
             <label className="flex flex-col text-xs font-semibold text-slate-600">
               {isAr ? "العام الدراسي" : "Academic year"}
               <select
@@ -612,6 +763,16 @@ const AdminParticipationAnalyticsPage = () => {
           <div className="mb-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">{error}</div>
         ) : null}
 
+        {data?.focusedActivity ? (
+          <div
+            className="mb-4 rounded-2xl border-2 border-indigo-200 bg-indigo-50/90 px-4 py-3 text-sm font-bold text-indigo-950 shadow-sm print:border print:bg-white"
+            role="status"
+          >
+            {isAr ? "تقرير مركّز على نشاط واحد:" : "Focused single-activity report:"}{" "}
+            <span dir="auto">{isAr ? data.focusedActivity.labelAr : data.focusedActivity.labelEn}</span>
+          </div>
+        ) : null}
+
         {allowed === true && !data && loading ? (
           <div className="flex items-center gap-2 py-12 text-slate-600">
             <Loader2 className="h-5 w-5 animate-spin" />
@@ -641,6 +802,58 @@ const AdminParticipationAnalyticsPage = () => {
                   <p className="mt-1 text-lg font-black text-slate-900">{v}</p>
                 </div>
               ))}
+            </section>
+
+            <section className="mb-6 grid gap-4 lg:grid-cols-2 print:grid-cols-1">
+              <div className="rounded-2xl border border-slate-200 bg-gradient-to-br from-white to-slate-50/80 p-4 shadow-sm">
+                <h3 className="text-sm font-black text-slate-900">
+                  {isAr ? "مقارنة النتائج (نطاق الفلاتر)" : "Result comparison (filtered scope)"}
+                </h3>
+                <p className="mt-1 text-[11px] text-slate-500">
+                  {isAr ? "ذهبية، فضية، برونزية، ترشيح، مراكز، مشاركة فقط" : "Gold, silver, bronze, nomination, ranks, participation"}
+                </p>
+                <div className="mt-3 space-y-2">
+                  {data.charts.resultOutcomeCompare.map((r) => (
+                    <MiniHBar
+                      key={r.key}
+                      label={isAr ? r.labelAr : r.labelEn}
+                      value={r.count}
+                      max={resultCompareMax}
+                      isAr={isAr}
+                      barClassName="h-full rounded-full transition-[width]"
+                      barStyle={{ backgroundColor: r.color }}
+                    />
+                  ))}
+                </div>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-gradient-to-br from-white to-slate-50/80 p-4 shadow-sm">
+                <h3 className="text-sm font-black text-slate-900">
+                  {isAr ? "تطور السنوات" : "Year-over-year"}
+                </h3>
+                <p className="mt-1 text-[11px] text-slate-500">
+                  {isAr
+                    ? "حسب سنة الإنجاز أو تاريخ السجل عند غياب السنة"
+                    : "By achievement year or record date when year is missing"}
+                </p>
+                <div className="mt-3 space-y-2">
+                  {data.charts.yearTrend.length === 0 ? (
+                    <p className="text-xs text-slate-500">
+                      {isAr ? "لا تتوفر بيانات سنوات كافية ضمن الفلاتر." : "Not enough year data under current filters."}
+                    </p>
+                  ) : (
+                    data.charts.yearTrend.map((y) => (
+                      <MiniHBar
+                        key={y.year}
+                        label={`${y.year} · ${isAr ? "سجلات" : "rows"} ${y.totalRows} · ${isAr ? "طلاب" : "students"} ${y.distinctStudents} · 🥇 ${y.goldMedals}`}
+                        value={y.totalRows}
+                        max={yearTrendMax}
+                        isAr={isAr}
+                        barClassName="h-full rounded-full bg-teal-600 transition-[width]"
+                      />
+                    ))
+                  )}
+                </div>
+              </div>
             </section>
 
             <section className="mb-6 grid gap-4 lg:grid-cols-2 print:grid-cols-1">
@@ -751,7 +964,7 @@ const AdminParticipationAnalyticsPage = () => {
                 </p>
               </div>
               <div className="mt-3 overflow-x-auto">
-                <table className="w-full min-w-[960px] border-collapse text-left text-xs">
+                <table className="w-full min-w-[1280px] border-collapse text-left text-xs">
                   <thead>
                     <tr className="border-b border-slate-200 bg-slate-50 text-slate-700">
                       {headers.map((h) => (
@@ -771,12 +984,15 @@ const AdminParticipationAnalyticsPage = () => {
                     ) : (
                       data.table.map((r) => (
                         <tr key={r.activityKey} className="border-b border-slate-100 hover:bg-slate-50/80">
-                          <td className="max-w-[200px] px-2 py-2 font-semibold text-slate-900">
+                          <td className="max-w-[220px] px-2 py-2 font-semibold text-slate-900">
                             {isAr ? r.activityLabelAr : r.activityLabelEn}
                           </td>
                           <td className="px-2 py-2">{isAr ? r.typeLabelAr : r.typeLabelEn}</td>
+                          <td className="max-w-[120px] px-2 py-2 text-slate-700">
+                            {isAr ? r.classificationLabelAr : r.classificationLabelEn}
+                          </td>
                           <td className="px-2 py-2">{isAr ? r.levelLabelAr : r.levelLabelEn}</td>
-                          <td className="max-w-[180px] px-2 py-2">
+                          <td className="max-w-[160px] px-2 py-2">
                             {isAr ? r.participationResultAr : r.participationResultEn}
                           </td>
                           <td className="px-2 py-2 tabular-nums">{r.distinctParticipants}</td>
@@ -786,9 +1002,15 @@ const AdminParticipationAnalyticsPage = () => {
                           <td className="px-2 py-2 tabular-nums">{r.internationalParticipants}</td>
                           <td className="px-2 py-2 tabular-nums">{r.mawhibaParticipants}</td>
                           <td className="px-2 py-2 tabular-nums">{r.nonMawhibaParticipants}</td>
+                          <td className="px-2 py-2 tabular-nums text-amber-800">{r.goldMedalCount}</td>
+                          <td className="px-2 py-2 tabular-nums text-slate-600">{r.silverMedalCount}</td>
+                          <td className="px-2 py-2 tabular-nums text-amber-950/80">{r.bronzeMedalCount}</td>
+                          <td className="px-2 py-2 tabular-nums">{r.rankCount}</td>
+                          <td className="px-2 py-2 tabular-nums">{r.nominationCount}</td>
+                          <td className="px-2 py-2 tabular-nums">{r.participationOnlyCount}</td>
                           <td className="px-2 py-2 tabular-nums">{r.excellenceRatePct}%</td>
                           <td className="px-2 py-2 tabular-nums">{r.approvedAchievements}</td>
-                          <td className="px-2 py-2 tabular-nums">{r.totalParticipations}</td>
+                          <td className="px-2 py-2 tabular-nums font-semibold">{r.totalParticipations}</td>
                         </tr>
                       ))
                     )}

@@ -740,6 +740,12 @@ AchievementSchema.index({ updatedAt: -1 });
 AchievementSchema.index({ pendingReReview: 1, lastStudentEditAt: -1, updatedAt: -1 });
 AchievementSchema.index({ userId: 1, status: 1, showInPublicPortfolio: 1 });
 AchievementSchema.index({ status: 1, userId: 1, score: -1, achievementYear: -1, createdAt: -1 });
+AchievementSchema.index({ achievementType: 1, achievementYear: 1, status: 1 });
+AchievementSchema.index({ achievementType: 1, achievementClassification: 1, createdAt: -1 });
+AchievementSchema.index({ achievementCategory: 1, createdAt: -1 });
+AchievementSchema.index({ resultType: 1, medalType: 1 });
+AchievementSchema.index({ achievementName: 1 });
+AchievementSchema.index({ inferredField: 1 });
 
 const Achievement: Model<IAchievement> =
   mongoose.models.Achievement ||

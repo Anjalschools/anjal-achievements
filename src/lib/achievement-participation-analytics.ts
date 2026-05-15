@@ -5,7 +5,6 @@ import Achievement from "@/models/Achievement";
 import type { AdminReportFilters } from "@/lib/achievement-admin-reports";
 import {
   formatLocalizedResultLine,
-  getAchievementDisplayName,
   getAchievementLevelLabel,
 } from "@/lib/achievementDisplay";
 import { getDbAchievementTypeLabel } from "@/lib/achievement-labels";
@@ -16,8 +15,11 @@ import {
   REPORT_LEVEL_VALUES,
   REPORT_RESULT_TOKEN_VALUES,
 } from "@/lib/report-filter-options";
+import { resolveAchievementActivityName } from "@/lib/resolve-achievement-activity-name";
+import { formatAchievementClassificationLabel } from "@/lib/admin-achievement-labels";
 
 const ALLOW_CATEGORY = new Set<string>([...REPORT_CATEGORY_VALUES]);
+const ALLOW_PRIMARY_TYPE = ALLOW_CATEGORY;
 const ALLOW_LEVEL = new Set<string>([...REPORT_LEVEL_VALUES]);
 const ALLOW_RESULT = new Set<string>(REPORT_RESULT_TOKEN_VALUES);
 
@@ -79,6 +81,17 @@ export type ParticipationAnalyticsFilters = AdminReportFilters & {
   organization?: string;
   /** achievementYear (single) — overrides academicYear if set */
   achievementYear?: number;
+  /**
+   * Narrow to one high-level DB category/type (competition, program, …).
+   * Uses the same allowlist as achievement reports (`REPORT_CATEGORY_VALUES`).
+   */
+  primaryAchievementType?: string;
+  /**
+   * Drill-down to one aggregated activity bucket (must match pipeline `achievementType` + `activityRaw`).
+   */
+  activityFocusType?: string;
+  /** Paired with `activityFocusType`; use exact string from `activityOptions[].rawKey` */
+  activityFocusRaw?: string;
 };
 
 export type ParticipationActivityRow = {
@@ -88,6 +101,9 @@ export type ParticipationActivityRow = {
   typeKey: string;
   typeLabelAr: string;
   typeLabelEn: string;
+  classificationKey: string;
+  classificationLabelAr: string;
+  classificationLabelEn: string;
   levelKey: string;
   levelLabelAr: string;
   levelLabelEn: string;
@@ -102,6 +118,12 @@ export type ParticipationActivityRow = {
   internationalParticipants: number;
   mawhibaParticipants: number;
   nonMawhibaParticipants: number;
+  goldMedalCount: number;
+  silverMedalCount: number;
+  bronzeMedalCount: number;
+  rankCount: number;
+  nominationCount: number;
+  participationOnlyCount: number;
   approvedAchievements: number;
   excellenceRatePct: number;
 };
@@ -138,7 +160,32 @@ export type ParticipationAnalyticsPayload = {
     genderResultStack: { gender: string; labelAr: string; labelEn: string; gold: number; silver: number; bronze: number; ranks: number }[];
     topPrograms: { labelAr: string; labelEn: string; studentCount: number; rows: number }[];
     activityHorizontal: { labelAr: string; labelEn: string; studentCount: number }[];
+    /** Gold / silver / bronze / nomination / rank / participation counts for the current filter scope */
+    resultOutcomeCompare: {
+      key: string;
+      labelAr: string;
+      labelEn: string;
+      count: number;
+      color: string;
+    }[];
+    /** Year-over-year trend when `achievementYear` / dates allow */
+    yearTrend: {
+      year: number;
+      totalRows: number;
+      distinctStudents: number;
+      goldMedals: number;
+    }[];
   };
+  /** Distinct real activities for cascading filters (server-side capped) */
+  activityOptions: {
+    typeKey: string;
+    rawKey: string;
+    count: number;
+    labelAr: string;
+    labelEn: string;
+  }[];
+  /** Present when `focusType` + `focusRaw` narrow to one activity bucket */
+  focusedActivity: { typeKey: string; rawKey: string; labelAr: string; labelEn: string } | null;
   table: ParticipationActivityRow[];
   tableTotal: number;
   page: number;
@@ -175,6 +222,13 @@ const buildMongoMatch = (filters: ParticipationAnalyticsFilters): Record<string,
   if (categories.length > 0) {
     rootAnd.push({
       $or: [{ achievementCategory: { $in: categories } }, { achievementType: { $in: categories } }],
+    });
+  }
+
+  const primary = String(filters.primaryAchievementType || "").trim();
+  if (primary && primary !== "all" && ALLOW_PRIMARY_TYPE.has(primary)) {
+    rootAnd.push({
+      $or: [{ achievementCategory: primary }, { achievementType: primary }],
     });
   }
 
@@ -293,6 +347,18 @@ export const buildParticipationAnalytics = async (input: {
   if (mh === "yes") postStages.push({ $match: { effMawhiba: true } });
   if (mh === "no") postStages.push({ $match: { effMawhiba: { $ne: true } } });
 
+  const focusType = String(filters.activityFocusType || "").trim();
+  const focusRawDefined = filters.activityFocusRaw !== undefined && filters.activityFocusRaw !== null;
+  const focusStages: mongoose.PipelineStage[] = [];
+  if (focusType && focusRawDefined) {
+    focusStages.push({
+      $match: {
+        achievementType: focusType,
+        activityRaw: String(filters.activityFocusRaw),
+      },
+    });
+  }
+
   const lookupAndShape: mongoose.PipelineStage[] = [
     { $match: baseMatch },
     {
@@ -381,13 +447,43 @@ export const buildParticipationAnalytics = async (input: {
                 then: "$customExhibitionName",
               },
               {
-                case: { $gt: [{ $strLenCP: { $ifNull: ["$olympiadMeeting", ""] } }, 0] },
-                then: "$olympiadMeeting",
+                case: {
+                  $or: [
+                    { $gt: [{ $strLenCP: { $ifNull: ["$olympiadMeeting", ""] } }, 0] },
+                    { $gt: [{ $strLenCP: { $ifNull: ["$olympiadField", ""] } }, 0] },
+                  ],
+                },
+                then: {
+                  $trim: {
+                    input: {
+                      $concat: [
+                        { $ifNull: ["$olympiadMeeting", ""] },
+                        {
+                          $cond: [
+                            {
+                              $and: [
+                                { $gt: [{ $strLenCP: { $ifNull: ["$olympiadMeeting", ""] } }, 0] },
+                                { $gt: [{ $strLenCP: { $ifNull: ["$olympiadField", ""] } }, 0] },
+                              ],
+                            },
+                            " — ",
+                            "",
+                          ],
+                        },
+                        { $ifNull: ["$olympiadField", ""] },
+                      ],
+                    },
+                  },
+                },
+              },
+              {
+                case: { $gt: [{ $strLenCP: { $ifNull: ["$qudratScore", ""] } }, 0] },
+                then: "$qudratScore",
               },
               { case: { $gt: [{ $strLenCP: { $ifNull: ["$nameAr", ""] } }, 0] }, then: "$nameAr" },
               { case: { $gt: [{ $strLenCP: { $ifNull: ["$title", ""] } }, 0] }, then: "$title" },
             ],
-            default: "$achievementType",
+            default: { $ifNull: ["$achievementType", ""] },
           },
         },
       },
@@ -396,6 +492,9 @@ export const buildParticipationAnalytics = async (input: {
       $addFields: {
         effGender: { $cond: [{ $eq: ["$effGenderRaw", "female"] }, "female", "male"] },
         effSection: { $cond: [{ $eq: ["$effSectionRaw", "international"] }, "international", "arabic"] },
+        effYear: {
+          $ifNull: ["$achievementYear", { $year: { $ifNull: ["$date", "$createdAt"] } }],
+        },
         levelRank: {
           $switch: {
             branches: [
@@ -411,6 +510,7 @@ export const buildParticipationAnalytics = async (input: {
       },
     },
     ...postStages,
+    ...focusStages,
   ];
 
   const facetBody: Record<string, mongoose.PipelineStage[]> = {
@@ -475,6 +575,72 @@ export const buildParticipationAnalytics = async (input: {
         },
       },
     ],
+    activityOptions: [
+      {
+        $group: {
+          _id: { t: "$achievementType", r: "$activityRaw" },
+          count: { $sum: 1 },
+        },
+      },
+      { $sort: { count: -1 } },
+      { $limit: 450 },
+    ],
+    yearTrend: [
+      {
+        $group: {
+          _id: "$effYear",
+          totalParticipations: { $sum: 1 },
+          students: { $addToSet: "$participantId" },
+          gold: {
+            $sum: {
+              $cond: [
+                { $and: [{ $eq: ["$resultType", "medal"] }, { $eq: ["$medalType", "gold"] }] },
+                1,
+                0,
+              ],
+            },
+          },
+        },
+      },
+      { $sort: { _id: 1 } },
+    ],
+    resultBuckets: [
+      {
+        $group: {
+          _id: null,
+          gold: {
+            $sum: {
+              $cond: [
+                { $and: [{ $eq: ["$resultType", "medal"] }, { $eq: ["$medalType", "gold"] }] },
+                1,
+                0,
+              ],
+            },
+          },
+          silver: {
+            $sum: {
+              $cond: [
+                { $and: [{ $eq: ["$resultType", "medal"] }, { $eq: ["$medalType", "silver"] }] },
+                1,
+                0,
+              ],
+            },
+          },
+          bronze: {
+            $sum: {
+              $cond: [
+                { $and: [{ $eq: ["$resultType", "medal"] }, { $eq: ["$medalType", "bronze"] }] },
+                1,
+                0,
+              ],
+            },
+          },
+          nomination: { $sum: { $cond: [{ $eq: ["$resultType", "nomination"] }, 1, 0] } },
+          rank: { $sum: { $cond: [{ $eq: ["$resultType", "rank"] }, 1, 0] } },
+          participation: { $sum: { $cond: [{ $eq: ["$resultType", "participation"] }, 1, 0] } },
+        },
+      },
+    ],
     activityGroups: [
       {
         $group: {
@@ -515,6 +681,37 @@ export const buildParticipationAnalytics = async (input: {
           maxLevelRank: { $max: "$levelRank" },
           levelsSeen: { $addToSet: "$achievementLevel" },
           resultCombos: { $push: { rt: "$resultType", mt: "$medalType", rk: "$rank" } },
+          achievementClassification: { $first: { $ifNull: ["$achievementClassification", ""] } },
+          goldMedalCount: {
+            $sum: {
+              $cond: [
+                { $and: [{ $eq: ["$resultType", "medal"] }, { $eq: ["$medalType", "gold"] }] },
+                1,
+                0,
+              ],
+            },
+          },
+          silverMedalCount: {
+            $sum: {
+              $cond: [
+                { $and: [{ $eq: ["$resultType", "medal"] }, { $eq: ["$medalType", "silver"] }] },
+                1,
+                0,
+              ],
+            },
+          },
+          bronzeMedalCount: {
+            $sum: {
+              $cond: [
+                { $and: [{ $eq: ["$resultType", "medal"] }, { $eq: ["$medalType", "bronze"] }] },
+                1,
+                0,
+              ],
+            },
+          },
+          rankCount: { $sum: { $cond: [{ $eq: ["$resultType", "rank"] }, 1, 0] } },
+          nominationRowCount: { $sum: { $cond: [{ $eq: ["$resultType", "nomination"] }, 1, 0] } },
+          participationOnlyCount: { $sum: { $cond: [{ $eq: ["$resultType", "participation"] }, 1, 0] } },
         },
       },
       { $sort: { totalParticipations: -1 } },
@@ -569,6 +766,13 @@ export const buildParticipationAnalytics = async (input: {
     maxLevelRank: number;
     levelsSeen: string[];
     resultCombos: Array<{ rt?: string; mt?: string; rk?: string }>;
+    achievementClassification?: string;
+    goldMedalCount?: number;
+    silverMedalCount?: number;
+    bronzeMedalCount?: number;
+    rankCount?: number;
+    nominationRowCount?: number;
+    participationOnlyCount?: number;
   }>;
 
   const tableTotal = activityGroups.length;
@@ -582,15 +786,11 @@ export const buildParticipationAnalytics = async (input: {
 
   const table: ParticipationActivityRow[] = pageSlice.map((g) => {
     const typeKey = String(g._id?.t || "");
-    const raw = String(g._id?.raw || "");
-    const synthetic: Record<string, unknown> = {
-      achievementType: typeKey,
-      achievementName: raw,
-      customAchievementName: raw,
-    };
-    const activityLabelAr = getAchievementDisplayName(synthetic, "ar");
-    const activityLabelEn = getAchievementDisplayName(synthetic, "en");
+    const raw = String(g._id?.raw ?? "");
+    const activityLabelAr = resolveAchievementActivityName(typeKey, raw, "ar");
+    const activityLabelEn = resolveAchievementActivityName(typeKey, raw, "en");
     const typeLbl = mapTypeUi(typeKey);
+    const classKey = String(g.achievementClassification || "").trim();
     const maxRank = Number(g.maxLevelRank || 2);
     const levelKey = levelKeyFromMaxRank(maxRank);
     const levelLabelAr = getAchievementLevelLabel(levelKey, "ar");
@@ -606,12 +806,15 @@ export const buildParticipationAnalytics = async (input: {
       totalRows > 0 ? Math.round((approved / totalRows) * 1000) / 10 : 0;
 
     return {
-      activityKey: `${typeKey}::${raw}`,
+      activityKey: `${typeKey}\u001f${raw}`,
       activityLabelAr,
       activityLabelEn,
       typeKey,
       typeLabelAr: typeLbl.ar,
       typeLabelEn: typeLbl.en,
+      classificationKey: classKey,
+      classificationLabelAr: formatAchievementClassificationLabel(classKey || undefined, "ar"),
+      classificationLabelEn: formatAchievementClassificationLabel(classKey || undefined, "en"),
       levelKey,
       levelLabelAr,
       levelLabelEn,
@@ -626,6 +829,12 @@ export const buildParticipationAnalytics = async (input: {
       internationalParticipants: Array.isArray(g.internationalIds) ? g.internationalIds.length : 0,
       mawhibaParticipants: Array.isArray(g.mawhibaIds) ? g.mawhibaIds.length : 0,
       nonMawhibaParticipants: Array.isArray(g.nonMawhibaIds) ? g.nonMawhibaIds.length : 0,
+      goldMedalCount: Number(g.goldMedalCount || 0),
+      silverMedalCount: Number(g.silverMedalCount || 0),
+      bronzeMedalCount: Number(g.bronzeMedalCount || 0),
+      rankCount: Number(g.rankCount || 0),
+      nominationCount: Number(g.nominationRowCount || 0),
+      participationOnlyCount: Number(g.participationOnlyCount || 0),
       approvedAchievements: approved,
       excellenceRatePct,
     };
@@ -694,15 +903,10 @@ export const buildParticipationAnalytics = async (input: {
 
   const topPrograms = activityGroups.slice(0, 10).map((g) => {
     const typeKey = String(g._id?.t || "");
-    const raw = String(g._id?.raw || "");
-    const synthetic: Record<string, unknown> = {
-      achievementType: typeKey,
-      achievementName: raw,
-      customAchievementName: raw,
-    };
+    const raw = String(g._id?.raw ?? "");
     return {
-      labelAr: getAchievementDisplayName(synthetic, "ar"),
-      labelEn: getAchievementDisplayName(synthetic, "en"),
+      labelAr: resolveAchievementActivityName(typeKey, raw, "ar"),
+      labelEn: resolveAchievementActivityName(typeKey, raw, "en"),
       studentCount: Array.isArray(g.participantIds) ? g.participantIds.length : 0,
       rows: g.totalParticipations,
     };
@@ -718,13 +922,8 @@ export const buildParticipationAnalytics = async (input: {
   let topProgramLabelAr = "—";
   let topProgramLabelEn = "—";
   if (top) {
-    const synthetic: Record<string, unknown> = {
-      achievementType: String(top._id?.t || ""),
-      achievementName: String(top._id?.raw || ""),
-      customAchievementName: String(top._id?.raw || ""),
-    };
-    topProgramLabelAr = getAchievementDisplayName(synthetic, "ar");
-    topProgramLabelEn = getAchievementDisplayName(synthetic, "en");
+    topProgramLabelAr = resolveAchievementActivityName(String(top._id?.t || ""), String(top._id?.raw ?? ""), "ar");
+    topProgramLabelEn = resolveAchievementActivityName(String(top._id?.t || ""), String(top._id?.raw ?? ""), "en");
   }
 
   let topSectionLabelAr = "—";
@@ -736,6 +935,99 @@ export const buildParticipationAnalytics = async (input: {
   }
 
   const highestLevelKey = levelKeyFromMaxRank(maxLevelRank);
+
+  const optRaw = (facetResult?.activityOptions || []) as Array<{ _id: { t: string; r: string }; count: number }>;
+  const activityOptions = optRaw.map((row) => {
+    const typeKey = String(row._id?.t || "");
+    const rawKey = String(row._id?.r ?? "");
+    return {
+      typeKey,
+      rawKey,
+      count: Number(row.count || 0),
+      labelAr: resolveAchievementActivityName(typeKey, rawKey, "ar"),
+      labelEn: resolveAchievementActivityName(typeKey, rawKey, "en"),
+    };
+  });
+
+  const focusedActivity =
+    focusType && focusRawDefined
+      ? {
+          typeKey: focusType,
+          rawKey: String(filters.activityFocusRaw),
+          labelAr: resolveAchievementActivityName(focusType, String(filters.activityFocusRaw), "ar"),
+          labelEn: resolveAchievementActivityName(focusType, String(filters.activityFocusRaw), "en"),
+        }
+      : null;
+
+  const rb = facetResult?.resultBuckets?.[0] as
+    | {
+        gold?: number;
+        silver?: number;
+        bronze?: number;
+        nomination?: number;
+        rank?: number;
+        participation?: number;
+      }
+    | undefined;
+  const resultOutcomeCompare = [
+    {
+      key: "gold",
+      labelAr: "ذهبية",
+      labelEn: "Gold",
+      count: Number(rb?.gold || 0),
+      color: "#CA8A04",
+    },
+    {
+      key: "silver",
+      labelAr: "فضية",
+      labelEn: "Silver",
+      count: Number(rb?.silver || 0),
+      color: "#94A3B8",
+    },
+    {
+      key: "bronze",
+      labelAr: "برونزية",
+      labelEn: "Bronze",
+      count: Number(rb?.bronze || 0),
+      color: "#B45309",
+    },
+    {
+      key: "nomination",
+      labelAr: "ترشيح",
+      labelEn: "Nomination",
+      count: Number(rb?.nomination || 0),
+      color: "#7C3AED",
+    },
+    {
+      key: "rank",
+      labelAr: "مراكز",
+      labelEn: "Ranks",
+      count: Number(rb?.rank || 0),
+      color: "#0D9488",
+    },
+    {
+      key: "participation",
+      labelAr: "مشاركة",
+      labelEn: "Participation",
+      count: Number(rb?.participation || 0),
+      color: "#2563EB",
+    },
+  ];
+
+  const yTrendRaw = (facetResult?.yearTrend || []) as Array<{
+    _id: number | null;
+    students?: unknown[];
+    totalParticipations?: number;
+    gold?: number;
+  }>;
+  const yearTrend = yTrendRaw
+    .filter((y) => typeof y._id === "number" && Number(y._id) >= 1990)
+    .map((y) => ({
+      year: Number(y._id),
+      totalRows: Number(y.totalParticipations || 0),
+      distinctStudents: Array.isArray(y.students) ? y.students.length : 0,
+      goldMedals: Number(y.gold || 0),
+    }));
 
   return {
     ok: true,
@@ -773,7 +1065,11 @@ export const buildParticipationAnalytics = async (input: {
       genderResultStack,
       topPrograms,
       activityHorizontal,
+      resultOutcomeCompare,
+      yearTrend,
     },
+    activityOptions,
+    focusedActivity,
     table,
     tableTotal,
     page,
@@ -783,25 +1079,31 @@ export const buildParticipationAnalytics = async (input: {
 
 export const parseParticipationFiltersFromSearchParams = (
   sp: URLSearchParams
-): ParticipationAnalyticsFilters => ({
-  academicYear: String(sp.get("academicYear") || "").trim() || undefined,
-  achievementYear: sp.get("achievementYear")
-    ? parseInt(String(sp.get("achievementYear")), 10)
-    : undefined,
-  gender: String(sp.get("gender") || "all").trim(),
-  mawhiba: String(sp.get("mawhiba") || "all").trim(),
-  stage: String(sp.get("stage") || "all").trim(),
-  grade: String(sp.get("grade") || "all").trim(),
-  section: String(sp.get("section") || "all").trim(),
-  categories: parseReportCsvParam(sp.get("category")),
-  achievementName: String(sp.get("achievementName") || "").trim() || undefined,
-  levels: parseReportCsvParam(sp.get("level")),
-  resultTokens: parseReportCsvParam(sp.get("result")),
-  status: String(sp.get("status") || "all").trim(),
-  certificateStatus: String(sp.get("certificateStatus") || "all").trim(),
-  fromDate: String(sp.get("fromDate") || "").trim() || undefined,
-  toDate: String(sp.get("toDate") || "").trim() || undefined,
-  domain: String(sp.get("domain") || "").trim() || undefined,
-  classification: String(sp.get("classification") || "").trim() || undefined,
-  organization: String(sp.get("organization") || "").trim() || undefined,
-});
+): ParticipationAnalyticsFilters => {
+  const focusT = String(sp.get("focusType") || "").trim();
+  return {
+    academicYear: String(sp.get("academicYear") || "").trim() || undefined,
+    achievementYear: sp.get("achievementYear")
+      ? parseInt(String(sp.get("achievementYear")), 10)
+      : undefined,
+    gender: String(sp.get("gender") || "all").trim(),
+    mawhiba: String(sp.get("mawhiba") || "all").trim(),
+    stage: String(sp.get("stage") || "all").trim(),
+    grade: String(sp.get("grade") || "all").trim(),
+    section: String(sp.get("section") || "all").trim(),
+    categories: parseReportCsvParam(sp.get("category")),
+    achievementName: String(sp.get("achievementName") || "").trim() || undefined,
+    levels: parseReportCsvParam(sp.get("level")),
+    resultTokens: parseReportCsvParam(sp.get("result")),
+    status: String(sp.get("status") || "all").trim(),
+    certificateStatus: String(sp.get("certificateStatus") || "all").trim(),
+    fromDate: String(sp.get("fromDate") || "").trim() || undefined,
+    toDate: String(sp.get("toDate") || "").trim() || undefined,
+    domain: String(sp.get("domain") || "").trim() || undefined,
+    classification: String(sp.get("classification") || "").trim() || undefined,
+    organization: String(sp.get("organization") || "").trim() || undefined,
+    primaryAchievementType: String(sp.get("primaryType") || "all").trim(),
+    activityFocusType: focusT || undefined,
+    activityFocusRaw: focusT ? String(sp.get("focusRaw") ?? "") : undefined,
+  };
+};
