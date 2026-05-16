@@ -17,6 +17,7 @@ import {
 } from "@/lib/report-filter-options";
 import { resolveAchievementActivityName } from "@/lib/resolve-achievement-activity-name";
 import { formatAchievementClassificationLabel } from "@/lib/admin-achievement-labels";
+import type { CiObservabilityMeta } from "@/lib/competition-intelligence-debug";
 
 const ALLOW_CATEGORY = new Set<string>([...REPORT_CATEGORY_VALUES]);
 const ALLOW_PRIMARY_TYPE = ALLOW_CATEGORY;
@@ -132,6 +133,8 @@ export type ParticipationAnalyticsPayload = {
   ok: true;
   generatedAt: string;
   filters: ParticipationAnalyticsFilters;
+  /** Optional server/cache timing — clients may ignore. */
+  ciObservability?: CiObservabilityMeta;
   kpis: {
     totalParticipations: number;
     distinctStudents: number;
@@ -200,7 +203,7 @@ const levelKeyFromMaxRank = (maxRank: number): string => {
   return "school";
 };
 
-const buildMongoMatch = (filters: ParticipationAnalyticsFilters): Record<string, unknown> => {
+const buildParticipationMongoMatch = (filters: ParticipationAnalyticsFilters): Record<string, unknown> => {
   const query: Record<string, unknown> = {};
   const rootAnd: Record<string, unknown>[] = [];
 
@@ -323,7 +326,7 @@ export const buildParticipationAnalytics = async (input: {
   const pageSize = Math.min(100, Math.max(5, input.pageSize ?? 25));
   const filters = input.filters;
 
-  const baseMatch = buildMongoMatch(filters);
+  const baseMatch = buildParticipationMongoMatch(filters);
 
   const postStages: mongoose.PipelineStage[] = [];
 
@@ -347,19 +350,7 @@ export const buildParticipationAnalytics = async (input: {
   if (mh === "yes") postStages.push({ $match: { effMawhiba: true } });
   if (mh === "no") postStages.push({ $match: { effMawhiba: { $ne: true } } });
 
-  const focusType = String(filters.activityFocusType || "").trim();
-  const focusRawDefined = filters.activityFocusRaw !== undefined && filters.activityFocusRaw !== null;
-  const focusStages: mongoose.PipelineStage[] = [];
-  if (focusType && focusRawDefined) {
-    focusStages.push({
-      $match: {
-        achievementType: focusType,
-        activityRaw: String(filters.activityFocusRaw),
-      },
-    });
-  }
-
-  const lookupAndShape: mongoose.PipelineStage[] = [
+  const shapedPipeline: mongoose.PipelineStage[] = [
     { $match: baseMatch },
     {
       $lookup: {
@@ -367,7 +358,7 @@ export const buildParticipationAnalytics = async (input: {
         let: { uid: "$userId" },
         pipeline: [
           { $match: { $expr: { $eq: ["$_id", "$$uid"] } } },
-          { $project: { gender: 1, section: 1, isMawhibaStudent: 1, grade: 1 } },
+          { $project: { gender: 1, section: 1, isMawhibaStudent: 1, grade: 1, fullName: 1, fullNameAr: 1, fullNameEn: 1 } },
         ],
         as: "_uwrap",
       },
@@ -510,7 +501,6 @@ export const buildParticipationAnalytics = async (input: {
       },
     },
     ...postStages,
-    ...focusStages,
   ];
 
   const facetBody: Record<string, mongoose.PipelineStage[]> = {
@@ -719,7 +709,7 @@ export const buildParticipationAnalytics = async (input: {
   };
 
   const [facetResult] = await Achievement.aggregate(
-    [...lookupAndShape, { $facet: facetBody }] as mongoose.PipelineStage[]
+    [...shapedPipeline, { $facet: facetBody }] as mongoose.PipelineStage[]
   ).allowDiskUse(true);
 
   const kpiRow = facetResult?.kpi?.[0] as
@@ -949,15 +939,7 @@ export const buildParticipationAnalytics = async (input: {
     };
   });
 
-  const focusedActivity =
-    focusType && focusRawDefined
-      ? {
-          typeKey: focusType,
-          rawKey: String(filters.activityFocusRaw),
-          labelAr: resolveAchievementActivityName(focusType, String(filters.activityFocusRaw), "ar"),
-          labelEn: resolveAchievementActivityName(focusType, String(filters.activityFocusRaw), "en"),
-        }
-      : null;
+  const focusedActivity = null;
 
   const rb = facetResult?.resultBuckets?.[0] as
     | {
@@ -1107,3 +1089,5 @@ export const parseParticipationFiltersFromSearchParams = (
     activityFocusRaw: focusT ? String(sp.get("focusRaw") ?? "") : undefined,
   };
 };
+
+export { buildParticipationMongoMatch };

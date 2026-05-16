@@ -6,11 +6,31 @@ import {
   parseParticipationFiltersFromSearchParams,
 } from "@/lib/achievement-participation-analytics";
 import { jsonInternalServerError } from "@/lib/api-safe-response";
+import {
+  ciRedactLine,
+  logAggregationHealth,
+  logCacheIntel,
+  type CiObservabilityMeta,
+} from "@/lib/competition-intelligence-debug";
 
 export const dynamic = "force-dynamic";
 
 const CACHE_MS = 45_000;
 const cache = new Map<string, { at: number; payload: Awaited<ReturnType<typeof buildParticipationAnalytics>> }>();
+
+const buildObs = (p: {
+  serverFacetMs: number;
+  cacheHit: boolean;
+  cacheAgeMs: number;
+  recomputeReason?: CiObservabilityMeta["recomputeReason"];
+}): CiObservabilityMeta => ({
+  generatedAt: new Date().toISOString(),
+  serverFacetMs: p.serverFacetMs,
+  cacheHit: p.cacheHit,
+  cacheAgeMs: p.cacheAgeMs,
+  source: "route-memory",
+  recomputeReason: p.recomputeReason,
+});
 
 export async function GET(request: NextRequest) {
   const gate = await requireAchievementReviewer();
@@ -31,13 +51,46 @@ export async function GET(request: NextRequest) {
     if (!bypass) {
       const hit = cache.get(cacheKey);
       if (hit && now - hit.at < CACHE_MS) {
-        return NextResponse.json(hit.payload, {
-          headers: { "Cache-Control": "private, max-age=30" },
+        const cacheAgeMs = now - hit.at;
+        logCacheIntel({
+          scope: "participation_general",
+          hit: true,
+          ageMs: cacheAgeMs,
+          keyChars: cacheKey.length,
+          reason: "memory_hit",
         });
+        return NextResponse.json(
+          {
+            ...hit.payload,
+            ciObservability: buildObs({
+              serverFacetMs: 0,
+              cacheHit: true,
+              cacheAgeMs,
+            }),
+          },
+          {
+            headers: { "Cache-Control": "private, max-age=30" },
+          }
+        );
       }
     }
 
+    const t0 = Date.now();
     const payload = await buildParticipationAnalytics({ filters, page, pageSize });
+    const ms = Date.now() - t0;
+    logAggregationHealth({
+      facet: "participation_general",
+      durationMs: ms,
+      filterSummary: ciRedactLine(cacheKey),
+      resultSize: payload.tableTotal,
+      cacheStatus: bypass ? "none" : "miss",
+    });
+    logCacheIntel({
+      scope: "participation_general",
+      hit: false,
+      keyChars: cacheKey.length,
+      reason: bypass ? "nocache_bypass" : "recomputed",
+    });
     cache.set(cacheKey, { at: now, payload });
     if (cache.size > 80) {
       for (const k of cache.keys()) {
@@ -46,9 +99,20 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    return NextResponse.json(payload, {
-      headers: { "Cache-Control": "private, max-age=30" },
-    });
+    return NextResponse.json(
+      {
+        ...payload,
+        ciObservability: buildObs({
+          serverFacetMs: ms,
+          cacheHit: false,
+          cacheAgeMs: 0,
+          recomputeReason: bypass ? "nocache_bypass" : "cache_miss",
+        }),
+      },
+      {
+        headers: { "Cache-Control": "private, max-age=30" },
+      }
+    );
   } catch (e) {
     console.error("[GET /api/admin/reports/achievement-participation]", e);
     return jsonInternalServerError(e);
