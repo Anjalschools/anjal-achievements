@@ -7,15 +7,19 @@ import { isCompetitionIntelDebugEnabled, competitionIntelDebug, competitionIntel
 
 export type CiAggregationSeverity = "ok" | "warn" | "severe" | "critical";
 
-export type CiCacheStatus = "hit" | "miss" | "none";
+export type CiCacheStatus = "hit" | "miss" | "none" | "stale" | "snapshot_fallback";
 
 export type CiObservabilityMeta = {
   generatedAt: string;
   serverFacetMs: number;
   cacheHit: boolean;
   cacheAgeMs: number;
-  source: "route-memory" | "none";
-  recomputeReason?: "cache_miss" | "nocache_bypass" | "cold";
+  source: "route-memory" | "snapshot" | "none";
+  recomputeReason?: "cache_miss" | "nocache_bypass" | "cold" | "stale_revalidate" | "snapshot_fallback";
+  aggregationVersion?: number;
+  cacheLifecycle?: "fresh" | "stale" | "expired" | "snapshot_fallback";
+  trustStatus?: string;
+  scalabilityWarnings?: string[];
 };
 
 export const createCorrelationId = (): string => {
@@ -149,6 +153,45 @@ export const logStudentIntelTrust = (params: {
 }) => {
   if (!isCompetitionIntelDebugEnabled()) return;
   competitionIntelDebug("[ci-student-trust]", params);
+};
+
+export const logSnapshotGenerationIntel = (params: {
+  granularity: string;
+  durationMs: number;
+  trendRows: number;
+  trustStatus: string;
+}) => {
+  if (!isCompetitionIntelDebugEnabled()) return;
+  competitionIntelDebug("[ci-snapshot]", params);
+};
+
+export const logCacheRegenerationIntel = (params: {
+  scope: string;
+  durationMs: number;
+  reason: string;
+  stale?: boolean;
+}) => {
+  if (!isCompetitionIntelDebugEnabled()) return;
+  competitionIntelDebug("[ci-cache-regen]", params);
+};
+
+export const logStaleDatasetIntel = (params: { scope: string; ageMs: number; thresholdMs: number }) => {
+  if (!isCompetitionIntelDebugEnabled()) return;
+  competitionIntelWarn("[ci-stale-dataset]", params);
+};
+
+export const logCompareOverloadIntel = (params: { compareCount: number; maxAllowed: number }) => {
+  if (!isCompetitionIntelDebugEnabled()) return;
+  competitionIntelWarn("[ci-compare-overload]", params);
+};
+
+export const logPdfMemoryPressureIntel = (params: {
+  estimatedRows: number;
+  chartCount: number;
+  degraded: boolean;
+}) => {
+  if (!isCompetitionIntelDebugEnabled()) return;
+  competitionIntelWarn("[ci-pdf-memory]", params);
 };
 
 export const measureServerMs = async <T>(

@@ -1,4 +1,10 @@
 import { competitionIntelDebug, competitionIntelWarn } from "@/lib/competition-intelligence-diagnostics";
+import {
+  exportTimeoutMs,
+  resolveExportSafety,
+  type ExportSafetyContext,
+} from "@/lib/competition/governance/export-safety-policy";
+import { logPdfMemoryPressureIntel } from "@/lib/competition-intelligence-debug";
 
 export type CompetitionExportPhase =
   | "idle"
@@ -48,6 +54,8 @@ export type RunExecutiveExportParams = {
   initialAttempt?: number;
   /** Stable id for export diagnostics / audit (client-generated). */
   correlationId?: string;
+  /** Optional export safety context for caps / degraded mode */
+  safetyContext?: Partial<ExportSafetyContext>;
 };
 
 /**
@@ -56,9 +64,49 @@ export type RunExecutiveExportParams = {
  */
 export const runCompetitionExecutiveExport = async (
   params: RunExecutiveExportParams & { run: () => Promise<void> }
-): Promise<{ ok: true } | { ok: false; error: string }> => {
-  const { isAr, onUpdate, run, totalTimeoutMs = 90_000, initialAttempt = 1, correlationId } = params;
+): Promise<
+  | { ok: true; degraded?: boolean }
+  | { ok: false; error: string; degraded?: boolean }
+> => {
+  const {
+    isAr,
+    onUpdate,
+    run,
+    totalTimeoutMs,
+    initialAttempt = 1,
+    correlationId,
+    safetyContext,
+  } = params;
   let attempt = initialAttempt;
+
+  const safety = resolveExportSafety({
+    requestedRows: safetyContext?.requestedRows ?? 800,
+    requestedCharts: safetyContext?.requestedCharts ?? 8,
+    pdfSections: safetyContext?.pdfSections ?? ["executive", "charts", "participants"],
+    attempt,
+  });
+
+  if (safety.shouldAbort) {
+    const msg = isAr ? "تجاوزت الحد الأقصى لمحاولات التصدير" : "Export retry cap exceeded";
+    competitionIntelWarn("export aborted", safety.abortReason ?? "retry_cap");
+    onUpdate({
+      phase: "error",
+      messageAr: msg,
+      messageEn: msg,
+      errorDetail: safety.abortReason,
+      attempt,
+      correlationId,
+    });
+    return { ok: false, error: msg, degraded: true };
+  }
+
+  logPdfMemoryPressureIntel({
+    estimatedRows: safety.safeRowCap,
+    chartCount: safety.safeChartCap,
+    degraded: safety.degraded,
+  });
+
+  const timeoutMs = totalTimeoutMs ?? exportTimeoutMs(safety.policy);
   const setPhase = (phase: CompetitionExportPhase, errorDetail?: string) => {
     const { ar, en } = exportPhaseMessages(phase, isAr);
     onUpdate({ phase, messageAr: ar, messageEn: en, errorDetail, attempt, correlationId });
@@ -82,14 +130,14 @@ export const runCompetitionExecutiveExport = async (
     await Promise.race([
       exec(),
       new Promise<never>((_, rej) =>
-        setTimeout(() => rej(new Error(isAr ? "انتهت مهلة التصدير" : "Export timed out")), totalTimeoutMs)
+        setTimeout(() => rej(new Error(isAr ? "انتهت مهلة التصدير" : "Export timed out")), timeoutMs)
       ),
     ]);
-    return { ok: true };
+    return { ok: true, degraded: safety.degraded };
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Error";
     competitionIntelWarn("export failed", msg);
     setPhase("error", msg);
-    return { ok: false, error: msg };
+    return { ok: false, error: msg, degraded: safety.degraded };
   }
 };

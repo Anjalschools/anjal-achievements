@@ -5,6 +5,7 @@ import { parseParticipationFiltersFromSearchParams } from "@/lib/achievement-par
 import { buildStudentIntelligence } from "@/lib/student-intelligence-analytics";
 import { jsonInternalServerError } from "@/lib/api-safe-response";
 import { ciRedactLine, logAggregationHealth, type CiObservabilityMeta } from "@/lib/competition-intelligence-debug";
+import { CI_AGGREGATION_VERSION } from "@/lib/competition/analytics/aggregation-version";
 
 export const dynamic = "force-dynamic";
 
@@ -38,6 +39,7 @@ export async function GET(request: NextRequest) {
       cacheAgeMs: 0,
       source: "none",
       recomputeReason: "cold",
+      aggregationVersion: CI_AGGREGATION_VERSION,
     };
     return NextResponse.json(
       { ...payload, ciObservability },

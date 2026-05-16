@@ -5,7 +5,9 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 /**
- * Periodic snapshots — call with Authorization: Bearer CRON_SECRET (same pattern as other crons).
+ * Periodic alumni analytics snapshots.
+ * Production scheduler: Render Cron Job only (not Vercel Cron).
+ * Authorization: Bearer CRON_SECRET
  */
 export async function GET(request: NextRequest) {
   const secret = process.env.CRON_SECRET?.trim();

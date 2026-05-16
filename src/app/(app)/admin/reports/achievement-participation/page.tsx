@@ -52,7 +52,13 @@ import {
   logCompareIntel,
   logEmptyDatasetIntel,
 } from "@/lib/competition-intelligence-debug";
-import { appendCiExportAudit, readCiExportAudit } from "@/lib/competition-intelligence-export-audit";
+import {
+  appendCiExportAudit,
+  buildDiagnosticsSummary,
+  readCiExportAudit,
+} from "@/lib/competition-intelligence-export-audit";
+import { CI_AGGREGATION_VERSION } from "@/lib/competition/analytics/aggregation-version";
+import { runStudentIntelGovernance } from "@/lib/competition/governance/student-intel-governance";
 import { getCompetitionIntelAccess } from "@/lib/competition-intelligence-permissions";
 import {
   getReportCategoryOptions,
@@ -179,6 +185,11 @@ const AdminParticipationAnalyticsPage = () => {
   const resultOptions = useMemo(() => getReportResultOptions(isAr ? "ar" : "en"), [isAr]);
   const intelAccess = useMemo(() => getCompetitionIntelAccess(viewerRole || undefined), [viewerRole]);
 
+  const studentIntelGovernance = useMemo(() => {
+    const age = studentIntelData?.ciObservability?.cacheAgeMs;
+    return runStudentIntelGovernance(studentIntelData, age);
+  }, [studentIntelData]);
+
   const analyticsTrustReport = useMemo(
     () =>
       mergeTrustReports([
@@ -191,8 +202,20 @@ const AdminParticipationAnalyticsPage = () => {
           compareEnabled && comparePick ? compareData : null
         ),
         verifyStudentIntelRows(studentIntelData),
+        {
+          level: studentIntelGovernance.level,
+          issues: studentIntelGovernance.issues.map((i) => i.code),
+        },
       ]),
-    [data, focusedData, compareData, studentIntelData, compareEnabled, comparePick]
+    [
+      data,
+      focusedData,
+      compareData,
+      studentIntelData,
+      compareEnabled,
+      comparePick,
+      studentIntelGovernance,
+    ]
   );
 
   const cacheAgeLabel = useMemo(() => {
@@ -1000,6 +1023,8 @@ const AdminParticipationAnalyticsPage = () => {
       reportPreset: isAr ? CI_PDF_PRESET_LABELS[pdfPreset].ar : CI_PDF_PRESET_LABELS[pdfPreset].en,
       confidentiality: isAr ? "داخلي — للاستخدام المؤسسي" : "Internal — institutional use",
       correlationId,
+      aggregationVersion: CI_AGGREGATION_VERSION,
+      trustStatus: analyticsTrustReport.level,
     };
     const sep = focusedPick.indexOf("\u001f");
     const focusType = sep === -1 ? focusedPick : focusedPick.slice(0, sep);
@@ -1013,6 +1038,12 @@ const AdminParticipationAnalyticsPage = () => {
       initialAttempt: exportAttemptRef.current,
       correlationId,
       onUpdate: setExportState,
+      safetyContext: {
+        requestedRows: CI_EXPORT_PARTICIPANT_ROW_CAP,
+        requestedCharts: 8,
+        pdfSections: ["executive", "charts", "participants", "metadata"],
+        attempt: exportAttemptRef.current,
+      },
       run: async () => {
         const sp = buildFocusedParams();
         sp.set("focusType", focusType);
@@ -1237,20 +1268,39 @@ const AdminParticipationAnalyticsPage = () => {
         ft: focusType,
       })
     );
+    const cacheAge =
+      focusedData?.ciObservability?.cacheAgeMs ?? data?.ciObservability?.cacheAgeMs;
     appendCiExportAudit({
       ts: new Date().toISOString(),
       status: res.ok ? "success" : "failure",
       durationMs: Date.now() - exportStartedMs,
       preset: pdfPreset,
+      exportPreset: pdfPreset,
       rowCount: auditCtx.rowCount,
       activityFocus: auditCtx.activity,
       compareMode: compareEnabled,
+      compareTargets:
+        compareEnabled && comparePick ?
+          [focusedPick, comparePick].filter(Boolean)
+        : undefined,
       filtersDigest: digest,
       filtersSnapshot: digest,
       correlationId,
       exportStatus: res.ok ? "success" : "failure",
       retryCount: exportAttemptRef.current,
+      cacheAge,
+      trustStatus: analyticsTrustReport.level,
+      degradedExport: res.degraded,
+      diagnosticsSummary: buildDiagnosticsSummary({
+        trust: analyticsTrustReport.level,
+        agg: CI_AGGREGATION_VERSION,
+        degraded: res.degraded,
+        compare: compareEnabled,
+      }),
     });
+    if (metaPdf.degradedExport !== res.degraded) {
+      metaPdf.degradedExport = res.degraded;
+    }
     competitionIntelDebug("focused pdf export", res);
     if (res.ok) {
       window.setTimeout(() => setExportOverlayOpen(false), 1800);
@@ -2379,12 +2429,16 @@ const AdminParticipationAnalyticsPage = () => {
                 {lastCompareLatencyMsRef.current ?? "—"}
               </li>
             </ul>
+            <p className="mt-2 text-[11px] text-slate-600" dir="ltr">
+              governance={intelAccess.governance.mode} · agg=v{CI_AGGREGATION_VERSION}
+            </p>
             <p className="mt-3 text-[11px] font-black text-slate-800">{isAr ? "سجل التصدير المحلي" : "Local export audit"}</p>
             <ul className="mt-1 space-y-1 font-mono text-[10px] text-slate-600" dir="ltr">
               {readCiExportAudit().slice(0, 5).map((e) => (
                 <li key={`${e.ts}-${e.correlationId ?? "na"}`}>
-                  {e.ts} · {e.exportStatus ?? e.status} · {e.durationMs}ms · preset={e.preset ?? "-"} · rows=
-                  {e.rowCount ?? 0}
+                  {e.ts} · {e.exportStatus ?? e.status} · {e.durationMs}ms · agg={e.aggregationVersion ?? "-"} · trust=
+                  {e.trustStatus ?? "-"} · rows={e.rowCount ?? 0}
+                  {e.degradedExport ? " · degraded" : ""}
                 </li>
               ))}
             </ul>

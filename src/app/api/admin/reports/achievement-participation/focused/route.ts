@@ -10,8 +10,11 @@ import { jsonInternalServerError } from "@/lib/api-safe-response";
 import {
   ciRedactLine,
   logAggregationHealth,
+  logCompareOverloadIntel,
   type CiObservabilityMeta,
 } from "@/lib/competition-intelligence-debug";
+import { CI_AGGREGATION_VERSION } from "@/lib/competition/analytics/aggregation-version";
+import { clampParticipantExportMax } from "@/lib/competition/governance/scalability-policy";
 
 export const dynamic = "force-dynamic";
 
@@ -27,6 +30,7 @@ const buildObs = (p: {
   cacheAgeMs: p.cacheAgeMs,
   source: "none",
   recomputeReason: p.recomputeReason,
+  aggregationVersion: CI_AGGREGATION_VERSION,
 });
 
 export async function GET(request: NextRequest) {
@@ -76,7 +80,11 @@ export async function GET(request: NextRequest) {
     }
 
     const exportAll = searchParams.get("exportParticipants") === "1";
-    const exportMax = Math.min(2000, Math.max(1, parseInt(searchParams.get("exportMax") || "800", 10) || 800));
+    const exportMaxRequested = Math.max(1, parseInt(searchParams.get("exportMax") || "800", 10) || 800);
+    const exportMax = clampParticipantExportMax(exportMaxRequested);
+    if (exportMax < exportMaxRequested) {
+      logCompareOverloadIntel({ compareCount: exportMaxRequested, maxAllowed: exportMax });
+    }
 
     const t0 = Date.now();
     const payload = await buildFocusedActivityReport({

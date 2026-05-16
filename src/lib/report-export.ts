@@ -465,6 +465,10 @@ export type ExecutivePdfMetadata = {
   reportPreset?: string;
   confidentiality?: string;
   correlationId?: string;
+  aggregationVersion?: number;
+  snapshotVersion?: number;
+  trustStatus?: string;
+  degradedExport?: boolean;
 };
 
 const formatExecutivePdfMetadataHtml = (
@@ -481,6 +485,16 @@ const formatExecutivePdfMetadataHtml = (
       meta.activityFocus ? [isAr ? "تركيز النشاط" : "Activity focus", meta.activityFocus] : null,
       meta.reportPreset ? [isAr ? "قالب التقرير" : "Report preset", meta.reportPreset] : null,
       meta.confidentiality ? [isAr ? "تصنيف السرية" : "Confidentiality level", meta.confidentiality] : null,
+      meta.aggregationVersion != null ?
+        [isAr ? "إصدار التجميع" : "Aggregation version", String(meta.aggregationVersion)]
+      : null,
+      meta.snapshotVersion != null ?
+        [isAr ? "إصدار اللقطة" : "Snapshot version", String(meta.snapshotVersion)]
+      : null,
+      meta.trustStatus ? [isAr ? "حالة الموثوقية" : "Trust status", meta.trustStatus] : null,
+      meta.degradedExport ?
+        [isAr ? "وضع التصدير" : "Export mode", isAr ? "مخفّض" : "Degraded"]
+      : null,
     ] as Array<[string, string] | null>
   ).filter((x): x is [string, string] => Array.isArray(x));
   if (metaRows.length === 0) return "";

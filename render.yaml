@@ -1,0 +1,49 @@
+# Render — official production scheduler for Competition Intelligence Lifecycle.
+# Production does NOT use Vercel Cron. Configure via this blueprint OR Render Dashboard Cron Jobs.
+#
+# Dashboard (recommended if web service already exists):
+#   Job: competition-analytics-snapshots
+#     GET  https://<your-render-domain>/api/cron/competition-analytics-snapshots
+#     Schedule: 0 2 * * *
+#     Header: Authorization: Bearer ${CRON_SECRET}
+#   Job: alumni-analytics-snapshots
+#     GET  https://<your-render-domain>/api/cron/alumni-analytics-snapshots
+#     Schedule: 0 3 * * *
+#     Header: Authorization: Bearer ${CRON_SECRET}
+#
+# Before applying blueprint: rename web service reference below to your Render Web Service name.
+
+services:
+  - type: cron
+    name: competition-analytics-snapshots
+    runtime: node
+    schedule: "0 2 * * *"
+    buildCommand: npm ci
+    startCommand: npm run cron:competition-snapshots
+    envVars:
+      - key: CRON_SECRET
+        sync: false
+      - key: CRON_ENDPOINT
+        value: /api/cron/competition-analytics-snapshots
+      - key: APP_URL
+        fromService:
+          type: web
+          name: al-anjal-achievements-platform
+          envVarKey: RENDER_EXTERNAL_URL
+
+  - type: cron
+    name: alumni-analytics-snapshots
+    runtime: node
+    schedule: "0 3 * * *"
+    buildCommand: npm ci
+    startCommand: npm run cron:alumni-snapshots
+    envVars:
+      - key: CRON_SECRET
+        sync: false
+      - key: CRON_ENDPOINT
+        value: /api/cron/alumni-analytics-snapshots
+      - key: APP_URL
+        fromService:
+          type: web
+          name: al-anjal-achievements-platform
+          envVarKey: RENDER_EXTERNAL_URL
