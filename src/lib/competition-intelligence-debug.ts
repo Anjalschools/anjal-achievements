@@ -49,6 +49,12 @@ export const logAggregationHealth = (params: {
   filterSummary: string;
   resultSize: number;
   cacheStatus: CiCacheStatus;
+  documentCount?: number;
+  pipelineStages?: number;
+  usedCache?: boolean;
+  degradedMode?: boolean;
+  correlationId?: string;
+  payloadBytes?: number;
 }) => {
   const sev = classifyAggregationMs(params.durationMs);
   const line = {
@@ -58,7 +64,13 @@ export const logAggregationHealth = (params: {
     severity: sev,
     filters: ciRedactLine(params.filterSummary),
     resultSize: params.resultSize,
+    documentCount: params.documentCount ?? params.resultSize,
+    pipelineStages: params.pipelineStages,
     cache: params.cacheStatus,
+    usedCache: params.usedCache ?? (params.cacheStatus === "hit" || params.cacheStatus === "stale"),
+    degradedMode: params.degradedMode ?? false,
+    correlationId: params.correlationId,
+    payloadBytes: params.payloadBytes,
   };
   if (!isCompetitionIntelDebugEnabled()) {
     if (sev !== "ok") {

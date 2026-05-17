@@ -15,8 +15,12 @@ import {
 } from "@/lib/competition-intelligence-debug";
 import { CI_AGGREGATION_VERSION } from "@/lib/competition/analytics/aggregation-version";
 import { clampParticipantExportMax } from "@/lib/competition/governance/scalability-policy";
+import { createCorrelationId } from "@/lib/competition-intelligence-debug";
+import { DEFAULT_AGGREGATION_TIMEOUT_MS, withTimeout } from "@/lib/resilience/query-safety";
+import { inferRouteErrorCause, logRouteError, payloadByteSize } from "@/lib/resilience/route-error-log";
 
 export const dynamic = "force-dynamic";
+const ROUTE_PATH = "/api/admin/reports/achievement-participation/focused";
 
 const buildObs = (p: {
   serverFacetMs: number;
@@ -40,13 +44,20 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
+  const correlationId = request.headers.get("x-correlation-id")?.trim() || createCorrelationId();
+  const routeT0 = Date.now();
+
   try {
     const { searchParams } = new URL(request.url);
     const parsed = parseFocusedParams(searchParams);
 
     if (parsed.listOptions) {
       const t0 = Date.now();
-      const activityOptions = await buildFocusedActivityOptionsList(parsed.filters);
+      const activityOptions = await withTimeout(
+        "focused_activity_options",
+        DEFAULT_AGGREGATION_TIMEOUT_MS,
+        async () => buildFocusedActivityOptionsList(parsed.filters)
+      );
       const ms = Date.now() - t0;
       logAggregationHealth({
         facet: "focused_activity_options",
@@ -87,14 +98,19 @@ export async function GET(request: NextRequest) {
     }
 
     const t0 = Date.now();
-    const payload = await buildFocusedActivityReport({
-      filters: parsed.filters,
-      focusType: parsed.focusType,
-      focusRaw: parsed.focusRaw,
-      focusedOutcome: parsed.focusedOutcome,
-      page: exportAll ? 1 : parsed.page,
-      pageSize: exportAll ? exportMax : parsed.pageSize,
-    });
+    const payload = await withTimeout(
+      exportAll ? "focused_participant_export" : "focused_activity_report",
+      DEFAULT_AGGREGATION_TIMEOUT_MS,
+      async () =>
+        buildFocusedActivityReport({
+          filters: parsed.filters,
+          focusType: parsed.focusType,
+          focusRaw: parsed.focusRaw,
+          focusedOutcome: parsed.focusedOutcome,
+          page: exportAll ? 1 : parsed.page,
+          pageSize: exportAll ? exportMax : parsed.pageSize,
+        })
+    );
     const ms = Date.now() - t0;
     logAggregationHealth({
       facet: exportAll ? "focused_participant_export" : "focused_activity_report",
@@ -102,11 +118,15 @@ export async function GET(request: NextRequest) {
       filterSummary: ciRedactLine(JSON.stringify({ f: parsed.filters, ft: parsed.focusType, out: parsed.focusedOutcome })),
       resultSize: payload.totalParticipants,
       cacheStatus: "none",
+      correlationId,
+      payloadBytes: payloadByteSize(payload),
+      degradedMode: exportMax < exportMaxRequested,
     });
 
-    return NextResponse.json(
+    const res = NextResponse.json(
       {
         ...payload,
+        ...(exportMax < exportMaxRequested ? { degraded: true as const } : {}),
         ciObservability: buildObs({
           serverFacetMs: ms,
           cacheHit: false,
@@ -118,8 +138,20 @@ export async function GET(request: NextRequest) {
         headers: { "Cache-Control": "private, max-age=15" },
       }
     );
+    res.headers.set("X-Correlation-Id", correlationId);
+    if (exportMax < exportMaxRequested) res.headers.set("X-Degraded", "1");
+    return res;
   } catch (e) {
-    console.error("[GET /api/admin/reports/achievement-participation/focused]", e);
-    return jsonInternalServerError(e);
+    logRouteError({
+      path: ROUTE_PATH,
+      durationMs: Date.now() - routeT0,
+      correlationId,
+      cause: inferRouteErrorCause(e, Date.now() - routeT0),
+      aggregation: "focused_activity_report",
+      message: e instanceof Error ? e.message : "Error",
+    });
+    const res = jsonInternalServerError(e, { merge: { correlationId } });
+    res.headers.set("X-Correlation-Id", correlationId);
+    return res;
   }
 }

@@ -58,6 +58,7 @@ import {
   readCiExportAudit,
 } from "@/lib/competition-intelligence-export-audit";
 import { CI_AGGREGATION_VERSION } from "@/lib/competition/analytics/aggregation-version";
+import { resilientFetchJson } from "@/lib/client/resilient-fetch";
 import { runStudentIntelGovernance } from "@/lib/competition/governance/student-intel-governance";
 import { getCompetitionIntelAccess } from "@/lib/competition-intelligence-permissions";
 import {
@@ -117,6 +118,7 @@ const AdminParticipationAnalyticsPage = () => {
   const [data, setData] = useState<ParticipationAnalyticsPayload | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [dataDegraded, setDataDegraded] = useState(false);
   const [page, setPage] = useState(1);
   const [focusedPage, setFocusedPage] = useState(1);
   const [execBoot] = useState(() => {
@@ -372,31 +374,43 @@ const AdminParticipationAnalyticsPage = () => {
   const fetchData = useCallback(async () => {
     setLoading(true);
     setError(null);
-    try {
-      const res = await fetch(`/api/admin/reports/achievement-participation?${buildQuery()}`, {
-        cache: "no-store",
-        credentials: "include",
-      });
-      if (res.status === 401) {
+    setDataDegraded(false);
+    const url = `/api/admin/reports/achievement-participation?${buildQuery()}`;
+    const result = await resilientFetchJson<
+      ParticipationAnalyticsPayload & { degraded?: boolean; error?: string }
+    >(url, { credentials: "include" }, {
+      staleKey: `anjal-participation:${buildQuery()}`,
+      staleMaxAgeMs: 10 * 60_000,
+      retries: 2,
+    });
+    if (!result.ok) {
+      if (result.status === 401) {
         router.push("/login");
         return;
       }
-      if (res.status === 403) {
+      if (result.status === 403) {
         setAllowed(false);
         return;
       }
-      const j = (await res.json()) as ParticipationAnalyticsPayload & { error?: string };
-      if (!res.ok || !j.ok) {
-        throw new Error(typeof j.error === "string" ? j.error : "Request failed");
-      }
-      setData(j);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Error");
+      setError(
+        isAr ?
+          "تعذر تحميل التقرير. جرّب إعادة المحاولة أو توسيع الفلاتر."
+        : "Could not load the report. Retry or broaden filters."
+      );
       setData(null);
-    } finally {
       setLoading(false);
+      return;
     }
-  }, [buildQuery, router]);
+    const j = result.data;
+    if (!j.ok) {
+      setError(typeof j.error === "string" ? j.error : "Request failed");
+      setData(null);
+    } else {
+      setData(j);
+      setDataDegraded(Boolean(result.degraded || result.fromStale || j.degraded));
+    }
+    setLoading(false);
+  }, [buildQuery, router, isAr]);
 
   const fetchFocusedOptions = useCallback(async () => {
     setFocusedOptionsLoading(true);
@@ -1325,6 +1339,16 @@ const AdminParticipationAnalyticsPage = () => {
   return (
     <PageContainer>
       <div dir={isAr ? "rtl" : "ltr"}>
+        {dataDegraded && activeTab === "general" ? (
+          <div
+            role="status"
+            className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950"
+          >
+            {isAr ?
+              "يتم عرض بيانات مؤقتة أو مخزّنة مسبقًا بسبب ضغط على الخادم. اضغط «تحديث» لإعادة الجلب."
+            : "Showing cached or snapshot data due to server load. Use Refresh to fetch live data."}
+          </div>
+        ) : null}
         <PageHeader
           title={title}
           subtitle={

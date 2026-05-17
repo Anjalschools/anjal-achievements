@@ -16,11 +16,13 @@ import {
 } from "@/lib/competition-intelligence-debug";
 import { CI_AGGREGATION_VERSION } from "@/lib/competition/analytics/aggregation-version";
 import { CiRouteMemoryCache } from "@/lib/competition/cache/cache-lifecycle";
-import { getLatestCompetitionSnapshot } from "@/lib/competition/analytics/historical-metrics";
-import type { CompetitionSnapshotPayload } from "@/lib/competition/analytics/snapshot-engine";
-import connectDB from "@/lib/mongodb";
+import { createCorrelationId } from "@/lib/competition-intelligence-debug";
+import { buildParticipationSnapshotFallback } from "@/lib/resilience/participation-snapshot-fallback";
+import { DEFAULT_AGGREGATION_TIMEOUT_MS, withTimeout } from "@/lib/resilience/query-safety";
+import { inferRouteErrorCause, logRouteError, payloadByteSize } from "@/lib/resilience/route-error-log";
 
 export const dynamic = "force-dynamic";
+const ROUTE_PATH = "/api/admin/reports/achievement-participation";
 
 const participationCache = new CiRouteMemoryCache<
   Awaited<ReturnType<typeof buildParticipationAnalytics>>
@@ -53,14 +55,15 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
+  const correlationId = request.headers.get("x-correlation-id")?.trim() || createCorrelationId();
+  const routeT0 = Date.now();
+
   try {
     const { searchParams } = new URL(request.url);
     const filters = parseParticipationFiltersFromSearchParams(searchParams);
     const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10) || 1);
     const pageSize = Math.min(100, Math.max(5, parseInt(searchParams.get("pageSize") || "25", 10) || 25));
     const bypass = searchParams.get("nocache") === "1";
-    const snapshotFallback = searchParams.get("snapshotFallback") === "1";
-
     const cacheKey = JSON.stringify({ filters, page, pageSize });
 
     if (!bypass) {
@@ -108,49 +111,16 @@ export async function GET(request: NextRequest) {
     let trustStatus: string | undefined;
 
     try {
-      payload = await buildParticipationAnalytics({ filters, page, pageSize });
+      payload = await withTimeout("participation_general", DEFAULT_AGGREGATION_TIMEOUT_MS, async () =>
+        buildParticipationAnalytics({ filters, page, pageSize })
+      );
     } catch (buildErr) {
-      if (snapshotFallback) {
-        await connectDB();
-        const snap = await getLatestCompetitionSnapshot("daily");
-        const sp = snap?.payload as CompetitionSnapshotPayload | undefined;
-        if (sp) {
-          payload = {
-            ok: true,
-            generatedAt: sp.computedAt,
-            filters,
-            kpis: sp.kpis as Awaited<ReturnType<typeof buildParticipationAnalytics>>["kpis"],
-            charts: {
-              genderParticipation: [],
-              sectionParticipation: [],
-              mawhibaSplit: [],
-              resultDistribution: [],
-              levelDistribution: [],
-              genderResultStack: [],
-              topPrograms: [],
-              activityHorizontal: [],
-              resultOutcomeCompare: sp.outcomes.map((o) => ({
-                key: o.key,
-                labelAr: o.key,
-                labelEn: o.key,
-                count: o.count,
-                color: "#94a3b8",
-              })),
-              yearTrend: sp.growth.yearTrend,
-            },
-            activityOptions: [],
-            focusedActivity: null,
-            table: [],
-            tableTotal: 0,
-            page,
-            pageSize,
-          };
-          obsSource = "snapshot";
-          recomputeReason = "snapshot_fallback";
-          trustStatus = String(snap?.trustStatus ?? sp.trustStatus);
-        } else {
-          throw buildErr;
-        }
+      const fb = await buildParticipationSnapshotFallback({ filters, page, pageSize });
+      if (fb) {
+        payload = fb;
+        obsSource = "snapshot";
+        recomputeReason = "snapshot_fallback";
+        trustStatus = "degraded";
       } else {
         throw buildErr;
       }
@@ -163,6 +133,9 @@ export async function GET(request: NextRequest) {
       filterSummary: ciRedactLine(cacheKey),
       resultSize: payload.tableTotal,
       cacheStatus: bypass ? "none" : "miss",
+      correlationId,
+      degradedMode: obsSource === "snapshot",
+      payloadBytes: payloadByteSize(payload),
     });
     logCacheIntel({
       scope: "participation_general",
@@ -180,9 +153,10 @@ export async function GET(request: NextRequest) {
       participationCache.set(cacheKey, payload, "synced");
     }
 
-    return NextResponse.json(
+    const res = NextResponse.json(
       {
         ...payload,
+        ...(obsSource === "snapshot" ? { degraded: true as const } : {}),
         ciObservability: buildObs({
           serverFacetMs: ms,
           cacheHit: false,
@@ -196,8 +170,47 @@ export async function GET(request: NextRequest) {
         headers: { "Cache-Control": "private, max-age=30" },
       }
     );
+    if (obsSource === "snapshot") res.headers.set("X-Degraded", "1");
+    res.headers.set("X-Correlation-Id", correlationId);
+    return res;
   } catch (e) {
-    console.error("[GET /api/admin/reports/achievement-participation]", e);
-    return jsonInternalServerError(e);
+    const durationMs = Date.now() - routeT0;
+    logRouteError({
+      path: ROUTE_PATH,
+      durationMs,
+      correlationId,
+      cause: inferRouteErrorCause(e, durationMs),
+      aggregation: "participation_general",
+      message: e instanceof Error ? e.message : "Error",
+    });
+    try {
+      const { searchParams } = new URL(request.url);
+      const filters = parseParticipationFiltersFromSearchParams(searchParams);
+      const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10) || 1);
+      const pageSize = Math.min(100, Math.max(5, parseInt(searchParams.get("pageSize") || "25", 10) || 25));
+      const fb = await buildParticipationSnapshotFallback({ filters, page, pageSize });
+      if (fb) {
+        const res = NextResponse.json({
+          ...fb,
+          degraded: true,
+          ciObservability: buildObs({
+            serverFacetMs: durationMs,
+            cacheHit: false,
+            cacheAgeMs: 0,
+            recomputeReason: "snapshot_fallback",
+            source: "snapshot",
+            trustStatus: "degraded",
+          }),
+        });
+        res.headers.set("X-Degraded", "1");
+        res.headers.set("X-Correlation-Id", correlationId);
+        return res;
+      }
+    } catch {
+      /* ignore fallback failure */
+    }
+    const res = jsonInternalServerError(e, { merge: { correlationId } });
+    res.headers.set("X-Correlation-Id", correlationId);
+    return res;
   }
 }
