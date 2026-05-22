@@ -274,5 +274,3 @@ export const mapDbAchievementTypeToUiCategory = (
       return "other";
   }
 };
-
-export { resolveAchievementFormUiCategory } from "@/lib/achievement-form-ui-resolve";

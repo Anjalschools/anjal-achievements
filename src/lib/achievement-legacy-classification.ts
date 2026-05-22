@@ -579,11 +579,46 @@ export const inferUniversityAdmission = (
   return applyNegativePenalty(result, negatives, 20);
 };
 
+const STRONG_TRAINING_SIGNALS = [
+  "masterclass",
+  "master class",
+  "bootcamp",
+  "boot camp",
+  "workshop",
+  "training course",
+  "دورة تدريبية",
+  "دورة",
+  "شهادة حضور",
+  "professional development",
+  "executive program",
+  "learning program",
+];
+
+const STRONG_ENTREPRENEURSHIP_SIGNALS = [
+  "متجر",
+  "متجر إلكتروني",
+  "online store",
+  "ecommerce",
+  "e-commerce",
+  "startup",
+  "entrepreneur",
+  "سلة",
+  "زد",
+  "shop",
+  "store",
+];
+
 export const inferEntrepreneurship = (
   input: LegacyAchievementInput
 ): LegacyClassificationResult | null => {
   const corpus = buildLegacySearchCorpus(input);
   if (!corpus) return null;
+
+  const trainingStrong = containsAny(corpus, STRONG_TRAINING_SIGNALS);
+  const entStrong = containsAny(corpus, STRONG_ENTREPRENEURSHIP_SIGNALS);
+  if (trainingStrong.length > 0 && entStrong.length === 0) {
+    return null;
+  }
 
   const negatives = [
     ...collectNegativeHits(corpus, GLOBAL_NEGATIVE_SIGNALS),
@@ -598,7 +633,12 @@ export const inferEntrepreneurship = (
     return null;
   }
 
-  const generalHits = containsAny(corpus, ENTREPRENEURSHIP_KEYWORDS);
+  const generalHits = containsAny(corpus, ENTREPRENEURSHIP_KEYWORDS).filter((h) => {
+    if (h === "تجارة" || h === "مشروع" || h === "مشروع تجاري") {
+      return entStrong.length > 0;
+    }
+    return true;
+  });
   if (generalHits.length === 0) return null;
 
   let bestEnt: { slug: string; weight: number } | null = null;
@@ -729,6 +769,14 @@ export const inferAchievementCategoryFromLegacyData = (
   candidates.sort((a, b) => b.score - a.score);
   const top = candidates[0];
   const second = candidates[1];
+
+  if (
+    top.category === UI_CATEGORY_TRAINING_COURSES &&
+    second?.category === UI_CATEGORY_ENTREPRENEURSHIP &&
+    containsAny(buildLegacySearchCorpus(input), STRONG_TRAINING_SIGNALS).length > 0
+  ) {
+    return top;
+  }
 
   if (second && top.score - second.score < 8 && top.confidence !== "high") {
     return { ...top, confidence: "medium", reasons: [...top.reasons, "competing_category_reduced_confidence"] };

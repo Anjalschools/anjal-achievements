@@ -1,3 +1,4 @@
+import { getAchievementCategoryOptions } from "@/constants/achievement-ui-categories";
 import {
   getAchievementLevelLabel,
   labelAchievementCategory,
@@ -38,11 +39,15 @@ const categoryLabel = (v: string, loc: Loc): string => {
   return labelLegacyAchievementType(v, loc);
 };
 
-export const getReportCategoryOptions = (loc: Loc): Array<{ value: string; label: string }> =>
-  [...REPORT_CATEGORY_VALUES].map((value) => ({
+export const getReportCategoryOptions = (loc: Loc): Array<{ value: string; label: string }> => {
+  const uiLabels = new Map<string, string>(
+    getAchievementCategoryOptions(loc).map((o) => [o.value, o.label])
+  );
+  return [...REPORT_CATEGORY_VALUES].map((value) => ({
     value,
-    label: categoryLabel(value, loc),
+    label: uiLabels.get(value) ?? categoryLabel(value, loc),
   }));
+};
 
 /** DB achievementLevel enum */
 export const REPORT_LEVEL_VALUES = ["school", "province", "kingdom", "international"] as const;
