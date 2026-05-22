@@ -4,6 +4,7 @@ import Achievement from "@/models/Achievement";
 import User from "@/models/User";
 import { requireAchievementReviewer } from "@/lib/review-auth";
 import { buildAchievementAccessFilter, mergeWithAchievementScope } from "@/lib/achievement-scope-filter";
+import { buildReportCategoriesMongoFilter } from "@/lib/achievement-report-category";
 import { jsonInternalServerError } from "@/lib/api-safe-response";
 
 export const dynamic = "force-dynamic";
@@ -69,7 +70,11 @@ export async function GET(request: NextRequest) {
 
     const andParts: Record<string, unknown>[] = [];
     if (status && status !== "all") andParts.push({ status });
-    if (type && type !== "all") andParts.push({ achievementType: type });
+    if (type && type !== "all") {
+      const typeFilter = buildReportCategoriesMongoFilter([type]);
+      if (typeFilter) andParts.push(typeFilter);
+      else andParts.push({ achievementType: type });
+    }
     if (field && field !== "all") andParts.push({ inferredField: field });
     if (level && level !== "all") andParts.push({ achievementLevel: level });
     if (year && year !== "all") andParts.push({ achievementYear: parseIntSafe(year, 0) });

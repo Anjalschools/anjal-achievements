@@ -23,6 +23,8 @@ import {
   getStudentAchievementCardFieldDisplay,
 } from "@/lib/achievement-display-labels";
 import AchievementStatusBadge from "@/components/achievements/AchievementStatusBadge";
+import SpecialAchievementHighlightBadge from "@/components/achievements/SpecialAchievementHighlightBadge";
+import { getSpecialAchievementHighlightBadge } from "@/lib/achievement-report-category";
 import StudentAchievementDataRows from "@/components/achievements/StudentAchievementDataRows";
 import type { WorkflowDisplayStatus } from "@/lib/achievementWorkflow";
 import { useScoringConfig } from "@/hooks/useScoringConfig";
@@ -39,6 +41,7 @@ type AchievementCardProps = {
   /** Not shown on the card — details page only */
   description?: string;
   category: string;
+  achievementCategory?: string;
   achievementType?: string;
   achievementLevel?: string;
   score?: number;
@@ -74,6 +77,7 @@ const AchievementCard = ({
   customAchievementName,
   description: _description,
   category: _category,
+  achievementCategory,
   achievementType,
   achievementLevel,
   score,
@@ -237,6 +241,13 @@ const AchievementCard = ({
         ? "غير محدد"
         : "Not specified";
 
+  const highlightBadge = getSpecialAchievementHighlightBadge({
+    achievementType: typeKey,
+    achievementCategory: String(achievementCategory || _category || ""),
+    achievementName: achievementName || title,
+    description: _description,
+  });
+
   const workflowBadgeStatus: WorkflowDisplayStatus =
     approvalNorm === "featured"
       ? "featured"
@@ -281,9 +292,14 @@ const AchievementCard = ({
       </div>
 
       <div className="p-5 sm:p-6">
-        <h3 className="mb-3 text-lg font-bold leading-snug text-text line-clamp-2 group-hover:text-primary">
-          {cardTitle}
-        </h3>
+        <div className="mb-3 flex flex-wrap items-start gap-2">
+          <h3 className="min-w-0 flex-1 text-lg font-bold leading-snug text-text line-clamp-2 group-hover:text-primary">
+            {cardTitle}
+          </h3>
+          {highlightBadge ? (
+            <SpecialAchievementHighlightBadge badge={highlightBadge} isArabic={locale === "ar"} />
+          ) : null}
+        </div>
 
         <StudentAchievementDataRows
           locale={loc}

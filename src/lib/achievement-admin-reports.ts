@@ -25,11 +25,15 @@ import {
 } from "@/lib/achievement-display-labels";
 import { getStageByGrade, reportStageLabel, type ReportStage } from "@/lib/report-stage-mapping";
 import {
-  REPORT_CATEGORY_VALUES,
   REPORT_LEVEL_VALUES,
   REPORT_RESULT_TOKEN_VALUES,
   resultTokenToMongoCondition,
 } from "@/lib/report-filter-options";
+import {
+  buildReportCategoriesMongoFilter,
+  EXTENDED_REPORT_CATEGORY_SET,
+  resolveStoredAchievementReportCategory,
+} from "@/lib/achievement-report-category";
 
 const safeStr = (v: unknown) => String(v ?? "").trim();
 
@@ -397,7 +401,7 @@ export type AdminReportFilters = {
   toDate?: string;
 };
 
-const ALLOW_CATEGORY = new Set<string>([...REPORT_CATEGORY_VALUES]);
+const ALLOW_CATEGORY = EXTENDED_REPORT_CATEGORY_SET;
 const ALLOW_LEVEL = new Set<string>([...REPORT_LEVEL_VALUES]);
 const ALLOW_RESULT = new Set<string>(REPORT_RESULT_TOKEN_VALUES);
 
@@ -492,14 +496,8 @@ export const buildUnifiedAdminAchievementReports = async (
     query.achievementName = new RegExp(`^${esc}$`, "i");
   }
 
-  if (categories.length > 0) {
-    rootAnd.push({
-      $or: [
-        { achievementCategory: { $in: categories } },
-        { achievementType: { $in: categories } },
-      ],
-    });
-  }
+  const categoryFilter = buildReportCategoriesMongoFilter(categories);
+  if (categoryFilter) rootAnd.push(categoryFilter);
 
   const resultConds = resultTokens
     .map((t) => resultTokenToMongoCondition(t))
@@ -593,7 +591,12 @@ export const buildUnifiedAdminAchievementReports = async (
     const refDate = (a.date as Date) || (a.createdAt as Date) || null;
     const eventLabelAr = getAchievementDisplayName(a, "ar");
     const eventLabelEn = getAchievementDisplayName(a, "en");
-    const categoryKey = displaySafeTrim(a.achievementCategory || a.achievementType);
+    const categoryKey = resolveStoredAchievementReportCategory({
+      achievementType: String(a.achievementType || ""),
+      achievementCategory: String(a.achievementCategory || ""),
+      achievementName: String(a.achievementName || ""),
+      description: String(a.description || ""),
+    });
 
     const row: AdminReportRow = {
       id: String(a._id),

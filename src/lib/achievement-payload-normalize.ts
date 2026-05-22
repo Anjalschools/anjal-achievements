@@ -3,6 +3,7 @@ import { sanitizeMongoShape } from "@/lib/sanitize-input";
 import { sanitizeUserText } from "@/lib/sanitize-html";
 import { QUDRAT_TIER_ALLOWED_VALUES } from "@/constants/achievement-options";
 import { normalizeLegacyQudratAchievementName } from "@/lib/achievementNormalize";
+import { validateSpecialCategoryServer } from "@/lib/achievement-special-category-rules";
 
 export type NormalizedPayload = {
   achievementType: string;
@@ -255,6 +256,18 @@ export const validateNormalizedPayload = (payload: NormalizedPayload): string[] 
   if (payload.evidenceRequiredMode !== "skipped" && !hasEvidence) {
     errors.push("Evidence is required: provide file/link or choose committee review");
   }
+
+  errors.push(
+    ...validateSpecialCategoryServer({
+      achievementType: payload.achievementType,
+      achievementName: payload.achievementName,
+      customAchievementName: payload.customAchievementName,
+      attachments: payload.attachments,
+      description: payload.description,
+      nominationText: payload.nominationText,
+      resultValue: payload.resultValue,
+    })
+  );
 
   return errors;
 };

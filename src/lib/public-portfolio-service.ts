@@ -15,8 +15,14 @@ import {
   formatLocalizedResultLine,
   getAchievementDisplayName,
   getAchievementLevelLabel,
+  labelAchievementCategory,
   labelLegacyAchievementType,
 } from "@/lib/achievementDisplay";
+import {
+  getSpecialAchievementHighlightBadge,
+  resolveStoredAchievementReportCategory,
+  stripEntrepreneurshipMetaFromDescription,
+} from "@/lib/achievement-report-category";
 import { resolveCertificateUiStatus } from "@/lib/certificate-eligibility";
 import { tokenPreviewForLogs } from "@/lib/get-base-url";
 import {
@@ -38,6 +44,8 @@ export type PublicPortfolioAchievementItem = {
   id: string;
   titleAr: string;
   titleEn: string;
+  highlightBadgeAr?: string | null;
+  highlightBadgeEn?: string | null;
   categoryLabelAr: string;
   categoryLabelEn: string;
   levelLabelAr: string;
@@ -395,9 +403,20 @@ export const loadPublicPortfolioPayload = async (
       const id = String(row._id);
       const titleAr = getAchievementDisplayName(row, "ar");
       const titleEn = getAchievementDisplayName(row, "en");
-      const typeSlug = String(row.achievementType || "");
-      const catAr = labelLegacyAchievementType(typeSlug, "ar");
-      const catEn = labelLegacyAchievementType(typeSlug, "en");
+      const reportCat = resolveStoredAchievementReportCategory({
+        achievementType: String(row.achievementType || ""),
+        achievementCategory: String(row.achievementCategory || ""),
+        achievementName: String(row.achievementName || ""),
+        description: String(row.description || ""),
+      });
+      const catAr = labelAchievementCategory(reportCat, "ar");
+      const catEn = labelAchievementCategory(reportCat, "en");
+      const highlight = getSpecialAchievementHighlightBadge({
+        achievementType: String(row.achievementType || ""),
+        achievementCategory: String(row.achievementCategory || ""),
+        achievementName: String(row.achievementName || ""),
+        description: String(row.description || ""),
+      });
       const levelRaw = row.achievementLevel || row.level;
       const levelAr = getAchievementLevelLabel(levelRaw, "ar");
       const levelEn = getAchievementLevelLabel(levelRaw, "en");
@@ -419,7 +438,9 @@ export const loadPublicPortfolioPayload = async (
       );
       const part = participationLabels(String(row.participationType || ""));
       const d = row.date instanceof Date ? row.date : null;
-      const descSource = String(row.description || row.title || "").trim();
+      const descSource = stripEntrepreneurshipMetaFromDescription(
+        String(row.description || row.title || "")
+      );
       const certUi = resolveCertificateUiStatus(
         row as Parameters<typeof resolveCertificateUiStatus>[0]
       );
@@ -434,6 +455,8 @@ export const loadPublicPortfolioPayload = async (
         id,
         titleAr,
         titleEn,
+        highlightBadgeAr: highlight?.labelAr ?? null,
+        highlightBadgeEn: highlight?.labelEn ?? null,
         categoryLabelAr: catAr,
         categoryLabelEn: catEn,
         levelLabelAr: levelAr,

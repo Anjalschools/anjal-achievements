@@ -26,6 +26,22 @@ import {
   STANDARDIZED_TEST_TYPE_OPTIONS,
   resolveAchievementFormUiCategory,
 } from "@/constants/achievement-ui-categories";
+import {
+  EARLY_UNIVERSITY_OTHER_VALUE,
+  isSpecialUiCategory,
+  UI_CATEGORY_EARLY_UNIVERSITY,
+  UI_CATEGORY_ENTREPRENEURSHIP,
+  UI_CATEGORY_TRAINING_COURSES,
+} from "@/constants/achievement-special-categories";
+import {
+  buildAutoNominationTextForEarlyUniversity,
+  getAutoLocksForSpecialUiCategory,
+  inferTrainingCourseField,
+  mergeDescriptionWithEntrepreneurshipMeta,
+  parseEntrepreneurshipMetaFromDescription,
+  validateSpecialCategoryClient,
+} from "@/lib/achievement-special-category-rules";
+import { INFERRED_FIELD_UI_LABELS } from "@/lib/achievement-inferred-field-allowlist";
 import { inferAchievementField } from "@/lib/achievement-field-inference";
 import { calculateAchievementScore } from "@/lib/achievement-scoring";
 import { useScoringConfig } from "@/hooks/useScoringConfig";
@@ -89,12 +105,20 @@ const AchievementForm = ({
   const isArabic = locale === "ar";
   const scoringCfg = useScoringConfig();
 
+  const initialEntMeta = parseEntrepreneurshipMetaFromDescription(
+    String(initialData?.description || "")
+  );
+
   const [formData, setFormData] = useState<Record<string, unknown>>({
     achievementType: String(initialData?.achievementType || ""),
     achievementCategory: String(
       resolveAchievementFormUiCategory(
         String(initialData?.achievementType || ""),
-        String(initialData?.achievementCategory || "").trim() || undefined
+        String(initialData?.achievementCategory || "").trim() || undefined,
+        {
+          achievementName: String(initialData?.achievementName || ""),
+          description: String(initialData?.description || ""),
+        }
       ) || "competition"
     ),
     achievementName: String(initialData?.achievementName || ""),
@@ -128,7 +152,17 @@ const AchievementForm = ({
     achievementClassification: String(
       initialData?.achievementClassification || "other"
     ),
-    description: String(initialData?.description || ""),
+    description: initialEntMeta.userDescription,
+    entActivityTypeDetail: String(initialEntMeta.meta.activityTypeDetail || ""),
+    entApproximateCapital: String(initialEntMeta.meta.approximateCapital || ""),
+    entBranchCount: String(initialEntMeta.meta.branchCount || ""),
+    entCustomerCount: String(initialEntMeta.meta.customerCount || ""),
+    entProjectSummary: String(initialEntMeta.meta.projectSummary || ""),
+    entStoreOrBusinessUrl: String(initialEntMeta.meta.storeOrBusinessUrl || ""),
+    trainingCourseName: String(initialData?.customAchievementName || ""),
+    trainingHours: String(
+      (initialData as Record<string, unknown> | undefined)?.resultValue ?? ""
+    ),
     image: initialData?.image || null,
     imagePublicId:
       typeof (initialData as Record<string, unknown> | undefined)?.imagePublicId === "string"
@@ -196,9 +230,17 @@ const AchievementForm = ({
       mapDbAchievementTypeToUiCategory(dbType) ||
       inferAchievementCategoryFromLegacyType(dbType) ||
       "competition";
+    const entParsed = parseEntrepreneurshipMetaFromDescription(
+      String(initialData.description || "")
+    );
+
     const cat = resolveAchievementFormUiCategory(
       dbType,
-      String(initialData.achievementCategory || "").trim() || undefined
+      String(initialData.achievementCategory || "").trim() || undefined,
+      {
+        achievementName: String(initialData.achievementName || ""),
+        description: String(initialData.description || ""),
+      }
     );
 
     let hydratedAchievementName = String(initialData.achievementName || "");
@@ -255,7 +297,17 @@ const AchievementForm = ({
           ? initialData.achievementYear
           : new Date().getFullYear(),
       achievementDate: achievementDateIsoFromRecord(raw),
-      description: String(initialData.description || ""),
+      description: entParsed.userDescription,
+      entActivityTypeDetail: String(entParsed.meta.activityTypeDetail || ""),
+      entApproximateCapital: String(entParsed.meta.approximateCapital || ""),
+      entBranchCount: String(entParsed.meta.branchCount || ""),
+      entCustomerCount: String(entParsed.meta.customerCount || ""),
+      entProjectSummary: String(entParsed.meta.projectSummary || ""),
+      entStoreOrBusinessUrl: String(entParsed.meta.storeOrBusinessUrl || ""),
+      trainingCourseName: String(initialData.customAchievementName || ""),
+      trainingHours: String(
+        (initialData as Record<string, unknown>).resultValue ?? ""
+      ),
       image: initialData.image || null,
       imagePublicId:
         typeof (initialData as Record<string, unknown>).imagePublicId === "string"
@@ -279,11 +331,15 @@ const AchievementForm = ({
 
     const lockedByCategory = getAutoLockedLevelByCategory(cat);
     const lockedByOlympiad = getAutoLevelForOlympiadNesmoEvent(hydratedAchievementName);
+    const specialLocks = getAutoLocksForSpecialUiCategory(cat);
 
-    setAutoLocks((prev) => ({
-      ...prev,
-      levelLocked: Boolean(lockedByCategory || lockedByOlympiad),
-    }));
+    setAutoLocks({
+      levelLocked: Boolean(
+        specialLocks.levelLocked || lockedByCategory || lockedByOlympiad
+      ),
+      participationLocked: specialLocks.participationLocked,
+      resultLocked: specialLocks.resultLocked,
+    });
 
     const initAchName = hydratedAchievementName;
     const initCustom = String(initialData.customAchievementName || "");
@@ -333,7 +389,29 @@ const AchievementForm = ({
     autoLocks.levelLocked ||
     olympiadNesmoLocked ||
     standardizedLevelLocked ||
+    isSpecialUiCategory(uiCategory) ||
     (uiCategory === "standardized_tests" && !achievementType);
+
+  const participationSelectDisabled =
+    autoLocks.participationLocked ||
+    achievementType === "gifted_discovery" ||
+    achievementType === "qudrat" ||
+    achievementType === "sat" ||
+    achievementType === "ielts" ||
+    achievementType === "toefl" ||
+    isSpecialUiCategory(uiCategory);
+
+  const mapSubmitAchievementCategory = (ui: string, dbType: string): string => {
+    if (ui === "standardized_tests") return "standardized_tests";
+    if (
+      ui === UI_CATEGORY_EARLY_UNIVERSITY ||
+      ui === UI_CATEGORY_ENTREPRENEURSHIP ||
+      ui === UI_CATEGORY_TRAINING_COURSES
+    ) {
+      return ui;
+    }
+    return ui || dbType || "competition";
+  };
 
   const availableNames = useMemo(() => {
     if (!uiCategory) return [];
@@ -381,6 +459,7 @@ const AchievementForm = ({
 
   useEffect(() => {
     if (isHydratingFromInitialDataRef.current) return;
+    if (isSpecialUiCategory(uiCategory)) return;
 
     setFormData((prev) => {
       const next: Record<string, unknown> = { ...prev };
@@ -440,7 +519,61 @@ const AchievementForm = ({
       participationLocked: false,
       resultLocked: false,
     });
-  }, [achievementType]);
+  }, [achievementType, uiCategory]);
+
+  const applySpecialUiCategoryDefaults = (category: string) => {
+    if (!isSpecialUiCategory(category)) return;
+    const locks = getAutoLocksForSpecialUiCategory(category);
+    setFormData((prev) => {
+      const next: Record<string, unknown> = { ...prev };
+      if (locks.level) next.achievementLevel = locks.level;
+      if (locks.participationType) next.participationType = locks.participationType;
+      if (locks.resultType) next.resultType = locks.resultType;
+      if (locks.inferredField) next.inferredFieldStudentOverride = locks.inferredField;
+      if (category === UI_CATEGORY_EARLY_UNIVERSITY) {
+        next.nominationText = buildAutoNominationTextForEarlyUniversity(
+          String(prev.achievementName || ""),
+          String(prev.customAchievementName || ""),
+          isArabic ? "ar" : "en"
+        );
+      }
+      return next;
+    });
+    setAutoLocks({
+      levelLocked: locks.levelLocked,
+      participationLocked: locks.participationLocked,
+      resultLocked: locks.resultLocked,
+    });
+  };
+
+  useEffect(() => {
+    if (uiCategory !== UI_CATEGORY_EARLY_UNIVERSITY) return;
+    setFormData((prev) => ({
+      ...prev,
+      nominationText: buildAutoNominationTextForEarlyUniversity(
+        String(prev.achievementName || ""),
+        String(prev.customAchievementName || ""),
+        isArabic ? "ar" : "en"
+      ),
+    }));
+  }, [
+    uiCategory,
+    achievementName,
+    customAchievementName,
+    isArabic,
+  ]);
+
+  useEffect(() => {
+    if (uiCategory !== UI_CATEGORY_TRAINING_COURSES) return;
+    const course = String(formData.trainingCourseName || "").trim();
+    const inferred = inferTrainingCourseField(course);
+    if (!inferred) return;
+    setFormData((prev) => {
+      const cur = String(prev.inferredFieldStudentOverride || "").trim();
+      if (cur === inferred) return prev;
+      return { ...prev, inferredFieldStudentOverride: inferred };
+    });
+  }, [uiCategory, formData.trainingCourseName]);
 
   useEffect(() => {
     if (achievementType !== "competition") return;
@@ -473,6 +606,7 @@ const AchievementForm = ({
 
   useEffect(() => {
     if (achievementType !== "program") return;
+    if (isSpecialUiCategory(uiCategory)) return;
 
     if (achievementName === "social_volunteer_programs") {
       setFormData((prev) => ({
@@ -483,7 +617,7 @@ const AchievementForm = ({
     } else {
       setAutoLocks((prev) => ({ ...prev, levelLocked: false }));
     }
-  }, [achievementType, achievementName]);
+  }, [achievementType, achievementName, uiCategory]);
 
   useEffect(() => {
     if (resultType !== "medal") {
@@ -517,6 +651,12 @@ const AchievementForm = ({
     if (achievementName === "other") {
       return customAchievementName.trim();
     }
+    if (achievementName === EARLY_UNIVERSITY_OTHER_VALUE) {
+      return customAchievementName.trim() || achievementName;
+    }
+    if (uiCategory === UI_CATEGORY_TRAINING_COURSES) {
+      return String(formData.trainingCourseName || "").trim() || achievementName;
+    }
     if (achievementName) return achievementName;
 
     const localNameAr = String(formData.nameAr || "").trim();
@@ -529,6 +669,8 @@ const AchievementForm = ({
     formData.achievementName,
     formData.nameAr,
     formData.nameEn,
+    uiCategory,
+    formData.trainingCourseName,
   ]);
 
   useEffect(() => {
@@ -542,7 +684,7 @@ const AchievementForm = ({
       finalAchievementName || achievementName,
       String(formData.olympiadField || ""),
       String(formData.mawhibaAnnualSubject || ""),
-      `${customAchievementName} ${String(formData.description || "")}`
+      `${customAchievementName} ${String(formData.trainingCourseName || "")} ${String(formData.description || "")}`
     );
 
     setInferredField({
@@ -556,6 +698,7 @@ const AchievementForm = ({
     formData.olympiadField,
     formData.mawhibaAnnualSubject,
     customAchievementName,
+    formData.trainingCourseName,
     formData.description,
   ]);
 
@@ -849,7 +992,8 @@ const AchievementForm = ({
     }
 
     if (
-      achievementName === "other" &&
+      (achievementName === "other" ||
+        achievementName === EARLY_UNIVERSITY_OTHER_VALUE) &&
       uiCategory !== "other" &&
       !customAchievementName.trim()
     ) {
@@ -984,6 +1128,21 @@ const AchievementForm = ({
         : "Provide evidence file/link or choose committee review";
     }
 
+    Object.assign(
+      nextErrors,
+      validateSpecialCategoryClient(uiCategory, formData, isArabic ? "ar" : "en")
+    );
+
+    if (
+      uiCategory === UI_CATEGORY_EARLY_UNIVERSITY &&
+      resolvedResult === "nomination" &&
+      !String(formData.nominationText || "").trim()
+    ) {
+      nextErrors.nominationText = isArabic
+        ? "نص الترشيح مطلوب"
+        : "Nomination text is required";
+    }
+
     setErrors(nextErrors);
     const errKeys = Object.keys(nextErrors);
     if (errKeys.length === 0) return true;
@@ -1013,14 +1172,33 @@ const AchievementForm = ({
             ? "score"
             : String(formData.resultType || "");
 
+    let descriptionOut = String(formData.description || "");
+    if (uiCategory === UI_CATEGORY_ENTREPRENEURSHIP) {
+      descriptionOut = mergeDescriptionWithEntrepreneurshipMeta(descriptionOut, {
+        activityTypeDetail: String(formData.entActivityTypeDetail || ""),
+        approximateCapital: String(formData.entApproximateCapital || ""),
+        branchCount: String(formData.entBranchCount || ""),
+        customerCount: String(formData.entCustomerCount || ""),
+        projectSummary: String(formData.entProjectSummary || ""),
+        storeOrBusinessUrl: String(formData.entStoreOrBusinessUrl || ""),
+        businessCategory: String(formData.achievementName || ""),
+      });
+    }
+
+    const submitAchievementName =
+      uiCategory === UI_CATEGORY_TRAINING_COURSES
+        ? String(formData.achievementName || "")
+        : finalAchievementName;
+
     const payload: Record<string, unknown> = {
       ...formData,
-      achievementName: finalAchievementName,
-      achievementCategory: String(
-        uiCategory === "standardized_tests"
-          ? "standardized_tests"
-          : formData.achievementCategory || achievementType || "competition"
-      ),
+      achievementName: submitAchievementName,
+      customAchievementName:
+        uiCategory === UI_CATEGORY_TRAINING_COURSES
+          ? String(formData.trainingCourseName || "").trim()
+          : formData.customAchievementName,
+      achievementCategory: mapSubmitAchievementCategory(uiCategory, achievementType),
+      description: descriptionOut,
       achievementClassification: String(
         formData.achievementClassification || "other"
       ),
@@ -1046,8 +1224,18 @@ const AchievementForm = ({
       achievementType === "toefl"
     ) {
       payload.resultValue = String(formData.resultValue || "").trim();
+    } else if (uiCategory === UI_CATEGORY_TRAINING_COURSES) {
+      payload.resultValue = String(formData.trainingHours || "").trim();
     } else {
       delete payload.resultValue;
+    }
+
+    if (uiCategory === UI_CATEGORY_EARLY_UNIVERSITY) {
+      payload.nominationText = buildAutoNominationTextForEarlyUniversity(
+        String(formData.achievementName || ""),
+        String(formData.customAchievementName || ""),
+        isArabic ? "ar" : "en"
+      );
     }
 
     if (achievementType === "mawhiba_annual") {
@@ -1059,6 +1247,7 @@ const AchievementForm = ({
   };
 
   const showResultSection =
+    !isSpecialUiCategory(uiCategory) &&
     achievementType !== "gifted_discovery" &&
     achievementType !== "qudrat" &&
     achievementType !== "sat" &&
@@ -1112,6 +1301,14 @@ const AchievementForm = ({
                 handleChange("olympiadField", "");
                 handleChange("mawhibaAnnualSubject", "");
                 handleChange("resultValue", "");
+                handleChange("trainingCourseName", "");
+                handleChange("trainingHours", "");
+                handleChange("entActivityTypeDetail", "");
+                handleChange("entApproximateCapital", "");
+                handleChange("entBranchCount", "");
+                handleChange("entCustomerCount", "");
+                handleChange("entProjectSummary", "");
+                handleChange("entStoreOrBusinessUrl", "");
 
                 if (v === "standardized_tests") {
                   handleChange("achievementType", "");
@@ -1120,12 +1317,13 @@ const AchievementForm = ({
                 }
 
                 handleChange("achievementType", mapUiCategoryToDbAchievementType(v));
+                applySpecialUiCategoryDefaults(v);
 
                 const locked = getAutoLockedLevelByCategory(v);
-                if (locked) {
+                if (locked && !isSpecialUiCategory(v)) {
                   handleChange("achievementLevel", locked);
                   setAutoLocks((p) => ({ ...p, levelLocked: true }));
-                } else {
+                } else if (!isSpecialUiCategory(v)) {
                   setAutoLocks((p) => ({ ...p, levelLocked: false }));
                 }
               }}
@@ -1306,6 +1504,80 @@ const AchievementForm = ({
               />
             )}
 
+            {uiCategory === UI_CATEGORY_EARLY_UNIVERSITY &&
+              achievementName === EARLY_UNIVERSITY_OTHER_VALUE && (
+                <input
+                  type="text"
+                  value={customAchievementName}
+                  onChange={(e) => handleChange("customAchievementName", e.target.value)}
+                  className={`mt-2 w-full rounded-xl border ${
+                    errors.customAchievementName ? "border-red-300" : "border-gray-300"
+                  } bg-white px-4 py-3 text-sm`}
+                  placeholder={isArabic ? "اسم الجامعة" : "University name"}
+                  aria-label={isArabic ? "اسم الجامعة" : "University name"}
+                />
+              )}
+
+            {uiCategory === UI_CATEGORY_ENTREPRENEURSHIP && achievementName && (
+              <div>
+                <input
+                  type="text"
+                  value={String(formData.entActivityTypeDetail || "")}
+                  onChange={(e) => handleChange("entActivityTypeDetail", e.target.value)}
+                  className={`mt-2 w-full rounded-xl border ${
+                    errors.entActivityTypeDetail ? "border-red-300" : "border-gray-300"
+                  } bg-white px-4 py-3 text-sm`}
+                  placeholder={
+                    isArabic
+                      ? "تحديد نوع النشاط (مثال: متجر ملابس)"
+                      : "Activity type (e.g. clothing store)"
+                  }
+                  aria-label={isArabic ? "تحديد نوع النشاط" : "Activity type detail"}
+                />
+                {errors.entActivityTypeDetail && (
+                  <p className="mt-1 text-xs text-red-600">{errors.entActivityTypeDetail}</p>
+                )}
+              </div>
+            )}
+
+            {uiCategory === UI_CATEGORY_TRAINING_COURSES && achievementName && (
+              <div className="mt-3 space-y-3">
+                <div>
+                  <label className="mb-2 block text-sm font-semibold text-text">
+                    {isArabic ? "اسم الدورة التدريبية" : "Training course name"} *
+                  </label>
+                  <input
+                    type="text"
+                    value={String(formData.trainingCourseName || "")}
+                    onChange={(e) => handleChange("trainingCourseName", e.target.value)}
+                    className={`w-full rounded-xl border ${
+                      errors.trainingCourseName ? "border-red-300" : "border-gray-300"
+                    } bg-white px-4 py-3 text-sm`}
+                  />
+                  {errors.trainingCourseName && (
+                    <p className="mt-1 text-xs text-red-600">{errors.trainingCourseName}</p>
+                  )}
+                </div>
+                <div>
+                  <label className="mb-2 block text-sm font-semibold text-text">
+                    {isArabic ? "عدد ساعات التدريب" : "Training hours"} *
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    value={String(formData.trainingHours || "")}
+                    onChange={(e) => handleChange("trainingHours", e.target.value)}
+                    className={`w-full rounded-xl border ${
+                      errors.trainingHours ? "border-red-300" : "border-gray-300"
+                    } bg-white px-4 py-3 text-sm`}
+                  />
+                  {errors.trainingHours && (
+                    <p className="mt-1 text-xs text-red-600">{errors.trainingHours}</p>
+                  )}
+                </div>
+              </div>
+            )}
+
             {uiCategory !== "standardized_tests" && errors.achievementName && (
               <p className="mt-1 text-xs text-red-600">{errors.achievementName}</p>
             )}
@@ -1379,8 +1651,41 @@ const AchievementForm = ({
             {isArabic ? "مجال النشاط" : "Activity field"}
           </p>
           <p className="font-bold text-text">
-            {labelInferredField(effectiveInferredFieldSlug, isArabic ? "ar" : "en")}
+            {labelInferredField(effectiveInferredFieldSlug, isArabic ? "ar" : "en") ||
+              (isArabic ? "—" : "—")}
           </p>
+          {uiCategory === UI_CATEGORY_TRAINING_COURSES && (
+            <div className="mt-3">
+              <label className="mb-2 block text-xs font-semibold text-text-light">
+                {isArabic
+                  ? "تعديل المجال يدويًا (اختياري)"
+                  : "Adjust field manually (optional)"}
+              </label>
+              <select
+                value={String(formData.inferredFieldStudentOverride || "")}
+                onChange={(e) =>
+                  handleChange("inferredFieldStudentOverride", e.target.value)
+                }
+                className="w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm"
+              >
+                <option value="">
+                  {isArabic ? "حسب اسم الدورة تلقائيًا" : "Auto from course name"}
+                </option>
+                {Object.entries(INFERRED_FIELD_UI_LABELS).map(([slug, labels]) => (
+                  <option key={slug} value={slug}>
+                    {isArabic ? labels.ar : labels.en}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+          {uiCategory === UI_CATEGORY_EARLY_UNIVERSITY && (
+            <p className="mt-2 text-xs text-text-light">
+              {isArabic
+                ? "يُضبط تلقائيًا: الإعداد الأكاديمي"
+                : "Auto-set: Academic preparation"}
+            </p>
+          )}
         </div>
       </SectionCard>
 
@@ -1515,6 +1820,66 @@ const AchievementForm = ({
           </div>
         )}
 
+        {uiCategory === UI_CATEGORY_ENTREPRENEURSHIP && achievementName && (
+          <div className="mt-4 grid gap-4 md:grid-cols-2">
+            <div>
+              <label className="mb-2 block text-sm font-semibold text-text">
+                {isArabic ? "رأس المال التقريبي" : "Approximate capital"}
+              </label>
+              <input
+                type="text"
+                value={String(formData.entApproximateCapital || "")}
+                onChange={(e) => handleChange("entApproximateCapital", e.target.value)}
+                className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm"
+              />
+            </div>
+            <div>
+              <label className="mb-2 block text-sm font-semibold text-text">
+                {isArabic ? "عدد الفروع" : "Number of branches"}
+              </label>
+              <input
+                type="text"
+                value={String(formData.entBranchCount || "")}
+                onChange={(e) => handleChange("entBranchCount", e.target.value)}
+                className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm"
+              />
+            </div>
+            <div>
+              <label className="mb-2 block text-sm font-semibold text-text">
+                {isArabic ? "عدد العملاء أو المستفيدين" : "Customers / beneficiaries"}
+              </label>
+              <input
+                type="text"
+                value={String(formData.entCustomerCount || "")}
+                onChange={(e) => handleChange("entCustomerCount", e.target.value)}
+                className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm"
+              />
+            </div>
+            <div>
+              <label className="mb-2 block text-sm font-semibold text-text">
+                {isArabic ? "رابط المتجر أو الحساب التجاري" : "Store / business link (optional)"}
+              </label>
+              <input
+                type="url"
+                value={String(formData.entStoreOrBusinessUrl || "")}
+                onChange={(e) => handleChange("entStoreOrBusinessUrl", e.target.value)}
+                className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm"
+              />
+            </div>
+            <div className="md:col-span-2">
+              <label className="mb-2 block text-sm font-semibold text-text">
+                {isArabic ? "وصف مختصر للمشروع" : "Brief project description"}
+              </label>
+              <textarea
+                rows={3}
+                value={String(formData.entProjectSummary || "")}
+                onChange={(e) => handleChange("entProjectSummary", e.target.value)}
+                className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm"
+              />
+            </div>
+          </div>
+        )}
+
         {!achievementType && (
           <p className="text-sm text-text-light">
             {isArabic ? "اختر نوع الإنجاز أولاً" : "Select achievement type first"}
@@ -1534,23 +1899,9 @@ const AchievementForm = ({
             <select
               value={participationType}
               onChange={(e) => handleChange("participationType", e.target.value)}
-              disabled={
-                autoLocks.participationLocked ||
-                achievementType === "gifted_discovery" ||
-                achievementType === "qudrat" ||
-                achievementType === "sat" ||
-                achievementType === "ielts" ||
-                achievementType === "toefl"
-              }
+              disabled={participationSelectDisabled}
               className={`w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm ${
-                autoLocks.participationLocked ||
-                achievementType === "gifted_discovery" ||
-                achievementType === "qudrat" ||
-                achievementType === "sat" ||
-                achievementType === "ielts" ||
-                achievementType === "toefl"
-                  ? "cursor-not-allowed opacity-60"
-                  : ""
+                participationSelectDisabled ? "cursor-not-allowed opacity-60" : ""
               }`}
             >
               {PARTICIPATION_TYPES.map((item) => (
@@ -1559,12 +1910,7 @@ const AchievementForm = ({
                 </option>
               ))}
             </select>
-            {(autoLocks.participationLocked ||
-              achievementType === "gifted_discovery" ||
-              achievementType === "qudrat" ||
-              achievementType === "sat" ||
-              achievementType === "ielts" ||
-              achievementType === "toefl") && (
+            {participationSelectDisabled && (
               <p className="mt-1 text-xs text-text-light">
                 {isArabic
                   ? "تم تحديد هذه القيمة تلقائيًا حسب نوع الإنجاز"
@@ -1887,6 +2233,21 @@ const AchievementForm = ({
         </div>
 
         <div className="mb-4">
+          {isSpecialUiCategory(uiCategory) && (
+            <p className="mb-2 text-xs font-medium text-amber-800">
+              {uiCategory === UI_CATEGORY_EARLY_UNIVERSITY
+                ? isArabic
+                  ? "مطلوب: خطاب قبول أو بريد ترشيح أو إثبات رسمي من الجامعة (مرفق واحد على الأقل)"
+                  : "Required: admission letter, nomination email, or official university proof (at least one attachment)"
+                : uiCategory === UI_CATEGORY_ENTREPRENEURSHIP
+                  ? isArabic
+                    ? "مطلوب: سجل نشاط، صور المشروع، فواتير، شهادات، أو أي إثبات داعم (مرفق واحد على الأقل)"
+                    : "Required: business record, project photos, invoices, certificates, or supporting proof (at least one attachment)"
+                  : isArabic
+                    ? "مطلوب مرفق واحد على الأقل يثبت حضور/إكمال الدورة"
+                    : "At least one attachment proving course attendance/completion is required"}
+            </p>
+          )}
           <button
             type="button"
             onClick={() => attachmentsInputRef.current?.click()}

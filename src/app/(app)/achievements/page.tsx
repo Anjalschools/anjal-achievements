@@ -20,6 +20,7 @@ import Link from "next/link";
 import AuthGuardLink from "@/components/auth/AuthGuardLink";
 import { getLocale } from "@/lib/i18n";
 import { safeString, safeTrim } from "@/lib/achievementDisplay";
+import { getReportCategoryOptions } from "@/lib/report-filter-options";
 import {
   formatAchievementTypeLabel,
   formatAchievementFieldLabel,
@@ -549,11 +550,11 @@ const AchievementsPage = () => {
                 </select>
                 <select value={adminType} onChange={(e) => setAdminType(e.target.value)} className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm">
                   <option value="all">{isAr ? "كل الأنواع" : "All types"}</option>
-                  <option value="competition">{isAr ? "مسابقة" : "Competition"}</option>
-                  <option value="program">{isAr ? "برنامج" : "Program"}</option>
-                  <option value="olympiad">{isAr ? "أولمبياد" : "Olympiad"}</option>
-                  <option value="mawhiba">{isAr ? "موهبة" : "Mawhiba"}</option>
-                  <option value="qudrat">{isAr ? "قدرات" : "Qudrat"}</option>
+                  {getReportCategoryOptions(isAr ? "ar" : "en").map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
                 </select>
                 <select value={adminField} onChange={(e) => setAdminField(e.target.value)} className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm">
                   <option value="all">{isAr ? "كل المجالات" : "All fields"}</option>
@@ -843,6 +844,7 @@ const AchievementsPage = () => {
                         ? achievement.score
                         : undefined,
                     category: achievement.achievementCategory || achievement.type || "competition",
+                    achievementCategory: achievement.achievementCategory || achievement.type || "",
                     achievementType: achievement.achievementType || "",
                     medalType: achievement.medalType || "",
                     rank: achievement.rank || "",

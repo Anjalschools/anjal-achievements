@@ -470,6 +470,21 @@ export default async function PublicPortfolioPage({ params, searchParams }: Page
                     dir={dir}
                   >
                     <div className="flex flex-wrap gap-1.5">
+                      {(lang === "ar" ? a.highlightBadgeAr : a.highlightBadgeEn) ? (
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-[10px] font-bold ring-1 ${
+                            (lang === "ar" ? a.highlightBadgeAr : a.highlightBadgeEn)?.includes(
+                              "ريادة"
+                            ) || (lang === "ar" ? a.highlightBadgeAr : a.highlightBadgeEn)?.includes(
+                              "Entrepreneurship"
+                            )
+                              ? "bg-amber-50 text-amber-950 ring-amber-200"
+                              : "bg-indigo-50 text-indigo-900 ring-indigo-200"
+                          }`}
+                        >
+                          {lang === "ar" ? a.highlightBadgeAr : a.highlightBadgeEn}
+                        </span>
+                      ) : null}
                       {a.isFeatured ? (
                         <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-900">
                           {copy.badgeFeatured}

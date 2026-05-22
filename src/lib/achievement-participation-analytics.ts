@@ -11,15 +11,18 @@ import { getDbAchievementTypeLabel } from "@/lib/achievement-labels";
 import {
   parseReportCsvParam,
   resultTokenToMongoCondition,
-  REPORT_CATEGORY_VALUES,
   REPORT_LEVEL_VALUES,
   REPORT_RESULT_TOKEN_VALUES,
 } from "@/lib/report-filter-options";
+import {
+  buildReportCategoriesMongoFilter,
+  EXTENDED_REPORT_CATEGORY_SET,
+} from "@/lib/achievement-report-category";
 import { resolveAchievementActivityName } from "@/lib/resolve-achievement-activity-name";
 import { formatAchievementClassificationLabel } from "@/lib/admin-achievement-labels";
 import type { CiObservabilityMeta } from "@/lib/competition-intelligence-debug";
 
-const ALLOW_CATEGORY = new Set<string>([...REPORT_CATEGORY_VALUES]);
+const ALLOW_CATEGORY = EXTENDED_REPORT_CATEGORY_SET;
 const ALLOW_PRIMARY_TYPE = ALLOW_CATEGORY;
 const ALLOW_LEVEL = new Set<string>([...REPORT_LEVEL_VALUES]);
 const ALLOW_RESULT = new Set<string>(REPORT_RESULT_TOKEN_VALUES);
@@ -222,17 +225,13 @@ const buildParticipationMongoMatch = (filters: ParticipationAnalyticsFilters): R
   }
 
   const categories = normalizeCategories(filters);
-  if (categories.length > 0) {
-    rootAnd.push({
-      $or: [{ achievementCategory: { $in: categories } }, { achievementType: { $in: categories } }],
-    });
-  }
+  const categoryFilter = buildReportCategoriesMongoFilter(categories);
+  if (categoryFilter) rootAnd.push(categoryFilter);
 
   const primary = String(filters.primaryAchievementType || "").trim();
   if (primary && primary !== "all" && ALLOW_PRIMARY_TYPE.has(primary)) {
-    rootAnd.push({
-      $or: [{ achievementCategory: primary }, { achievementType: primary }],
-    });
+    const primaryFilter = buildReportCategoriesMongoFilter([primary]);
+    if (primaryFilter) rootAnd.push(primaryFilter);
   }
 
   const resultTokens = normalizeResultTokens(filters);

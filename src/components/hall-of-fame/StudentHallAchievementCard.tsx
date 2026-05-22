@@ -4,6 +4,7 @@ import { Award, Flag, Globe, MapPin, School } from "lucide-react";
 import type { HallAchievementCard } from "@/lib/hall-of-fame-service";
 import { hallTierAchievementCardClass } from "@/lib/hall-of-fame-level";
 import StudentAchievementDataRows from "@/components/achievements/StudentAchievementDataRows";
+import SpecialAchievementHighlightBadge from "@/components/achievements/SpecialAchievementHighlightBadge";
 
 type Props = {
   card: HallAchievementCard;
@@ -55,9 +56,14 @@ const StudentHallAchievementCard = ({ card, isAr }: Props) => {
             <Icon className={`h-6 w-6 ${icon}`} aria-hidden />
           </div>
           <div className="min-w-0 flex-1 space-y-3">
-            <h3 className="line-clamp-2 min-w-0 text-base font-bold leading-snug text-text" title={card.title}>
-              {card.title}
-            </h3>
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              <h3 className="line-clamp-2 min-w-0 flex-1 text-base font-bold leading-snug text-text" title={card.title}>
+                {card.title}
+              </h3>
+              {card.highlightBadge ? (
+                <SpecialAchievementHighlightBadge badge={card.highlightBadge} isArabic={isAr} />
+              ) : null}
+            </div>
             <StudentAchievementDataRows
               locale={locale}
               content={card.summary}

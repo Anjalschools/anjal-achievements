@@ -198,7 +198,10 @@ const pick = (m: Record<string, { ar: string; en: string }>, key: unknown, loc: 
 
 const UI_CAT: Record<string, { ar: string; en: string }> = {
   olympiad: { ar: "أولمبياد", en: "Olympiad" },
+  training_courses: { ar: "دورات تدريبية", en: "Training courses" },
   excellence_program: { ar: "برنامج تميز", en: "Excellence program" },
+  early_university_admission: { ar: "القبول المبكر بالجامعات", en: "Early university admission" },
+  entrepreneurship: { ar: "ريادة الأعمال", en: "Entrepreneurship" },
   qudrat: { ar: "اختبار قدرات", en: "Qudrat test" },
   mawhiba: { ar: "اختبار موهبة السنوي", en: "Mawhiba annual test" },
   mawhiba_annual: { ar: "اختبار موهبة السنوي", en: "Mawhiba annual test" },
@@ -211,13 +214,28 @@ const EVENT_LABELS: Record<string, { ar: string; en: string }> = {
   informatics: { ar: "المعلوماتية", en: "Informatics" },
   mathematics: { ar: "الرياضيات", en: "Mathematics" },
   math: { ar: "الرياضيات", en: "Mathematics" },
+  training_in_person: { ar: "حضوري", en: "In-person" },
+  training_online: { ar: "أونلاين", en: "Online" },
+  ent_shop: { ar: "متجر", en: "Shop" },
+  ent_ecommerce: { ar: "متجر إلكتروني", en: "Online store" },
+  ent_home_business: { ar: "أسر منتجة", en: "Home-based business" },
+  ent_factory: { ar: "مصنع", en: "Factory" },
+  ent_office: { ar: "مكتب", en: "Office" },
+  uni_kfupm: { ar: "جامعة الملك فهد للبترول والمعادن", en: "KFUPM" },
+  uni_ksu: { ar: "جامعة الملك سعود", en: "King Saud University" },
+  uni_kaust: { ar: "جامعة الملك عبدالله للعلوم والتقنية", en: "KAUST" },
 };
 
 const CAT: Record<string, { ar: string; en: string }> = {
   competition: { ar: "مسابقة", en: "Competition" },
   program: { ar: "برنامج", en: "Program" },
   exhibition: { ar: "معرض", en: "Exhibition" },
+  olympiad: { ar: "أولمبياد", en: "Olympiad" },
+  excellence_program: { ar: "برنامج تميز", en: "Excellence program" },
   standardized_tests: { ar: "الاختبارات المعيارية", en: "Standardized tests" },
+  early_university_admission: { ar: "القبول المبكر بالجامعات", en: "Early university admission" },
+  entrepreneurship: { ar: "ريادة الأعمال", en: "Entrepreneurship" },
+  training_courses: { ar: "دورات تدريبية", en: "Training courses" },
 };
 
 const CLASS: Record<string, { ar: string; en: string }> = {

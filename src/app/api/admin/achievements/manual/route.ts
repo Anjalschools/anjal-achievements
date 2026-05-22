@@ -195,9 +195,21 @@ export async function POST(request: NextRequest) {
 
     const achievementData: Record<string, unknown> = {
       achievementType: normalized.achievementType,
-      achievementCategory: ["competition", "program", "exhibition"].includes(
-        String(normalized.achievementCategory || "")
-      )
+      achievementCategory: [
+        "competition",
+        "program",
+        "exhibition",
+        "olympiad",
+        "excellence_program",
+        "standardized_tests",
+        "early_university_admission",
+        "entrepreneurship",
+        "training_courses",
+        "qudrat",
+        "mawhiba",
+        "gifted_screening",
+        "other",
+      ].includes(String(normalized.achievementCategory || ""))
         ? normalized.achievementCategory
         : undefined,
       achievementLevel: normalized.achievementLevel,

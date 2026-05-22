@@ -28,6 +28,7 @@ import {
 } from "@/lib/hall-of-fame-level";
 import type { ScoringConfig } from "@/constants/default-scoring";
 import { getScoringConfig } from "@/lib/getScoringConfig";
+import { getSpecialAchievementHighlightBadge } from "@/lib/achievement-report-category";
 import { resolveAchievementScoreExplanation, type AchievementScoreExplanation } from "@/lib/achievement-score-explain";
 
 const safeStr = (v: unknown) => String(v ?? "").trim();
@@ -84,6 +85,11 @@ export type HallAchievementCard = {
   levelBadgeKey: string;
   medalType: string;
   resultType: string;
+  highlightBadge?: {
+    key: "early_university" | "entrepreneurship";
+    labelAr: string;
+    labelEn: string;
+  } | null;
 };
 
 export type StudentHallProfilePayload = {
@@ -232,6 +238,13 @@ const buildHallProfilePayloadFromData = (
           scoreExplanation,
         };
 
+        const highlightBadge = getSpecialAchievementHighlightBadge({
+          achievementType: typeKey,
+          achievementCategory: safeStr(a.achievementCategory),
+          achievementName: safeStr(a.achievementName),
+          description: safeStr(a.description),
+        });
+
         return {
           id,
           title,
@@ -243,6 +256,7 @@ const buildHallProfilePayloadFromData = (
           levelBadgeKey: rawLevel.trim(),
           medalType: String(a.medalType || ""),
           resultType: rt,
+          highlightBadge,
         };
       })
     : [];

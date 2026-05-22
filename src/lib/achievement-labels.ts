@@ -7,7 +7,13 @@ import {
   OLYMPIAD_EVENT_OTHER_VALUE,
   OLYMPIAD_UI_EVENT_OPTIONS,
   QUDRAT_EVENT_OPTIONS,
+  UI_CATEGORY_OPTIONS,
 } from "@/constants/achievement-ui-categories";
+import {
+  EARLY_UNIVERSITY_EVENT_OPTIONS,
+  ENTREPRENEURSHIP_EVENT_OPTIONS,
+  TRAINING_MODE_OPTIONS,
+} from "@/constants/achievement-special-categories";
 import {
   COMPETITION_OPTIONS,
   EXCELLENCE_PROGRAM_OPTIONS,
@@ -78,6 +84,12 @@ for (const o of OLYMPIAD_UI_EVENT_OPTIONS) {
 for (const o of QUDRAT_EVENT_OPTIONS) {
   SLUG_LABELS[slugKey(o.value)] = { ar: o.ar, en: o.en };
 }
+for (const o of UI_CATEGORY_OPTIONS) {
+  SLUG_LABELS[slugKey(o.value)] = { ar: o.ar, en: o.en };
+}
+mergeOpts(SLUG_LABELS, EARLY_UNIVERSITY_EVENT_OPTIONS);
+mergeOpts(SLUG_LABELS, ENTREPRENEURSHIP_EVENT_OPTIONS);
+mergeOpts(SLUG_LABELS, TRAINING_MODE_OPTIONS);
 
 const isLikelyMongoObjectId = (s: string): boolean => /^[a-f0-9]{24}$/i.test(safeTrim(s));
 

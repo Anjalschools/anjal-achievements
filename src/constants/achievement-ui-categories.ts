@@ -3,13 +3,28 @@
  */
 
 import { getAchievementNamesByType, QUDRAT_TIER_OPTIONS } from "@/constants/achievement-options";
+import {
+  EARLY_UNIVERSITY_EVENT_OPTIONS,
+  ENTREPRENEURSHIP_EVENT_OPTIONS,
+  TRAINING_MODE_OPTIONS,
+  UI_CATEGORY_EARLY_UNIVERSITY,
+  UI_CATEGORY_ENTREPRENEURSHIP,
+  UI_CATEGORY_TRAINING_COURSES,
+} from "@/constants/achievement-special-categories";
+import {
+  inferUiCategoryFromStoredAchievement,
+  mapSpecialUiCategoryToDbAchievementType,
+} from "@/lib/achievement-special-category-rules";
 
 export type UiAchievementCategory =
   | "competition"
   | "program"
   | "olympiad"
+  | "training_courses"
   | "excellence_program"
   | "standardized_tests"
+  | "early_university_admission"
+  | "entrepreneurship"
   | "other";
 
 export const UI_CATEGORY_OPTIONS: ReadonlyArray<{
@@ -20,8 +35,11 @@ export const UI_CATEGORY_OPTIONS: ReadonlyArray<{
   { value: "competition", ar: "مسابقة", en: "Competition" },
   { value: "program", ar: "برنامج", en: "Program" },
   { value: "olympiad", ar: "أولمبياد", en: "Olympiad" },
+  { value: "training_courses", ar: "دورات تدريبية", en: "Training courses" },
   { value: "excellence_program", ar: "برنامج تميز", en: "Excellence Program" },
   { value: "standardized_tests", ar: "الاختبارات المعيارية", en: "Standardized tests" },
+  { value: "early_university_admission", ar: "القبول المبكر بالجامعات", en: "Early university admission" },
+  { value: "entrepreneurship", ar: "ريادة الأعمال", en: "Entrepreneurship" },
   { value: "other", ar: "آخر", en: "Other" },
 ] as const;
 
@@ -90,6 +108,11 @@ export const getAutoLockedLevelByCategory = (
   uiCategory: string | null | undefined
 ): string | null => {
   switch (uiCategory) {
+    case UI_CATEGORY_EARLY_UNIVERSITY:
+      return "kingdom";
+    case UI_CATEGORY_ENTREPRENEURSHIP:
+    case UI_CATEGORY_TRAINING_COURSES:
+      return "province";
     default:
       return null;
   }
@@ -122,6 +145,10 @@ export const mapUiCategoryToDbAchievementType = (ui: string): string => {
     case "qudrat":
     case "other":
       return ui;
+    case "early_university_admission":
+    case "entrepreneurship":
+    case "training_courses":
+      return mapSpecialUiCategoryToDbAchievementType(ui);
     default:
       return "other";
   }
@@ -137,7 +164,10 @@ export const mapUiCategoryToNamesListType = (ui: string): string => {
     ui === "competition" ||
     ui === "program" ||
     ui === "olympiad" ||
-    ui === "excellence_program"
+    ui === "excellence_program" ||
+    ui === "early_university_admission" ||
+    ui === "entrepreneurship" ||
+    ui === "training_courses"
   ) {
     return ui;
   }
@@ -153,6 +183,27 @@ export const getEventOptionsForUiCategory = (
 
   if (ui === "olympiad") {
     return OLYMPIAD_UI_EVENT_OPTIONS.map((o) => ({
+      value: o.value,
+      label: locale === "ar" ? o.ar : o.en,
+    }));
+  }
+
+  if (ui === "early_university_admission") {
+    return EARLY_UNIVERSITY_EVENT_OPTIONS.map((o) => ({
+      value: o.value,
+      label: locale === "ar" ? o.ar : o.en,
+    }));
+  }
+
+  if (ui === "entrepreneurship") {
+    return ENTREPRENEURSHIP_EVENT_OPTIONS.map((o) => ({
+      value: o.value,
+      label: locale === "ar" ? o.ar : o.en,
+    }));
+  }
+
+  if (ui === "training_courses") {
+    return TRAINING_MODE_OPTIONS.map((o) => ({
       value: o.value,
       label: locale === "ar" ? o.ar : o.en,
     }));
@@ -205,7 +256,8 @@ export const mapDbAchievementTypeToUiCategory = (
 /** UI category shown in the form: legacy rows may store old `achievementCategory` (qudrat, mawhiba, …). */
 export const resolveAchievementFormUiCategory = (
   dbType: string,
-  storedCategory: string | undefined
+  storedCategory: string | undefined,
+  opts?: { achievementName?: string; description?: string }
 ): UiAchievementCategory => {
   const fromType = mapDbAchievementTypeToUiCategory(dbType);
   if (fromType === "standardized_tests") return "standardized_tests";
@@ -222,10 +274,22 @@ export const resolveAchievementFormUiCategory = (
     s === "competition" ||
     s === "program" ||
     s === "olympiad" ||
+    s === "training_courses" ||
     s === "excellence_program" ||
+    s === "early_university_admission" ||
+    s === "entrepreneurship" ||
     s === "other"
   ) {
     return s as UiAchievementCategory;
   }
+
+  const fromStoredSlug = inferUiCategoryFromStoredAchievement({
+    achievementType: dbType,
+    achievementName: opts?.achievementName,
+    achievementCategory: s,
+    description: opts?.description,
+  });
+  if (fromStoredSlug) return fromStoredSlug as UiAchievementCategory;
+
   return fromType;
 };

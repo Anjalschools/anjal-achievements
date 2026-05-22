@@ -6,7 +6,6 @@ import {
   labelRank,
   labelResultType,
 } from "@/lib/achievementDisplay";
-
 type Loc = "ar" | "en";
 
 /** Values that may appear on achievementCategory or achievementType */
@@ -25,6 +24,9 @@ export const REPORT_CATEGORY_VALUES = [
   "mawhiba",
   "gifted_screening",
   "standardized_tests",
+  "early_university_admission",
+  "entrepreneurship",
+  "training_courses",
   "other",
 ] as const;
 

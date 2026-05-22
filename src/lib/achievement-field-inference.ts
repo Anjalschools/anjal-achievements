@@ -7,6 +7,8 @@ import type { AchievementFieldInference } from "@/types/achievement";
 import {
   COMPETITION_OPTIONS,
 } from "@/constants/achievement-options";
+import { EARLY_UNIVERSITY_EVENT_VALUES, TRAINING_MODE_VALUES } from "@/constants/achievement-special-categories";
+import { inferTrainingCourseField } from "@/lib/achievement-special-category-rules";
 
 const FREE_TEXT_RULES: Array<{ keywords: string[]; field: string; category: string }> = [
   { keywords: ["رياضيات", "math", "mathematics"], field: "mathematics", category: "الرياضيات" },
@@ -69,6 +71,26 @@ export function inferAchievementField(
 
   if (!achievementType) {
     return defaultInference;
+  }
+
+  const nameSlug = String(achievementName || "").trim();
+  if (nameSlug && EARLY_UNIVERSITY_EVENT_VALUES.has(nameSlug)) {
+    return {
+      field: "academic_development",
+      normalizedCategory: "الإعداد الأكاديمي",
+      sourceType: "program",
+    };
+  }
+
+  if (nameSlug && TRAINING_MODE_VALUES.has(nameSlug)) {
+    const fromCourse = inferTrainingCourseField(String(freeText || ""));
+    if (fromCourse) {
+      return {
+        field: fromCourse,
+        normalizedCategory: fromCourse,
+        sourceType: "program",
+      };
+    }
   }
 
   // OLYMPIAD: Field comes from olympiadField selection, not name
