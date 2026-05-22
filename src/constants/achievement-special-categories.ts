@@ -50,6 +50,35 @@ export const EARLY_UNIVERSITY_EVENT_VALUES: ReadonlySet<string> = new Set(
   EARLY_UNIVERSITY_EVENT_OPTIONS.map((o) => o.value)
 );
 
+/** Saudi / Gulf universities → achievementLevel `kingdom` (المملكة) */
+export const SAUDI_ARAB_UNIVERSITY_SLUGS: ReadonlySet<string> = new Set([
+  "uni_kfupm",
+  "uni_aramco",
+  "uni_ksu",
+  "uni_kaust",
+  "uni_pmf",
+  "uni_alfaisal",
+]);
+
+/** International universities → achievementLevel `international` (دولي) */
+export const INTERNATIONAL_UNIVERSITY_SLUGS: ReadonlySet<string> = new Set([
+  "uni_mit",
+  "uni_stanford",
+  "uni_harvard",
+  "uni_cmu",
+  "uni_ucb",
+  "uni_gatech",
+  "uni_toronto",
+  "uni_oxford",
+  "uni_cambridge",
+]);
+
+export const isSaudiArabUniversitySlug = (slug: string): boolean =>
+  SAUDI_ARAB_UNIVERSITY_SLUGS.has(String(slug || "").trim());
+
+export const isInternationalUniversitySlug = (slug: string): boolean =>
+  INTERNATIONAL_UNIVERSITY_SLUGS.has(String(slug || "").trim());
+
 export const ENTREPRENEURSHIP_EVENT_OPTIONS = [
   { value: "ent_shop", ar: "متجر", en: "Shop" },
   { value: "ent_ecommerce", ar: "متجر إلكتروني", en: "Online store" },

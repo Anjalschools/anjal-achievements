@@ -39,6 +39,7 @@ import {
   inferTrainingCourseField,
   mergeDescriptionWithEntrepreneurshipMeta,
   parseEntrepreneurshipMetaFromDescription,
+  resolveUniversityAchievementLevel,
   validateSpecialCategoryClient,
 } from "@/lib/achievement-special-category-rules";
 import { INFERRED_FIELD_UI_LABELS } from "@/lib/achievement-inferred-field-allowlist";
@@ -329,9 +330,15 @@ const AchievementForm = ({
       setImagePreview(initialData.image);
     }
 
+    const initAchName = hydratedAchievementName;
+    const initCustom = String(initialData.customAchievementName || "");
+
     const lockedByCategory = getAutoLockedLevelByCategory(cat);
     const lockedByOlympiad = getAutoLevelForOlympiadNesmoEvent(hydratedAchievementName);
-    const specialLocks = getAutoLocksForSpecialUiCategory(cat);
+    const specialLocks = getAutoLocksForSpecialUiCategory(cat, {
+      achievementName: hydratedAchievementName,
+      customAchievementName: initCustom,
+    });
 
     setAutoLocks({
       levelLocked: Boolean(
@@ -340,9 +347,6 @@ const AchievementForm = ({
       participationLocked: specialLocks.participationLocked,
       resultLocked: specialLocks.resultLocked,
     });
-
-    const initAchName = hydratedAchievementName;
-    const initCustom = String(initialData.customAchievementName || "");
     const snapFinal =
       initAchName === OLYMPIAD_EVENT_OTHER_VALUE || initAchName === "other"
         ? initCustom.trim() || initAchName
@@ -523,7 +527,10 @@ const AchievementForm = ({
 
   const applySpecialUiCategoryDefaults = (category: string) => {
     if (!isSpecialUiCategory(category)) return;
-    const locks = getAutoLocksForSpecialUiCategory(category);
+    const locks = getAutoLocksForSpecialUiCategory(category, {
+      achievementName: String(formData.achievementName || ""),
+      customAchievementName: String(formData.customAchievementName || ""),
+    });
     setFormData((prev) => {
       const next: Record<string, unknown> = { ...prev };
       if (locks.level) next.achievementLevel = locks.level;
@@ -548,20 +555,28 @@ const AchievementForm = ({
 
   useEffect(() => {
     if (uiCategory !== UI_CATEGORY_EARLY_UNIVERSITY) return;
-    setFormData((prev) => ({
-      ...prev,
-      nominationText: buildAutoNominationTextForEarlyUniversity(
+    const uniSlug = String(achievementName || "").trim();
+    if (!uniSlug) return;
+    const level = resolveUniversityAchievementLevel({
+      universitySlug: uniSlug,
+      customUniversityName: String(customAchievementName || ""),
+    });
+    setFormData((prev) => {
+      const nextNomination = buildAutoNominationTextForEarlyUniversity(
         String(prev.achievementName || ""),
         String(prev.customAchievementName || ""),
         isArabic ? "ar" : "en"
-      ),
-    }));
-  }, [
-    uiCategory,
-    achievementName,
-    customAchievementName,
-    isArabic,
-  ]);
+      );
+      const changed =
+        prev.achievementLevel !== level || prev.nominationText !== nextNomination;
+      if (!changed) return prev;
+      return {
+        ...prev,
+        achievementLevel: level,
+        nominationText: nextNomination,
+      };
+    });
+  }, [uiCategory, achievementName, customAchievementName, isArabic]);
 
   useEffect(() => {
     if (uiCategory !== UI_CATEGORY_TRAINING_COURSES) return;

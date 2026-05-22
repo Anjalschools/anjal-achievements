@@ -21,7 +21,9 @@
     "verify:competition-snapshots": "tsx scripts/verify-competition-snapshot-integrity.ts",
     "cron:competition-snapshots": "CRON_ENDPOINT=/api/cron/competition-analytics-snapshots tsx scripts/run-cron-endpoint.ts",
     "cron:alumni-snapshots": "CRON_ENDPOINT=/api/cron/alumni-analytics-snapshots tsx scripts/run-cron-endpoint.ts",
-    "verify:achievement-media-migration": "tsx scripts/verify-achievement-media-migration.ts"
+    "verify:achievement-media-migration": "tsx scripts/verify-achievement-media-migration.ts",
+    "backfill:achievement-categories": "tsx scripts/backfill-achievement-categories.ts",
+    "rollback:achievement-categories": "tsx scripts/rollback-achievement-category-backfill.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1031.0",

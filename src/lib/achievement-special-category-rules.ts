@@ -6,6 +6,10 @@ import {
   EARLY_UNIVERSITY_EVENT_VALUES,
   EARLY_UNIVERSITY_OTHER_VALUE,
   ENTREPRENEURSHIP_EVENT_VALUES,
+  INTERNATIONAL_UNIVERSITY_SLUGS,
+  SAUDI_ARAB_UNIVERSITY_SLUGS,
+  isInternationalUniversitySlug,
+  isSaudiArabUniversitySlug,
   isSpecialUiCategory,
   TRAINING_MODE_VALUES,
   UI_CATEGORY_EARLY_UNIVERSITY,
@@ -13,6 +17,128 @@ import {
   UI_CATEGORY_TRAINING_COURSES,
   getEarlyUniversityEventLabel,
 } from "@/constants/achievement-special-categories";
+
+export type UniversityAchievementLevel = "kingdom" | "international";
+
+export type ResolveUniversityLevelInput = {
+  universitySlug?: string;
+  customUniversityName?: string;
+  /** Optional free text (description, OCR, nomination) for "other" inference */
+  corpusText?: string;
+};
+
+const INTERNATIONAL_UNI_NAME_PATTERNS: RegExp[] = [
+  /\bmit\b/i,
+  /massachusetts institute of technology/i,
+  /stanford/i,
+  /harvard/i,
+  /carnegie mellon/i,
+  /berkeley/i,
+  /georgia tech/i,
+  /georgia institute of technology/i,
+  /university of toronto/i,
+  /university of oxford/i,
+  /university of cambridge/i,
+  /oxford university/i,
+  /cambridge university/i,
+  /yale\b/i,
+  /princeton\b/i,
+  /columbia university/i,
+  /caltech/i,
+  /imperial college/i,
+  /eth zurich/i,
+  /\buniversity of\b/i,
+  /\binstitute of technology\b/i,
+  /\bcollege\b/i,
+];
+
+const SAUDI_GULF_ARAB_UNI_NAME_PATTERNS: RegExp[] = [
+  /جامعة/,
+  /الملك فهد/,
+  /الملك سعود/,
+  /الملك عبدالله/,
+  /الأمير محمد/,
+  /الفيصل/,
+  /المملكة/,
+  /السعودية/,
+  /سعودي/,
+  /aramco/i,
+  /saudi aramco/i,
+  /kfupm/i,
+  /kaust/i,
+  /ksu\b/i,
+  /pmf\b/i,
+  /alfaisal/i,
+  /الخليج/,
+  /الإمارات/,
+  /قطر/,
+  /البحرين/,
+  /الكويت/,
+  /عمان/,
+  /مصر/,
+  /الأردن/,
+  /لبنان/,
+];
+
+const isPredominantlyLatinText = (text: string): boolean => {
+  const t = text.trim();
+  if (!t) return false;
+  const latin = (t.match(/[a-zA-Z]/g) || []).length;
+  const arabic = (t.match(/[\u0600-\u06FF]/g) || []).length;
+  if (latin === 0 && arabic === 0) return false;
+  return latin >= arabic;
+};
+
+const matchesAnyPattern = (text: string, patterns: RegExp[]): boolean => {
+  const t = text.trim();
+  if (!t) return false;
+  return patterns.some((p) => p.test(t));
+};
+
+/**
+ * Resolves achievementLevel for early university admission:
+ * - Saudi/Arab/Gulf → `kingdom` (المملكة)
+ * - International list / English global names → `international` (دولي)
+ */
+export const resolveUniversityAchievementLevel = (
+  input: ResolveUniversityLevelInput
+): UniversityAchievementLevel => {
+  const slug = String(input.universitySlug || "").trim();
+  const custom = String(input.customUniversityName || "").trim();
+  const corpus = String(input.corpusText || "").trim();
+  const combined = [custom, corpus].filter(Boolean).join(" ");
+
+  if (slug && slug !== EARLY_UNIVERSITY_OTHER_VALUE) {
+    if (isInternationalUniversitySlug(slug)) return "international";
+    if (isSaudiArabUniversitySlug(slug)) return "kingdom";
+  }
+
+  const textForOther = [custom, corpus].filter(Boolean).join(" ").trim();
+  if (!textForOther) return "kingdom";
+
+  if (matchesAnyPattern(textForOther, INTERNATIONAL_UNI_NAME_PATTERNS)) {
+    return "international";
+  }
+  if (matchesAnyPattern(textForOther, SAUDI_GULF_ARAB_UNI_NAME_PATTERNS)) {
+    return "kingdom";
+  }
+
+  if (isPredominantlyLatinText(textForOther)) {
+    return "international";
+  }
+
+  return "kingdom";
+};
+
+/** True when slug is a known university (not "other") */
+export const isConfirmedUniversitySlug = (slug: string): boolean => {
+  const s = String(slug || "").trim();
+  if (!s || s === EARLY_UNIVERSITY_OTHER_VALUE) return false;
+  return (
+    INTERNATIONAL_UNIVERSITY_SLUGS.has(s) ||
+    SAUDI_ARAB_UNIVERSITY_SLUGS.has(s)
+  );
+};
 
 export type EntrepreneurshipMeta = {
   activityTypeDetail?: string;
@@ -164,7 +290,8 @@ export const mapSpecialUiCategoryToDbAchievementType = (ui: string): string => {
 };
 
 export const getAutoLocksForSpecialUiCategory = (
-  ui: string
+  ui: string,
+  context?: { achievementName?: string; customAchievementName?: string }
 ): {
   level: string | null;
   participationType: string | null;
@@ -175,9 +302,16 @@ export const getAutoLocksForSpecialUiCategory = (
   resultLocked: boolean;
 } => {
   switch (ui) {
-    case UI_CATEGORY_EARLY_UNIVERSITY:
+    case UI_CATEGORY_EARLY_UNIVERSITY: {
+      const slug = String(context?.achievementName || "").trim();
+      const level = slug
+        ? resolveUniversityAchievementLevel({
+            universitySlug: slug,
+            customUniversityName: context?.customAchievementName,
+          })
+        : "kingdom";
       return {
-        level: "kingdom",
+        level,
         participationType: "individual",
         resultType: "nomination",
         inferredField: "academic_development",
@@ -185,6 +319,7 @@ export const getAutoLocksForSpecialUiCategory = (
         participationLocked: true,
         resultLocked: true,
       };
+    }
     case UI_CATEGORY_ENTREPRENEURSHIP:
       return {
         level: "province",

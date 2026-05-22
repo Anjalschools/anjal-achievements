@@ -3,7 +3,14 @@ import { sanitizeMongoShape } from "@/lib/sanitize-input";
 import { sanitizeUserText } from "@/lib/sanitize-html";
 import { QUDRAT_TIER_ALLOWED_VALUES } from "@/constants/achievement-options";
 import { normalizeLegacyQudratAchievementName } from "@/lib/achievementNormalize";
-import { validateSpecialCategoryServer } from "@/lib/achievement-special-category-rules";
+import {
+  resolveUniversityAchievementLevel,
+  validateSpecialCategoryServer,
+} from "@/lib/achievement-special-category-rules";
+import {
+  EARLY_UNIVERSITY_EVENT_VALUES,
+  UI_CATEGORY_EARLY_UNIVERSITY,
+} from "@/constants/achievement-special-categories";
 
 export type NormalizedPayload = {
   achievementType: string;
@@ -103,6 +110,25 @@ export const normalizeAchievementPayload = (rawBody: Record<string, unknown>): N
     if (!achievementName.trim()) {
       achievementName = achievementType;
     }
+  }
+
+  if (
+    achievementCategory === UI_CATEGORY_EARLY_UNIVERSITY ||
+    EARLY_UNIVERSITY_EVENT_VALUES.has(achievementName)
+  ) {
+    achievementLevel = resolveUniversityAchievementLevel({
+      universitySlug: achievementName,
+      customUniversityName: customAchievementName,
+      corpusText: [
+        String(body.description || ""),
+        String(body.nominationText || ""),
+        String(body.organization || ""),
+      ]
+        .filter(Boolean)
+        .join(" "),
+    });
+    if (!resultType) resultType = "nomination";
+    if (!participationType) participationType = "individual";
   }
 
   const evidenceUrl = String(body.evidenceUrl || "").trim() || undefined;
