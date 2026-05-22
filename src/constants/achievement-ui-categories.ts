@@ -43,6 +43,28 @@ export const UI_CATEGORY_OPTIONS: ReadonlyArray<{
   { value: "other", ar: "آخر", en: "Other" },
 ] as const;
 
+/** Unified achievement category picker (create / edit / admin / filters). */
+export const getAchievementCategoryOptions = (
+  locale: "ar" | "en"
+): Array<{ value: UiAchievementCategory; label: string }> =>
+  UI_CATEGORY_OPTIONS.map((o) => ({
+    value: o.value,
+    label: locale === "ar" ? o.ar : o.en,
+  }));
+
+/** Stored `achievementCategory` for API payloads from UI category + DB type. */
+export const mapSubmitAchievementCategory = (ui: string, dbType: string): string => {
+  if (ui === "standardized_tests") return "standardized_tests";
+  if (
+    ui === UI_CATEGORY_EARLY_UNIVERSITY ||
+    ui === UI_CATEGORY_ENTREPRENEURSHIP ||
+    ui === UI_CATEGORY_TRAINING_COURSES
+  ) {
+    return ui;
+  }
+  return ui || dbType || "competition";
+};
+
 /** Picker under «الاختبارات المعيارية» — values are DB `achievementType`. */
 export const STANDARDIZED_TEST_TYPE_OPTIONS: ReadonlyArray<{
   value: string;
@@ -253,43 +275,4 @@ export const mapDbAchievementTypeToUiCategory = (
   }
 };
 
-/** UI category shown in the form: legacy rows may store old `achievementCategory` (qudrat, mawhiba, …). */
-export const resolveAchievementFormUiCategory = (
-  dbType: string,
-  storedCategory: string | undefined,
-  opts?: { achievementName?: string; description?: string }
-): UiAchievementCategory => {
-  const fromType = mapDbAchievementTypeToUiCategory(dbType);
-  if (fromType === "standardized_tests") return "standardized_tests";
-  const s = String(storedCategory || "").trim();
-  if (
-    s === "qudrat" ||
-    s === "mawhiba" ||
-    s === "gifted_screening" ||
-    s === "standardized_tests"
-  ) {
-    return "standardized_tests";
-  }
-  if (
-    s === "competition" ||
-    s === "program" ||
-    s === "olympiad" ||
-    s === "training_courses" ||
-    s === "excellence_program" ||
-    s === "early_university_admission" ||
-    s === "entrepreneurship" ||
-    s === "other"
-  ) {
-    return s as UiAchievementCategory;
-  }
-
-  const fromStoredSlug = inferUiCategoryFromStoredAchievement({
-    achievementType: dbType,
-    achievementName: opts?.achievementName,
-    achievementCategory: s,
-    description: opts?.description,
-  });
-  if (fromStoredSlug) return fromStoredSlug as UiAchievementCategory;
-
-  return fromType;
-};
+export { resolveAchievementFormUiCategory } from "@/lib/achievement-form-ui-resolve";

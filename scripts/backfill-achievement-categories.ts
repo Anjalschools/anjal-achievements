@@ -13,6 +13,7 @@
  *   npx tsx scripts/backfill-achievement-categories.ts --apply --batch=50
  *   npx tsx scripts/backfill-achievement-categories.ts --dry-run --fix-university-levels
  *   npx tsx scripts/backfill-achievement-categories.ts --apply --fix-university-levels
+ *   npx tsx scripts/backfill-achievement-categories.ts --apply --force-category-only
  *
  * Preview (no DB): GET /api/admin/achievement-backfill-preview or /admin/achievement-backfill-preview
  *
@@ -35,6 +36,7 @@ type Args = {
   batch: number;
   verbose: boolean;
   fixUniversityLevels: boolean;
+  forceCategoryOnly: boolean;
 };
 
 const parseArgs = (): Args => {
@@ -54,6 +56,7 @@ const parseArgs = (): Args => {
   let batch = BACKFILL_BATCH_DEFAULT;
   let verbose = argv.includes("--verbose");
   const fixUniversityLevels = argv.includes("--fix-university-levels");
+  const forceCategoryOnly = argv.includes("--force-category-only");
 
   for (const a of argv) {
     if (a.startsWith("--limit=")) {
@@ -64,7 +67,7 @@ const parseArgs = (): Args => {
     }
   }
 
-  return { dryRun, apply, limit, batch, verbose, fixUniversityLevels };
+  return { dryRun, apply, limit, batch, verbose, fixUniversityLevels, forceCategoryOnly };
 };
 
 const rowToLegacyInput = (
@@ -117,7 +120,9 @@ const main = async () => {
 
   await connectDB();
 
-  console.log(`[backfill] classifierVersion=${CLASSIFIER_VERSION} batch=${args.batch}`);
+  console.log(
+    `[backfill] classifierVersion=${CLASSIFIER_VERSION} batch=${args.batch} forceCategoryOnly=${args.forceCategoryOnly}`
+  );
 
   const query = {
     achievementType: { $in: ["program", "other"] },
@@ -201,7 +206,15 @@ const main = async () => {
     }
     stats.classified += 1;
 
-    const patch = buildLegacyBackfillPatch(input, classification);
+    const applyOpts = args.forceCategoryOnly ? { forceCategoryOnly: true } : undefined;
+    let patch = buildLegacyBackfillPatch(input, classification, applyOpts);
+    if (
+      !patch &&
+      classification &&
+      isManuallyProtectedAchievement(getBackfillProtectionFlags(input))
+    ) {
+      patch = buildLegacyBackfillPatch(input, classification, { forceCategoryOnly: true });
+    }
     if (!patch) {
       stats.skippedLowConfidence += 1;
       continue;

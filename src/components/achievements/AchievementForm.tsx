@@ -15,8 +15,9 @@ import {
   getAchievementNamesByType,
 } from "@/constants/achievement-options";
 import {
-  UI_CATEGORY_OPTIONS,
+  getAchievementCategoryOptions,
   getEventOptionsForUiCategory,
+  mapSubmitAchievementCategory,
   mapUiCategoryToDbAchievementType,
   mapDbAchievementTypeToUiCategory,
   OLYMPIAD_EVENT_OTHER_VALUE,
@@ -24,8 +25,8 @@ import {
   getAutoLockedLevelByCategory,
   getMawhibaAnnualSubjectOptionsForCategory,
   STANDARDIZED_TEST_TYPE_OPTIONS,
-  resolveAchievementFormUiCategory,
 } from "@/constants/achievement-ui-categories";
+import { resolveAchievementFormUiCategory } from "@/lib/achievement-form-ui-resolve";
 import {
   EARLY_UNIVERSITY_OTHER_VALUE,
   isSpecialUiCategory,
@@ -118,7 +119,11 @@ const AchievementForm = ({
         String(initialData?.achievementCategory || "").trim() || undefined,
         {
           achievementName: String(initialData?.achievementName || ""),
+          customAchievementName: String(initialData?.customAchievementName || ""),
           description: String(initialData?.description || ""),
+          nameAr: String(initialData?.nameAr || ""),
+          nameEn: String(initialData?.nameEn || ""),
+          title: String((initialData as Record<string, unknown>)?.title || ""),
         }
       ) || "competition"
     ),
@@ -240,7 +245,11 @@ const AchievementForm = ({
       String(initialData.achievementCategory || "").trim() || undefined,
       {
         achievementName: String(initialData.achievementName || ""),
+        customAchievementName: String(initialData.customAchievementName || ""),
         description: String(initialData.description || ""),
+        nameAr: String(initialData.nameAr || names.normalizedNameAr || ""),
+        nameEn: String(initialData.nameEn || names.normalizedNameEn || ""),
+        title: String(raw.title || ""),
       }
     );
 
@@ -404,18 +413,6 @@ const AchievementForm = ({
     achievementType === "ielts" ||
     achievementType === "toefl" ||
     isSpecialUiCategory(uiCategory);
-
-  const mapSubmitAchievementCategory = (ui: string, dbType: string): string => {
-    if (ui === "standardized_tests") return "standardized_tests";
-    if (
-      ui === UI_CATEGORY_EARLY_UNIVERSITY ||
-      ui === UI_CATEGORY_ENTREPRENEURSHIP ||
-      ui === UI_CATEGORY_TRAINING_COURSES
-    ) {
-      return ui;
-    }
-    return ui || dbType || "competition";
-  };
 
   const availableNames = useMemo(() => {
     if (!uiCategory) return [];
@@ -1346,9 +1343,9 @@ const AchievementForm = ({
                 errors.achievementCategory ? "border-red-300" : "border-gray-300"
               } bg-white px-4 py-3 text-sm`}
             >
-              {UI_CATEGORY_OPTIONS.map((item) => (
+              {getAchievementCategoryOptions(isArabic ? "ar" : "en").map((item) => (
                 <option key={item.value} value={item.value}>
-                  {isArabic ? item.ar : item.en}
+                  {item.label}
                 </option>
               ))}
             </select>

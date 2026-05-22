@@ -91,6 +91,16 @@ export async function GET(request: NextRequest) {
           id: String(row._id),
           studentId: String(row.userId || ""),
           ...preview,
+          classification: preview.classification
+            ? {
+                category: preview.classification.category,
+                confidence: preview.classification.confidence,
+                score: preview.classification.score,
+                reasons: preview.classification.reasons,
+                matchedSignals: preview.classification.matchedSignals,
+                negativeSignals: preview.classification.negativeSignals,
+              }
+            : null,
         };
       })
       .filter((p) => (onlyWouldApply ? p.wouldApply : true));

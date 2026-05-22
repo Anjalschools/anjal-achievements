@@ -80,6 +80,11 @@ export type LegacyClassificationResult = {
   businessTypeHint?: string;
 };
 
+export type LegacyBackfillApplyOptions = {
+  /** Only set achievementCategory (+ audit metadata); for protected rows. */
+  forceCategoryOnly?: boolean;
+};
+
 export type LegacyBackfillPatch = {
   achievementCategory: LegacyCategorySlug;
   achievementLevel?: string;
@@ -315,10 +320,17 @@ const TRAINING_KEYWORDS = [
   "أكاديمية",
   "عن بعد",
   "حضور",
+  "ماستر كلاس",
+  "ماستركلاس",
+  "برنامج تدريبي",
+  "مسار تدريبي",
+  "تطوير مهني",
+  "معسكر تدريبي",
   "certificate of completion",
   "training hours",
   "training hour",
   "workshop",
+  "workshop series",
   "boot camp",
   "bootcamp",
   "online course",
@@ -326,6 +338,37 @@ const TRAINING_KEYWORDS = [
   "course completion",
   "attendance certificate",
   "certification course",
+  "masterclass",
+  "master class",
+  "certification",
+  "certified",
+  "executive program",
+  "executive education",
+  "academy",
+  "training track",
+  "immersion",
+  "professional development",
+  "learning program",
+  "specialization",
+  "nanodegree",
+  "covered",
+  "completion",
+  "attendance",
+];
+
+const TRAINING_CONFIDENCE_BOOSTERS = [
+  "completion",
+  "completed",
+  "certificate",
+  "certified",
+  "attendance",
+  "attended",
+  "شهادة",
+  "إتمام",
+  "اتمام",
+  "حضور",
+  "masterclass",
+  "ماستر",
 ];
 
 const TRAINING_ONLINE_KEYWORDS = [
@@ -432,6 +475,8 @@ const ENT_EVENT_BY_KEYWORD: Array<{ slug: string; patterns: string[]; weight: nu
 export const buildLegacySearchCorpus = (input: LegacyAchievementInput): string => {
   const extracted =
     input.extractedText ||
+    input.ocrText ||
+    input.aiSummary ||
     (typeof input.evidenceExtractedData?.rawText === "string"
       ? String(input.evidenceExtractedData.rawText)
       : "") ||
@@ -440,6 +485,9 @@ export const buildLegacySearchCorpus = (input: LegacyAchievementInput): string =
       : "") ||
     (typeof input.evidenceExtractedData?.extractedText === "string"
       ? String(input.evidenceExtractedData.extractedText)
+      : "") ||
+    (typeof input.evidenceExtractedData?.aiSummary === "string"
+      ? String(input.evidenceExtractedData.aiSummary)
       : "");
 
   return normalizeText([
@@ -448,6 +496,7 @@ export const buildLegacySearchCorpus = (input: LegacyAchievementInput): string =
     input.title,
     input.nameAr,
     input.nameEn,
+    input.nominationText,
     input.description,
     input.organization,
     input.evidenceFileName,
@@ -615,19 +664,39 @@ export const inferTrainingCourseFromLegacy = (
   ).trim();
   const courseField = inferTrainingCourseField(titleSource);
 
-  let score = trainingHits.length * 10 + (hours ? 12 : 0) + (onlineHits.length || inPersonHits.length ? 6 : 0);
+  const boosterHits = containsAny(corpus, TRAINING_CONFIDENCE_BOOSTERS);
+  let score =
+    trainingHits.length * 10 +
+    (hours ? 14 : 0) +
+    (onlineHits.length || inPersonHits.length ? 6 : 0) +
+    boosterHits.length * 8;
   const reasons = [`training_keywords:${trainingHits.slice(0, 4).join(",")}`];
   if (hours) reasons.push(`training_hours:${hours}`);
+  if (boosterHits.length) reasons.push(`training_boosters:${boosterHits.slice(0, 3).join(",")}`);
   reasons.push(`training_mode:${mode}`);
   if (courseField) reasons.push(`inferred_field:${courseField}`);
 
   const matchedSignals = [...reasons];
+  if (trainingHits.length >= 1 && (hours || boosterHits.length > 0)) {
+    matchedSignals.push("training_confidence_boost");
+  }
   const negatives = [
     ...collectNegativeHits(corpus, GLOBAL_NEGATIVE_SIGNALS),
     ...collectNegativeHits(corpus, TRAINING_NEGATIVE_SIGNALS),
   ];
 
-  const confidence = scoreToConfidence(score, trainingHits.length + (hours ? 1 : 0));
+  const signalCount = trainingHits.length + (hours ? 1 : 0) + (boosterHits.length ? 1 : 0);
+  let confidence = scoreToConfidence(score, signalCount);
+  if (
+    trainingHits.length >= 1 &&
+    (hours || boosterHits.length > 0) &&
+    confidence === "low"
+  ) {
+    confidence = "medium";
+  }
+  if (trainingHits.length >= 2 && (hours || boosterHits.length > 0)) {
+    confidence = score >= 55 ? "high" : "medium";
+  }
   if (confidence === "low") return null;
 
   let result: LegacyClassificationResult = {
@@ -763,19 +832,23 @@ export const getBackfillProtectionFlags = (
  */
 export const buildLegacyBackfillPatch = (
   input: LegacyAchievementInput,
-  classification: LegacyClassificationResult
+  classification: LegacyClassificationResult,
+  applyOptions?: LegacyBackfillApplyOptions
 ): LegacyBackfillPatch | null => {
   if (!classification.category || !shouldApplyLegacyClassification(classification)) {
     return null;
   }
 
-  const protectNames = isManuallyProtectedAchievement(getBackfillProtectionFlags(input));
+  const protectionFlags = getBackfillProtectionFlags(input);
+  const protectNames =
+    isManuallyProtectedAchievement(protectionFlags) && !applyOptions?.forceCategoryOnly;
+  const forceCategoryOnly = applyOptions?.forceCategoryOnly === true;
 
   const patch: LegacyBackfillPatch = {
     achievementCategory: classification.category,
   };
 
-  if (classification.category === UI_CATEGORY_EARLY_UNIVERSITY) {
+  if (!forceCategoryOnly && classification.category === UI_CATEGORY_EARLY_UNIVERSITY) {
     const uniSlug =
       classification.universitySlug ||
       String(input.achievementName || "").trim();
@@ -823,7 +896,7 @@ export const buildLegacyBackfillPatch = (
     }
   }
 
-  if (classification.category === UI_CATEGORY_TRAINING_COURSES) {
+  if (!forceCategoryOnly && classification.category === UI_CATEGORY_TRAINING_COURSES) {
     if (!String(input.achievementLevel || "").trim()) patch.achievementLevel = "province";
     if (!String(input.participationType || "").trim()) patch.participationType = "individual";
     if (!String(input.resultType || "").trim()) patch.resultType = "participation";
@@ -858,7 +931,7 @@ export const buildLegacyBackfillPatch = (
     }
   }
 
-  if (classification.category === UI_CATEGORY_ENTREPRENEURSHIP) {
+  if (!forceCategoryOnly && classification.category === UI_CATEGORY_ENTREPRENEURSHIP) {
     if (!String(input.achievementLevel || "").trim()) patch.achievementLevel = "province";
     if (!String(input.participationType || "").trim()) patch.participationType = "individual";
     if (!String(input.resultType || "").trim()) patch.resultType = "participation";
@@ -880,7 +953,96 @@ export const buildLegacyBackfillPatch = (
     patch
   );
 
+  if (forceCategoryOnly) {
+    return {
+      achievementCategory: patch.achievementCategory,
+      evidenceExtractedData: patch.evidenceExtractedData,
+    };
+  }
+
   return patch;
+};
+
+export type LegacyBackfillSkipExplanation = {
+  wouldApply: boolean;
+  skipReason: string | null;
+  protectedBy: string[];
+  missingSignals: string[];
+  matchedTrainingSignals: string[];
+};
+
+export const explainLegacyBackfillDecision = (
+  input: LegacyAchievementInput,
+  classification: LegacyClassificationResult | null,
+  patch: LegacyBackfillPatch | null
+): LegacyBackfillSkipExplanation => {
+  const flags = getBackfillProtectionFlags(input);
+  const protectedBy: string[] = [];
+  if (flags.isManuallyApproved) protectedBy.push("approved");
+  if (flags.isFeatured) protectedBy.push("featured");
+  if (flags.isHallOfFame) protectedBy.push("hallOfFame");
+  if (flags.isAdminEdited) protectedBy.push("adminEdited");
+
+  const matchedTrainingSignals =
+    classification?.category === UI_CATEGORY_TRAINING_COURSES
+      ? classification.matchedSignals
+      : [];
+
+  if (patch) {
+    return {
+      wouldApply: true,
+      skipReason: null,
+      protectedBy,
+      missingSignals: [],
+      matchedTrainingSignals,
+    };
+  }
+
+  if (!isEligibleForLegacyBackfill(input)) {
+    return {
+      wouldApply: false,
+      skipReason: "not_eligible_already_special_or_non_program_type",
+      protectedBy,
+      missingSignals: [],
+      matchedTrainingSignals,
+    };
+  }
+
+  if (!classification) {
+    return {
+      wouldApply: false,
+      skipReason: "no_classification_match_or_low_confidence",
+      protectedBy,
+      missingSignals: ["insufficient_training_or_admission_signals"],
+      matchedTrainingSignals,
+    };
+  }
+
+  if (!shouldApplyLegacyClassification(classification)) {
+    const missing: string[] = [];
+    if (classification.confidence === "low") missing.push("confidence_low");
+    if (classification.category === UI_CATEGORY_EARLY_UNIVERSITY) {
+      missing.push("university_multi_signal_gate");
+    }
+    if (classification.negativeSignals.length) {
+      missing.push(`negatives:${classification.negativeSignals.slice(0, 3).join(",")}`);
+    }
+    return {
+      wouldApply: false,
+      skipReason: "confidence_or_rules_below_apply_threshold",
+      protectedBy,
+      missingSignals: missing,
+      matchedTrainingSignals,
+    };
+  }
+
+  return {
+    wouldApply: false,
+    skipReason: "patch_build_returned_null",
+    protectedBy,
+    missingSignals: [],
+    matchedTrainingSignals,
+  };
 };
 
 export type LegacyBackfillPreview = {
@@ -889,6 +1051,10 @@ export type LegacyBackfillPreview = {
   protected: boolean;
   protectionFlags: AchievementBackfillProtectionFlags;
   wouldApply: boolean;
+  skipReason: string | null;
+  protectedBy: string[];
+  missingSignals: string[];
+  matchedTrainingSignals: string[];
   current: {
     achievementCategory: string;
     achievementName: string;
@@ -907,7 +1073,8 @@ export type LegacyBackfillPreview = {
 
 /** Read-only preview (no DB writes). */
 export const buildLegacyBackfillPreview = (
-  input: LegacyAchievementInput
+  input: LegacyAchievementInput,
+  applyOptions?: LegacyBackfillApplyOptions
 ): LegacyBackfillPreview => {
   const protectionFlags = getBackfillProtectionFlags(input);
   const eligible = isEligibleForLegacyBackfill(input);
@@ -915,15 +1082,20 @@ export const buildLegacyBackfillPreview = (
     ? classifyLegacyAchievement(input)
     : inferAchievementCategoryFromLegacyData(input);
   const patch = classification
-    ? buildLegacyBackfillPatch(input, classification)
+    ? buildLegacyBackfillPatch(input, classification, applyOptions)
     : null;
+  const explain = explainLegacyBackfillDecision(input, classification, patch);
 
   return {
     classifierVersion: CLASSIFIER_VERSION,
     eligible,
     protected: isManuallyProtectedAchievement(protectionFlags),
     protectionFlags,
-    wouldApply: Boolean(patch),
+    wouldApply: explain.wouldApply,
+    skipReason: explain.skipReason,
+    protectedBy: explain.protectedBy,
+    missingSignals: explain.missingSignals,
+    matchedTrainingSignals: explain.matchedTrainingSignals,
     current: {
       achievementCategory: String(input.achievementCategory || ""),
       achievementName: String(input.achievementName || ""),

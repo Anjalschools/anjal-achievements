@@ -19,7 +19,12 @@ type PreviewRow = {
     achievementLevel?: string;
     patchKeys: string[];
   } | null;
+  skipReason: string | null;
+  protectedBy: string[];
+  missingSignals: string[];
+  matchedTrainingSignals: string[];
   classification: {
+    category: string | null;
     confidence: string;
     score: number;
     reasons: string[];
@@ -162,7 +167,7 @@ const AchievementBackfillPreviewPage = () => {
                   <th className="px-3 py-2">المقترح</th>
                   <th className="px-3 py-2">ثقة</th>
                   <th className="px-3 py-2">إشارات</th>
-                  <th className="px-3 py-2">حماية</th>
+                  <th className="px-3 py-2">حماية / سبب التخطي</th>
                 </tr>
               </thead>
               <tbody>
@@ -212,14 +217,18 @@ const AchievementBackfillPreviewPage = () => {
                         </p>
                       ) : null}
                     </td>
-                    <td className="px-3 py-2">
+                    <td className="px-3 py-2 text-xs">
                       {p.protected ? (
-                        <span className="rounded bg-amber-100 px-2 py-0.5 text-xs text-amber-900">
-                          محمي
+                        <span className="rounded bg-amber-100 px-2 py-0.5 text-amber-900">
+                          محمي {p.protectedBy?.length ? `(${p.protectedBy.join(",")})` : ""}
                         </span>
-                      ) : (
-                        "—"
-                      )}
+                      ) : null}
+                      {!p.wouldApply && p.skipReason ? (
+                        <p className="mt-1 text-slate-600">{p.skipReason}</p>
+                      ) : null}
+                      {p.missingSignals?.length ? (
+                        <p className="mt-1 text-amber-800">ناقص: {p.missingSignals.join(" · ")}</p>
+                      ) : null}
                     </td>
                   </tr>
                 ))}

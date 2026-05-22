@@ -5,16 +5,34 @@ import type { AdminAchievementDetailApi } from "@/types/admin-achievement-review
 import {
   ACHIEVEMENT_LEVELS,
   ACHIEVEMENT_RESULT_TYPES,
-  ACHIEVEMENT_TYPES,
   MEDAL_TYPES,
   PARTICIPATION_TYPES,
   RANK_OPTIONS,
 } from "@/constants/achievement-options";
 import {
+  EARLY_UNIVERSITY_OTHER_VALUE,
+  isSpecialUiCategory,
+  UI_CATEGORY_EARLY_UNIVERSITY,
+  UI_CATEGORY_ENTREPRENEURSHIP,
+  UI_CATEGORY_TRAINING_COURSES,
+} from "@/constants/achievement-special-categories";
+import {
+  getAchievementCategoryOptions,
+  mapSubmitAchievementCategory,
+  mapUiCategoryToDbAchievementType,
+  STANDARDIZED_TEST_TYPE_OPTIONS,
+} from "@/constants/achievement-ui-categories";
+import { resolveAchievementFormUiCategory } from "@/lib/achievement-form-ui-resolve";
+import {
   buildAdminAchievementEditInitialNames,
   getAdminAchievementEventSelectOptions,
   mergeUnknownEventOption,
 } from "@/lib/admin-achievement-edit-form-map";
+import {
+  buildAutoNominationTextForEarlyUniversity,
+  getAutoLocksForSpecialUiCategory,
+  resolveUniversityAchievementLevel,
+} from "@/lib/achievement-special-category-rules";
 import { Loader2, Pencil, Save, X } from "lucide-react";
 
 type Props = {
@@ -46,8 +64,11 @@ const AdminAchievementAdminEditForm = ({
   const [nameEn, setNameEn] = useState("");
   const [description, setDescription] = useState("");
   const [achievementLevel, setAchievementLevel] = useState("");
+  const [uiCategory, setUiCategory] = useState("competition");
   const [achievementType, setAchievementType] = useState("");
   const [organization, setOrganization] = useState("");
+  const [trainingCourseName, setTrainingCourseName] = useState("");
+  const [trainingHours, setTrainingHours] = useState("");
   const [competitionName, setCompetitionName] = useState("");
   const [achievementName, setAchievementName] = useState("");
   const [customEventName, setCustomEventName] = useState("");
@@ -71,12 +92,31 @@ const AdminAchievementAdminEditForm = ({
     setNameEn(initNames.nameEn);
     setDescription(String(a.description ?? ""));
     setAchievementLevel(String(a.achievementLevel ?? a.level ?? ""));
-    setAchievementType(String(a.achievementType ?? ""));
+    const dbType = String(a.achievementType ?? "");
+    const an = String(a.achievementName ?? "").trim();
+    const custom = String(a.customAchievementName ?? "");
+    const resolvedUi = resolveAchievementFormUiCategory(
+      dbType,
+      String(a.achievementCategory ?? "").trim() || undefined,
+      {
+        achievementName: an,
+        customAchievementName: custom,
+        description: String(a.description ?? ""),
+        nameAr: initNames.nameAr,
+        nameEn: initNames.nameEn,
+        title: String(a.title ?? ""),
+      }
+    );
+    setUiCategory(resolvedUi);
+    setAchievementType(dbType);
     setOrganization(String(a.organization ?? ""));
     setCompetitionName(String(a.competitionName ?? ""));
-    const an = String(a.achievementName ?? "").trim();
     setAchievementName(an);
-    setCustomEventName(String(a.customAchievementName ?? ""));
+    setCustomEventName(custom);
+    setTrainingCourseName(
+      resolvedUi === UI_CATEGORY_TRAINING_COURSES ? custom : ""
+    );
+    setTrainingHours(String(a.resultValue ?? ""));
     setResultType(String(a.resultType ?? ""));
     setMedalType(String(a.medalType ?? ""));
     setRank(String(a.rank ?? ""));
@@ -91,9 +131,11 @@ const AdminAchievementAdminEditForm = ({
     setAchievementYear(typeof y === "number" ? String(y) : String(y ?? ""));
   }, [open, detail, a]);
 
-  const typeOptions = useMemo(
-    () => ACHIEVEMENT_TYPES.map((o) => ({ value: o.value, label: loc === "ar" ? o.ar : o.en })),
-    [loc]
+  const categoryOptions = useMemo(() => getAchievementCategoryOptions(loc), [loc]);
+
+  const specialLocks = useMemo(
+    () => getAutoLocksForSpecialUiCategory(uiCategory, { achievementName, customAchievementName: customEventName }),
+    [uiCategory, achievementName, customEventName]
   );
 
   const levelOptions = useMemo(
@@ -134,8 +176,8 @@ const AdminAchievementAdminEditForm = ({
   }, [medalType, medalOptions]);
 
   const rawEventOptions = useMemo(
-    () => getAdminAchievementEventSelectOptions(achievementType, loc),
-    [achievementType, loc]
+    () => getAdminAchievementEventSelectOptions(uiCategory, achievementType, loc),
+    [uiCategory, achievementType, loc]
   );
 
   const eventOptions = useMemo(
@@ -144,6 +186,47 @@ const AdminAchievementAdminEditForm = ({
   );
 
   const showEventSelect = eventOptions.length > 0;
+
+  const handleUiCategoryChange = (nextUi: string) => {
+    setUiCategory(nextUi);
+    if (nextUi === "standardized_tests") {
+      setAchievementType("");
+      setAchievementName("");
+      setCustomEventName("");
+      return;
+    }
+    const db = mapUiCategoryToDbAchievementType(nextUi);
+    setAchievementType(db);
+    setAchievementName("");
+    setCustomEventName("");
+    setTrainingCourseName("");
+    setTrainingHours("");
+    const locks = getAutoLocksForSpecialUiCategory(nextUi, {
+      achievementName: "",
+      customAchievementName: "",
+    });
+    if (locks.level) setAchievementLevel(locks.level);
+    if (locks.participationType) setParticipationType(locks.participationType);
+    if (locks.resultType) setResultType(locks.resultType);
+    if (nextUi === UI_CATEGORY_EARLY_UNIVERSITY) {
+      setNominationText(
+        buildAutoNominationTextForEarlyUniversity("", "", loc)
+      );
+    }
+  };
+
+  useEffect(() => {
+    if (!isSpecialUiCategory(uiCategory)) return;
+    if (uiCategory !== UI_CATEGORY_EARLY_UNIVERSITY) return;
+    const level = resolveUniversityAchievementLevel({
+      universitySlug: achievementName,
+      customUniversityName: customEventName,
+    });
+    setAchievementLevel(level);
+    setNominationText(
+      buildAutoNominationTextForEarlyUniversity(achievementName, customEventName, loc)
+    );
+  }, [uiCategory, achievementName, customEventName, loc]);
 
   const handleSave = useCallback(async () => {
     setSaving(true);
@@ -154,10 +237,17 @@ const AdminAchievementAdminEditForm = ({
         ? eventKey
         : achievementName.trim() || String(a.achievementName || "").trim();
 
-      const resolvedCustom =
-        resolvedAchievementName === "other" || resolvedAchievementName === "olympiad_other"
-          ? customEventName.trim()
-          : "";
+      let resolvedCustom = "";
+      if (resolvedAchievementName === "other" || resolvedAchievementName === "olympiad_other") {
+        resolvedCustom = customEventName.trim();
+      } else if (uiCategory === UI_CATEGORY_TRAINING_COURSES) {
+        resolvedCustom = trainingCourseName.trim();
+      } else if (
+        uiCategory === UI_CATEGORY_EARLY_UNIVERSITY &&
+        resolvedAchievementName === EARLY_UNIVERSITY_OTHER_VALUE
+      ) {
+        resolvedCustom = customEventName.trim();
+      }
 
       const body: Record<string, unknown> = {
         nameAr: nameAr.trim(),
@@ -165,10 +255,13 @@ const AdminAchievementAdminEditForm = ({
         description: description.trim(),
         achievementLevel: achievementLevel.trim(),
         achievementType: achievementType.trim(),
+        achievementCategory: mapSubmitAchievementCategory(uiCategory, achievementType),
         organization: organization.trim(),
         competitionName: competitionName.trim(),
         achievementName: resolvedAchievementName,
         customAchievementName: resolvedCustom,
+        resultValue:
+          uiCategory === UI_CATEGORY_TRAINING_COURSES ? trainingHours.trim() : undefined,
         resultType: resultType.trim(),
         medalType: resultType === "medal" ? medalType.trim() : "",
         rank: resultType === "rank" ? rank.trim() : "",
@@ -204,7 +297,10 @@ const AdminAchievementAdminEditForm = ({
     nameEn,
     description,
     achievementLevel,
+    uiCategory,
     achievementType,
+    trainingCourseName,
+    trainingHours,
     organization,
     competitionName,
     achievementName,
@@ -289,20 +385,16 @@ const AdminAchievementAdminEditForm = ({
           />
         </label>
 
-        <label className="block text-sm">
-          <span className="text-xs font-semibold text-text-light">{isAr ? "نوع الإنجاز" : "Achievement type"}</span>
+        <label className="block text-sm sm:col-span-2">
+          <span className="text-xs font-semibold text-text-light">
+            {isAr ? "تصنيف الإنجاز" : "Achievement category"}
+          </span>
           <select
-            value={achievementType}
-            onChange={(e) => {
-              const v = e.target.value;
-              setAchievementType(v);
-              setAchievementName("");
-              setCustomEventName("");
-            }}
+            value={uiCategory}
+            onChange={(e) => handleUiCategoryChange(e.target.value)}
             className={selectBaseClass}
           >
-            <option value="">{isAr ? "اختر النوع" : "Select type"}</option>
-            {typeOptions.map((o) => (
+            {categoryOptions.map((o) => (
               <option key={o.value} value={o.value}>
                 {o.label}
               </option>
@@ -310,11 +402,35 @@ const AdminAchievementAdminEditForm = ({
           </select>
         </label>
 
+        {uiCategory === "standardized_tests" ? (
+          <label className="block text-sm sm:col-span-2">
+            <span className="text-xs font-semibold text-text-light">
+              {isAr ? "نوع الاختبار المعياري" : "Standardized test"}
+            </span>
+            <select
+              value={achievementType}
+              onChange={(e) => {
+                setAchievementType(e.target.value);
+                setAchievementName("");
+              }}
+              className={selectBaseClass}
+            >
+              <option value="">{isAr ? "اختر" : "Select"}</option>
+              {STANDARDIZED_TEST_TYPE_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {loc === "ar" ? o.ar : o.en}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
+
         <label className="block text-sm">
           <span className="text-xs font-semibold text-text-light">{isAr ? "المستوى" : "Level"}</span>
           <select
             value={achievementLevel}
             onChange={(e) => setAchievementLevel(e.target.value)}
+            disabled={specialLocks.levelLocked}
             className={selectBaseClass}
           >
             <option value="">{isAr ? "اختر المستوى" : "Select level"}</option>
@@ -353,16 +469,54 @@ const AdminAchievementAdminEditForm = ({
                 </option>
               ))}
             </select>
-            {(achievementName === "other" || achievementName === "olympiad_other") && (
+            {(achievementName === "other" ||
+              achievementName === "olympiad_other" ||
+              achievementName === EARLY_UNIVERSITY_OTHER_VALUE) && (
               <input
                 value={customEventName}
                 onChange={(e) => setCustomEventName(e.target.value)}
-                placeholder={isAr ? "اكتب الاسم المخصص" : "Custom name"}
+                placeholder={
+                  uiCategory === UI_CATEGORY_EARLY_UNIVERSITY
+                    ? isAr
+                      ? "اسم الجامعة"
+                      : "University name"
+                    : isAr
+                      ? "اكتب الاسم المخصص"
+                      : "Custom name"
+                }
                 className="mt-2 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
               />
             )}
           </label>
-        ) : (
+        ) : null}
+
+        {uiCategory === UI_CATEGORY_TRAINING_COURSES ? (
+          <>
+            <label className="block text-sm sm:col-span-2">
+              <span className="text-xs font-semibold text-text-light">
+                {isAr ? "اسم الدورة التدريبية" : "Training course name"}
+              </span>
+              <input
+                value={trainingCourseName}
+                onChange={(e) => setTrainingCourseName(e.target.value)}
+                className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              />
+            </label>
+            <label className="block text-sm">
+              <span className="text-xs font-semibold text-text-light">
+                {isAr ? "ساعات التدريب" : "Training hours"}
+              </span>
+              <input
+                value={trainingHours}
+                onChange={(e) => setTrainingHours(e.target.value)}
+                className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                inputMode="numeric"
+              />
+            </label>
+          </>
+        ) : null}
+
+        {!showEventSelect && !isSpecialUiCategory(uiCategory) ? (
           <label className="block text-sm sm:col-span-2">
             <span className="text-xs font-semibold text-text-light">
               {isAr ? "معرّف الحدث (مفتاح التخزين)" : "Event key (stored slug)"}
@@ -380,8 +534,9 @@ const AdminAchievementAdminEditForm = ({
                 : "Prefer an achievement type with a dropdown to avoid raw keys."}
             </span>
           </label>
-        )}
+        ) : null}
 
+        {!isSpecialUiCategory(uiCategory) && uiCategory !== "standardized_tests" ? (
         <label className="block text-sm sm:col-span-2">
           <span className="text-xs font-semibold text-text-light">
             {isAr ? "اسم مسابقة إضافي (اختياري)" : "Extra competition label (optional)"}
@@ -393,12 +548,14 @@ const AdminAchievementAdminEditForm = ({
             autoComplete="off"
           />
         </label>
+        ) : null}
 
         <label className="block text-sm">
           <span className="text-xs font-semibold text-text-light">{isAr ? "نوع النتيجة" : "Result type"}</span>
           <select
             value={resultType}
             onChange={(e) => setResultType(e.target.value)}
+            disabled={specialLocks.resultLocked}
             className={selectBaseClass}
           >
             <option value="">{isAr ? "اختر" : "Select"}</option>
@@ -473,7 +630,7 @@ const AdminAchievementAdminEditForm = ({
           </label>
         ) : null}
 
-        {resultType === "nomination" ? (
+        {(resultType === "nomination" || uiCategory === UI_CATEGORY_EARLY_UNIVERSITY) ? (
           <label className="block text-sm sm:col-span-2">
             <span className="text-xs font-semibold text-text-light">{isAr ? "نص الترشيح" : "Nomination details"}</span>
             <textarea

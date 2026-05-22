@@ -10,6 +10,7 @@ import {
   mapDbAchievementTypeToUiCategory,
   getEventOptionsForUiCategory,
 } from "@/constants/achievement-ui-categories";
+import { isSpecialUiCategory } from "@/constants/achievement-special-categories";
 import { EXHIBITION_OPTIONS } from "@/constants/achievement-options";
 
 export type AdminEditLocale = "ar" | "en";
@@ -48,11 +49,17 @@ export const buildAdminAchievementEditInitialNames = (
   return { nameAr, nameEn };
 };
 
-/** Dropdown options for event / program / exhibition slug (value = stored achievementName). */
+/** Dropdown options for event / program / special category (value = stored achievementName). */
 export const getAdminAchievementEventSelectOptions = (
+  uiCategory: string,
   dbAchievementType: string,
   loc: AdminEditLocale
 ): Array<{ value: string; label: string }> => {
+  const ui = String(uiCategory || "").trim();
+  if (ui && ui !== "other" && (isSpecialUiCategory(ui) || ui === "olympiad" || ui === "competition" || ui === "program" || ui === "excellence_program")) {
+    return getEventOptionsForUiCategory(ui, loc);
+  }
+
   const t = String(dbAchievementType || "").trim();
   if (t === "exhibition") {
     return EXHIBITION_OPTIONS.map((o) => ({
@@ -60,11 +67,11 @@ export const getAdminAchievementEventSelectOptions = (
       label: loc === "ar" ? o.ar : o.en,
     }));
   }
-  const ui = mapDbAchievementTypeToUiCategory(t);
-  if (ui === "other" && t !== "exhibition") {
+  const fromType = mapDbAchievementTypeToUiCategory(t);
+  if (fromType === "other" && t !== "exhibition" && !ui) {
     return [];
   }
-  return getEventOptionsForUiCategory(ui, loc);
+  return getEventOptionsForUiCategory(ui || fromType, loc);
 };
 
 /** If current achievementName is not in the list, prepend a synthetic option so the select stays controlled. */
