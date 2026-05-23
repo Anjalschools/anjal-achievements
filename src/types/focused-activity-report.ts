@@ -113,6 +113,7 @@ export type FocusedExecutiveBundle = {
     }>;
   };
   topPerformers: {
+    byWeighted: FocusedTopPerformerRow[];
     byParticipation: FocusedTopPerformerRow[];
     byMedals: FocusedTopPerformerRow[];
     byLevel: FocusedTopPerformerRow[];

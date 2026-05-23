@@ -22,6 +22,11 @@ import {
   buildCompetitionDecisionPlatform,
   type PeerActivityMetricRow,
 } from "@/lib/competition-decision-intelligence";
+import { mongoAnalyticsCategoryAddFields } from "@/lib/analytics/mongo-analytics-category";
+import {
+  buildTopPerformersFromRankingPool,
+  type RankingPoolRow,
+} from "@/lib/analytics/build-top-performers-weighted";
 
 export {
   FOCUSED_ACHIEVEMENT_OUTCOMES,
@@ -207,6 +212,7 @@ export const buildShapedStages = (filters: ParticipationAnalyticsFilters): mongo
     },
     {
       $addFields: {
+        ...mongoAnalyticsCategoryAddFields(),
         effGender: { $cond: [{ $eq: ["$effGenderRaw", "female"] }, "female", "male"] },
         effSection: { $cond: [{ $eq: ["$effSectionRaw", "international"] }, "international", "arabic"] },
         effYear: {
@@ -246,7 +252,7 @@ const loadPeerActivityMetrics = async (filters: ParticipationAnalyticsFilters): 
     ...shaped,
     {
       $group: {
-        _id: { t: "$achievementType", r: "$activityRaw" },
+        _id: { t: "$analyticsCategory", r: "$activityRaw" },
         records: { $sum: 1 },
         students: { $addToSet: "$participantId" },
         gold: {
@@ -428,7 +434,12 @@ export const buildFocusedActivityReport = async (input: {
 
   const shaped = buildShapedStages(input.filters);
   const focusStages: mongoose.PipelineStage[] = [
-    { $match: { achievementType: focusType, activityRaw: focusRaw } },
+    {
+      $match: {
+        activityRaw: focusRaw,
+        $or: [{ analyticsCategory: focusType }, { achievementType: focusType }],
+      },
+    },
   ];
   if (outcomeMatch) {
     focusStages.push({ $match: outcomeMatch });
@@ -642,6 +653,23 @@ export const buildFocusedActivityReport = async (input: {
       { $sort: { maxLevelRank: -1, medalCount: -1, recordCount: -1 } },
       { $limit: 8 },
     ],
+    rankingPool: [
+      {
+        $project: {
+          participantId: 1,
+          resultType: 1,
+          medalType: 1,
+          rank: 1,
+          achievementLevel: 1,
+          _id: 1,
+          organization: 1,
+          effStage: 1,
+          u: 1,
+          studentSnapshot: 1,
+        },
+      },
+      { $limit: 5000 },
+    ],
     rows: [
       { $sort: { createdAt: -1 } },
       { $skip: skip },
@@ -849,6 +877,32 @@ export const buildFocusedActivityReport = async (input: {
   const topByMedals = mapTop((facetResult?.topByMedals || []) as TopAgg[]);
   const topByLevel = mapTop((facetResult?.topByLevel || []) as TopAgg[]);
 
+  type LeanRankDoc = Record<string, unknown>;
+  const rankDocs = (facetResult?.rankingPool || []) as LeanRankDoc[];
+  const rankingPool: RankingPoolRow[] = rankDocs.map((doc) => {
+    const u = doc.u as {
+      fullNameAr?: string;
+      fullNameEn?: string;
+      fullName?: string;
+      profilePhoto?: string;
+    } | undefined;
+    const snap = doc.studentSnapshot as { fullNameAr?: string; fullNameEn?: string } | undefined;
+    return {
+      participantId: String(doc.participantId ?? ""),
+      achievementId: String(doc._id ?? ""),
+      resultType: String(doc.resultType || ""),
+      medalType: String(doc.medalType || ""),
+      rank: String(doc.rank || ""),
+      achievementLevel: String(doc.achievementLevel || ""),
+      nameAr: String(u?.fullNameAr || snap?.fullNameAr || u?.fullName || ""),
+      nameEn: String(u?.fullNameEn || snap?.fullNameEn || u?.fullName || ""),
+      school: String(doc.organization || ""),
+      stage: String(doc.effStage || "unknown"),
+      avatarUrl: u?.profilePhoto ? String(u.profilePhoto) : "",
+    };
+  });
+  const weightedTops = buildTopPerformersFromRankingPool(rankingPool);
+
   const kpiYoYRecords = pctChange(yCurr?.records ?? 0, yPrev?.records);
   const kpiYoYStudents = pctChange(yCurr?.distinctStudents ?? 0, yPrev?.distinctStudents);
   const kpiYoYGold = pctChange(yCurr?.goldMedals ?? 0, yPrev?.goldMedals);
@@ -955,6 +1009,8 @@ export const buildFocusedActivityReport = async (input: {
       ],
     },
     topPerformers: {
+      byWeighted:
+        weightedTops.byWeighted.length > 0 ? weightedTops.byWeighted : topByMedals,
       byParticipation: topByParticipation,
       byMedals: topByMedals,
       byLevel: topByLevel,

@@ -17,6 +17,11 @@ import {
   CI_TYPOGRAPHY,
 } from "@/lib/competition-intelligence-theme";
 import { describeFocusedEmptyContext } from "@/lib/competition-intelligence-consistency";
+import {
+  chartEmptyMessage,
+  validateChartSeries,
+  validateTrendSeries,
+} from "@/lib/analytics/chart-data-validator";
 import { ciRedactLine, logEmptyDatasetIntel, logVirtualizationIntel } from "@/lib/competition-intelligence-debug";
 import {
   Bar,
@@ -452,27 +457,39 @@ export const FocusedExecutiveIntelligencePanel = memo((props: FocusedExecutiveIn
 
   const isExecutiveDensity = viewDensity === "executive";
 
-  const resultDonutData = useMemo(() => {
-    if (!data?.charts?.resultBars?.length) return [];
-    const t = data.charts.resultBars.reduce((s, x) => s + x.count, 0);
-    return data.charts.resultBars.map((x) => ({
-      key: x.key,
-      name: isAr ? x.labelAr : x.labelEn,
-      value: x.count,
-      fill: RESULT_SLICE_FILL[x.key] ?? x.fill,
-      pct: t > 0 ? Math.round((x.count / t) * 1000) / 10 : 0,
-    }));
+  const resultDonutValidation = useMemo(() => {
+    if (!data?.charts?.resultBars?.length) {
+      return { ok: false as const, data: [] as Array<{ key: string; name: string; value: number; fill?: string; pct?: number }>, total: 0 };
+    }
+    const validated = validateChartSeries(
+      data.charts.resultBars.map((x) => ({
+        key: x.key,
+        name: isAr ? x.labelAr : x.labelEn,
+        value: x.count,
+        fill: RESULT_SLICE_FILL[x.key] ?? x.fill,
+      }))
+    );
+    return validated;
   }, [data, isAr]);
 
-  const yoyChartData = useMemo(() => {
-    if (!data?.executive?.yearComparison?.length) return [];
-    return data.executive.yearComparison.map((y) => ({
-      year: String(y.year),
-      participants: y.distinctStudents,
-      medals: y.totalMedals,
-      excellence: y.excellenceRatePct,
-    }));
+  const resultDonutData = resultDonutValidation.data;
+
+  const yoyChartValidation = useMemo(() => {
+    if (!data?.executive?.yearComparison?.length) {
+      return { ok: false, data: [] as Array<Record<string, unknown>> };
+    }
+    return validateTrendSeries(
+      data.executive.yearComparison.map((y) => ({
+        year: String(y.year),
+        participants: y.distinctStudents,
+        medals: y.totalMedals,
+        excellence: y.excellenceRatePct,
+      })),
+      ["participants", "medals", "excellence"]
+    );
   }, [data]);
+
+  const yoyChartData = yoyChartValidation.data;
 
   const stackSection = useMemo(() => {
     if (!data?.executive?.demographicStacks?.sectionGender) return [];
@@ -1217,6 +1234,11 @@ export const FocusedExecutiveIntelligencePanel = memo((props: FocusedExecutiveIn
                 {isAr ? "دائري مع النسب المئوية" : "Donut with percentages"}
               </p>
               <div className="mt-2 h-64 min-h-[256px] w-full overflow-hidden" dir="ltr">
+                {!resultDonutValidation.ok ? (
+                  <div className="flex h-64 w-full items-center justify-center rounded-lg border border-dashed border-slate-200 bg-slate-50 text-sm font-semibold text-slate-600">
+                    {chartEmptyMessage(isAr)}
+                  </div>
+                ) : (
                 <LazyChartMount
                   minHeight={256}
                   chartId="focused-result-donut"
@@ -1255,13 +1277,16 @@ export const FocusedExecutiveIntelligencePanel = memo((props: FocusedExecutiveIn
                     </PieChart>
                   </ResponsiveContainer>
                 </LazyChartMount>
+                )}
               </div>
+              {resultDonutValidation.ok ? (
               <p className="mt-1 text-center text-xs font-bold text-slate-600">
                 {isAr ? "الإجمالي" : "Total"}{" "}
                 <span className="tabular-nums text-slate-900">
-                  {resultDonutData.reduce((s, x) => s + x.value, 0)}
+                  {resultDonutValidation.total}
                 </span>
               </p>
+              ) : null}
             </div>
             <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm print:break-inside-avoid">
               <h3 className="text-sm font-black text-slate-900">Year-over-year</h3>
@@ -1269,6 +1294,11 @@ export const FocusedExecutiveIntelligencePanel = memo((props: FocusedExecutiveIn
                 {isAr ? "مقارنة مباشرة بين السنوات (ضمن النطاق)" : "Direct multi-year comparison (scope)"}
               </p>
               <div className="mt-2 h-64 min-h-[256px] w-full overflow-hidden" dir="ltr">
+                {!yoyChartValidation.ok ? (
+                  <div className="flex h-64 w-full items-center justify-center rounded-lg border border-dashed border-slate-200 bg-slate-50 text-sm font-semibold text-slate-600">
+                    {chartEmptyMessage(isAr)}
+                  </div>
+                ) : (
                 <LazyChartMount
                   minHeight={256}
                   chartId="focused-yoy-bars"
@@ -1310,6 +1340,7 @@ export const FocusedExecutiveIntelligencePanel = memo((props: FocusedExecutiveIn
                     </BarChart>
                   </ResponsiveContainer>
                 </LazyChartMount>
+                )}
               </div>
             </div>
           </section>
@@ -1398,9 +1429,9 @@ export const FocusedExecutiveIntelligencePanel = memo((props: FocusedExecutiveIn
             <div className="grid gap-4 lg:grid-cols-3">
               {(
                 [
+                  [isAr ? "أفضل الأداء (مرجّح)" : "Top weighted score", data.executive.topPerformers.byWeighted],
                   [isAr ? "أكثر مشاركة" : "Most participation", data.executive.topPerformers.byParticipation],
                   [isAr ? "أكثر ميداليات" : "Most medals", data.executive.topPerformers.byMedals],
-                  [isAr ? "أعلى مستوى إنجاز" : "Highest level profile", data.executive.topPerformers.byLevel],
                 ] as const
               ).map(([ttl, list]) => (
                 <div key={ttl} className="rounded-xl border border-slate-100 bg-slate-50/50 p-3">

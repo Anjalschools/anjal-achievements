@@ -5,7 +5,6 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import PageContainer from "@/components/layout/PageContainer";
 import PageHeader from "@/components/layout/PageHeader";
-import { getLocale } from "@/lib/i18n";
 import { FocusedExecutiveIntelligencePanel } from "@/components/admin/FocusedExecutiveIntelligencePanel";
 import {
   exportFocusedCompetitionAnalyticsPdf,
@@ -22,7 +21,6 @@ import {
   exportPhaseMessages,
 } from "@/lib/competition-export-controller";
 import {
-  readExecutiveSnapshot,
   writeExecutiveSnapshot,
   readSavedExecutiveViews,
   upsertSavedExecutiveView,
@@ -36,20 +34,10 @@ import {
 } from "@/lib/competition-intelligence-persistence";
 import { competitionIntelDebug, isCompetitionIntelDebugEnabled } from "@/lib/competition-intelligence-diagnostics";
 import { ciBuildFiltersSummary, ciMedalsPer100, CI_EXPORT_PARTICIPANT_ROW_CAP } from "@/lib/competition-intelligence-normalize";
-import {
-  mergeTrustReports,
-  verifyComparisonConsistency,
-  verifyMedalTotals,
-  verifyOutcomeBuckets,
-  verifyParticipantCounts,
-  verifyStudentIntelRows,
-  verifyYearTrend,
-  formatCacheAgeLabel,
-} from "@/lib/competition-intelligence-consistency";
+import { AnalyticsFilterProvider, useAnalyticsFilters, useAnalyticsDerivedState } from "@/contexts/AnalyticsFilterContext";
 import {
   ciRedactLine,
   createCorrelationId,
-  logCompareIntel,
   logEmptyDatasetIntel,
 } from "@/lib/competition-intelligence-debug";
 import {
@@ -58,24 +46,13 @@ import {
   readCiExportAudit,
 } from "@/lib/competition-intelligence-export-audit";
 import { CI_AGGREGATION_VERSION } from "@/lib/competition/analytics/aggregation-version";
-import { resilientFetchJson } from "@/lib/client/resilient-fetch";
-import { runStudentIntelGovernance } from "@/lib/competition/governance/student-intel-governance";
 import { getCompetitionIntelAccess } from "@/lib/competition-intelligence-permissions";
-import {
-  getReportCategoryOptions,
-  getReportLevelOptions,
-  getReportResultOptions,
-} from "@/lib/report-filter-options";
 import { GRADE_OPTIONS } from "@/constants/grades";
 import type { StudentIntelligencePayload, StudentProfileInsightPayload } from "@/lib/student-intelligence-analytics";
 import { CI_PDF_PRESET_LABELS, CI_STORAGE_KEYS, type CiPdfExportPreset } from "@/lib/competition-intelligence-theme";
 import { Loader2, RefreshCw } from "lucide-react";
-import type { ParticipationActivityRow, ParticipationAnalyticsPayload } from "@/lib/achievement-participation-analytics";
-import {
-  FOCUSED_ACHIEVEMENT_OUTCOMES,
-  type FocusedActivityOptionsPayload,
-  type FocusedActivityReportPayload,
-} from "@/types/focused-activity-report";
+import type { ParticipationActivityRow } from "@/lib/achievement-participation-analytics";
+import { FOCUSED_ACHIEVEMENT_OUTCOMES, type FocusedActivityReportPayload } from "@/types/focused-activity-report";
 
 const MiniHBar = ({
   label,
@@ -109,65 +86,63 @@ const MiniHBar = ({
   );
 };
 
-const AdminParticipationAnalyticsPage = () => {
+const AdminParticipationAnalyticsPageInner = () => {
   const router = useRouter();
-  const locale = getLocale();
-  const isAr = locale === "ar";
-  const [allowed, setAllowed] = useState<boolean | null>(null);
-  const [activeTab, setActiveTab] = useState<"general" | "focused" | "studentIntel">("general");
-  const [data, setData] = useState<ParticipationAnalyticsPayload | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [dataDegraded, setDataDegraded] = useState(false);
-  const [page, setPage] = useState(1);
-  const [focusedPage, setFocusedPage] = useState(1);
-  const [execBoot] = useState(() => {
-    if (typeof window === "undefined") {
-      return { snap: {} as Partial<ExecutiveUiSnapshot> };
-    }
-    const snap = readExecutiveSnapshot();
-    hydrateLocalStoragePanelsFromSnapshot(snap);
-    return { snap };
-  });
+  const {
+    isAr,
+    allowed,
+    setAllowed,
+    activeTab,
+    setActiveTab,
+    data,
+    loading,
+    error,
+    dataDegraded,
+    page,
+    setPage,
+    focusedPage,
+    setFocusedPage,
+    focusedOutcome,
+    setFocusedOutcome,
+    focusedPick,
+    setFocusedPick,
+    focusedActivityOptions,
+    focusedData,
+    focusedLoading,
+    focusedError,
+    focusedOptionsLoading,
+    compareEnabled,
+    setCompareEnabled,
+    comparePick,
+    setComparePick,
+    compareData,
+    compareLoading,
+    compareError,
+    studentIntelData,
+    studentIntelLoading,
+    studentIntelError,
+    pdfPreset,
+    setPdfPreset,
+    f,
+    setF,
+    categoryOptions,
+    levelOptions,
+    resultOptions,
+    insights,
+    analyticsTrustReport,
+    cacheAgeLabel,
+    debugDiagnostics,
+    buildFocusedParams,
+    fetchData,
+    refreshAll,
+  } = useAnalyticsFilters();
+  const { canonicalSnapshot } = useAnalyticsDerivedState();
 
-  const [focusedOutcome, setFocusedOutcome] = useState(() => execBoot.snap.focusedOutcome ?? "all");
-  const [focusedPick, setFocusedPick] = useState(() => execBoot.snap.focusedPick ?? "");
-  const [focusedActivityOptions, setFocusedActivityOptions] = useState<
-    { typeKey: string; rawKey: string; count: number; labelAr: string; labelEn: string }[]
-  >([]);
-  const [focusedData, setFocusedData] = useState<FocusedActivityReportPayload | null>(null);
-  const [focusedLoading, setFocusedLoading] = useState(false);
-  const [focusedError, setFocusedError] = useState<string | null>(null);
-  const [focusedOptionsLoading, setFocusedOptionsLoading] = useState(false);
-  const [compareEnabled, setCompareEnabled] = useState(() => Boolean(execBoot.snap.compareEnabled));
-  const [comparePick, setComparePick] = useState(() => execBoot.snap.comparePick ?? "");
-  const [compareData, setCompareData] = useState<FocusedActivityReportPayload | null>(null);
-  const [compareLoading, setCompareLoading] = useState(false);
-  const [compareError, setCompareError] = useState<string | null>(null);
-  const [studentIntelData, setStudentIntelData] = useState<StudentIntelligencePayload | null>(null);
-  const [studentIntelLoading, setStudentIntelLoading] = useState(false);
-  const [studentIntelError, setStudentIntelError] = useState<string | null>(null);
-  const [pdfPreset, setPdfPreset] = useState<CiPdfExportPreset>(() => {
-    const fromSnap = execBoot.snap.pdfPreset;
-    if (fromSnap && (Object.keys(CI_PDF_PRESET_LABELS) as CiPdfExportPreset[]).includes(fromSnap)) {
-      return fromSnap;
-    }
-    if (typeof window !== "undefined") {
-      try {
-        const v = localStorage.getItem(CI_STORAGE_KEYS.pdfPreset) as CiPdfExportPreset | null;
-        if (v && (Object.keys(CI_PDF_PRESET_LABELS) as CiPdfExportPreset[]).includes(v)) return v;
-      } catch {
-        /* ignore */
-      }
-    }
-    return "full";
-  });
   const [studentProfilePid, setStudentProfilePid] = useState<string | null>(null);
   const [studentProfileReloadKey, setStudentProfileReloadKey] = useState(0);
   const [studentProfileData, setStudentProfileData] = useState<StudentProfileInsightPayload | null>(null);
   const [studentProfileLoading, setStudentProfileLoading] = useState(false);
   const [studentProfileError, setStudentProfileError] = useState<string | null>(null);
-  const [f, setF] = useState<ExecutiveFilterSnapshot>(() => mergeExecutiveSnapshotIntoFilter(execBoot.snap));
 
   const [exportOverlayOpen, setExportOverlayOpen] = useState(false);
   const [exportState, setExportState] = useState<CompetitionExportState>({
@@ -182,51 +157,7 @@ const AdminParticipationAnalyticsPage = () => {
   const exportAttemptRef = useRef(1);
   const lastCompareLatencyMsRef = useRef<number | null>(null);
 
-  const categoryOptions = useMemo(() => getReportCategoryOptions(isAr ? "ar" : "en"), [isAr]);
-  const levelOptions = useMemo(() => getReportLevelOptions(isAr ? "ar" : "en"), [isAr]);
-  const resultOptions = useMemo(() => getReportResultOptions(isAr ? "ar" : "en"), [isAr]);
   const intelAccess = useMemo(() => getCompetitionIntelAccess(viewerRole || undefined), [viewerRole]);
-
-  const studentIntelGovernance = useMemo(() => {
-    const age = studentIntelData?.ciObservability?.cacheAgeMs;
-    return runStudentIntelGovernance(studentIntelData, age);
-  }, [studentIntelData]);
-
-  const analyticsTrustReport = useMemo(
-    () =>
-      mergeTrustReports([
-        verifyOutcomeBuckets(data),
-        verifyParticipantCounts(focusedData),
-        verifyMedalTotals(focusedData),
-        verifyYearTrend(focusedData),
-        verifyComparisonConsistency(
-          compareEnabled && comparePick ? focusedData : null,
-          compareEnabled && comparePick ? compareData : null
-        ),
-        verifyStudentIntelRows(studentIntelData),
-        {
-          level: studentIntelGovernance.level,
-          issues: studentIntelGovernance.issues.map((i) => i.code),
-        },
-      ]),
-    [
-      data,
-      focusedData,
-      compareData,
-      studentIntelData,
-      compareEnabled,
-      comparePick,
-      studentIntelGovernance,
-    ]
-  );
-
-  const cacheAgeLabel = useMemo(() => {
-    const obs =
-      activeTab === "general" ? data?.ciObservability
-      : activeTab === "focused" ? focusedData?.ciObservability
-      : studentIntelData?.ciObservability;
-    return formatCacheAgeLabel(obs?.generatedAt, isAr);
-  }, [activeTab, data?.ciObservability, focusedData?.ciObservability, studentIntelData?.ciObservability, isAr]);
 
   useEffect(() => {
     void (async () => {
@@ -258,63 +189,12 @@ const AdminParticipationAnalyticsPage = () => {
   }, []);
 
   useEffect(() => {
-    const t = window.setTimeout(() => {
-      const aux = captureExecutiveAuxLocalState();
-      writeExecutiveSnapshot({
-        focusedPick: focusedPick || undefined,
-        comparePick: comparePick || undefined,
-        compareEnabled,
-        pdfPreset,
-        focusedOutcome,
-        filter: cloneExecutiveFilterSnapshot(f),
-        collapseJson: aux.collapseJson,
-        viewDensity: aux.viewDensity,
-      });
-    }, 400);
-    return () => window.clearTimeout(t);
-  }, [focusedPick, comparePick, compareEnabled, pdfPreset, focusedOutcome, f]);
-
-  useEffect(() => {
     if (activeTab !== "studentIntel") {
       setStudentProfilePid(null);
       setStudentProfileData(null);
       setStudentProfileError(null);
     }
   }, [activeTab]);
-
-  const buildSharedSearchParams = useCallback(() => {
-    const sp = new URLSearchParams();
-    sp.set("academicYear", f.academicYear);
-    sp.set("gender", f.gender);
-    sp.set("mawhiba", f.mawhiba);
-    sp.set("stage", f.stage);
-    sp.set("grade", f.grade);
-    sp.set("section", f.section);
-    if (f.categories.length) sp.set("category", f.categories.join(","));
-    if (f.levels.length) sp.set("level", f.levels.join(","));
-    if (f.resultTokens.length) sp.set("result", f.resultTokens.join(","));
-    sp.set("status", f.status);
-    sp.set("certificateStatus", f.certificateStatus);
-    if (f.fromDate) sp.set("fromDate", f.fromDate);
-    if (f.toDate) sp.set("toDate", f.toDate);
-    if (f.domain.trim()) sp.set("domain", f.domain.trim());
-    if (f.classification.trim()) sp.set("classification", f.classification.trim());
-    if (f.organization.trim()) sp.set("organization", f.organization.trim());
-    return sp;
-  }, [f]);
-
-  const buildQuery = useCallback(() => {
-    const sp = buildSharedSearchParams();
-    sp.set("page", String(page));
-    sp.set("pageSize", "25");
-    return sp.toString();
-  }, [buildSharedSearchParams, page]);
-
-  const buildFocusedParams = useCallback(() => {
-    const sp = buildSharedSearchParams();
-    if (f.primaryType && f.primaryType !== "all") sp.set("primaryType", f.primaryType);
-    return sp;
-  }, [buildSharedSearchParams, f.primaryType]);
 
   useEffect(() => {
     if (!studentProfilePid || activeTab !== "studentIntel" || allowed !== true) {
@@ -370,281 +250,6 @@ const AdminParticipationAnalyticsPage = () => {
     })();
     return () => ac.abort();
   }, [studentProfilePid, studentProfileReloadKey, activeTab, allowed, buildFocusedParams, router]);
-
-  const fetchData = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    setDataDegraded(false);
-    const url = `/api/admin/reports/achievement-participation?${buildQuery()}`;
-    const result = await resilientFetchJson<
-      ParticipationAnalyticsPayload & { degraded?: boolean; error?: string }
-    >(url, { credentials: "include" }, {
-      staleKey: `anjal-participation:${buildQuery()}`,
-      staleMaxAgeMs: 10 * 60_000,
-      retries: 2,
-    });
-    if (!result.ok) {
-      if (result.status === 401) {
-        router.push("/login");
-        return;
-      }
-      if (result.status === 403) {
-        setAllowed(false);
-        return;
-      }
-      setError(
-        isAr ?
-          "تعذر تحميل التقرير. جرّب إعادة المحاولة أو توسيع الفلاتر."
-        : "Could not load the report. Retry or broaden filters."
-      );
-      setData(null);
-      setLoading(false);
-      return;
-    }
-    const j = result.data;
-    if (!j.ok) {
-      setError(typeof j.error === "string" ? j.error : "Request failed");
-      setData(null);
-    } else {
-      setData(j);
-      setDataDegraded(Boolean(result.degraded || result.fromStale || j.degraded));
-    }
-    setLoading(false);
-  }, [buildQuery, router, isAr]);
-
-  const fetchFocusedOptions = useCallback(async () => {
-    setFocusedOptionsLoading(true);
-    try {
-      const sp = buildFocusedParams();
-      sp.set("listOptions", "1");
-      const res = await fetch(`/api/admin/reports/achievement-participation/focused?${sp.toString()}`, {
-        cache: "no-store",
-        credentials: "include",
-      });
-      if (res.status === 401) {
-        router.push("/login");
-        return;
-      }
-      if (res.status === 403) {
-        setAllowed(false);
-        return;
-      }
-      const j = (await res.json()) as FocusedActivityOptionsPayload & { error?: string };
-      if (!res.ok || !j.ok) {
-        throw new Error(typeof (j as { error?: string }).error === "string" ? (j as { error: string }).error : "Request failed");
-      }
-      setFocusedActivityOptions(j.activityOptions);
-      setFocusedError(null);
-    } catch (e) {
-      setFocusedError(e instanceof Error ? e.message : "Error");
-      setFocusedActivityOptions([]);
-    } finally {
-      setFocusedOptionsLoading(false);
-    }
-  }, [buildFocusedParams, router]);
-
-  const fetchFocusedReport = useCallback(async () => {
-    if (!focusedPick) {
-      setFocusedData(null);
-      return;
-    }
-    const sep = focusedPick.indexOf("\u001f");
-    const focusType = sep === -1 ? focusedPick : focusedPick.slice(0, sep);
-    const focusRaw = sep === -1 ? "" : focusedPick.slice(sep + 1);
-    setFocusedLoading(true);
-    try {
-      const sp = buildFocusedParams();
-      sp.set("focusType", focusType);
-      sp.set("focusRaw", focusRaw);
-      sp.set("focusedOutcome", focusedOutcome);
-      sp.set("page", String(focusedPage));
-      sp.set("pageSize", "25");
-      const res = await fetch(`/api/admin/reports/achievement-participation/focused?${sp.toString()}`, {
-        cache: "no-store",
-        credentials: "include",
-      });
-      if (res.status === 401) {
-        router.push("/login");
-        return;
-      }
-      if (res.status === 403) {
-        setAllowed(false);
-        return;
-      }
-      const j = (await res.json()) as FocusedActivityReportPayload & { ok?: boolean; error?: string };
-      if (!res.ok || !j.ok) {
-        throw new Error(typeof j.error === "string" ? j.error : "Request failed");
-      }
-      setFocusedData(j);
-      setFocusedError(null);
-    } catch (e) {
-      setFocusedError(e instanceof Error ? e.message : "Error");
-      setFocusedData(null);
-    } finally {
-      setFocusedLoading(false);
-    }
-  }, [buildFocusedParams, focusedPick, focusedOutcome, focusedPage, router]);
-
-  const fetchCompareReport = useCallback(async () => {
-    if (!compareEnabled || !comparePick) {
-      setCompareData(null);
-      setCompareError(null);
-      return;
-    }
-    const sep = comparePick.indexOf("\u001f");
-    const focusType = sep === -1 ? comparePick : comparePick.slice(0, sep);
-    const focusRaw = sep === -1 ? "" : comparePick.slice(sep + 1);
-    const sp = buildFocusedParams();
-    sp.set("focusType", focusType);
-    sp.set("focusRaw", focusRaw);
-    sp.set("focusedOutcome", focusedOutcome);
-    sp.set("page", "1");
-    sp.set("pageSize", "25");
-    const cacheKey = `ci-compare:v1:${sp.toString()}`;
-    const tCache0 = typeof performance !== "undefined" ? performance.now() : Date.now();
-    try {
-      if (typeof sessionStorage !== "undefined") {
-        const raw = sessionStorage.getItem(cacheKey);
-        if (raw) {
-          const parsed = JSON.parse(raw) as { ts?: number; payload?: FocusedActivityReportPayload };
-          if (parsed.ts && Date.now() - parsed.ts < 120_000 && parsed.payload?.ok) {
-            setCompareData(parsed.payload);
-            setCompareError(null);
-            const ms =
-              typeof performance !== "undefined" ? Math.round(performance.now() - tCache0) : 0;
-            lastCompareLatencyMsRef.current = ms;
-            logCompareIntel({
-              durationMs: ms,
-              cacheHit: true,
-              filterSummary: ciRedactLine(sp.toString()),
-            });
-            return;
-          }
-        }
-      }
-    } catch {
-      /* ignore cache */
-    }
-    setCompareLoading(true);
-    try {
-      const t0 = typeof performance !== "undefined" ? performance.now() : Date.now();
-      let lastErr: unknown;
-      for (let attempt = 0; attempt < 2; attempt++) {
-        try {
-          const res = await fetch(`/api/admin/reports/achievement-participation/focused?${sp.toString()}`, {
-            cache: "no-store",
-            credentials: "include",
-          });
-          if (res.status === 401) {
-            router.push("/login");
-            return;
-          }
-          if (res.status === 403) {
-            setAllowed(false);
-            return;
-          }
-          const j = (await res.json()) as FocusedActivityReportPayload & { ok?: boolean; error?: string };
-          if (!res.ok || !j.ok) {
-            throw new Error(typeof j.error === "string" ? j.error : "Request failed");
-          }
-          setCompareData(j);
-          setCompareError(null);
-          try {
-            if (typeof sessionStorage !== "undefined") {
-              sessionStorage.setItem(cacheKey, JSON.stringify({ ts: Date.now(), payload: j }));
-            }
-          } catch {
-            /* ignore */
-          }
-          const ms =
-            typeof performance !== "undefined" ? Math.round(performance.now() - t0) : 0;
-          lastCompareLatencyMsRef.current = ms;
-          logCompareIntel({
-            durationMs: ms,
-            cacheHit: false,
-            filterSummary: ciRedactLine(sp.toString()),
-          });
-          return;
-        } catch (e) {
-          lastErr = e;
-          if (attempt === 0) {
-            await new Promise((r) => setTimeout(r, 450));
-          }
-        }
-      }
-      setCompareError(lastErr instanceof Error ? lastErr.message : "Error");
-      setCompareData(null);
-      logCompareIntel({
-        durationMs: typeof performance !== "undefined" ? Math.round(performance.now() - t0) : 0,
-        cacheHit: false,
-        filterSummary: ciRedactLine(`${sp.toString()}|failed`),
-      });
-    } finally {
-      setCompareLoading(false);
-    }
-  }, [buildFocusedParams, compareEnabled, comparePick, focusedOutcome, router]);
-
-  const fetchStudentIntelligence = useCallback(async () => {
-    setStudentIntelLoading(true);
-    setStudentIntelError(null);
-    try {
-      const sp = buildFocusedParams();
-      const res = await fetch(`/api/admin/reports/achievement-participation/student-intelligence?${sp.toString()}`, {
-        cache: "no-store",
-        credentials: "include",
-      });
-      if (res.status === 401) {
-        router.push("/login");
-        return;
-      }
-      if (res.status === 403) {
-        setAllowed(false);
-        return;
-      }
-      const j = (await res.json()) as StudentIntelligencePayload & { ok?: boolean; error?: string };
-      if (!res.ok || !j.ok) {
-        throw new Error(typeof (j as { error?: string }).error === "string" ? (j as { error: string }).error : "Request failed");
-      }
-      setStudentIntelData(j);
-    } catch (e) {
-      setStudentIntelError(e instanceof Error ? e.message : "Error");
-      setStudentIntelData(null);
-    } finally {
-      setStudentIntelLoading(false);
-    }
-  }, [buildFocusedParams, router]);
-
-  useEffect(() => {
-    if (allowed !== true || activeTab !== "general") return;
-    void fetchData();
-  }, [allowed, activeTab, fetchData]);
-
-  useEffect(() => {
-    if (allowed !== true || activeTab !== "focused") return;
-    void fetchFocusedOptions();
-  }, [allowed, activeTab, fetchFocusedOptions]);
-
-  useEffect(() => {
-    if (allowed !== true || activeTab !== "focused") return;
-    void fetchFocusedReport();
-  }, [allowed, activeTab, fetchFocusedReport]);
-
-  useEffect(() => {
-    if (allowed !== true || activeTab !== "focused") {
-      return;
-    }
-    if (!compareEnabled || !comparePick) {
-      setCompareData(null);
-      setCompareError(null);
-      return;
-    }
-    void fetchCompareReport();
-  }, [allowed, activeTab, compareEnabled, comparePick, fetchCompareReport]);
-
-  useEffect(() => {
-    if (allowed !== true || activeTab !== "studentIntel") return;
-    void fetchStudentIntelligence();
-  }, [allowed, activeTab, fetchStudentIntelligence, f]);
 
   useEffect(() => {
     if (!data?.ok || (data.table?.length ?? 0) > 0) return;
@@ -950,11 +555,8 @@ const AdminParticipationAnalyticsPage = () => {
   }, [focusedData, isAr]);
 
   const handleFocusedRefresh = useCallback(() => {
-    void fetchFocusedOptions();
-    void fetchFocusedReport();
-    if (compareEnabled && comparePick) void fetchCompareReport();
-    if (activeTab === "studentIntel") void fetchStudentIntelligence();
-  }, [fetchFocusedOptions, fetchFocusedReport, fetchCompareReport, compareEnabled, comparePick, activeTab, fetchStudentIntelligence]);
+    refreshAll();
+  }, [refreshAll]);
 
   const handleFocusedExportSelectionExcel = (headers: string[], rows: Record<string, string | number>[]) => {
     void exportRowsToExcelWorkbook(
@@ -1363,7 +965,7 @@ const AdminParticipationAnalyticsPage = () => {
                 onClick={() => {
                   if (activeTab === "general") void fetchData();
                   else if (activeTab === "focused") handleFocusedRefresh();
-                  else void fetchStudentIntelligence();
+                  else refreshAll();
                 }}
                 disabled={
                   activeTab === "general"
@@ -1499,7 +1101,7 @@ const AdminParticipationAnalyticsPage = () => {
           }
         />
 
-        {allowed === true ? (
+        {allowed === true && analyticsTrustReport.level !== "synced" ? (
           <div
             className="mb-4 flex flex-wrap items-center gap-3 rounded-2xl border border-slate-200 bg-white p-3 text-sm shadow-sm print:hidden"
             role="status"
@@ -1507,9 +1109,7 @@ const AdminParticipationAnalyticsPage = () => {
           >
             <span
               className={`h-2.5 w-2.5 shrink-0 rounded-full ${
-                analyticsTrustReport.level === "synced" ? "bg-emerald-500"
-                : analyticsTrustReport.level === "partial" ? "bg-amber-400"
-                : "bg-red-600"
+                analyticsTrustReport.level === "partial" ? "bg-amber-400" : "bg-red-600"
               }`}
               aria-hidden
             />
@@ -1518,12 +1118,13 @@ const AdminParticipationAnalyticsPage = () => {
                 {isAr ? "ثقة التحليلات" : "Analytics trust"}
               </p>
               <p className="text-[11px] leading-snug text-slate-600">
-                {analyticsTrustReport.level === "synced" &&
-                  (isAr ? "البيانات متزامنة بين اللوحات لهذه الجلسة." : "Data is consistent across panels for this session.")}
-                {analyticsTrustReport.level === "partial" &&
-                  (isAr ? "بعض المقارنات تقريبية أو بحاجة لمراجعة الفلاتر." : "Some comparisons are approximate — review filters if unsure.")}
-                {analyticsTrustReport.level === "mismatch" &&
-                  (isAr ? "تم رصد اختلاف — راجع وحدة البيانات أو أعد التحميل." : "Mismatch detected — refresh or review underlying data.")}
+                {analyticsTrustReport.level === "partial" ?
+                  isAr ?
+                    "بعض المقارنات تقريبية أو بحاجة لمراجعة الفلاتر."
+                  : "Some comparisons are approximate — review filters if unsure."
+                : isAr ?
+                  "تم رصد اختلاف — راجع وحدة البيانات أو أعد التحميل."
+                : "Mismatch detected — refresh or review underlying data."}
               </p>
               {isCompetitionIntelDebugEnabled() && analyticsTrustReport.issues.length ? (
                 <p className="mt-1 break-all font-mono text-[10px] text-slate-500" dir="ltr">
@@ -1535,6 +1136,39 @@ const AdminParticipationAnalyticsPage = () => {
               <span className="text-[11px] font-semibold text-slate-500">{cacheAgeLabel}</span>
             ) : null}
           </div>
+        ) : null}
+
+        {allowed === true && insights.hasData && insights.insights.length > 0 ? (
+          <section className="mb-4 rounded-2xl border border-indigo-100 bg-indigo-50/40 p-4 print:hidden">
+            <h2 className="text-sm font-black text-indigo-950">
+              {isAr ? "رؤى تحليلية" : "Analytics insights"}
+            </h2>
+            <ul className="mt-3 space-y-2">
+              {insights.insights.map((ins) => (
+                <li
+                  key={ins.id}
+                  className="rounded-xl border border-white/80 bg-white/90 px-3 py-2 text-xs shadow-sm"
+                >
+                  <p className="font-bold text-slate-900">{isAr ? ins.titleAr : ins.titleEn}</p>
+                  <p className="mt-1 text-slate-600">{isAr ? ins.bodyAr : ins.bodyEn}</p>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ) : null}
+
+        {debugDiagnostics ? (
+          <section
+            className="mb-4 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-3 font-mono text-[10px] text-slate-600 print:hidden"
+            dir="ltr"
+          >
+            <p className="font-bold text-slate-800">CI debug</p>
+            <p>filterKey={debugDiagnostics.filterKey.slice(0, 120)}…</p>
+            <p>expected={debugDiagnostics.expectedCount} normalized={debugDiagnostics.normalizedCount}</p>
+            <p>stale={debugDiagnostics.staleSources.join(",") || "—"}</p>
+            <p>mismatch={debugDiagnostics.mismatchKeys.join(" · ") || "—"}</p>
+            <p>sources={canonicalSnapshot.sourceKeys.join(",")}</p>
+          </section>
         ) : null}
 
         <div className="mb-4 flex flex-wrap gap-3 text-sm print:hidden">
@@ -1913,6 +1547,7 @@ const AdminParticipationAnalyticsPage = () => {
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
               {(
                 [
+                  [isAr ? "أفضل الأداء (مرجّح)" : "Top weighted score", studentIntelData.byWeightedScore],
                   [isAr ? "أكثر المشاركة" : "Most participation", studentIntelData.byParticipation],
                   [isAr ? "أكثر الميداليات" : "Most medals", studentIntelData.byMedals],
                   [isAr ? "أعلى معدل نجاح (ميداليات/سجل)" : "Highest success rate (medals/record)", studentIntelData.bySuccessRate],
@@ -2384,11 +2019,7 @@ const AdminParticipationAnalyticsPage = () => {
             compareEnabled={compareEnabled}
             onCompareEnabledChange={(v) => {
               setCompareEnabled(v);
-              if (!v) {
-                setComparePick("");
-                setCompareData(null);
-                setCompareError(null);
-              }
+              if (!v) setComparePick("");
             }}
             comparePick={comparePick}
             onComparePickChange={setComparePick}
@@ -2479,5 +2110,11 @@ const AdminParticipationAnalyticsPage = () => {
     </PageContainer>
   );
 };
+
+const AdminParticipationAnalyticsPage = () => (
+  <AnalyticsFilterProvider>
+    <AdminParticipationAnalyticsPageInner />
+  </AnalyticsFilterProvider>
+);
 
 export default AdminParticipationAnalyticsPage;

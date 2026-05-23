@@ -21,6 +21,7 @@ import {
 import { resolveAchievementActivityName } from "@/lib/resolve-achievement-activity-name";
 import { formatAchievementClassificationLabel } from "@/lib/admin-achievement-labels";
 import type { CiObservabilityMeta } from "@/lib/competition-intelligence-debug";
+import { mongoAnalyticsCategoryAddFields } from "@/lib/analytics/mongo-analytics-category";
 
 const ALLOW_CATEGORY = EXTENDED_REPORT_CATEGORY_SET;
 const ALLOW_PRIMARY_TYPE = ALLOW_CATEGORY;
@@ -480,6 +481,7 @@ export const buildParticipationAnalytics = async (input: {
     },
     {
       $addFields: {
+        ...mongoAnalyticsCategoryAddFields(),
         effGender: { $cond: [{ $eq: ["$effGenderRaw", "female"] }, "female", "male"] },
         effSection: { $cond: [{ $eq: ["$effSectionRaw", "international"] }, "international", "arabic"] },
         effYear: {
@@ -567,7 +569,7 @@ export const buildParticipationAnalytics = async (input: {
     activityOptions: [
       {
         $group: {
-          _id: { t: "$achievementType", r: "$activityRaw" },
+          _id: { t: "$analyticsCategory", r: "$activityRaw" },
           count: { $sum: 1 },
         },
       },
@@ -627,13 +629,27 @@ export const buildParticipationAnalytics = async (input: {
           nomination: { $sum: { $cond: [{ $eq: ["$resultType", "nomination"] }, 1, 0] } },
           rank: { $sum: { $cond: [{ $eq: ["$resultType", "rank"] }, 1, 0] } },
           participation: { $sum: { $cond: [{ $eq: ["$resultType", "participation"] }, 1, 0] } },
+          otherOutcomes: {
+            $sum: {
+              $cond: [
+                {
+                  $in: [
+                    "$resultType",
+                    ["completion", "score", "recognition", "special_award", "other", "award"],
+                  ],
+                },
+                1,
+                0,
+              ],
+            },
+          },
         },
       },
     ],
     activityGroups: [
       {
         $group: {
-          _id: { t: "$achievementType", raw: "$activityRaw" },
+          _id: { t: "$analyticsCategory", raw: "$activityRaw" },
           participantIds: { $addToSet: "$participantId" },
           maleIds: {
             $addToSet: {
@@ -948,6 +964,7 @@ export const buildParticipationAnalytics = async (input: {
         nomination?: number;
         rank?: number;
         participation?: number;
+        otherOutcomes?: number;
       }
     | undefined;
   const resultOutcomeCompare = [
@@ -992,6 +1009,13 @@ export const buildParticipationAnalytics = async (input: {
       labelEn: "Participation",
       count: Number(rb?.participation || 0),
       color: "#2563EB",
+    },
+    {
+      key: "other",
+      labelAr: "نتائج أخرى",
+      labelEn: "Other outcomes",
+      count: Number(rb?.otherOutcomes || 0),
+      color: "#64748B",
     },
   ];
 

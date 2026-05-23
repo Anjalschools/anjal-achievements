@@ -5,6 +5,10 @@ import Achievement from "@/models/Achievement";
 import { buildShapedStages } from "@/lib/achievement-participation-focused-analytics";
 import type { ParticipationAnalyticsFilters } from "@/lib/achievement-participation-analytics";
 import { logStudentIntelTrust, type CiObservabilityMeta } from "@/lib/competition-intelligence-debug";
+import {
+  buildWeightedStudentRankings,
+  sortIntelRowsByWeightedScore,
+} from "@/lib/analytics/achievement-ranking-engine";
 
 const stageLabel = (key: string, loc: "ar" | "en"): string => {
   if (key === "primary") return loc === "ar" ? "ابتدائي" : "Primary";
@@ -38,6 +42,7 @@ export type StudentIntelligencePayload = {
   generatedAt: string;
   filters: Record<string, unknown>;
   ciObservability?: CiObservabilityMeta;
+  byWeightedScore: StudentIntelRow[];
   byParticipation: StudentIntelRow[];
   byMedals: StudentIntelRow[];
   bySuccessRate: StudentIntelRow[];
@@ -132,6 +137,19 @@ export const buildStudentIntelligence = async (
   const shaped = buildShapedStages(filters);
 
   const facetBody: Record<string, mongoose.PipelineStage[]> = {
+    rankingPool: [
+      {
+        $project: {
+          participantId: 1,
+          resultType: 1,
+          medalType: 1,
+          rank: 1,
+          achievementLevel: 1,
+          _id: 1,
+        },
+      },
+      { $limit: 8000 },
+    ],
     byParticipation: [
       {
         $group: {
@@ -248,7 +266,11 @@ export const buildStudentIntelligence = async (
           medalCount: { $sum: { $cond: [{ $eq: ["$resultType", "medal"] }, 1, 0] } },
           distinctActivities: {
             $addToSet: {
-              $concat: [{ $toString: "$achievementType" }, "\u001f", { $toString: "$activityRaw" }],
+              $concat: [
+                { $toString: { $ifNull: ["$analyticsCategory", "$achievementType"] } },
+                "\u001f",
+                { $toString: "$activityRaw" },
+              ],
             },
           },
           nameAr: {
@@ -287,6 +309,27 @@ export const buildStudentIntelligence = async (
 
   const part = ((res?.byParticipation || []) as AggRow[]).map((r) => toRow(r, 0));
   const medals = ((res?.byMedals || []) as AggRow[]).map((r) => toRow(r, 0));
+
+  type RankLean = {
+    participantId?: unknown;
+    resultType?: string;
+    medalType?: string;
+    rank?: string;
+    achievementLevel?: string;
+    _id?: unknown;
+  };
+  const rankPool = ((res?.rankingPool || []) as RankLean[]).map((doc) => ({
+    participantId: String(doc.participantId ?? ""),
+    achievementId: String(doc._id ?? ""),
+    resultType: String(doc.resultType || ""),
+    medalType: String(doc.medalType || ""),
+    rank: String(doc.rank || ""),
+    achievementLevel: String(doc.achievementLevel || ""),
+  }));
+  const weightedScores = buildWeightedStudentRankings(rankPool, { limit: 40 });
+  const scoreById = new Map(weightedScores.map((w) => [w.participantId, w.weightedScore]));
+  const metaRows = [...part, ...medals];
+  const byWeightedScore = sortIntelRowsByWeightedScore(metaRows, scoreById).slice(0, 20);
   const divRaw = (res?.byDiversity || []) as Array<AggRow & { divN?: number; distinctActivities?: unknown[] }>;
   const byDiversity = divRaw.map((r) =>
     toRow(r, Array.isArray(r.distinctActivities) ? r.distinctActivities.length : Number(r.divN ?? 0))
@@ -328,6 +371,7 @@ export const buildStudentIntelligence = async (
     ok: true,
     generatedAt: new Date().toISOString(),
     filters: filters as unknown as Record<string, unknown>,
+    byWeightedScore: byWeightedScore.length > 0 ? byWeightedScore : part.slice(0, 20),
     byParticipation: part,
     byMedals: medals,
     bySuccessRate: bySuccess,

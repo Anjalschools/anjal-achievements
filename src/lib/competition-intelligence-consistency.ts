@@ -1,11 +1,18 @@
 /**
  * Client-safe numeric / structural consistency checks for competition intelligence.
- * No side effects except optional debug logging via competition-intelligence-diagnostics.
+ * Uses normalized datasets + tolerance before flagging user-visible mismatches.
  */
 
 import type { ParticipationAnalyticsPayload } from "@/lib/achievement-participation-analytics";
 import type { FocusedActivityReportPayload } from "@/types/focused-activity-report";
 import type { StudentIntelligencePayload } from "@/lib/student-intelligence-analytics";
+import {
+  comparableFilterSnapshot,
+  countsWithinTolerance,
+  logAnalyticsConsistencyDebug,
+  normalizeFocusedPayloadCounts,
+  normalizeParticipationPayloadCounts,
+} from "@/lib/analytics/achievement-analytics-normalizer";
 import { ciRoundCount } from "@/lib/competition-intelligence-normalize";
 import { competitionIntelWarn } from "@/lib/competition-intelligence-diagnostics";
 
@@ -24,25 +31,37 @@ const mergeWorst = (a: CiConsistencyReport, b: CiConsistencyReport): CiConsisten
 
 const warnIssues = (label: string, issues: string[]) => {
   if (!issues.length) return;
-  // Always surface data-shape mismatches for institutional auditability (no PII in issue codes).
-  // eslint-disable-next-line no-console
-  console.warn(`[ci-consistency:${label}]`, issues);
   competitionIntelWarn(`[ci-consistency:${label}]`, issues);
 };
 
 export const verifyParticipantCounts = (focused: FocusedActivityReportPayload | null): CiConsistencyReport => {
   const issues: string[] = [];
   if (!focused) return { level: "synced", issues: [] };
-  const total = focused.kpis.totalRecords;
-  const genderSum = focused.charts.genderPie.reduce((s, x) => s + x.value, 0);
-  const sectionSum = focused.charts.sectionPie.reduce((s, x) => s + x.value, 0);
-  if (total > 0 && genderSum !== total) {
-    issues.push(`genderPie_sum_${genderSum}_neq_totalRecords_${total}`);
+
+  const norm = normalizeFocusedPayloadCounts({
+    totalRecords: focused.kpis.totalRecords,
+    genderPie: focused.charts.genderPie,
+    sectionPie: focused.charts.sectionPie,
+  });
+
+  if (norm.totalRecords > 0) {
+    if (!countsWithinTolerance(norm.totalRecords, norm.genderPieSum)) {
+      issues.push(`genderPie_sum_${norm.genderPieSum}_neq_totalRecords_${norm.totalRecords}`);
+    }
+    if (!countsWithinTolerance(norm.totalRecords, norm.sectionPieSum)) {
+      issues.push(`sectionPie_sum_${norm.sectionPieSum}_neq_totalRecords_${norm.totalRecords}`);
+    }
   }
-  if (total > 0 && sectionSum !== total) {
-    issues.push(`sectionPie_sum_${sectionSum}_neq_totalRecords_${total}`);
-  }
-  const level: CiTrustLevel = issues.length ? "mismatch" : "synced";
+
+  logAnalyticsConsistencyDebug("participants", {
+    expectedCount: norm.totalRecords,
+    actualCount: norm.genderPieSum,
+    mismatchKeys: issues,
+    staleSources: focused.ciObservability?.cacheHit ? ["focused_cache"] : [],
+  });
+
+  const level: CiTrustLevel =
+    issues.length ? "mismatch" : "synced";
   if (issues.length) warnIssues("participants", issues);
   return { level, issues };
 };
@@ -62,7 +81,9 @@ export const verifyMedalTotals = (focused: FocusedActivityReportPayload | null):
       issues.push("medal_bar_rate_negative");
     }
   }
-  if (goldRb + silverRb + bronzeRb > focused.kpis.totalRecords * 2) {
+  const medalSum = goldRb + silverRb + bronzeRb;
+  const maxPlausible = focused.kpis.totalRecords * 2;
+  if (medalSum > maxPlausible) {
     issues.push("medal_counts_implausibly_high_vs_records");
   }
   const level: CiTrustLevel = issues.length ? "partial" : "synced";
@@ -73,12 +94,40 @@ export const verifyMedalTotals = (focused: FocusedActivityReportPayload | null):
 export const verifyOutcomeBuckets = (general: ParticipationAnalyticsPayload | null): CiConsistencyReport => {
   const issues: string[] = [];
   if (!general) return { level: "synced", issues: [] };
-  const sum = general.charts.resultOutcomeCompare.reduce((s, x) => s + x.count, 0);
-  const kpi = general.kpis.totalParticipations;
-  if (kpi > 0 && sum !== kpi) {
-    issues.push(`resultOutcomeCompare_sum_${sum}_neq_kpi_totalParticipations_${kpi}`);
+
+  const norm = normalizeParticipationPayloadCounts({
+    totalParticipations: general.kpis.totalParticipations,
+    resultOutcomeCompare: general.charts.resultOutcomeCompare,
+  });
+
+  const { totalParticipations, resultOutcomeSum } = norm;
+
+  if (totalParticipations > 0) {
+    if (resultOutcomeSum > totalParticipations) {
+      if (!countsWithinTolerance(totalParticipations, resultOutcomeSum)) {
+        issues.push(`resultOutcomeCompare_sum_${resultOutcomeSum}_gt_kpi_${totalParticipations}`);
+      }
+    } else if (resultOutcomeSum < totalParticipations) {
+      const gap = totalParticipations - resultOutcomeSum;
+      if (!countsWithinTolerance(totalParticipations, resultOutcomeSum)) {
+        if (gap > Math.max(1, Math.ceil(totalParticipations * 0.01))) {
+          issues.push(`resultOutcomeCompare_sum_${resultOutcomeSum}_lt_kpi_${totalParticipations}`);
+        }
+      }
+    }
   }
-  const level: CiTrustLevel = issues.length ? "mismatch" : "synced";
+
+  logAnalyticsConsistencyDebug("outcome_buckets", {
+    expectedCount: totalParticipations,
+    actualCount: resultOutcomeSum,
+    mismatchKeys: issues,
+    staleSources: general.ciObservability?.cacheHit ? ["general_cache"] : [],
+  });
+
+  const level: CiTrustLevel =
+    issues.some((i) => i.includes("_gt_")) ? "mismatch"
+    : issues.length ? "partial"
+    : "synced";
   if (issues.length) warnIssues("outcome_buckets", issues);
   return { level, issues };
 };
@@ -87,7 +136,9 @@ export const verifyYearTrend = (focused: FocusedActivityReportPayload | null): C
   const issues: string[] = [];
   if (!focused?.charts?.yearTrend?.length) return { level: "synced", issues: [] };
   for (const y of focused.charts.yearTrend) {
-    if (y.records < y.distinctStudents) {
+    const records = ciRoundCount(y.records);
+    const students = ciRoundCount(y.distinctStudents);
+    if (records > 0 && records < students) {
       issues.push(`year_${y.year}_records_lt_distinctStudents`);
     }
     if (y.totalMedals < 0 || y.goldMedals < 0) {
@@ -105,10 +156,10 @@ export const verifyComparisonConsistency = (
 ): CiConsistencyReport => {
   const issues: string[] = [];
   if (!a || !b) return { level: "synced", issues: [] };
-  const fa = JSON.stringify(a.filters ?? {});
-  const fb = JSON.stringify(b.filters ?? {});
+  const fa = comparableFilterSnapshot(a.filters as Record<string, unknown> | undefined);
+  const fb = comparableFilterSnapshot(b.filters as Record<string, unknown> | undefined);
   if (fa !== fb) {
-    issues.push("compare_filter_snapshot_mismatch");
+    issues.push("compare_demographic_filter_snapshot_mismatch");
   }
   const level: CiTrustLevel = issues.length ? "partial" : "synced";
   if (issues.length) warnIssues("compare", issues);
@@ -146,7 +197,51 @@ export const verifyStudentIntelRows = (payload: StudentIntelligencePayload | nul
 
 export const mergeTrustReports = (reports: CiConsistencyReport[]): CiConsistencyReport => {
   if (!reports.length) return { level: "synced", issues: [] };
-  return reports.reduce((acc, r) => mergeWorst(acc, r));
+  const merged = reports.reduce((acc, r) => mergeWorst(acc, r));
+  const critical = merged.issues.filter(
+    (i) =>
+      i.includes("_gt_") ||
+      i.includes("negative") ||
+      i.includes("duplicate_participant") ||
+      i.includes("medals_gt_records")
+  );
+  if (merged.level === "mismatch" && critical.length === 0) {
+    return { level: "partial", issues: merged.issues };
+  }
+  return merged;
+};
+
+/** Unified entry: run all checks; downgrade noise; dev diagnostics only. */
+export const runAnalyticsConsistencyEngine = (input: {
+  general: ParticipationAnalyticsPayload | null;
+  focused: FocusedActivityReportPayload | null;
+  compareA: FocusedActivityReportPayload | null;
+  compareB: FocusedActivityReportPayload | null;
+  studentIntel: StudentIntelligencePayload | null;
+  governance?: CiConsistencyReport;
+}): CiConsistencyReport => {
+  const reports: CiConsistencyReport[] = [
+    verifyOutcomeBuckets(input.general),
+    verifyParticipantCounts(input.focused),
+    verifyMedalTotals(input.focused),
+    verifyYearTrend(input.focused),
+    verifyComparisonConsistency(input.compareA, input.compareB),
+    verifyStudentIntelRows(input.studentIntel),
+  ];
+  if (input.governance) reports.push(input.governance);
+  const merged = mergeTrustReports(reports);
+
+  logAnalyticsConsistencyDebug("engine", {
+    expectedCount: input.general?.kpis.totalParticipations ?? 0,
+    actualCount: input.focused?.kpis.totalRecords ?? 0,
+    mismatchKeys: merged.issues,
+    staleSources: [
+      ...(input.general?.ciObservability?.cacheHit ? ["general"] : []),
+      ...(input.focused?.ciObservability?.cacheHit ? ["focused"] : []),
+    ],
+  });
+
+  return merged;
 };
 
 /** Heuristic empty-state explanation (no extra server round-trip). */

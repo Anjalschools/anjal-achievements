@@ -107,7 +107,7 @@ export const runStudentIntelGovernance = (
 
   const level: CiTrustLevel =
     issues.some((i) => i.severity === "critical") ? "mismatch"
-    : issues.length ? "partial"
+    : issues.some((i) => i.severity === "warn") ? "partial"
     : "synced";
 
   return {
