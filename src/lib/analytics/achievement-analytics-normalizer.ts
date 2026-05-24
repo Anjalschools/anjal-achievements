@@ -6,7 +6,7 @@
 import { resolveStoredAchievementReportCategory } from "@/lib/achievement-report-category";
 import { REPORT_CATEGORY_VALUES } from "@/lib/report-filter-options";
 import { resolveCanonicalActivity } from "@/lib/analytics/activity-name-normalizer";
-import { resolveActivityYear } from "@/lib/analytics/activity-year";
+import { extractActivityYearFromAchievement } from "@/lib/analytics/activity-year-resolver";
 import {
   resolveStandardizedComparableScore,
   resolveStandardizedTestType,
@@ -44,6 +44,9 @@ export type AnalyticsAchievementRecord = {
   qudratScore?: string;
   giftedDiscoveryScore?: number;
   standardizedTest?: Record<string, unknown>;
+  activityYear?: number | string | null;
+  activityYearLabel?: string;
+  competitionEdition?: string | number | null;
   achievementYear?: number;
   date?: string | Date;
   createdAt?: string | Date;
@@ -69,6 +72,8 @@ export type NormalizedAnalyticsRecord = {
   standardizedTestType: string | null;
   standardizedComparableScore: number | null;
   activityYear: number | null;
+  activityYearLabelAr: string;
+  activityYearLabelEn: string;
 };
 
 export const ciRoundCount = (n: number): number => Math.round(Number(n) || 0);
@@ -149,6 +154,7 @@ export const normalizeAchievementAnalyticsRecord = (
     giftedDiscoveryScore: raw.giftedDiscoveryScore,
     standardizedTest: raw.standardizedTest,
   };
+  const yearResolved = extractActivityYearFromAchievement(raw);
   return {
     id,
     analyticsCategory: category,
@@ -161,11 +167,9 @@ export const normalizeAchievementAnalyticsRecord = (
     analyticsActivityDisplayEn: canonical.displayNameEn,
     standardizedTestType: resolveStandardizedTestType(stdInput),
     standardizedComparableScore: resolveStandardizedComparableScore(stdInput),
-    activityYear: resolveActivityYear({
-      achievementYear: raw.achievementYear as number | undefined,
-      date: raw.date as string | undefined,
-      createdAt: raw.createdAt as string | undefined,
-    }),
+    activityYear: yearResolved.year,
+    activityYearLabelAr: yearResolved.activityYearLabelAr,
+    activityYearLabelEn: yearResolved.activityYearLabelEn,
   };
 };
 

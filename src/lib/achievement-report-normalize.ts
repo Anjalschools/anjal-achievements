@@ -21,6 +21,7 @@ type RawRow = {
   eventLabelAr: string;
   analyticsActivityDisplayAr?: string;
   activityYear?: number | null;
+  activityYearLabelAr?: string;
   standardizedTestType?: string | null;
   levelLabelAr: string;
   participationLabelAr: string;
@@ -79,11 +80,12 @@ export const normalizeAchievementReportRow = (row: RawRow): NormalizedReportRow 
     achievementType: row.categoryLabelAr || "غير محدد",
     achievementName: row.analyticsActivityDisplayAr || row.eventLabelAr || "غير محدد",
     activityYear:
-      row.activityYear != null
+      row.activityYearLabelAr?.replace(/م$/, "") ||
+      (row.activityYear != null
         ? String(row.activityYear)
         : row.year != null
           ? String(row.year)
-          : "—",
+          : "—"),
     testTypeLabel: testKey ? TEST_TYPE_LABELS[testKey] || testKey : "—",
     result: row.resultLabelAr || "غير محدد",
     level: row.levelLabelAr || "غير محدد",

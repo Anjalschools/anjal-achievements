@@ -4,9 +4,9 @@ import connectDB from "@/lib/mongodb";
 import Achievement from "@/models/Achievement";
 import type { AdminReportFilters } from "@/lib/achievement-admin-reports";
 import {
-  formatLocalizedResultLine,
   getAchievementLevelLabel,
 } from "@/lib/achievementDisplay";
+import { resolveAchievementOutcome } from "@/lib/analytics/achievement-outcome-resolver";
 import { getDbAchievementTypeLabel } from "@/lib/achievement-labels";
 import {
   parseReportCsvParam,
@@ -22,6 +22,13 @@ import { resolveAchievementActivityName } from "@/lib/resolve-achievement-activi
 import { formatAchievementClassificationLabel } from "@/lib/admin-achievement-labels";
 import type { CiObservabilityMeta } from "@/lib/competition-intelligence-debug";
 import { mongoAnalyticsCategoryAddFields } from "@/lib/analytics/mongo-analytics-category";
+import {
+  buildMultiFilterMongoQuery,
+  deserializeMultiFilter,
+  deserializeMultiFilterWithLegacy,
+  normalizeNumericMultiFilter,
+  resolveReportMultiFilters,
+} from "@/lib/analytics/multi-filter-utils";
 
 const ALLOW_CATEGORY = EXTENDED_REPORT_CATEGORY_SET;
 const ALLOW_PRIMARY_TYPE = ALLOW_CATEGORY;
@@ -215,12 +222,34 @@ const buildParticipationMongoMatch = (filters: ParticipationAnalyticsFilters): R
   if (levels.length === 1) query.achievementLevel = levels[0];
   else if (levels.length > 1) query.achievementLevel = { $in: levels };
 
-  if (filters.status && filters.status !== "all") query.status = filters.status;
+  const multi = resolveReportMultiFilters(filters);
 
-  if (filters.certificateStatus === "issued") query.certificateIssued = true;
-  if (filters.certificateStatus === "not_issued") query.certificateIssued = { $ne: true };
+  const statusMongo = buildMultiFilterMongoQuery("status", multi.statuses);
+  if (statusMongo) Object.assign(query, statusMongo);
 
-  if (filters.achievementName && filters.achievementName !== "all") {
+  if (multi.certificateStatuses.length === 1) {
+    if (multi.certificateStatuses[0] === "issued") query.certificateIssued = true;
+    if (multi.certificateStatuses[0] === "not_issued") query.certificateIssued = { $ne: true };
+  } else if (multi.certificateStatuses.length > 1) {
+    const wantIssued = multi.certificateStatuses.includes("issued");
+    const wantNot = multi.certificateStatuses.includes("not_issued");
+    if (wantIssued !== wantNot) {
+      if (wantIssued) query.certificateIssued = true;
+      else query.certificateIssued = { $ne: true };
+    }
+  }
+
+  if (multi.achievementNames.length === 1) {
+    const esc = multi.achievementNames[0].replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    query.achievementName = new RegExp(`^${esc}$`, "i");
+  } else if (multi.achievementNames.length > 1) {
+    rootAnd.push({
+      $or: multi.achievementNames.map((n) => {
+        const esc = n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        return { achievementName: new RegExp(`^${esc}$`, "i") };
+      }),
+    });
+  } else if (filters.achievementName && filters.achievementName !== "all") {
     const esc = String(filters.achievementName).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     query.achievementName = new RegExp(`^${esc}$`, "i");
   }
@@ -312,8 +341,13 @@ const dominantResultFromCombos = (
   }
   if (!bestKey) return { key: "", label: loc === "ar" ? "غير محدد" : "Not specified" };
   const [rt, mt, rk] = bestKey.split("|");
-  const label = formatLocalizedResultLine(rt, mt, rk, loc);
-  return { key: bestKey, label };
+  const outcome = resolveAchievementOutcome({
+    resultType: rt,
+    medalType: mt,
+    rank: rk,
+  });
+  const label = loc === "ar" ? outcome.displayAr : outcome.displayEn;
+  return { key: outcome.outcomeKey || bestKey, label };
 };
 
 export const buildParticipationAnalytics = async (input: {
@@ -330,25 +364,53 @@ export const buildParticipationAnalytics = async (input: {
 
   const postStages: mongoose.PipelineStage[] = [];
 
-  const stage = String(filters.stage || "").trim();
-  if (stage !== "all" && stage && GRADES_BY_STAGE[stage]) {
-    postStages.push({ $match: { effGrade: { $in: GRADES_BY_STAGE[stage] } } });
+  const multi = resolveReportMultiFilters(filters);
+
+  if (multi.stages.length > 0) {
+    const stageGrades = multi.stages.flatMap((s) => GRADES_BY_STAGE[s] || []);
+    if (stageGrades.length > 0) {
+      postStages.push({ $match: { effGrade: { $in: stageGrades } } });
+    }
+  } else {
+    const stage = String(filters.stage || "").trim();
+    if (stage !== "all" && stage && GRADES_BY_STAGE[stage]) {
+      postStages.push({ $match: { effGrade: { $in: GRADES_BY_STAGE[stage] } } });
+    }
   }
-  const grade = String(filters.grade || "").trim();
-  if (grade && grade !== "all") {
-    postStages.push({ $match: { effGrade: grade.toLowerCase() } });
+
+  if (multi.grades.length > 0) {
+    postStages.push({ $match: { effGrade: { $in: multi.grades.map((g) => g.toLowerCase()) } } });
+  } else {
+    const grade = String(filters.grade || "").trim();
+    if (grade && grade !== "all") {
+      postStages.push({ $match: { effGrade: grade.toLowerCase() } });
+    }
   }
-  const gender = String(filters.gender || "").trim();
-  if (gender && gender !== "all") {
-    postStages.push({ $match: { effGender: gender } });
+
+  if (multi.genders.length > 0) {
+    postStages.push({ $match: { effGender: { $in: multi.genders } } });
+  } else {
+    const gender = String(filters.gender || "").trim();
+    if (gender && gender !== "all") {
+      postStages.push({ $match: { effGender: gender } });
+    }
   }
   const section = String(filters.section || "").trim();
   if (section && section !== "all") {
     postStages.push({ $match: { effSection: section } });
   }
-  const mh = String(filters.mawhiba || "").trim();
-  if (mh === "yes") postStages.push({ $match: { effMawhiba: true } });
-  if (mh === "no") postStages.push({ $match: { effMawhiba: { $ne: true } } });
+  if (multi.mawhibaValues.length > 0) {
+    const wantYes = multi.mawhibaValues.includes("yes");
+    const wantNo = multi.mawhibaValues.includes("no");
+    if (wantYes !== wantNo) {
+      if (wantYes) postStages.push({ $match: { effMawhiba: true } });
+      if (wantNo) postStages.push({ $match: { effMawhiba: { $ne: true } } });
+    }
+  } else {
+    const mh = String(filters.mawhiba || "").trim();
+    if (mh === "yes") postStages.push({ $match: { effMawhiba: true } });
+    if (mh === "no") postStages.push({ $match: { effMawhiba: { $ne: true } } });
+  }
 
   const shapedPipeline: mongoose.PipelineStage[] = [
     { $match: baseMatch },
@@ -873,8 +935,13 @@ export const buildParticipationAnalytics = async (input: {
   );
 
   const resultDist = (facetResult?.resultDist || []).map((r: { _id: { rt?: string; mt?: string; rk?: string }; count: number }) => {
-    const labelAr = formatLocalizedResultLine(r._id?.rt, r._id?.mt, r._id?.rk, "ar");
-    const labelEn = formatLocalizedResultLine(r._id?.rt, r._id?.mt, r._id?.rk, "en");
+    const outcome = resolveAchievementOutcome({
+      resultType: String(r._id?.rt || ""),
+      medalType: String(r._id?.mt || ""),
+      rank: String(r._id?.rk || ""),
+    });
+    const labelAr = outcome.displayAr;
+    const labelEn = outcome.displayEn;
     return { labelAr, labelEn, count: r.count };
   });
 
@@ -1092,16 +1159,35 @@ export const parseParticipationFiltersFromSearchParams = (
       ? parseInt(String(sp.get("achievementYear")), 10)
       : undefined,
     gender: String(sp.get("gender") || "all").trim(),
+    genders: deserializeMultiFilterWithLegacy(sp.get("genders"), sp.get("gender")),
     mawhiba: String(sp.get("mawhiba") || "all").trim(),
+    mawhibaValues: deserializeMultiFilterWithLegacy(sp.get("mawhibaValues"), sp.get("mawhiba")),
     stage: String(sp.get("stage") || "all").trim(),
+    stages: deserializeMultiFilterWithLegacy(sp.get("stages"), sp.get("stage")),
     grade: String(sp.get("grade") || "all").trim(),
+    grades: deserializeMultiFilterWithLegacy(sp.get("grades"), sp.get("grade")),
     section: String(sp.get("section") || "all").trim(),
     categories: parseReportCsvParam(sp.get("category")),
     achievementName: String(sp.get("achievementName") || "").trim() || undefined,
+    achievementNames: deserializeMultiFilterWithLegacy(
+      sp.get("achievementNames"),
+      sp.get("achievementName")
+    ),
+    activityYears: normalizeNumericMultiFilter(
+      deserializeMultiFilter(sp.get("activityYears")),
+      sp.get("filterActivityYear")
+    ),
+    filterActivityYear: String(sp.get("filterActivityYear") || "").trim() || undefined,
+    standardizedTestTypes: deserializeMultiFilter(sp.get("standardizedTestTypes")),
     levels: parseReportCsvParam(sp.get("level")),
     resultTokens: parseReportCsvParam(sp.get("result")),
     status: String(sp.get("status") || "all").trim(),
+    statuses: deserializeMultiFilterWithLegacy(sp.get("statuses"), sp.get("status")),
     certificateStatus: String(sp.get("certificateStatus") || "all").trim(),
+    certificateStatuses: deserializeMultiFilterWithLegacy(
+      sp.get("certificateStatuses"),
+      sp.get("certificateStatus")
+    ),
     fromDate: String(sp.get("fromDate") || "").trim() || undefined,
     toDate: String(sp.get("toDate") || "").trim() || undefined,
     domain: String(sp.get("domain") || "").trim() || undefined,

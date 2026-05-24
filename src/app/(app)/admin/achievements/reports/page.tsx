@@ -1,12 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useDeferredValue, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import PageContainer from "@/components/layout/PageContainer";
 import PageHeader from "@/components/layout/PageHeader";
 import { getLocale } from "@/lib/i18n";
-import { getGradeLabel, GRADE_OPTIONS } from "@/constants/grades";
+import { getGradeLabel } from "@/constants/grades";
 import { exportRowsToExcelWorkbook, exportRowsToPrintablePdfView } from "@/lib/report-export";
 import { getAchievementReportTitle } from "@/lib/report-title";
 import { reportStageLabel } from "@/lib/report-stage-mapping";
@@ -18,10 +18,24 @@ import {
 import { Loader2, RefreshCw } from "lucide-react";
 import MultiSelect from "@/components/ui/multi-select";
 import CanonicalActivityCombobox from "@/components/reports/CanonicalActivityCombobox";
+import ActivityYearCombobox from "@/components/reports/ActivityYearCombobox";
+import {
+  buildAdminReportSearchParams,
+  buildReportOptionFetchParams,
+  defaultReportFilterUiState,
+  type ReportFilterUiState,
+} from "@/lib/analytics/report-filter-params";
 import {
   getReportCategoryOptions,
   getReportLevelOptions,
   getReportResultOptions,
+  getStandardizedTestTypeOptions,
+  getReportGenderOptions,
+  getReportMawhibaOptions,
+  getReportStageOptions,
+  getReportGradeOptions,
+  getReportStatusOptions,
+  getReportCertificateStatusOptions,
 } from "@/lib/report-filter-options";
 
 type AdminReportRow = {
@@ -40,6 +54,8 @@ type AdminReportRow = {
   analyticsActivityKey?: string;
   analyticsActivityDisplayAr?: string;
   analyticsActivityDisplayEn?: string;
+  activityYearLabelAr?: string;
+  activityYearLabelEn?: string;
   activityYear?: number | null;
   standardizedTestType?: string | null;
   levelLabelAr: string;
@@ -73,25 +89,8 @@ const AdminAchievementReportsPage = () => {
   const [adminStats, setAdminStats] = useState<Record<string, unknown> | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [f, setF] = useState({
-    academicYear: "2025-2026م",
-    gender: "all",
-    mawhiba: "all",
-    stage: "all",
-    grade: "all",
-    /** empty = الكل */
-    categories: [] as string[],
-    achievementName: "all",
-    uniqueParticipantsOnly: false,
-    levels: [] as string[],
-    resultTokens: [] as string[],
-    status: "all",
-    certificateStatus: "all",
-    fromDate: "",
-    toDate: "",
-    scoreMin: "" as string | number,
-    scoreMax: "" as string | number,
-  });
+  const [f, setF] = useState<ReportFilterUiState>(() => defaultReportFilterUiState());
+  const deferredF = useDeferredValue(f);
 
   const categoryOptions = useMemo(
     () => getReportCategoryOptions(isAr ? "ar" : "en"),
@@ -99,6 +98,13 @@ const AdminAchievementReportsPage = () => {
   );
   const levelOptions = useMemo(() => getReportLevelOptions(isAr ? "ar" : "en"), [isAr]);
   const resultOptions = useMemo(() => getReportResultOptions(isAr ? "ar" : "en"), [isAr]);
+  const genderOptions = useMemo(() => getReportGenderOptions(isAr ? "ar" : "en"), [isAr]);
+  const mawhibaOptions = useMemo(() => getReportMawhibaOptions(isAr ? "ar" : "en"), [isAr]);
+  const stageOptions = useMemo(() => getReportStageOptions(isAr ? "ar" : "en"), [isAr]);
+  const gradeOptions = useMemo(() => getReportGradeOptions(isAr ? "ar" : "en"), [isAr]);
+  const statusOptions = useMemo(() => getReportStatusOptions(isAr ? "ar" : "en"), [isAr]);
+  const certificateOptions = useMemo(() => getReportCertificateStatusOptions(isAr ? "ar" : "en"), [isAr]);
+  const stdTestOptions = useMemo(() => getStandardizedTestTypeOptions(isAr ? "ar" : "en"), [isAr]);
 
   useEffect(() => {
     (async () => {
@@ -123,25 +129,7 @@ const AdminAchievementReportsPage = () => {
     setLoading(true);
     setError(null);
     try {
-      const params = new URLSearchParams({
-        view: "unified",
-        academicYear: f.academicYear,
-        gender: f.gender,
-        mawhiba: f.mawhiba,
-        stage: f.stage,
-        grade: f.grade,
-        achievementName: f.achievementName,
-        status: f.status,
-        certificateStatus: f.certificateStatus,
-        fromDate: f.fromDate,
-        toDate: f.toDate,
-      });
-      if (f.categories.length > 0) params.set("category", f.categories.join(","));
-      if (f.levels.length > 0) params.set("level", f.levels.join(","));
-      if (f.resultTokens.length > 0) params.set("result", f.resultTokens.join(","));
-      if (f.uniqueParticipantsOnly) params.set("uniqueParticipantsOnly", "1");
-      if (f.scoreMin !== "" && f.scoreMin != null) params.set("scoreMin", String(f.scoreMin));
-      if (f.scoreMax !== "" && f.scoreMax != null) params.set("scoreMax", String(f.scoreMax));
+      const params = buildAdminReportSearchParams(deferredF as unknown as Record<string, unknown>);
       const res = await fetch(`/api/admin/achievements/reports?${params.toString()}`, { cache: "no-store" });
       if (res.status === 401) {
         router.push("/login");
@@ -166,51 +154,58 @@ const AdminAchievementReportsPage = () => {
     } finally {
       setLoading(false);
     }
-  }, [f, router]);
+  }, [deferredF, router]);
 
   useEffect(() => {
     if (allowed !== true) return;
     void fetchReport();
   }, [allowed, fetchReport]);
 
-  const activityFetchParams = useMemo(
-    () => ({
-      academicYear: f.academicYear,
-      gender: f.gender,
-      mawhiba: f.mawhiba,
-      stage: f.stage,
-      grade: f.grade,
-      status: f.status,
-      certificateStatus: f.certificateStatus,
-      fromDate: f.fromDate,
-      toDate: f.toDate,
-      ...(f.categories.length > 0 ? { category: f.categories.join(",") } : {}),
-      ...(f.levels.length > 0 ? { level: f.levels.join(",") } : {}),
-      ...(f.resultTokens.length > 0 ? { result: f.resultTokens.join(",") } : {}),
-    }),
-    [f]
-  );
+  const activityFetchParams = useMemo(() => {
+    const base = buildReportOptionFetchParams(deferredF as unknown as Record<string, unknown>);
+    delete base.achievementNames;
+    return base;
+  }, [deferredF]);
 
-  const selectedActivityLabel = useMemo(() => {
-    if (f.achievementName === "all") return undefined;
-    const hit = rows.find((r) => r.analyticsActivityKey === f.achievementName);
-    return hit?.analyticsActivityDisplayAr || hit?.eventLabelAr || f.achievementName.replace(/_/g, " ");
-  }, [f.achievementName, rows]);
+  const yearFetchParams = useMemo(() => {
+    const base = buildReportOptionFetchParams(deferredF as unknown as Record<string, unknown>);
+    delete base.activityYears;
+    delete base.filterActivityYear;
+    return base;
+  }, [deferredF]);
 
-  const reportTitle = useMemo(
-    () =>
-      getAchievementReportTitle(
-        {
-          academicYear: f.academicYear,
-          gender: f.gender,
-          stage: f.stage !== "all" ? reportStageLabel(f.stage as any, true) : undefined,
-          gradeLabel: f.grade !== "all" ? getGradeLabel(f.grade, "ar") : undefined,
-          eventLabel: selectedActivityLabel,
-        },
-        true
-      ),
-    [f, selectedActivityLabel]
-  );
+  const selectedActivityLabels = useMemo(() => {
+    if (f.achievementNames.length === 0) return undefined;
+    const fromRows = f.achievementNames.map((key) => {
+      const hit = rows.find((r) => r.analyticsActivityKey === key);
+      return hit?.analyticsActivityDisplayAr || hit?.eventLabelAr || key.replace(/_/g, " ");
+    });
+    return fromRows.join(isAr ? "، " : ", ");
+  }, [f.achievementNames, rows, isAr]);
+
+  const reportTitle = useMemo(() => {
+    const joinLabels = (values: string[], options: Array<{ value: string; label: string }>) => {
+      if (values.length === 0) return undefined;
+      const map = new Map(options.map((o) => [o.value, o.label]));
+      return values.map((v) => map.get(v) || v).join(isAr ? "، " : ", ");
+    };
+    return getAchievementReportTitle(
+      {
+        academicYear: f.academicYear,
+        genderLabels: joinLabels(f.genders, genderOptions),
+        stageLabels: joinLabels(f.stages, stageOptions),
+        gradeLabels: joinLabels(f.grades, gradeOptions),
+        eventLabels: selectedActivityLabels,
+        activityYearLabels:
+          f.activityYears.length > 0
+            ? f.activityYears.map((y) => `${y}م`).join(isAr ? "، " : ", ")
+            : undefined,
+        levelLabels: joinLabels(f.levels, levelOptions),
+        resultLabels: joinLabels(f.resultTokens, resultOptions),
+      },
+      true
+    );
+  }, [f, selectedActivityLabels, genderOptions, stageOptions, gradeOptions, levelOptions, resultOptions, isAr]);
 
   const tableHeaders = [
     "اسم الطالب",
@@ -237,6 +232,7 @@ const AdminAchievementReportsPage = () => {
           analyticsActivityDisplayAr:
             r.analyticsActivityDisplayAr || r.eventLabelAr,
           activityYear: r.activityYear ?? r.year,
+          activityYearLabelAr: r.activityYearLabelAr,
           standardizedTestType: r.standardizedTestType,
           resultLabelAr: r.resultLabelAr,
         }))
@@ -314,26 +310,7 @@ const AdminAchievementReportsPage = () => {
               </button>
               <button
                 type="button"
-                onClick={() =>
-                  setF({
-                    academicYear: "2025-2026م",
-                    gender: "all",
-                    mawhiba: "all",
-                    stage: "all",
-                    grade: "all",
-                    categories: [],
-                    achievementName: "all",
-                    uniqueParticipantsOnly: false,
-                    levels: [],
-                    resultTokens: [],
-                    status: "all",
-                    certificateStatus: "all",
-                    fromDate: "",
-                    toDate: "",
-                    scoreMin: "",
-                    scoreMax: "",
-                  })
-                }
+                onClick={() => setF(defaultReportFilterUiState())}
                 className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-text shadow-sm hover:bg-gray-50"
               >
                 {isAr ? "إعادة تعيين الفلاتر" : "Reset filters"}
@@ -365,58 +342,76 @@ const AdminAchievementReportsPage = () => {
               <option value="2025-2026م">2025-2026م</option>
             </select>
           </label>
-          <label className="flex flex-col text-xs font-semibold text-text-light">
-            {isAr ? "النوع" : "Gender"}
-            <select
-              value={f.gender}
-              onChange={(e) => setF((p) => ({ ...p, gender: e.target.value }))}
-              className="mt-1 rounded-lg border border-gray-300 px-3 py-2 text-sm text-text"
-            >
-              <option value="all">{isAr ? "الكل" : "All"}</option>
-              <option value="male">{isAr ? "طلاب" : "Boys"}</option>
-              <option value="female">{isAr ? "طالبات" : "Girls"}</option>
-            </select>
-          </label>
-          <label className="flex flex-col text-xs font-semibold text-text-light">
-            {isAr ? "فصول موهبة" : "Mawhiba classes"}
-            <select
-              value={f.mawhiba}
-              onChange={(e) => setF((p) => ({ ...p, mawhiba: e.target.value }))}
-              className="mt-1 rounded-lg border border-gray-300 px-3 py-2 text-sm text-text"
-            >
-              <option value="all">{isAr ? "الكل" : "All"}</option>
-              <option value="yes">{isAr ? "طلاب موهبة" : "Mawhiba students"}</option>
-              <option value="no">{isAr ? "غير موهبة" : "Non‑Mawhiba"}</option>
-            </select>
-          </label>
-          <label className="flex flex-col text-xs font-semibold text-text-light">
-            {isAr ? "المرحلة" : "Stage"}
-            <select
-              value={f.stage}
-              onChange={(e) => setF((p) => ({ ...p, stage: e.target.value }))}
-              className="mt-1 rounded-lg border border-gray-300 px-3 py-2 text-sm text-text"
-            >
-              <option value="all">{isAr ? "الكل" : "All"}</option>
-              <option value="primary">{isAr ? "ابتدائي" : "Primary"}</option>
-              <option value="middle">{isAr ? "متوسط" : "Middle"}</option>
-              <option value="secondary">{isAr ? "ثانوي" : "Secondary"}</option>
-            </select>
-          </label>
-          <label className="flex flex-col text-xs font-semibold text-text-light">
-            {isAr ? "الصف" : "Grade"}
-            <select
-              value={f.grade}
-              onChange={(e) => setF((p) => ({ ...p, grade: e.target.value }))}
-              className="mt-1 rounded-lg border border-gray-300 px-3 py-2 text-sm text-text"
-            >
-              <option value="all">{isAr ? "الكل" : "All"}</option>
-              {GRADE_OPTIONS.map((g) => (
-                <option key={g.value} value={g.value}>
-                  {isAr ? g.ar : g.en}
-                </option>
-              ))}
-            </select>
-          </label>
+          <div className="flex flex-col text-xs font-semibold text-text-light">
+            <ActivityYearCombobox
+              label={isAr ? "سنة النشاط" : "Activity year"}
+              value={f.activityYears}
+              onChange={(years) => setF((p) => ({ ...p, activityYears: years }))}
+              fetchParams={yearFetchParams}
+              isAr={isAr}
+              className="mt-1"
+            />
+          </div>
+          <div className="flex flex-col text-xs font-semibold text-text-light">
+            <MultiSelect
+              label={isAr ? "النوع" : "Gender"}
+              placeholder={isAr ? "اختر النوع" : "Select gender"}
+              options={genderOptions}
+              value={f.genders}
+              onChange={(next) => setF((p) => ({ ...p, genders: next }))}
+              isRtl={isAr}
+              searchable
+              maxVisibleChips={2}
+              selectAllLabel={isAr ? "الكل" : "All"}
+              clearLabel={isAr ? "مسح التحديد" : "Clear selection"}
+              className="mt-1"
+            />
+          </div>
+          <div className="flex flex-col text-xs font-semibold text-text-light">
+            <MultiSelect
+              label={isAr ? "فصول موهبة" : "Mawhiba classes"}
+              placeholder={isAr ? "اختر فئة موهبة" : "Select Mawhiba filter"}
+              options={mawhibaOptions}
+              value={f.mawhibaValues}
+              onChange={(next) => setF((p) => ({ ...p, mawhibaValues: next }))}
+              isRtl={isAr}
+              searchable
+              maxVisibleChips={2}
+              selectAllLabel={isAr ? "الكل" : "All"}
+              clearLabel={isAr ? "مسح التحديد" : "Clear selection"}
+              className="mt-1"
+            />
+          </div>
+          <div className="flex flex-col text-xs font-semibold text-text-light">
+            <MultiSelect
+              label={isAr ? "المرحلة" : "Stage"}
+              placeholder={isAr ? "اختر المرحلة" : "Select stage"}
+              options={stageOptions}
+              value={f.stages}
+              onChange={(next) => setF((p) => ({ ...p, stages: next }))}
+              isRtl={isAr}
+              searchable
+              maxVisibleChips={2}
+              selectAllLabel={isAr ? "الكل" : "All"}
+              clearLabel={isAr ? "مسح التحديد" : "Clear selection"}
+              className="mt-1"
+            />
+          </div>
+          <div className="flex flex-col text-xs font-semibold text-text-light">
+            <MultiSelect
+              label={isAr ? "الصف" : "Grade"}
+              placeholder={isAr ? "اختر الصف" : "Select grade"}
+              options={gradeOptions}
+              value={f.grades}
+              onChange={(next) => setF((p) => ({ ...p, grades: next }))}
+              isRtl={isAr}
+              searchable
+              maxVisibleChips={2}
+              selectAllLabel={isAr ? "الكل" : "All"}
+              clearLabel={isAr ? "مسح التحديد" : "Clear selection"}
+              className="mt-1"
+            />
+          </div>
           <div className="flex flex-col text-xs font-semibold text-text-light">
             <MultiSelect
               label={isAr ? "تصنيف الإنجاز" : "Achievement category"}
@@ -425,6 +420,7 @@ const AdminAchievementReportsPage = () => {
               value={f.categories}
               onChange={(next) => setF((p) => ({ ...p, categories: next }))}
               isRtl={isAr}
+              searchable
               maxVisibleChips={2}
               selectAllLabel={isAr ? "الكل" : "All"}
               clearLabel={isAr ? "مسح التحديد" : "Clear selection"}
@@ -434,8 +430,8 @@ const AdminAchievementReportsPage = () => {
           <div className="flex flex-col text-xs font-semibold text-text-light">
             <CanonicalActivityCombobox
               label={isAr ? "اسم الإنجاز" : "Achievement name"}
-              value={f.achievementName}
-              onChange={(canonicalKey) => setF((p) => ({ ...p, achievementName: canonicalKey }))}
+              value={f.achievementNames}
+              onChange={(names) => setF((p) => ({ ...p, achievementNames: names }))}
               fetchParams={activityFetchParams}
               isAr={isAr}
               className="mt-1"
@@ -478,6 +474,7 @@ const AdminAchievementReportsPage = () => {
               value={f.levels}
               onChange={(next) => setF((p) => ({ ...p, levels: next }))}
               isRtl={isAr}
+              searchable
               maxVisibleChips={2}
               selectAllLabel={isAr ? "الكل" : "All"}
               clearLabel={isAr ? "مسح التحديد" : "Clear selection"}
@@ -492,38 +489,58 @@ const AdminAchievementReportsPage = () => {
               value={f.resultTokens}
               onChange={(next) => setF((p) => ({ ...p, resultTokens: next }))}
               isRtl={isAr}
+              searchable
               maxVisibleChips={2}
               selectAllLabel={isAr ? "الكل" : "All"}
               clearLabel={isAr ? "مسح التحديد" : "Clear selection"}
               className="mt-1"
             />
           </div>
-          <label className="flex flex-col text-xs font-semibold text-text-light">
-            {isAr ? "حالة الإنجاز" : "Status"}
-            <select
-              value={f.status}
-              onChange={(e) => setF((p) => ({ ...p, status: e.target.value }))}
-              className="mt-1 rounded-lg border border-gray-300 px-3 py-2 text-sm text-text"
-            >
-              <option value="all">{isAr ? "الكل" : "All"}</option>
-              <option value="approved">{isAr ? "معتمد" : "Approved"}</option>
-              <option value="pending">{isAr ? "قيد المراجعة" : "Pending"}</option>
-              <option value="needs_revision">{isAr ? "يحتاج تعديل" : "Needs revision"}</option>
-              <option value="rejected">{isAr ? "مرفوض" : "Rejected"}</option>
-            </select>
-          </label>
-          <label className="flex flex-col text-xs font-semibold text-text-light">
-            {isAr ? "حالة الشهادة" : "Certificate status"}
-            <select
-              value={f.certificateStatus}
-              onChange={(e) => setF((p) => ({ ...p, certificateStatus: e.target.value }))}
-              className="mt-1 rounded-lg border border-gray-300 px-3 py-2 text-sm text-text"
-            >
-              <option value="all">{isAr ? "الكل" : "All"}</option>
-              <option value="issued">{isAr ? "صادرة" : "Issued"}</option>
-              <option value="not_issued">{isAr ? "غير صادرة" : "Not issued"}</option>
-            </select>
-          </label>
+          <div className="flex flex-col text-xs font-semibold text-text-light">
+            <MultiSelect
+              label={isAr ? "حالة الإنجاز" : "Status"}
+              placeholder={isAr ? "اختر الحالة" : "Select status"}
+              options={statusOptions}
+              value={f.statuses}
+              onChange={(next) => setF((p) => ({ ...p, statuses: next }))}
+              isRtl={isAr}
+              searchable
+              maxVisibleChips={2}
+              selectAllLabel={isAr ? "الكل" : "All"}
+              clearLabel={isAr ? "مسح التحديد" : "Clear selection"}
+              className="mt-1"
+            />
+          </div>
+          <div className="flex flex-col text-xs font-semibold text-text-light">
+            <MultiSelect
+              label={isAr ? "حالة الشهادة" : "Certificate status"}
+              placeholder={isAr ? "اختر حالة الشهادة" : "Select certificate status"}
+              options={certificateOptions}
+              value={f.certificateStatuses}
+              onChange={(next) => setF((p) => ({ ...p, certificateStatuses: next }))}
+              isRtl={isAr}
+              searchable
+              maxVisibleChips={2}
+              selectAllLabel={isAr ? "الكل" : "All"}
+              clearLabel={isAr ? "مسح التحديد" : "Clear selection"}
+              className="mt-1"
+            />
+          </div>
+          <div className="flex flex-col text-xs font-semibold text-text-light">
+            <MultiSelect
+              label={isAr ? "نوع الاختبار المعياري" : "Standardized test type"}
+              placeholder={isAr ? "اختر نوع الاختبار" : "Select test type"}
+              options={stdTestOptions}
+              value={f.standardizedTestTypes}
+              onChange={(next) => setF((p) => ({ ...p, standardizedTestTypes: next }))}
+              isRtl={isAr}
+              searchable
+              maxVisibleChips={2}
+              selectAllLabel={isAr ? "الكل" : "All"}
+              clearLabel={isAr ? "مسح التحديد" : "Clear selection"}
+              className="mt-1"
+            />
+          </div>
           <label className="flex flex-col text-xs font-semibold text-text-light">
             {isAr ? "من تاريخ" : "From date"}
             <input
@@ -610,6 +627,56 @@ const AdminAchievementReportsPage = () => {
                       {t.above7 != null ? (
                         <p className="text-text-light">IELTS ≥ 7: {String(t.above7)}</p>
                       ) : null}
+                    </div>
+                  ))}
+                </div>
+              </section>
+            ) : null}
+
+            {Array.isArray(stats?.yearOverYearByActivity) &&
+            (stats.yearOverYearByActivity as Array<Record<string, unknown>>).length > 0 ? (
+              <section className="rounded-2xl border border-gray-200 bg-white p-4">
+                <h3 className="mb-3 text-sm font-bold text-text">
+                  {isAr ? "تحليل سنوي للأنشطة (Year-over-Year)" : "Year-over-year activity trends"}
+                </h3>
+                <div className="grid gap-2 lg:grid-cols-2">
+                  {(stats.yearOverYearByActivity as Array<Record<string, unknown>>)
+                    .slice(0, 8)
+                    .map((item, i) => (
+                      <div key={i} className="rounded-lg border border-gray-100 bg-gray-50/70 p-3 text-xs">
+                        <p className="font-bold text-text">
+                          {String(isAr ? item.labelAr : item.labelEn || item.labelAr)}
+                        </p>
+                        <p className="mt-1 text-text-light">
+                          {(item.years as Array<{ year: number; rowsCount: number }> | undefined)
+                            ?.map((y) => `${y.year}: ${y.rowsCount}`)
+                            .join(" · ") || "—"}
+                        </p>
+                        {item.growthPct != null ? (
+                          <p className="mt-1 font-semibold text-primary">
+                            {isAr ? "النمو" : "Growth"}: {String(item.growthPct)}%
+                          </p>
+                        ) : null}
+                      </div>
+                    ))}
+                </div>
+              </section>
+            ) : null}
+
+            {Array.isArray(stats?.byActivityYear) &&
+            (stats.byActivityYear as Array<Record<string, unknown>>).length > 0 ? (
+              <section className="rounded-2xl border border-emerald-200 bg-emerald-50/30 p-4">
+                <h3 className="mb-3 text-sm font-bold text-text">
+                  {isAr ? "توزيع حسب سنة النشاط" : "Distribution by activity year"}
+                </h3>
+                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                  {(stats.byActivityYear as Array<Record<string, unknown>>).map((y, i) => (
+                    <div key={i} className="rounded-lg border border-emerald-100 bg-white p-3 text-xs">
+                      <p className="font-bold text-text">{String(y.labelAr || y.year)}</p>
+                      <p className="mt-1 text-text-light">
+                        {isAr ? "سجلات" : "Rows"}: {String(y.rowsCount ?? 0)} · {isAr ? "طلاب" : "Students"}:{" "}
+                        {String(y.studentCount ?? 0)}
+                      </p>
                     </div>
                   ))}
                 </div>

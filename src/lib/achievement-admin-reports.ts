@@ -37,8 +37,13 @@ import {
   resolveCanonicalActivity,
   normalizeAchievementActivityName,
 } from "@/lib/analytics/activity-name-normalizer";
-import { resolveActivityYear } from "@/lib/analytics/activity-year";
+import {
+  extractActivityYearFromAchievement,
+  dedupeActivityYears,
+  buildActivityYearLabel,
+} from "@/lib/analytics/activity-year-resolver";
 import { resolveAchievementResultDisplay } from "@/lib/standardized-tests/resolve-achievement-result-display";
+import { resolveAchievementOutcome } from "@/lib/analytics/achievement-outcome-resolver";
 import {
   resolveStandardizedComparableScore,
   resolveStandardizedTestType,
@@ -47,6 +52,10 @@ import {
   ACTIVITY_REGISTRY_GROUP_LABELS,
   type ActivityRegistryCategory,
 } from "@/constants/achievement-competition-registry";
+import {
+  buildMultiFilterMongoQuery,
+  resolveReportMultiFilters,
+} from "@/lib/analytics/multi-filter-utils";
 
 const safeStr = (v: unknown) => String(v ?? "").trim();
 
@@ -415,6 +424,19 @@ export type AdminReportFilters = {
   resultTokens?: string[];
   status?: string;
   certificateStatus?: string;
+  /** Filter by resolved activity year (e.g. 2025). Omit or "all" = no filter. */
+  filterActivityYear?: number | string;
+  /** Multi activity years (CSV: activityYears=2025,2026). */
+  activityYears?: (number | string)[];
+  /** Multi canonical activity keys (CSV: achievementNames=bebras,kangaroo). */
+  achievementNames?: string[];
+  stages?: string[];
+  grades?: string[];
+  genders?: string[];
+  mawhibaValues?: string[];
+  statuses?: string[];
+  certificateStatuses?: string[];
+  standardizedTestTypes?: string[];
   fromDate?: string;
   toDate?: string;
 };
@@ -467,6 +489,9 @@ export type AdminReportRow = {
   analyticsActivityDisplayAr: string;
   analyticsActivityDisplayEn: string;
   activityYear: number | null;
+  activityYearLabelAr: string;
+  activityYearLabelEn: string;
+  activityYearSource: string | null;
   standardizedTestType: string | null;
   standardizedScoreComparable: number | null;
   standardizedScoreLabel: string;
@@ -476,6 +501,10 @@ export type AdminReportRow = {
   participationLabelEn: string;
   resultLabelAr: string;
   resultLabelEn: string;
+  /** Structured outcome key for analytics bucketing (medal:gold, rank:first, …) */
+  outcomeKey: string;
+  medalType: string | null;
+  rank: string | null;
   year: number | null;
   dateIso: string | null;
   dateLabelAr: string;
@@ -515,7 +544,9 @@ export const buildUnifiedAdminAchievementReports = async (
     query.achievementLevel = { $in: levels };
   }
 
-  if (filters.status && filters.status !== "all") query.status = filters.status;
+  const multi = resolveReportMultiFilters(filters);
+  const statusMongo = buildMultiFilterMongoQuery("status", multi.statuses);
+  if (statusMongo) Object.assign(query, statusMongo);
   // achievementName filter applied post-normalization (canonical activity key)
 
   const categoryFilter = buildReportCategoriesMongoFilter(categories);
@@ -547,7 +578,7 @@ export const buildUnifiedAdminAchievementReports = async (
 
   const achievements = (await Achievement.find(query)
     .select(
-      "userId studentSourceType studentSnapshot studentProfileKey achievementType achievementCategory achievementName customAchievementName nameAr nameEn title achievementLevel participationType resultType resultValue medalType rank score qudratScore giftedDiscoveryScore standardizedTest achievementYear date createdAt description status certificateIssued certificateIssuedAt verificationStatus pendingReReview attachments evidenceUrl"
+      "userId studentSourceType studentSnapshot studentProfileKey achievementType achievementCategory achievementName customAchievementName nameAr nameEn title achievementLevel participationType resultType resultValue medalType rank nominationText specialAwardText score qudratScore giftedDiscoveryScore standardizedTest activityYear competitionEdition achievementYear date createdAt description status certificateIssued certificateIssuedAt verificationStatus pendingReReview attachments evidenceUrl"
     )
     .sort({ createdAt: -1 })
     .lean()) as unknown as Record<string, unknown>[];
@@ -625,19 +656,29 @@ export const buildUnifiedAdminAchievementReports = async (
       achievementType: String(a.achievementType || ""),
       achievementCategory: String(a.achievementCategory || ""),
       achievementName: String(a.achievementName || ""),
+      customAchievementName: String(a.customAchievementName || ""),
+      title: String(a.title || a.nameAr || a.nameEn || ""),
       resultType: String(a.resultType || ""),
       resultValue: String(a.resultValue || ""),
+      medalType: String(a.medalType || ""),
+      rank: String(a.rank || ""),
+      nominationText: String(a.nominationText || ""),
+      specialAwardText: String(a.specialAwardText || ""),
+      description: String(a.description || ""),
       qudratScore: String(a.qudratScore || ""),
       giftedDiscoveryScore:
         typeof a.giftedDiscoveryScore === "number" ? a.giftedDiscoveryScore : undefined,
       standardizedTest: a.standardizedTest as Record<string, unknown> | undefined,
     };
-    const activityYear = resolveActivityYear({
-      achievementYear: a.achievementYear as number,
-      date: refDate,
-      createdAt: a.createdAt as Date,
+    const activityYearResolved = extractActivityYearFromAchievement(a, {
+      academicYear: filters.academicYear,
     });
+    const activityYear = activityYearResolved.year;
     const comparableScore = resolveStandardizedComparableScore(stdInput);
+    const outcome = resolveAchievementOutcome(
+      stdInput,
+      stdInput.resultType === "score" && stdInput.resultValue ? stdInput.resultValue : undefined
+    );
 
     const row: AdminReportRow = {
       id: String(a._id),
@@ -657,6 +698,9 @@ export const buildUnifiedAdminAchievementReports = async (
       analyticsActivityDisplayAr: canonical.displayNameAr,
       analyticsActivityDisplayEn: canonical.displayNameEn,
       activityYear,
+      activityYearLabelAr: activityYearResolved.activityYearLabelAr,
+      activityYearLabelEn: activityYearResolved.activityYearLabelEn,
+      activityYearSource: activityYearResolved.source,
       standardizedTestType: resolveStandardizedTestType(stdInput) || null,
       standardizedScoreComparable: comparableScore,
       standardizedScoreLabel:
@@ -667,6 +711,9 @@ export const buildUnifiedAdminAchievementReports = async (
       participationLabelEn: getParticipationTypeLabel(a.participationType, "en"),
       resultLabelAr: resolveAchievementResultDisplay(stdInput, "ar"),
       resultLabelEn: resolveAchievementResultDisplay(stdInput, "en"),
+      outcomeKey: outcome.outcomeKey,
+      medalType: outcome.medalType,
+      rank: outcome.rank,
       year: typeof a.achievementYear === "number" ? a.achievementYear : null,
       dateIso: refDate instanceof Date && !Number.isNaN(refDate.getTime()) ? refDate.toISOString() : null,
       dateLabelAr:
@@ -680,22 +727,37 @@ export const buildUnifiedAdminAchievementReports = async (
     rows.push(row);
   }
 
-  const mh = String(filters.mawhiba || "all").trim();
   let filtered = rows.filter((r) => {
-    if (filters.gender && filters.gender !== "all" && r.gender !== filters.gender) return false;
-    if (mh === "yes" && !r.isMawhibaStudent) return false;
-    if (mh === "no" && r.isMawhibaStudent) return false;
-    if (filters.stage && filters.stage !== "all" && r.stage !== filters.stage) return false;
-    if (filters.grade && filters.grade !== "all" && r.grade !== filters.grade) return false;
-    if (filters.certificateStatus && filters.certificateStatus !== "all") {
-      if (filters.certificateStatus === "issued" && !r.certificateIssued) return false;
-      if (filters.certificateStatus === "not_issued" && r.certificateIssued) return false;
+    if (multi.genders.length > 0 && !multi.genders.includes(r.gender)) return false;
+    if (multi.mawhibaValues.length > 0) {
+      const wantYes = multi.mawhibaValues.includes("yes");
+      const wantNo = multi.mawhibaValues.includes("no");
+      if (wantYes !== wantNo) {
+        if (wantYes && !r.isMawhibaStudent) return false;
+        if (wantNo && r.isMawhibaStudent) return false;
+      }
     }
-    if (filters.achievementName && filters.achievementName !== "all") {
-      const fk = String(filters.achievementName).trim();
-      if (r.analyticsActivityKey !== fk) {
-        const resolvedFilter = resolveCanonicalActivity(fk);
-        if (r.analyticsActivityKey !== resolvedFilter.canonicalKey) return false;
+    if (multi.stages.length > 0 && !multi.stages.includes(r.stage)) return false;
+    if (multi.grades.length > 0 && !multi.grades.includes(r.grade)) return false;
+    if (multi.certificateStatuses.length > 0) {
+      const wantIssued = multi.certificateStatuses.includes("issued");
+      const wantNot = multi.certificateStatuses.includes("not_issued");
+      if (wantIssued !== wantNot) {
+        if (wantIssued && !r.certificateIssued) return false;
+        if (wantNot && r.certificateIssued) return false;
+      }
+    }
+    if (multi.achievementNames.length > 0) {
+      const rowKey = r.analyticsActivityKey;
+      const matched = multi.achievementNames.some((fk) => {
+        if (rowKey === fk) return true;
+        return rowKey === resolveCanonicalActivity(fk).canonicalKey;
+      });
+      if (!matched) return false;
+    }
+    if (multi.standardizedTestTypes.length > 0) {
+      if (!r.standardizedTestType || !multi.standardizedTestTypes.includes(r.standardizedTestType)) {
+        return false;
       }
     }
     if (filters.scoreMin != null || filters.scoreMax != null) {
@@ -703,6 +765,9 @@ export const buildUnifiedAdminAchievementReports = async (
       if (sc == null) return false;
       if (filters.scoreMin != null && sc < filters.scoreMin) return false;
       if (filters.scoreMax != null && sc > filters.scoreMax) return false;
+    }
+    if (multi.activityYears.length > 0) {
+      if (r.activityYear == null || !multi.activityYears.includes(r.activityYear)) return false;
     }
     return true;
   });
@@ -791,6 +856,104 @@ export const buildUnifiedAdminAchievementReports = async (
     filtered.map((r) => ({ key: r.levelLabelAr || "غير محدد" })) as unknown as Record<string, unknown>[],
     "key"
   );
+
+  const byActivityYear = (() => {
+    const m = new Map<
+      number,
+      {
+        year: number;
+        rows: number;
+        students: Set<string>;
+        medals: number;
+        certificates: number;
+        stdScores: number[];
+      }
+    >();
+    for (const r of filtered) {
+      if (r.activityYear == null) continue;
+      const hit =
+        m.get(r.activityYear) ??
+        ({
+          year: r.activityYear,
+          rows: 0,
+          students: new Set<string>(),
+          medals: 0,
+          certificates: 0,
+          stdScores: [],
+        } as const);
+      const bucket = {
+        year: r.activityYear,
+        rows: hit.rows + 1,
+        students: new Set(hit.students),
+        medals: hit.medals,
+        certificates: hit.certificates,
+        stdScores: [...hit.stdScores],
+      };
+      bucket.students.add(r.studentId || r.id);
+      if (String(r.resultLabelAr || "").includes("ميدالية")) bucket.medals += 1;
+      if (r.certificateIssued) bucket.certificates += 1;
+      if (r.standardizedScoreComparable != null) bucket.stdScores.push(r.standardizedScoreComparable);
+      m.set(r.activityYear, bucket);
+    }
+    return [...m.values()]
+      .map((x) => ({
+        year: x.year,
+        labelAr: buildActivityYearLabel(x.year, "ar"),
+        labelEn: buildActivityYearLabel(x.year, "en"),
+        rowsCount: x.rows,
+        studentCount: x.students.size,
+        medalCount: x.medals,
+        certificateCount: x.certificates,
+        avgStdScore:
+          x.stdScores.length > 0
+            ? Math.round((x.stdScores.reduce((a, b) => a + b, 0) / x.stdScores.length) * 10) / 10
+            : null,
+      }))
+      .sort((a, b) => b.year - a.year);
+  })();
+
+  const yearOverYearByActivity = (() => {
+    const m = new Map<string, Map<number, { rows: number; students: Set<string> }>>();
+    for (const r of filtered) {
+      if (r.activityYear == null) continue;
+      const key = r.analyticsActivityKey || r.eventLabelAr;
+      const actMap = m.get(key) ?? new Map();
+      const hit = actMap.get(r.activityYear) ?? { rows: 0, students: new Set<string>() };
+      hit.rows += 1;
+      hit.students.add(r.studentId || r.id);
+      actMap.set(r.activityYear, hit);
+      m.set(key, actMap);
+    }
+    return [...m.entries()]
+      .map(([activityKey, yearMap]) => {
+        const years = [...yearMap.entries()]
+          .map(([year, v]) => ({
+            year,
+            rowsCount: v.rows,
+            studentCount: v.students.size,
+          }))
+          .sort((a, b) => a.year - b.year);
+        const first = years[0]?.rowsCount ?? 0;
+        const last = years[years.length - 1]?.rowsCount ?? 0;
+        const growthPct =
+          first > 0 ? Math.round(((last - first) / first) * 1000) / 10 : last > 0 ? 100 : 0;
+        const sample = filtered.find((r) => (r.analyticsActivityKey || r.eventLabelAr) === activityKey);
+        return {
+          activityKey,
+          labelAr: sample?.analyticsActivityDisplayAr || sample?.eventLabelAr || activityKey,
+          labelEn: sample?.analyticsActivityDisplayEn || sample?.eventLabelEn || activityKey,
+          years,
+          growthPct,
+        };
+      })
+      .filter((x) => x.years.length >= 1)
+      .sort((a, b) => {
+        const lb = b.years[b.years.length - 1]?.rowsCount ?? 0;
+        const la = a.years[a.years.length - 1]?.rowsCount ?? 0;
+        return lb - la;
+      })
+      .slice(0, 20);
+  })();
 
   const standardizedTestStats = (() => {
     const scored = filtered.filter((r) => r.standardizedScoreComparable != null);
@@ -913,6 +1076,8 @@ export const buildUnifiedAdminAchievementReports = async (
       byEventStudents,
       byResult,
       byLevel,
+      byActivityYear,
+      yearOverYearByActivity,
       standardizedTestStats,
     },
     admin: {
@@ -941,12 +1106,25 @@ export type CanonicalActivityOption = {
 export const buildCanonicalActivityOptions = async (
   filters: AdminReportFilters & { search?: string; limit?: number }
 ): Promise<CanonicalActivityOption[]> => {
-  const { search, limit = 500, achievementName: _skip, uniqueParticipantsOnly: _u, ...rest } = filters;
+  const {
+    search,
+    limit = 500,
+    achievementName: _skip,
+    achievementNames: _skipNames,
+    filterActivityYear: _skipYear,
+    activityYears: _skipYears,
+    uniqueParticipantsOnly: _u,
+    ...rest
+  } = filters;
   void _skip;
+  void _skipNames;
+  void _skipYear;
+  void _skipYears;
   void _u;
   const payload = await buildUnifiedAdminAchievementReports({
     ...rest,
     achievementName: "all",
+    achievementNames: [],
     uniqueParticipantsOnly: false,
   });
 
@@ -1017,5 +1195,69 @@ export const buildCanonicalActivityOptions = async (
     return b.rowCount - a.rowCount || a.displayNameAr.localeCompare(b.displayNameAr, "ar");
   });
 
+  return options.slice(0, limit);
+};
+
+export type ActivityYearOption = {
+  year: number;
+  labelAr: string;
+  labelEn: string;
+  rowCount: number;
+  studentCount: number;
+};
+
+/** Deduplicated activity years for report filter combobox. */
+export const buildCanonicalActivityYearOptions = async (
+  filters: AdminReportFilters & { search?: string; limit?: number }
+): Promise<ActivityYearOption[]> => {
+  const {
+    search,
+    limit = 50,
+    filterActivityYear: _skipYear,
+    activityYears: _skipYears,
+    achievementName: _skipAct,
+    achievementNames: _skipNames,
+    uniqueParticipantsOnly: _u,
+    ...rest
+  } = filters;
+  void _skipYear;
+  void _skipYears;
+  void _skipAct;
+  void _skipNames;
+  void _u;
+
+  const payload = await buildUnifiedAdminAchievementReports({
+    ...rest,
+    filterActivityYear: "all",
+    activityYears: [],
+    achievementName: "all",
+    achievementNames: [],
+    uniqueParticipantsOnly: false,
+  });
+
+  const searchNorm = String(search || "").trim();
+  const m = new Map<number, { rows: number; students: Set<string> }>();
+
+  for (const r of payload.rows) {
+    if (r.activityYear == null) continue;
+    const hit = m.get(r.activityYear) ?? { rows: 0, students: new Set<string>() };
+    hit.rows += 1;
+    hit.students.add(r.studentId || r.id);
+    m.set(r.activityYear, hit);
+  }
+
+  let options: ActivityYearOption[] = [...m.entries()].map(([year, v]) => ({
+    year,
+    labelAr: buildActivityYearLabel(year, "ar"),
+    labelEn: buildActivityYearLabel(year, "en"),
+    rowCount: v.rows,
+    studentCount: v.students.size,
+  }));
+
+  if (searchNorm) {
+    options = options.filter((o) => String(o.year).includes(searchNorm) || o.labelAr.includes(searchNorm));
+  }
+
+  options.sort((a, b) => b.year - a.year);
   return options.slice(0, limit);
 };

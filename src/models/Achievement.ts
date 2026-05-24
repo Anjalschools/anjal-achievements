@@ -166,6 +166,10 @@ export interface IAchievement extends Document {
   
   // Additional
   achievementYear: number;
+  /** Optional explicit activity year override (analytics / reports). */
+  activityYear?: number;
+  /** Optional competition edition label e.g. "2025" or "bebras-2025". */
+  competitionEdition?: string;
   evidenceUrl?: string;
   evidenceFileName?: string;
   evidenceRequiredMode?: "provided" | "skipped";
@@ -600,6 +604,15 @@ const AchievementSchema: Schema = new Schema(
       type: Number,
       required: true,
       index: true,
+    },
+    activityYear: {
+      type: Number,
+      index: true,
+      sparse: true,
+    },
+    competitionEdition: {
+      type: String,
+      trim: true,
     },
     evidenceUrl: {
       type: String,

@@ -1,4 +1,5 @@
 import { getAchievementCategoryOptions } from "@/constants/achievement-ui-categories";
+import { GRADE_OPTIONS } from "@/constants/grades";
 import {
   getAchievementLevelLabel,
   labelAchievementCategory,
@@ -103,6 +104,81 @@ export const getReportResultOptions = (loc: Loc): Array<{ value: string; label: 
     value,
     label: resultTokenLabel(value, loc),
   }));
+
+/** Standardized test type filter options (reports analytics). */
+export const STANDARDIZED_TEST_TYPE_VALUES = [
+  "qudrat",
+  "tahsili",
+  "sat",
+  "ielts",
+  "toefl",
+  "step",
+  "act",
+  "mawhiba",
+  "mawhiba_annual",
+  "gifted_discovery",
+  "gifted_screening",
+  "qiyas",
+  "language_test",
+  "other",
+] as const;
+
+const standardizedTestTypeLabel = (v: string, loc: Loc): string => {
+  const map: Record<string, { ar: string; en: string }> = {
+    qudrat: { ar: "قدرات", en: "Qudrat" },
+    tahsili: { ar: "تحصيلي", en: "Tahsili" },
+    sat: { ar: "SAT", en: "SAT" },
+    ielts: { ar: "IELTS", en: "IELTS" },
+    toefl: { ar: "TOEFL", en: "TOEFL" },
+    step: { ar: "STEP", en: "STEP" },
+    act: { ar: "ACT", en: "ACT" },
+    mawhiba: { ar: "موهبة", en: "Mawhiba" },
+    mawhiba_annual: { ar: "موهبة السنوي", en: "Mawhiba annual" },
+    gifted_discovery: { ar: "اكتشاف الموهوبين", en: "Gifted discovery" },
+    gifted_screening: { ar: "الفرز الموهوب", en: "Gifted screening" },
+    qiyas: { ar: "قياس", en: "Qiyas" },
+    language_test: { ar: "اختبار لغة", en: "Language test" },
+    other: { ar: "أخرى", en: "Other" },
+  };
+  return map[v]?.[loc] ?? v;
+};
+
+export const getStandardizedTestTypeOptions = (loc: Loc): Array<{ value: string; label: string }> =>
+  STANDARDIZED_TEST_TYPE_VALUES.map((value) => ({
+    value,
+    label: standardizedTestTypeLabel(value, loc),
+  }));
+
+export const getReportGenderOptions = (loc: Loc): Array<{ value: string; label: string }> => [
+  { value: "male", label: loc === "ar" ? "طلاب" : "Boys" },
+  { value: "female", label: loc === "ar" ? "طالبات" : "Girls" },
+];
+
+export const getReportMawhibaOptions = (loc: Loc): Array<{ value: string; label: string }> => [
+  { value: "yes", label: loc === "ar" ? "طلاب موهبة" : "Mawhiba students" },
+  { value: "no", label: loc === "ar" ? "غير موهبة" : "Non‑Mawhiba" },
+];
+
+export const getReportStageOptions = (loc: Loc): Array<{ value: string; label: string }> => [
+  { value: "primary", label: loc === "ar" ? "ابتدائي" : "Primary" },
+  { value: "middle", label: loc === "ar" ? "متوسط" : "Middle" },
+  { value: "secondary", label: loc === "ar" ? "ثانوي" : "Secondary" },
+];
+
+export const getReportGradeOptions = (loc: Loc): Array<{ value: string; label: string }> =>
+  GRADE_OPTIONS.map((g) => ({ value: g.value, label: loc === "ar" ? g.ar : g.en }));
+
+export const getReportStatusOptions = (loc: Loc): Array<{ value: string; label: string }> => [
+  { value: "approved", label: loc === "ar" ? "معتمد" : "Approved" },
+  { value: "pending", label: loc === "ar" ? "قيد المراجعة" : "Pending" },
+  { value: "needs_revision", label: loc === "ar" ? "يحتاج تعديل" : "Needs revision" },
+  { value: "rejected", label: loc === "ar" ? "مرفوض" : "Rejected" },
+];
+
+export const getReportCertificateStatusOptions = (loc: Loc): Array<{ value: string; label: string }> => [
+  { value: "issued", label: loc === "ar" ? "صادرة" : "Issued" },
+  { value: "not_issued", label: loc === "ar" ? "غير صادرة" : "Not issued" },
+];
 
 /** Map one result token to a Mongo sub-document condition (AND within token). */
 /** Comma-separated list from query string; empty / "all" => no filter (الكل). */

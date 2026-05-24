@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAchievementReviewer } from "@/lib/review-auth";
 import { roleHasCapability } from "@/lib/app-role-scope-matrix";
-import { buildCanonicalActivityOptions } from "@/lib/achievement-admin-reports";
+import { buildCanonicalActivityYearOptions } from "@/lib/achievement-admin-reports";
 import { parseAdminReportFiltersFromSearchParams } from "@/lib/analytics/report-filter-params";
 import { jsonInternalServerError } from "@/lib/api-safe-response";
 
@@ -17,14 +17,14 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   try {
     const base = parseAdminReportFiltersFromSearchParams(searchParams);
-    const options = await buildCanonicalActivityOptions({
+    const options = await buildCanonicalActivityYearOptions({
       ...base,
       search: String(searchParams.get("q") || "").trim() || undefined,
-      limit: Math.min(500, Math.max(1, Number(searchParams.get("limit") || 200) || 200)),
+      limit: Math.min(50, Math.max(1, Number(searchParams.get("limit") || 30) || 30)),
     });
     return NextResponse.json({ ok: true, options });
   } catch (e) {
-    console.error("[GET admin achievements reports activity-options]", e);
+    console.error("[GET admin achievements reports activity-years]", e);
     return jsonInternalServerError(e);
   }
 }

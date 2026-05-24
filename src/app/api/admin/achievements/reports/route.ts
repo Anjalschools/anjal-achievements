@@ -9,7 +9,7 @@ import {
   buildStudentAchievementReportStats,
   buildUrgentReviewQueueStats,
 } from "@/lib/achievement-admin-reports";
-import { parseReportCsvParam } from "@/lib/report-filter-options";
+import { parseAdminReportFiltersFromSearchParams } from "@/lib/analytics/report-filter-params";
 import { jsonInternalServerError } from "@/lib/api-safe-response";
 
 export const dynamic = "force-dynamic";
@@ -27,34 +27,9 @@ export async function GET(request: NextRequest) {
 
   try {
     if (unified) {
-      const payload = await buildUnifiedAdminAchievementReports({
-        academicYear: String(searchParams.get("academicYear") || "").trim() || undefined,
-        gender: String(searchParams.get("gender") || "").trim() || undefined,
-        mawhiba: String(searchParams.get("mawhiba") || "").trim() || undefined,
-        stage: String(searchParams.get("stage") || "").trim() || undefined,
-        grade: String(searchParams.get("grade") || "").trim() || undefined,
-        categories: parseReportCsvParam(searchParams.get("category")),
-        achievementName: String(searchParams.get("achievementName") || "").trim() || undefined,
-        levels: parseReportCsvParam(searchParams.get("level")),
-        resultTokens: parseReportCsvParam(searchParams.get("result")),
-        status: String(searchParams.get("status") || "").trim() || undefined,
-        certificateStatus: String(searchParams.get("certificateStatus") || "").trim() || undefined,
-        fromDate: String(searchParams.get("fromDate") || "").trim() || undefined,
-        toDate: String(searchParams.get("toDate") || "").trim() || undefined,
-        uniqueParticipantsOnly: searchParams.get("uniqueParticipantsOnly") === "1",
-        scoreMin: (() => {
-          const v = searchParams.get("scoreMin");
-          if (!v) return undefined;
-          const n = Number(v);
-          return Number.isFinite(n) ? n : undefined;
-        })(),
-        scoreMax: (() => {
-          const v = searchParams.get("scoreMax");
-          if (!v) return undefined;
-          const n = Number(v);
-          return Number.isFinite(n) ? n : undefined;
-        })(),
-      });
+      const payload = await buildUnifiedAdminAchievementReports(
+        parseAdminReportFiltersFromSearchParams(searchParams)
+      );
       return NextResponse.json({ ok: true, ...payload });
     }
 

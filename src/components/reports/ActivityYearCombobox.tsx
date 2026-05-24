@@ -4,20 +4,17 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react"
 import { Check, ChevronDown, Loader2, Search, X } from "lucide-react";
 import { toggleMultiFilterValue } from "@/lib/analytics/multi-filter-utils";
 
-export type CanonicalActivityOption = {
-  canonicalKey: string;
-  displayNameAr: string;
-  displayNameEn: string;
-  category: string;
-  groupLabelAr: string;
-  groupLabelEn: string;
+export type ActivityYearOption = {
+  year: number;
+  labelAr: string;
+  labelEn: string;
   rowCount: number;
   studentCount: number;
 };
 
-export type CanonicalActivityComboboxProps = {
+export type ActivityYearComboboxProps = {
   value: string[];
-  onChange: (canonicalKeys: string[]) => void;
+  onChange: (years: string[]) => void;
   fetchParams: Record<string, string>;
   isAr: boolean;
   label?: string;
@@ -26,9 +23,7 @@ export type CanonicalActivityComboboxProps = {
   maxVisibleChips?: number;
 };
 
-const VIRTUAL_WINDOW = 80;
-
-const CanonicalActivityCombobox = ({
+const ActivityYearCombobox = ({
   value,
   onChange,
   fetchParams,
@@ -37,20 +32,19 @@ const CanonicalActivityCombobox = ({
   disabled = false,
   className = "",
   maxVisibleChips = 2,
-}: CanonicalActivityComboboxProps) => {
+}: ActivityYearComboboxProps) => {
   const id = useId();
   const rootRef = useRef<HTMLDivElement>(null);
-  const listRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
-  const [options, setOptions] = useState<CanonicalActivityOption[]>([]);
+  const [options, setOptions] = useState<ActivityYearOption[]>([]);
   const [loading, setLoading] = useState(false);
   const [highlightIndex, setHighlightIndex] = useState(0);
-  const cacheRef = useRef<Map<string, CanonicalActivityOption[]>>(new Map());
+  const cacheRef = useRef<Map<string, ActivityYearOption[]>>(new Map());
 
   useEffect(() => {
-    const t = window.setTimeout(() => setDebouncedQuery(query.trim()), 250);
+    const t = window.setTimeout(() => setDebouncedQuery(query.trim()), 200);
     return () => window.clearTimeout(t);
   }, [query]);
 
@@ -68,20 +62,13 @@ const CanonicalActivityCombobox = ({
     try {
       const params = new URLSearchParams(fetchParams);
       if (debouncedQuery) params.set("q", debouncedQuery);
-      params.set("limit", "300");
       const res = await fetch(
-        `/api/admin/achievements/reports/activity-options?${params.toString()}`,
+        `/api/admin/achievements/reports/activity-years?${params.toString()}`,
         { cache: "no-store" }
       );
-      const j = (await res.json().catch(() => ({}))) as {
-        options?: CanonicalActivityOption[];
-      };
+      const j = (await res.json().catch(() => ({}))) as { options?: ActivityYearOption[] };
       const list = Array.isArray(j.options) ? j.options : [];
       cacheRef.current.set(cacheKey, list);
-      if (cacheRef.current.size > 40) {
-        const first = cacheRef.current.keys().next().value;
-        if (first) cacheRef.current.delete(first);
-      }
       setOptions(list);
     } catch {
       setOptions([]);
@@ -108,42 +95,29 @@ const CanonicalActivityCombobox = ({
     return () => document.removeEventListener("mousedown", onDoc);
   }, []);
 
-  const labelByKey = useMemo(() => {
+  const labelByYear = useMemo(() => {
     const m = new Map<string, string>();
     for (const o of options) {
-      m.set(o.canonicalKey, isAr ? o.displayNameAr : o.displayNameEn);
+      m.set(String(o.year), isAr ? o.labelAr : o.labelEn);
     }
-    for (const k of value) {
-      if (!m.has(k)) m.set(k, k.replace(/_/g, " "));
+    for (const y of value) {
+      if (!m.has(y)) m.set(y, isAr ? `${y}م` : y);
     }
     return m;
   }, [options, value, isAr]);
 
-  const grouped = useMemo(() => {
-    const m = new Map<string, CanonicalActivityOption[]>();
-    for (const o of options) {
-      const g = isAr ? o.groupLabelAr : o.groupLabelEn;
-      const arr = m.get(g) || [];
-      arr.push(o);
-      m.set(g, arr);
-    }
-    return [...m.entries()].sort(([a], [b]) => a.localeCompare(b, isAr ? "ar" : "en"));
-  }, [options, isAr]);
+  const filtered = useMemo(() => {
+    if (!debouncedQuery) return options;
+    return options.filter((o) => String(o.year).includes(debouncedQuery));
+  }, [options, debouncedQuery]);
 
-  const flatOptions = useMemo(() => grouped.flatMap(([, items]) => items), [grouped]);
-
-  const visibleSlice = useMemo(() => {
-    const start = Math.max(0, highlightIndex - Math.floor(VIRTUAL_WINDOW / 2));
-    return flatOptions.slice(start, start + VIRTUAL_WINDOW);
-  }, [flatOptions, highlightIndex]);
-
-  const handleToggle = (key: string) => {
-    onChange(toggleMultiFilterValue(value, key));
+  const handleToggle = (year: string) => {
+    onChange(toggleMultiFilterValue(value, year));
   };
 
-  const handleRemoveChip = (e: React.MouseEvent, key: string) => {
+  const handleRemoveChip = (e: React.MouseEvent, year: string) => {
     e.stopPropagation();
-    onChange(value.filter((x) => x !== key));
+    onChange(value.filter((x) => x !== year));
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -160,36 +134,30 @@ const CanonicalActivityCombobox = ({
     }
     if (e.key === "ArrowDown") {
       e.preventDefault();
-      setHighlightIndex((i) => Math.min(i + 1, flatOptions.length - 1));
+      setHighlightIndex((i) => Math.min(i + 1, filtered.length - 1));
     }
     if (e.key === "ArrowUp") {
       e.preventDefault();
       setHighlightIndex((i) => Math.max(i - 1, 0));
     }
-    if (e.key === "Enter" && flatOptions[highlightIndex]) {
+    if (e.key === "Enter" && filtered[highlightIndex]) {
       e.preventDefault();
-      handleToggle(flatOptions[highlightIndex].canonicalKey);
+      handleToggle(String(filtered[highlightIndex].year));
     }
   };
 
-  useEffect(() => {
-    if (!open || !listRef.current) return;
-    const el = listRef.current.querySelector('[data-active="true"]');
-    el?.scrollIntoView({ block: "nearest" });
-  }, [highlightIndex, open]);
-
-  const renderChip = (key: string, idx: number) => {
-    const text = labelByKey.get(key) || key;
+  const renderChip = (year: string, idx: number) => {
+    const text = labelByYear.get(year) || year;
     return (
       <span
         key={idx}
-        className="inline-flex max-w-[140px] items-center gap-0.5 rounded-lg bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary"
+        className="inline-flex max-w-[120px] items-center gap-0.5 rounded-lg bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary"
       >
         <span className="truncate">{text}</span>
         <button
           type="button"
           aria-label={isAr ? `إزالة ${text}` : `Remove ${text}`}
-          onClick={(e) => handleRemoveChip(e, key)}
+          onClick={(e) => handleRemoveChip(e, year)}
           className="shrink-0 rounded p-0.5 hover:bg-primary/20"
         >
           <X className="h-3 w-3" aria-hidden />
@@ -218,12 +186,12 @@ const CanonicalActivityCombobox = ({
       >
         <span className="min-w-0 flex-1">
           {value.length === 0 ? (
-            <span className="text-text-light">{isAr ? "اختر نشاطًا" : "Select activity"}</span>
+            <span className="text-text-light">{isAr ? "اختر سنة" : "Select year"}</span>
           ) : value.length <= maxVisibleChips ? (
-            <span className="flex flex-wrap gap-1">{value.map((k, i) => renderChip(k, i))}</span>
+            <span className="flex flex-wrap gap-1">{value.map((y, i) => renderChip(y, i))}</span>
           ) : (
             <span className="flex flex-wrap items-center gap-1">
-              {value.slice(0, maxVisibleChips).map((k, i) => renderChip(k, i))}
+              {value.slice(0, maxVisibleChips).map((y, i) => renderChip(y, i))}
               <span className="rounded-lg bg-gray-100 px-2 py-0.5 text-xs font-bold text-text">
                 +{value.length - maxVisibleChips}
               </span>
@@ -248,19 +216,14 @@ const CanonicalActivityCombobox = ({
                 setHighlightIndex(0);
               }}
               onKeyDown={handleKeyDown}
-              placeholder={isAr ? "ابحث عن نشاط..." : "Search activity..."}
+              placeholder={isAr ? "ابحث عن سنة..." : "Search year..."}
               aria-label={isAr ? "بحث" : "Search"}
-              className="min-w-0 flex-1 border-0 bg-transparent text-sm text-text outline-none placeholder:text-text-light"
+              className="min-w-0 flex-1 border-0 bg-transparent text-sm outline-none"
               autoFocus
             />
             {loading ? <Loader2 className="h-4 w-4 animate-spin text-primary" aria-hidden /> : null}
           </div>
-          <div
-            ref={listRef}
-            role="listbox"
-            aria-multiselectable
-            className="max-h-72 overflow-auto py-1"
-          >
+          <div role="listbox" aria-multiselectable className="max-h-60 overflow-auto py-1">
             <button
               type="button"
               role="option"
@@ -284,59 +247,46 @@ const CanonicalActivityCombobox = ({
               </button>
             ) : null}
             <div className="border-t border-gray-100" />
-            {flatOptions.length === 0 && !loading ? (
+            {filtered.length === 0 && !loading ? (
               <p className="px-3 py-4 text-center text-xs text-text-light">
-                {isAr ? "لا توجد أنشطة مطابقة." : "No matching activities."}
+                {isAr ? "لا توجد سنوات مطابقة." : "No matching years."}
               </p>
             ) : (
-              grouped.map(([groupLabel, items]) => {
-                const visibleKeys = new Set(visibleSlice.map((x) => x.canonicalKey));
-                const groupItems = items.filter((x) => visibleKeys.has(x.canonicalKey));
-                if (groupItems.length === 0 && debouncedQuery) return null;
+              filtered.map((opt, idx) => {
+                const key = String(opt.year);
+                const checked = selectedSet.has(key);
+                const active = idx === highlightIndex;
                 return (
-                  <div key={groupLabel}>
-                    <p className="sticky top-0 z-[1] bg-gray-50 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wide text-text-light">
-                      {groupLabel}
-                    </p>
-                    {(debouncedQuery ? items : groupItems).map((opt) => {
-                      const flatIdx = flatOptions.findIndex((x) => x.canonicalKey === opt.canonicalKey);
-                      const checked = selectedSet.has(opt.canonicalKey);
-                      const active = flatIdx === highlightIndex;
-                      return (
-                        <button
-                          key={opt.canonicalKey}
-                          id={`activity-opt-${opt.canonicalKey}`}
-                          type="button"
-                          role="option"
-                          aria-selected={checked}
-                          data-active={active ? "true" : undefined}
-                          onMouseEnter={() => setHighlightIndex(flatIdx)}
-                          onClick={() => handleToggle(opt.canonicalKey)}
-                          className={`flex w-full items-start gap-2 px-3 py-2 text-start text-sm hover:bg-gray-50 ${
-                            active ? "bg-primary/5" : ""
-                          }`}
-                        >
-                          <span
-                            className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
-                              checked ? "border-primary bg-primary text-white" : "border-gray-300"
-                            }`}
-                          >
-                            {checked ? <Check className="h-3 w-3" aria-hidden /> : null}
-                          </span>
-                          <span className="min-w-0 flex-1">
-                            <span className="block font-medium text-text">
-                              {isAr ? opt.displayNameAr : opt.displayNameEn}
-                            </span>
-                            <span className="mt-0.5 block text-[10px] text-text-light">
-                              {isAr
-                                ? `${opt.studentCount} طالب · ${opt.rowCount} سجل`
-                                : `${opt.studentCount} students · ${opt.rowCount} records`}
-                            </span>
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
+                  <button
+                    key={key}
+                    type="button"
+                    role="option"
+                    aria-selected={checked}
+                    data-active={active ? "true" : undefined}
+                    onMouseEnter={() => setHighlightIndex(idx)}
+                    onClick={() => handleToggle(key)}
+                    className={`flex w-full items-start gap-2 px-3 py-2 text-start text-sm hover:bg-gray-50 ${
+                      active ? "bg-primary/5" : ""
+                    }`}
+                  >
+                    <span
+                      className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
+                        checked ? "border-primary bg-primary text-white" : "border-gray-300"
+                      }`}
+                    >
+                      {checked ? <Check className="h-3 w-3" aria-hidden /> : null}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block font-medium text-text">
+                        {isAr ? opt.labelAr : opt.labelEn}
+                      </span>
+                      <span className="mt-0.5 block text-[10px] text-text-light">
+                        {isAr
+                          ? `${opt.studentCount} طالب · ${opt.rowCount} سجل`
+                          : `${opt.studentCount} students · ${opt.rowCount} records`}
+                      </span>
+                    </span>
+                  </button>
                 );
               })
             )}
@@ -347,4 +297,4 @@ const CanonicalActivityCombobox = ({
   );
 };
 
-export default CanonicalActivityCombobox;
+export default ActivityYearCombobox;
