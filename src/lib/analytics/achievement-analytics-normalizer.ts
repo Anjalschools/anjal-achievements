@@ -5,6 +5,12 @@
 
 import { resolveStoredAchievementReportCategory } from "@/lib/achievement-report-category";
 import { REPORT_CATEGORY_VALUES } from "@/lib/report-filter-options";
+import { resolveCanonicalActivity } from "@/lib/analytics/activity-name-normalizer";
+import { resolveActivityYear } from "@/lib/analytics/activity-year";
+import {
+  resolveStandardizedComparableScore,
+  resolveStandardizedTestType,
+} from "@/lib/standardized-tests/standardized-test-rules";
 
 export const ANALYTICS_COUNT_TOLERANCE_RATIO = 0.01;
 export const ANALYTICS_COUNT_TOLERANCE_ABSOLUTE = 1;
@@ -33,10 +39,17 @@ export type AnalyticsAchievementRecord = {
   achievementCategory?: string;
   achievementName?: string;
   customAchievementName?: string;
+  resultType?: string;
+  resultValue?: string;
+  qudratScore?: string;
+  giftedDiscoveryScore?: number;
+  standardizedTest?: Record<string, unknown>;
+  achievementYear?: number;
+  date?: string | Date;
+  createdAt?: string | Date;
   description?: string;
   achievementLevel?: string;
   level?: string;
-  resultType?: string;
   medalType?: string;
   rank?: string;
   userId?: string;
@@ -50,6 +63,12 @@ export type NormalizedAnalyticsRecord = {
   analyticsLevel: string;
   resultToken: string;
   activityRawKey: string;
+  analyticsActivityKey: string;
+  analyticsActivityDisplayAr: string;
+  analyticsActivityDisplayEn: string;
+  standardizedTestType: string | null;
+  standardizedComparableScore: number | null;
+  activityYear: number | null;
 };
 
 export const ciRoundCount = (n: number): number => Math.round(Number(n) || 0);
@@ -118,14 +137,35 @@ export const normalizeAchievementAnalyticsRecord = (
   if (!id) return null;
   const dbType = String(raw.achievementType || "").trim() || "other";
   const category = resolveAnalyticsCategory(raw);
-  const name = String(raw.achievementName || raw.customAchievementName || "").trim();
+  const rawName = String(raw.achievementName || raw.customAchievementName || "").trim();
+  const canonical = resolveCanonicalActivity(raw);
+  const stdInput = {
+    achievementType: raw.achievementType,
+    achievementCategory: raw.achievementCategory,
+    achievementName: raw.achievementName,
+    resultType: raw.resultType,
+    resultValue: raw.resultValue,
+    qudratScore: raw.qudratScore,
+    giftedDiscoveryScore: raw.giftedDiscoveryScore,
+    standardizedTest: raw.standardizedTest,
+  };
   return {
     id,
     analyticsCategory: category,
     dbAchievementType: dbType,
     analyticsLevel: resolveAnalyticsLevel(raw),
     resultToken: resolveAnalyticsResult(raw),
-    activityRawKey: name || dbType,
+    activityRawKey: rawName || dbType,
+    analyticsActivityKey: canonical.canonicalKey,
+    analyticsActivityDisplayAr: canonical.displayNameAr,
+    analyticsActivityDisplayEn: canonical.displayNameEn,
+    standardizedTestType: resolveStandardizedTestType(stdInput),
+    standardizedComparableScore: resolveStandardizedComparableScore(stdInput),
+    activityYear: resolveActivityYear({
+      achievementYear: raw.achievementYear as number | undefined,
+      date: raw.date as string | undefined,
+      createdAt: raw.createdAt as string | undefined,
+    }),
   };
 };
 
@@ -138,7 +178,7 @@ export const normalizeAnalyticsDataset = (
   rows.forEach((row, i) => {
     const n = normalizeAchievementAnalyticsRecord(row, i);
     if (!n) return;
-    const dedupeKey = `${n.id}\u001f${n.analyticsCategory}\u001f${n.activityRawKey}\u001f${n.resultToken}`;
+    const dedupeKey = `${n.id}\u001f${n.analyticsCategory}\u001f${n.analyticsActivityKey}\u001f${n.resultToken}`;
     if (seen.has(dedupeKey)) return;
     seen.add(dedupeKey);
     out.push(n);

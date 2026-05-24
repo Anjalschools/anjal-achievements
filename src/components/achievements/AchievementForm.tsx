@@ -58,6 +58,11 @@ import {
   labelInferredField,
   labelVerificationStatus,
 } from "@/lib/achievementDisplay";
+import StandardizedTestScoreField from "@/components/achievements/StandardizedTestScoreField";
+import {
+  normalizeStandardizedTestScore,
+  type StandardizedTestType,
+} from "@/lib/standardized-tests/standardized-test-rules";
 import {
   clampInferredFieldToAllowlist,
 } from "@/lib/achievement-inferred-field-allowlist";
@@ -1120,10 +1125,19 @@ const AchievementForm = ({
       achievementType === "ielts" ||
       achievementType === "toefl"
     ) {
-      if (!String(formData.resultValue || "").trim()) {
+      const rv = String(formData.resultValue || "").trim();
+      if (!rv) {
         nextErrors.resultValue = isArabic
           ? "درجة الاختبار مطلوبة"
           : "Test score is required";
+      } else {
+        const testType = achievementType as StandardizedTestType;
+        const validated = normalizeStandardizedTestScore(testType, rv);
+        if (!validated.isValid) {
+          nextErrors.resultValue = isArabic
+            ? "الدرجة خارج النطاق المسموح لهذا الاختبار"
+            : "Score is outside the allowed range for this test";
+        }
       }
     }
 
@@ -1809,27 +1823,13 @@ const AchievementForm = ({
         {(achievementType === "sat" ||
           achievementType === "ielts" ||
           achievementType === "toefl") && (
-          <div>
-            <label className="mb-2 block text-sm font-semibold text-text">
-              {isArabic ? "درجة الاختبار" : "Test score"} *
-            </label>
-            <input
-              type="text"
-              inputMode="decimal"
-              value={String(formData.resultValue || "")}
-              onChange={(e) => handleChange("resultValue", e.target.value)}
-              className={`w-full rounded-xl border ${
-                errors.resultValue ? "border-red-300" : "border-gray-300"
-              } bg-white px-4 py-3 text-sm`}
-              placeholder={
-                isArabic ? "أدخل الدرجة (مثال: 1500 أو 7.5)" : "Enter score (e.g. 1500 or 7.5)"
-              }
-              aria-invalid={Boolean(errors.resultValue)}
-            />
-            {errors.resultValue && (
-              <p className="mt-1 text-xs text-red-600">{errors.resultValue}</p>
-            )}
-          </div>
+          <StandardizedTestScoreField
+            testType={achievementType as StandardizedTestType}
+            value={String(formData.resultValue || "")}
+            onChange={(v) => handleChange("resultValue", v)}
+            isAr={isArabic}
+            error={errors.resultValue}
+          />
         )}
 
         {uiCategory === UI_CATEGORY_ENTREPRENEURSHIP && achievementName && (

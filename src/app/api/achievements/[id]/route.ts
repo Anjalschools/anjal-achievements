@@ -330,6 +330,25 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
           : new Date(`${achievementYearNext}-01-01`),
     };
 
+    const { attachStandardizedTestToPayload } = await import(
+      "@/lib/standardized-tests/persist-standardized-test"
+    );
+    attachStandardizedTestToPayload(updateData, {
+      achievementType,
+      achievementCategory,
+      achievementName: finalName,
+      resultType,
+      resultValue: updateData.resultValue as string | undefined,
+      qudratScore: String(body.qudratScore || existing.qudratScore || ""),
+      giftedDiscoveryScore:
+        typeof body.giftedDiscoveryScore === "number"
+          ? body.giftedDiscoveryScore
+          : typeof existing.giftedDiscoveryScore === "number"
+            ? existing.giftedDiscoveryScore
+            : undefined,
+      standardizedTest: existing.standardizedTest as Record<string, unknown> | undefined,
+    });
+
     if (fromNeedsRevision) {
       updateData.status = "pending_review";
       updateData.workflowState = mergeResubmitWorkflowState(existingPlain.workflowState, {

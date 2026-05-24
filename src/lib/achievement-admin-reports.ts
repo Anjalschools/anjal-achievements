@@ -9,7 +9,6 @@ import User from "@/models/User";
 import { DUPLICATE_FLAG } from "@/lib/achievement-review-rules";
 import { buildAdminAchievementListFilter } from "@/lib/adminAchievementListQuery";
 import {
-  formatLocalizedResultLine,
   getAchievementDisplayName,
   getAchievementLevelLabel,
   labelAchievementCategory,
@@ -34,6 +33,20 @@ import {
   EXTENDED_REPORT_CATEGORY_SET,
   resolveStoredAchievementReportCategory,
 } from "@/lib/achievement-report-category";
+import {
+  resolveCanonicalActivity,
+  normalizeAchievementActivityName,
+} from "@/lib/analytics/activity-name-normalizer";
+import { resolveActivityYear } from "@/lib/analytics/activity-year";
+import { resolveAchievementResultDisplay } from "@/lib/standardized-tests/resolve-achievement-result-display";
+import {
+  resolveStandardizedComparableScore,
+  resolveStandardizedTestType,
+} from "@/lib/standardized-tests/standardized-test-rules";
+import {
+  ACTIVITY_REGISTRY_GROUP_LABELS,
+  type ActivityRegistryCategory,
+} from "@/constants/achievement-competition-registry";
 
 const safeStr = (v: unknown) => String(v ?? "").trim();
 
@@ -387,6 +400,11 @@ export type AdminReportFilters = {
   /** Empty array = الكل (no filter). */
   categories?: string[];
   achievementName?: string;
+  /** When true, keep one row per student + canonical activity. */
+  uniqueParticipantsOnly?: boolean;
+  /** Standardized test score range (applies to rows with comparable scores). */
+  scoreMin?: number;
+  scoreMax?: number;
   /** @deprecated prefer `levels` */
   level?: string;
   /** Empty array = الكل */
@@ -445,6 +463,13 @@ export type AdminReportRow = {
   categoryLabelEn: string;
   eventLabelAr: string;
   eventLabelEn: string;
+  analyticsActivityKey: string;
+  analyticsActivityDisplayAr: string;
+  analyticsActivityDisplayEn: string;
+  activityYear: number | null;
+  standardizedTestType: string | null;
+  standardizedScoreComparable: number | null;
+  standardizedScoreLabel: string;
   levelLabelAr: string;
   levelLabelEn: string;
   participationLabelAr: string;
@@ -491,10 +516,7 @@ export const buildUnifiedAdminAchievementReports = async (
   }
 
   if (filters.status && filters.status !== "all") query.status = filters.status;
-  if (filters.achievementName && filters.achievementName !== "all") {
-    const esc = String(filters.achievementName).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    query.achievementName = new RegExp(`^${esc}$`, "i");
-  }
+  // achievementName filter applied post-normalization (canonical activity key)
 
   const categoryFilter = buildReportCategoriesMongoFilter(categories);
   if (categoryFilter) rootAnd.push(categoryFilter);
@@ -525,7 +547,7 @@ export const buildUnifiedAdminAchievementReports = async (
 
   const achievements = (await Achievement.find(query)
     .select(
-      "userId studentSourceType studentSnapshot studentProfileKey achievementType achievementCategory achievementName customAchievementName nameAr nameEn title achievementLevel participationType resultType resultValue medalType rank score achievementYear date createdAt description status certificateIssued certificateIssuedAt verificationStatus pendingReReview attachments evidenceUrl"
+      "userId studentSourceType studentSnapshot studentProfileKey achievementType achievementCategory achievementName customAchievementName nameAr nameEn title achievementLevel participationType resultType resultValue medalType rank score qudratScore giftedDiscoveryScore standardizedTest achievementYear date createdAt description status certificateIssued certificateIssuedAt verificationStatus pendingReReview attachments evidenceUrl"
     )
     .sort({ createdAt: -1 })
     .lean()) as unknown as Record<string, unknown>[];
@@ -589,14 +611,33 @@ export const buildUnifiedAdminAchievementReports = async (
     const isMawhibaStudent = rs.isMawhibaStudent;
     const stage = getStageByGrade(grade);
     const refDate = (a.date as Date) || (a.createdAt as Date) || null;
-    const eventLabelAr = getAchievementDisplayName(a, "ar");
-    const eventLabelEn = getAchievementDisplayName(a, "en");
+    const canonical = resolveCanonicalActivity(a);
+    const eventLabelAr = canonical.displayNameAr;
+    const eventLabelEn = canonical.displayNameEn;
     const categoryKey = resolveStoredAchievementReportCategory({
       achievementType: String(a.achievementType || ""),
       achievementCategory: String(a.achievementCategory || ""),
       achievementName: String(a.achievementName || ""),
       description: String(a.description || ""),
     });
+
+    const stdInput = {
+      achievementType: String(a.achievementType || ""),
+      achievementCategory: String(a.achievementCategory || ""),
+      achievementName: String(a.achievementName || ""),
+      resultType: String(a.resultType || ""),
+      resultValue: String(a.resultValue || ""),
+      qudratScore: String(a.qudratScore || ""),
+      giftedDiscoveryScore:
+        typeof a.giftedDiscoveryScore === "number" ? a.giftedDiscoveryScore : undefined,
+      standardizedTest: a.standardizedTest as Record<string, unknown> | undefined,
+    };
+    const activityYear = resolveActivityYear({
+      achievementYear: a.achievementYear as number,
+      date: refDate,
+      createdAt: a.createdAt as Date,
+    });
+    const comparableScore = resolveStandardizedComparableScore(stdInput);
 
     const row: AdminReportRow = {
       id: String(a._id),
@@ -612,24 +653,20 @@ export const buildUnifiedAdminAchievementReports = async (
       categoryLabelEn: labelAchievementCategory(categoryKey || undefined, "en"),
       eventLabelAr,
       eventLabelEn,
+      analyticsActivityKey: canonical.canonicalKey,
+      analyticsActivityDisplayAr: canonical.displayNameAr,
+      analyticsActivityDisplayEn: canonical.displayNameEn,
+      activityYear,
+      standardizedTestType: resolveStandardizedTestType(stdInput) || null,
+      standardizedScoreComparable: comparableScore,
+      standardizedScoreLabel:
+        resolveAchievementResultDisplay(stdInput, "ar").split(" ").slice(1).join(" ") || "—",
       levelLabelAr: getAchievementLevelLabel(a.achievementLevel, "ar"),
       levelLabelEn: getAchievementLevelLabel(a.achievementLevel, "en"),
       participationLabelAr: getParticipationTypeLabel(a.participationType, "ar"),
       participationLabelEn: getParticipationTypeLabel(a.participationType, "en"),
-      resultLabelAr: formatLocalizedResultLine(
-        String(a.resultType || ""),
-        String(a.medalType || ""),
-        String(a.rank || ""),
-        "ar",
-        typeof a.score === "number" ? a.score : undefined
-      ),
-      resultLabelEn: formatLocalizedResultLine(
-        String(a.resultType || ""),
-        String(a.medalType || ""),
-        String(a.rank || ""),
-        "en",
-        typeof a.score === "number" ? a.score : undefined
-      ),
+      resultLabelAr: resolveAchievementResultDisplay(stdInput, "ar"),
+      resultLabelEn: resolveAchievementResultDisplay(stdInput, "en"),
       year: typeof a.achievementYear === "number" ? a.achievementYear : null,
       dateIso: refDate instanceof Date && !Number.isNaN(refDate.getTime()) ? refDate.toISOString() : null,
       dateLabelAr:
@@ -644,7 +681,7 @@ export const buildUnifiedAdminAchievementReports = async (
   }
 
   const mh = String(filters.mawhiba || "all").trim();
-  const filtered = rows.filter((r) => {
+  let filtered = rows.filter((r) => {
     if (filters.gender && filters.gender !== "all" && r.gender !== filters.gender) return false;
     if (mh === "yes" && !r.isMawhibaStudent) return false;
     if (mh === "no" && r.isMawhibaStudent) return false;
@@ -654,8 +691,31 @@ export const buildUnifiedAdminAchievementReports = async (
       if (filters.certificateStatus === "issued" && !r.certificateIssued) return false;
       if (filters.certificateStatus === "not_issued" && r.certificateIssued) return false;
     }
+    if (filters.achievementName && filters.achievementName !== "all") {
+      const fk = String(filters.achievementName).trim();
+      if (r.analyticsActivityKey !== fk) {
+        const resolvedFilter = resolveCanonicalActivity(fk);
+        if (r.analyticsActivityKey !== resolvedFilter.canonicalKey) return false;
+      }
+    }
+    if (filters.scoreMin != null || filters.scoreMax != null) {
+      const sc = r.standardizedScoreComparable;
+      if (sc == null) return false;
+      if (filters.scoreMin != null && sc < filters.scoreMin) return false;
+      if (filters.scoreMax != null && sc > filters.scoreMax) return false;
+    }
     return true;
   });
+
+  if (filters.uniqueParticipantsOnly) {
+    const seen = new Set<string>();
+    filtered = filtered.filter((r) => {
+      const k = `${r.studentId}\u001f${r.analyticsActivityKey}`;
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    });
+  }
 
   const byMawhiba = {
     mawhiba: filtered.filter((r) => r.isMawhibaStudent).length,
@@ -693,15 +753,19 @@ export const buildUnifiedAdminAchievementReports = async (
     "key"
   );
   const byEventStudents = (() => {
-    const m = new Map<string, { labelAr: string; labelEn: string; s: Set<string>; rows: number; cat: string }>();
+    const m = new Map<
+      string,
+      { labelAr: string; labelEn: string; s: Set<string>; rows: number; cat: string; canonicalKey: string }
+    >();
     for (const r of filtered) {
-      const key = `${r.eventLabelAr}||${r.eventLabelEn}`;
+      const key = r.analyticsActivityKey || `${r.eventLabelAr}||${r.eventLabelEn}`;
       const hit = m.get(key) || {
-        labelAr: r.eventLabelAr,
-        labelEn: r.eventLabelEn,
+        labelAr: r.analyticsActivityDisplayAr || r.eventLabelAr,
+        labelEn: r.analyticsActivityDisplayEn || r.eventLabelEn,
         s: new Set<string>(),
         rows: 0,
         cat: r.categoryLabelAr,
+        canonicalKey: r.analyticsActivityKey,
       };
       hit.rows += 1;
       hit.s.add(r.studentId || r.id);
@@ -711,6 +775,7 @@ export const buildUnifiedAdminAchievementReports = async (
       .map((x) => ({
         labelAr: x.labelAr,
         labelEn: x.labelEn,
+        canonicalKey: x.canonicalKey,
         studentCount: x.s.size,
         rowsCount: x.rows,
         categoryAr: x.cat,
@@ -726,6 +791,38 @@ export const buildUnifiedAdminAchievementReports = async (
     filtered.map((r) => ({ key: r.levelLabelAr || "غير محدد" })) as unknown as Record<string, unknown>[],
     "key"
   );
+
+  const standardizedTestStats = (() => {
+    const scored = filtered.filter((r) => r.standardizedScoreComparable != null);
+    if (scored.length === 0) return null;
+    const byType = new Map<
+      string,
+      { scores: number[]; students: Set<string>; count: number }
+    >();
+    for (const r of scored) {
+      const t = r.standardizedTestType || "other";
+      const hit = byType.get(t) || { scores: [], students: new Set<string>(), count: 0 };
+      hit.scores.push(r.standardizedScoreComparable!);
+      hit.students.add(r.studentId);
+      hit.count += 1;
+      byType.set(t, hit);
+    }
+    return [...byType.entries()].map(([testType, v]) => {
+      const sorted = [...v.scores].sort((a, b) => b - a);
+      const sum = sorted.reduce((a, b) => a + b, 0);
+      return {
+        testType,
+        count: v.count,
+        studentCount: v.students.size,
+        average: Math.round((sum / sorted.length) * 10) / 10,
+        max: sorted[0],
+        min: sorted[sorted.length - 1],
+        above95: sorted.filter((s) => s >= 95).length,
+        above1400: testType === "sat" ? sorted.filter((s) => s >= 1400).length : undefined,
+        above7: testType === "ielts" ? sorted.filter((s) => s >= 7).length : undefined,
+      };
+    });
+  })();
 
   const topStudents = (() => {
     const m = new Map<
@@ -816,6 +913,7 @@ export const buildUnifiedAdminAchievementReports = async (
       byEventStudents,
       byResult,
       byLevel,
+      standardizedTestStats,
     },
     admin: {
       topStudents,
@@ -826,4 +924,98 @@ export const buildUnifiedAdminAchievementReports = async (
     },
     filters: filtersOut,
   };
+};
+
+export type CanonicalActivityOption = {
+  canonicalKey: string;
+  displayNameAr: string;
+  displayNameEn: string;
+  category: ActivityRegistryCategory;
+  groupLabelAr: string;
+  groupLabelEn: string;
+  rowCount: number;
+  studentCount: number;
+};
+
+/** Canonical deduplicated activity list for report filter combobox. */
+export const buildCanonicalActivityOptions = async (
+  filters: AdminReportFilters & { search?: string; limit?: number }
+): Promise<CanonicalActivityOption[]> => {
+  const { search, limit = 500, achievementName: _skip, uniqueParticipantsOnly: _u, ...rest } = filters;
+  void _skip;
+  void _u;
+  const payload = await buildUnifiedAdminAchievementReports({
+    ...rest,
+    achievementName: "all",
+    uniqueParticipantsOnly: false,
+  });
+
+  const searchNorm = normalizeAchievementActivityName(search || "");
+  const m = new Map<
+    string,
+    { option: CanonicalActivityOption; students: Set<string>; rows: number }
+  >();
+
+  for (const r of payload.rows) {
+    const key = r.analyticsActivityKey;
+    if (!key) continue;
+    const canonical = resolveCanonicalActivity(key);
+    const grp =
+      ACTIVITY_REGISTRY_GROUP_LABELS[canonical.category] ??
+      ACTIVITY_REGISTRY_GROUP_LABELS.other;
+    const hit =
+      m.get(key) ??
+      ({
+        option: {
+          canonicalKey: key,
+          displayNameAr: r.analyticsActivityDisplayAr || canonical.displayNameAr,
+          displayNameEn: r.analyticsActivityDisplayEn || canonical.displayNameEn,
+          category: canonical.category,
+          groupLabelAr: grp.ar,
+          groupLabelEn: grp.en,
+          rowCount: 0,
+          studentCount: 0,
+        },
+        students: new Set<string>(),
+        rows: 0,
+      } as const);
+    const bucket = {
+      option: hit.option,
+      students: new Set(hit.students),
+      rows: hit.rows + 1,
+    };
+    bucket.students.add(r.studentId || r.id);
+    bucket.option = {
+      ...hit.option,
+      rowCount: bucket.rows,
+      studentCount: bucket.students.size,
+    };
+    m.set(key, bucket);
+  }
+
+  let options = [...m.values()].map((x) => ({
+    ...x.option,
+    rowCount: x.rows,
+    studentCount: x.students.size,
+  }));
+
+  if (searchNorm) {
+    options = options.filter((o) => {
+      const hay = [o.canonicalKey, o.displayNameAr, o.displayNameEn, o.groupLabelAr, o.groupLabelEn]
+        .map((s) => normalizeAchievementActivityName(s))
+        .join(" ");
+      return (
+        hay.includes(searchNorm) ||
+        o.canonicalKey.includes(searchNorm.replace(/\s+/g, "_"))
+      );
+    });
+  }
+
+  options.sort((a, b) => {
+    const ga = a.groupLabelAr.localeCompare(b.groupLabelAr, "ar");
+    if (ga !== 0) return ga;
+    return b.rowCount - a.rowCount || a.displayNameAr.localeCompare(b.displayNameAr, "ar");
+  });
+
+  return options.slice(0, limit);
 };

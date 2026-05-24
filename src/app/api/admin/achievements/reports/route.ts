@@ -41,6 +41,19 @@ export async function GET(request: NextRequest) {
         certificateStatus: String(searchParams.get("certificateStatus") || "").trim() || undefined,
         fromDate: String(searchParams.get("fromDate") || "").trim() || undefined,
         toDate: String(searchParams.get("toDate") || "").trim() || undefined,
+        uniqueParticipantsOnly: searchParams.get("uniqueParticipantsOnly") === "1",
+        scoreMin: (() => {
+          const v = searchParams.get("scoreMin");
+          if (!v) return undefined;
+          const n = Number(v);
+          return Number.isFinite(n) ? n : undefined;
+        })(),
+        scoreMax: (() => {
+          const v = searchParams.get("scoreMax");
+          if (!v) return undefined;
+          const n = Number(v);
+          return Number.isFinite(n) ? n : undefined;
+        })(),
       });
       return NextResponse.json({ ok: true, ...payload });
     }

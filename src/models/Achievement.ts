@@ -67,6 +67,17 @@ export interface IAchievement extends Document {
   mawhibaAnnualRank?: string;
   mawhibaAnnualSubject?: string;
   giftedDiscoveryScore?: number;
+
+  /** Structured standardized test score (optional — backward compatible). */
+  standardizedTest?: {
+    testType?: string;
+    rawScore?: number;
+    normalizedScore?: number;
+    percentile?: number;
+    bandScore?: number;
+    scoreScale?: string;
+    scoreLabel?: string;
+  };
   
   // Auto-calculated
   inferredField?: string;
@@ -416,6 +427,9 @@ const AchievementSchema: Schema = new Schema(
       type: Number,
       min: 0,
       max: 2000,
+    },
+    standardizedTest: {
+      type: Schema.Types.Mixed,
     },
     
     // Auto-calculated

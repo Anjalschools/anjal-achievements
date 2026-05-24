@@ -1,11 +1,27 @@
 import { getWorkflowStatusLabel } from "@/lib/achievement-display-labels";
 
+const TEST_TYPE_LABELS: Record<string, string> = {
+  qudrat: "القدرات",
+  tahsili: "التحصيلي",
+  sat: "SAT",
+  ielts: "IELTS",
+  toefl: "TOEFL",
+  step: "STEP",
+  act: "ACT",
+  mawhiba: "موهبة",
+  mawhiba_annual: "موهبة السنوي",
+  gifted_discovery: "الكشف عن الموهوبين",
+};
+
 type RawRow = {
   studentName: string;
   grade: string;
   stageLabelAr: string;
   categoryLabelAr: string;
   eventLabelAr: string;
+  analyticsActivityDisplayAr?: string;
+  activityYear?: number | null;
+  standardizedTestType?: string | null;
   levelLabelAr: string;
   participationLabelAr: string;
   resultLabelAr: string;
@@ -22,13 +38,14 @@ export type NormalizedReportRow = {
   stage: string;
   achievementType: string;
   achievementName: string;
+  activityYear: string;
+  testTypeLabel: string;
+  result: string;
   level: string;
   participation: string;
-  result: string;
   year: string;
   date: string;
   description: string;
-  /** Raw workflow status for styling / filters (not for end-user display). */
   statusKey: string;
   statusLabel: string;
   certificateStatusLabel: string;
@@ -53,25 +70,35 @@ export const reportLevelBadgeClass = (levelLabelAr: string): string => {
   return "bg-amber-100 text-amber-900 ring-amber-200";
 };
 
-export const normalizeAchievementReportRow = (row: RawRow): NormalizedReportRow => ({
-  studentName: row.studentName || "—",
-  grade: row.grade || "—",
-  stage: row.stageLabelAr || "غير محدد",
-  achievementType: row.categoryLabelAr || "غير محدد",
-  achievementName: row.eventLabelAr || "غير محدد",
-  level: row.levelLabelAr || "غير محدد",
-  participation: row.participationLabelAr || "غير محدد",
-  result: row.resultLabelAr || "غير محدد",
-  year: row.year != null ? String(row.year) : "—",
-  date: row.dateLabelAr || "—",
-  description: row.description || "—",
-  statusKey: String(row.status || ""),
-  statusLabel: (() => {
-    const w = getWorkflowStatusLabel(row.status, "ar");
-    return w && w !== "—" ? w : "غير محدد";
-  })(),
-  certificateStatusLabel: row.certificateIssued ? "صادرة" : "غير صادرة",
-});
+export const normalizeAchievementReportRow = (row: RawRow): NormalizedReportRow => {
+  const testKey = String(row.standardizedTestType || "").trim();
+  return {
+    studentName: row.studentName || "—",
+    grade: row.grade || "—",
+    stage: row.stageLabelAr || "غير محدد",
+    achievementType: row.categoryLabelAr || "غير محدد",
+    achievementName: row.analyticsActivityDisplayAr || row.eventLabelAr || "غير محدد",
+    activityYear:
+      row.activityYear != null
+        ? String(row.activityYear)
+        : row.year != null
+          ? String(row.year)
+          : "—",
+    testTypeLabel: testKey ? TEST_TYPE_LABELS[testKey] || testKey : "—",
+    result: row.resultLabelAr || "غير محدد",
+    level: row.levelLabelAr || "غير محدد",
+    participation: row.participationLabelAr || "غير محدد",
+    year: row.year != null ? String(row.year) : "—",
+    date: row.dateLabelAr || "—",
+    description: row.description || "—",
+    statusKey: String(row.status || ""),
+    statusLabel: (() => {
+      const w = getWorkflowStatusLabel(row.status, "ar");
+      return w && w !== "—" ? w : "غير محدد";
+    })(),
+    certificateStatusLabel: row.certificateIssued ? "صادرة" : "غير صادرة",
+  };
+};
 
 export const normalizeAchievementReportData = (rows: RawRow[]): NormalizedReportRow[] =>
   rows.map(normalizeAchievementReportRow);

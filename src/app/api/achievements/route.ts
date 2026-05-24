@@ -360,6 +360,22 @@ export async function POST(request: NextRequest) {
     if (normalized.otherResultText) achievementData.otherResultText = normalized.otherResultText;
     if (normalized.resultValue) achievementData.resultValue = normalized.resultValue;
 
+    const { attachStandardizedTestToPayload } = await import(
+      "@/lib/standardized-tests/persist-standardized-test"
+    );
+    attachStandardizedTestToPayload(achievementData, {
+      achievementType: normalized.achievementType,
+      achievementCategory: achievementData.achievementCategory as string,
+      achievementName: finalAchievementName,
+      resultType: normalized.resultType,
+      resultValue: normalized.resultValue,
+      qudratScore: typeof body.qudratScore === "string" ? body.qudratScore : undefined,
+      giftedDiscoveryScore:
+        typeof normalized.giftedDiscoveryScore === "number"
+          ? normalized.giftedDiscoveryScore
+          : undefined,
+    });
+
     // Set participation-specific fields
     if (normalized.participationType === "team" && normalized.teamRole) achievementData.teamRole = normalized.teamRole;
 

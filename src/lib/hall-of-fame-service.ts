@@ -4,9 +4,9 @@ import Achievement from "@/models/Achievement";
 import User from "@/models/User";
 import { getGradeLabel } from "@/constants/grades";
 import {
-  formatLocalizedResultLine,
   getAchievementScoreDisplay,
 } from "@/lib/achievementDisplay";
+import { resolveAchievementResultDisplay } from "@/lib/standardized-tests/resolve-achievement-result-display";
 import {
   getAchievementLevelLabel,
   getAchievementTypeLabel,
@@ -174,18 +174,23 @@ const buildHallProfilePayloadFromData = (
         const rt = String(a.resultType || "");
         const resultTypeLabel = getResultTypeLabel(rt || undefined, locale);
 
-        const scoreNum = typeof a.score === "number" ? a.score : undefined;
-        let resultLine = formatLocalizedResultLine(
-          rt,
-          String(a.medalType || ""),
-          String(a.rank || ""),
-          locale,
-          scoreNum
-        );
-        if (!resultLine || resultLine === "—") {
-          const rv = safeStr(a.resultValue);
-          resultLine = rv || (locale === "ar" ? "غير محدد" : "Not specified");
-        }
+        const resultLine =
+          resolveAchievementResultDisplay(
+            {
+              achievementType: typeKey,
+              achievementCategory: String(a.achievementCategory || ""),
+              achievementName: String(a.achievementName || ""),
+              resultType: rt,
+              resultValue: String(a.resultValue || ""),
+              medalType: String(a.medalType || ""),
+              rank: String(a.rank || ""),
+              qudratScore: String(a.qudratScore || ""),
+              giftedDiscoveryScore:
+                typeof a.giftedDiscoveryScore === "number" ? a.giftedDiscoveryScore : undefined,
+              standardizedTest: a.standardizedTest as Record<string, unknown> | undefined,
+            },
+            locale
+          ) || (locale === "ar" ? "غير محدد" : "Not specified");
 
         const levelLabel = rawLevel
           ? getAchievementLevelLabel(rawLevel, locale)

@@ -6,7 +6,6 @@ import {
 } from "@/lib/achievement-inferred-field-allowlist";
 import { getDbAchievementTypeLabel, labelAchievementSlugOrKey } from "@/lib/achievement-labels";
 import {
-  formatLocalizedResultLine,
   getDisplayLabel,
   labelAchievementCategory,
   labelAchievementClassification,
@@ -68,19 +67,25 @@ export const formatOrgLabel = (raw: Record<string, unknown>, loc: AdminLabelLoca
   return legacy ? getDisplayLabel(legacy, loc) : loc === "ar" ? "غير محدد" : "—";
 };
 
-export const formatResultLine = (raw: Record<string, unknown>, loc: AdminLabelLocale): string => {
-  const rt = String(raw.resultType || "");
-  const medal = String(raw.medalType || "");
-  const rank = String(raw.rank || "");
-  const rv = raw.resultValue;
-  const scoreVal =
-    typeof rv === "number" && !Number.isNaN(rv)
-      ? rv
-      : typeof rv === "string" && rv.trim()
-        ? rv.trim()
-        : Number(rv) || undefined;
-  return formatLocalizedResultLine(rt, medal, rank, loc, scoreVal);
-};
+import { resolveAchievementResultDisplay } from "@/lib/standardized-tests/resolve-achievement-result-display";
+
+export const formatResultLine = (raw: Record<string, unknown>, loc: AdminLabelLocale): string =>
+  resolveAchievementResultDisplay(
+    {
+      achievementType: String(raw.achievementType || ""),
+      achievementCategory: String(raw.achievementCategory || ""),
+      achievementName: String(raw.achievementName || ""),
+      resultType: String(raw.resultType || ""),
+      resultValue: String(raw.resultValue || ""),
+      medalType: String(raw.medalType || ""),
+      rank: String(raw.rank || ""),
+      qudratScore: String(raw.qudratScore || ""),
+      giftedDiscoveryScore:
+        typeof raw.giftedDiscoveryScore === "number" ? raw.giftedDiscoveryScore : undefined,
+      standardizedTest: raw.standardizedTest as Record<string, unknown> | undefined,
+    },
+    loc
+  );
 
 export const formatParticipationLabel = (v: string | undefined, loc: AdminLabelLocale): string => {
   const k = String(v || "").toLowerCase();

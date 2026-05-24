@@ -228,5 +228,19 @@ export const buildAchievementFormSubmitPayload = async (
   if (data.evidenceUrl) payload.evidenceUrl = data.evidenceUrl;
   if (data.evidenceFileName) payload.evidenceFileName = data.evidenceFileName;
 
+  const { attachStandardizedTestToPayload } = await import(
+    "@/lib/standardized-tests/persist-standardized-test"
+  );
+  attachStandardizedTestToPayload(payload, {
+    achievementType: String(data.achievementType || ""),
+    achievementCategory: String(data.achievementCategory || ""),
+    achievementName: String(data.achievementName || actualAchievementName || ""),
+    resultType: String(data.resultType || ""),
+    resultValue: String(data.resultValue || ""),
+    qudratScore: String(data.qudratScore || ""),
+    giftedDiscoveryScore:
+      typeof data.giftedDiscoveryScore === "number" ? data.giftedDiscoveryScore : undefined,
+  });
+
   return payload;
 };

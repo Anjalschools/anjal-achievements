@@ -17,6 +17,7 @@ import {
 } from "@/lib/achievement-report-normalize";
 import { Loader2, RefreshCw } from "lucide-react";
 import MultiSelect from "@/components/ui/multi-select";
+import CanonicalActivityCombobox from "@/components/reports/CanonicalActivityCombobox";
 import {
   getReportCategoryOptions,
   getReportLevelOptions,
@@ -36,6 +37,11 @@ type AdminReportRow = {
   categoryLabelEn: string;
   eventLabelAr: string;
   eventLabelEn: string;
+  analyticsActivityKey?: string;
+  analyticsActivityDisplayAr?: string;
+  analyticsActivityDisplayEn?: string;
+  activityYear?: number | null;
+  standardizedTestType?: string | null;
   levelLabelAr: string;
   levelLabelEn: string;
   participationLabelAr: string;
@@ -76,12 +82,15 @@ const AdminAchievementReportsPage = () => {
     /** empty = الكل */
     categories: [] as string[],
     achievementName: "all",
+    uniqueParticipantsOnly: false,
     levels: [] as string[],
     resultTokens: [] as string[],
     status: "all",
     certificateStatus: "all",
     fromDate: "",
     toDate: "",
+    scoreMin: "" as string | number,
+    scoreMax: "" as string | number,
   });
 
   const categoryOptions = useMemo(
@@ -130,6 +139,9 @@ const AdminAchievementReportsPage = () => {
       if (f.categories.length > 0) params.set("category", f.categories.join(","));
       if (f.levels.length > 0) params.set("level", f.levels.join(","));
       if (f.resultTokens.length > 0) params.set("result", f.resultTokens.join(","));
+      if (f.uniqueParticipantsOnly) params.set("uniqueParticipantsOnly", "1");
+      if (f.scoreMin !== "" && f.scoreMin != null) params.set("scoreMin", String(f.scoreMin));
+      if (f.scoreMax !== "" && f.scoreMax != null) params.set("scoreMax", String(f.scoreMax));
       const res = await fetch(`/api/admin/achievements/reports?${params.toString()}`, { cache: "no-store" });
       if (res.status === 401) {
         router.push("/login");
@@ -161,11 +173,29 @@ const AdminAchievementReportsPage = () => {
     void fetchReport();
   }, [allowed, fetchReport]);
 
-  const eventOptions = useMemo(() => {
-    const s = new Set<string>();
-    for (const r of rows) s.add(r.eventLabelAr);
-    return [...s].sort((a, b) => a.localeCompare(b, "ar"));
-  }, [rows]);
+  const activityFetchParams = useMemo(
+    () => ({
+      academicYear: f.academicYear,
+      gender: f.gender,
+      mawhiba: f.mawhiba,
+      stage: f.stage,
+      grade: f.grade,
+      status: f.status,
+      certificateStatus: f.certificateStatus,
+      fromDate: f.fromDate,
+      toDate: f.toDate,
+      ...(f.categories.length > 0 ? { category: f.categories.join(",") } : {}),
+      ...(f.levels.length > 0 ? { level: f.levels.join(",") } : {}),
+      ...(f.resultTokens.length > 0 ? { result: f.resultTokens.join(",") } : {}),
+    }),
+    [f]
+  );
+
+  const selectedActivityLabel = useMemo(() => {
+    if (f.achievementName === "all") return undefined;
+    const hit = rows.find((r) => r.analyticsActivityKey === f.achievementName);
+    return hit?.analyticsActivityDisplayAr || hit?.eventLabelAr || f.achievementName.replace(/_/g, " ");
+  }, [f.achievementName, rows]);
 
   const reportTitle = useMemo(
     () =>
@@ -175,11 +205,11 @@ const AdminAchievementReportsPage = () => {
           gender: f.gender,
           stage: f.stage !== "all" ? reportStageLabel(f.stage as any, true) : undefined,
           gradeLabel: f.grade !== "all" ? getGradeLabel(f.grade, "ar") : undefined,
-          eventLabel: f.achievementName !== "all" ? f.achievementName : undefined,
+          eventLabel: selectedActivityLabel,
         },
         true
       ),
-    [f]
+    [f, selectedActivityLabel]
   );
 
   const tableHeaders = [
@@ -188,12 +218,13 @@ const AdminAchievementReportsPage = () => {
     "المرحلة",
     "تصنيف الإنجاز",
     "اسم الإنجاز",
+    "سنة النشاط",
+    "نوع الاختبار",
+    "النتيجة",
     "المستوى",
     "المشاركة",
-    "النتيجة",
     "السنة",
     "التاريخ",
-    "الوصف",
     "الحالة",
     "حالة الشهادة",
   ];
@@ -203,6 +234,11 @@ const AdminAchievementReportsPage = () => {
         rows.map((r) => ({
           ...r,
           grade: getGradeLabel(r.grade, "ar"),
+          analyticsActivityDisplayAr:
+            r.analyticsActivityDisplayAr || r.eventLabelAr,
+          activityYear: r.activityYear ?? r.year,
+          standardizedTestType: r.standardizedTestType,
+          resultLabelAr: r.resultLabelAr,
         }))
       ),
     [rows]
@@ -213,12 +249,13 @@ const AdminAchievementReportsPage = () => {
     المرحلة: r.stage,
     "تصنيف الإنجاز": r.achievementType,
     "اسم الإنجاز": r.achievementName,
+    "سنة النشاط": r.activityYear,
+    "نوع الاختبار": r.testTypeLabel,
+    النتيجة: r.result,
     المستوى: r.level,
     المشاركة: r.participation,
-    النتيجة: r.result,
     السنة: r.year,
     التاريخ: r.date,
-    الوصف: r.description,
     الحالة: r.statusLabel,
     "حالة الشهادة": r.certificateStatusLabel,
   }));
@@ -286,12 +323,15 @@ const AdminAchievementReportsPage = () => {
                     grade: "all",
                     categories: [],
                     achievementName: "all",
+                    uniqueParticipantsOnly: false,
                     levels: [],
                     resultTokens: [],
                     status: "all",
                     certificateStatus: "all",
                     fromDate: "",
                     toDate: "",
+                    scoreMin: "",
+                    scoreMax: "",
                   })
                 }
                 className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-text shadow-sm hover:bg-gray-50"
@@ -391,20 +431,44 @@ const AdminAchievementReportsPage = () => {
               className="mt-1"
             />
           </div>
-          <label className="flex flex-col text-xs font-semibold text-text-light">
-            {isAr ? "اسم الإنجاز" : "Achievement name"}
-            <select
+          <div className="flex flex-col text-xs font-semibold text-text-light">
+            <CanonicalActivityCombobox
+              label={isAr ? "اسم الإنجاز" : "Achievement name"}
               value={f.achievementName}
-              onChange={(e) => setF((p) => ({ ...p, achievementName: e.target.value }))}
+              onChange={(canonicalKey) => setF((p) => ({ ...p, achievementName: canonicalKey }))}
+              fetchParams={activityFetchParams}
+              isAr={isAr}
+              className="mt-1"
+            />
+          </div>
+          <label className="flex items-center gap-2 self-end text-xs font-semibold text-text">
+            <input
+              type="checkbox"
+              checked={f.uniqueParticipantsOnly}
+              onChange={(e) => setF((p) => ({ ...p, uniqueParticipantsOnly: e.target.checked }))}
+              className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary/30"
+            />
+            {isAr ? "احتساب الطلاب الفريدين فقط" : "Unique participants only"}
+          </label>
+          <label className="flex flex-col text-xs font-semibold text-text-light">
+            {isAr ? "الدرجة من" : "Score min"}
+            <input
+              type="number"
+              value={f.scoreMin}
+              onChange={(e) => setF((p) => ({ ...p, scoreMin: e.target.value }))}
+              placeholder={isAr ? "مثال: 95" : "e.g. 95"}
               className="mt-1 rounded-lg border border-gray-300 px-3 py-2 text-sm"
-            >
-              <option value="all">{isAr ? "الكل" : "All"}</option>
-              {eventOptions.map((x) => (
-                <option key={x} value={x}>
-                  {x}
-                </option>
-              ))}
-            </select>
+            />
+          </label>
+          <label className="flex flex-col text-xs font-semibold text-text-light">
+            {isAr ? "الدرجة إلى" : "Score max"}
+            <input
+              type="number"
+              value={f.scoreMax}
+              onChange={(e) => setF((p) => ({ ...p, scoreMax: e.target.value }))}
+              placeholder={isAr ? "مثال: 1600" : "e.g. 1600"}
+              className="mt-1 rounded-lg border border-gray-300 px-3 py-2 text-sm"
+            />
           </label>
           <div className="flex flex-col text-xs font-semibold text-text-light">
             <MultiSelect
@@ -517,6 +581,41 @@ const AdminAchievementReportsPage = () => {
               <MetricCard label={isAr ? "تحت المراجعة" : "Under review"} value={statusCounts.pending || 0} />
             </div>
 
+            {Array.isArray(stats?.standardizedTestStats) &&
+            (stats.standardizedTestStats as Array<Record<string, unknown>>).length > 0 ? (
+              <section className="rounded-2xl border border-violet-200 bg-violet-50/40 p-4">
+                <h3 className="mb-3 text-sm font-bold text-text">
+                  {isAr ? "إحصائيات الاختبارات المعيارية" : "Standardized test statistics"}
+                </h3>
+                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                  {(stats.standardizedTestStats as Array<Record<string, unknown>>).map((t, i) => (
+                    <div key={i} className="rounded-lg border border-violet-100 bg-white p-3 text-xs">
+                      <p className="font-bold text-text">{String(t.testType || "—")}</p>
+                      <p className="mt-1 text-text-light">
+                        {isAr ? "متوسط" : "Avg"}: {String(t.average ?? "—")} · {isAr ? "أعلى" : "Max"}:{" "}
+                        {String(t.max ?? "—")}
+                      </p>
+                      <p className="text-text-light">
+                        {isAr ? "سجلات" : "Rows"}: {String(t.count ?? 0)} · {isAr ? "طلاب" : "Students"}:{" "}
+                        {String(t.studentCount ?? 0)}
+                      </p>
+                      {t.above95 != null ? (
+                        <p className="text-text-light">
+                          {isAr ? "فوق 95%" : "Above 95%"}: {String(t.above95)}
+                        </p>
+                      ) : null}
+                      {t.above1400 != null ? (
+                        <p className="text-text-light">SAT ≥ 1400: {String(t.above1400)}</p>
+                      ) : null}
+                      {t.above7 != null ? (
+                        <p className="text-text-light">IELTS ≥ 7: {String(t.above7)}</p>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+              </section>
+            ) : null}
+
             <section className="rounded-2xl border border-gray-200 bg-white p-4">
               <h3 className="mb-3 text-sm font-bold text-text">
                 {isAr ? "تقرير إنجازات الطلبة (جدولي)" : "Students achievement report table"}
@@ -547,16 +646,17 @@ const AdminAchievementReportsPage = () => {
                           <td className="px-2 py-2 text-xs text-text">{row.stage}</td>
                           <td className="px-2 py-2 text-xs text-text">{row.achievementType}</td>
                           <td className="px-2 py-2 text-xs text-text">{row.achievementName}</td>
+                          <td className="px-2 py-2 text-xs text-text">{row.activityYear}</td>
+                          <td className="px-2 py-2 text-xs text-text">{row.testTypeLabel}</td>
+                          <td className="px-2 py-2 text-xs font-semibold text-text">{row.result}</td>
                           <td className="px-2 py-2 text-xs">
                             <span className={`inline-flex rounded-full px-2 py-1 text-[10px] font-semibold ring-1 ${reportLevelBadgeClass(row.level)}`}>
                               {row.level}
                             </span>
                           </td>
                           <td className="px-2 py-2 text-xs text-text">{row.participation}</td>
-                          <td className="px-2 py-2 text-xs text-text">{row.result}</td>
                           <td className="px-2 py-2 text-xs text-text">{row.year}</td>
                           <td className="px-2 py-2 text-xs text-text">{row.date}</td>
-                          <td className="max-w-[220px] px-2 py-2 text-xs text-text-light">{row.description}</td>
                           <td className="px-2 py-2 text-xs">
                             <span className={`inline-flex rounded-full px-2 py-1 text-[10px] font-semibold ring-1 ${reportStatusBadgeClass(
                               row.statusKey
