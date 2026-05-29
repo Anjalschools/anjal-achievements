@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useDeferredValue, useEffect, useMemo, useState } from "react";
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, Suspense } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import PageContainer from "@/components/layout/PageContainer";
@@ -25,6 +25,8 @@ import {
   defaultReportFilterUiState,
   type ReportFilterUiState,
 } from "@/lib/analytics/report-filter-params";
+import { useAnalyticsUrlSync } from "@/hooks/useAnalyticsUrlSync";
+import type { AnalyticsUrlUiState } from "@/lib/analytics/report-filter-url-sync";
 import {
   getReportCategoryOptions,
   getReportLevelOptions,
@@ -79,7 +81,7 @@ type UnifiedPayload = {
   admin: Record<string, unknown>;
 };
 
-const AdminAchievementReportsPage = () => {
+const AdminAchievementReportsPageInner = () => {
   const router = useRouter();
   const locale = getLocale();
   const isAr = locale === "ar";
@@ -91,6 +93,28 @@ const AdminAchievementReportsPage = () => {
   const [error, setError] = useState<string | null>(null);
   const [f, setF] = useState<ReportFilterUiState>(() => defaultReportFilterUiState());
   const deferredF = useDeferredValue(f);
+  const urlHydrationDoneRef = useRef(false);
+
+  const handleHydrateFromUrl = useCallback(
+    ({
+      filters,
+      hasUrlFilters,
+    }: {
+      filters: ReportFilterUiState;
+      ui: AnalyticsUrlUiState;
+      hasUrlFilters: boolean;
+    }) => {
+      if (hasUrlFilters) setF(filters);
+    },
+    []
+  );
+
+  const { copyShareUrl } = useAnalyticsUrlSync({
+    scope: "reports",
+    filter: f,
+    onHydrateFromUrl: handleHydrateFromUrl,
+    hydrationDoneRef: urlHydrationDoneRef,
+  });
 
   const categoryOptions = useMemo(
     () => getReportCategoryOptions(isAr ? "ar" : "en"),
@@ -307,6 +331,16 @@ const AdminAchievementReportsPage = () => {
                 className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-text shadow-sm hover:bg-gray-50"
               >
                 Excel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const url = copyShareUrl();
+                  if (url) void navigator.clipboard?.writeText(url);
+                }}
+                className="rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-2 text-sm font-semibold text-indigo-900 shadow-sm hover:bg-indigo-100"
+              >
+                {isAr ? "نسخ الرابط" : "Copy link"}
               </button>
               <button
                 type="button"
@@ -844,4 +878,16 @@ const MetricCardSmall = ({ label, value }: { label: string; value: number }) => 
   </div>
 );
 
-export default AdminAchievementReportsPage;
+export default function AdminAchievementReportsPage() {
+  return (
+    <Suspense
+      fallback={
+        <PageContainer>
+          <p className="py-12 text-center text-sm text-slate-600">Loading reports…</p>
+        </PageContainer>
+      }
+    >
+      <AdminAchievementReportsPageInner />
+    </Suspense>
+  );
+}

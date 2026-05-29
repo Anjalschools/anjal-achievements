@@ -83,8 +83,10 @@ const normalizeResultTokens = (f: AdminReportFilters): string[] => {
 };
 
 export type ParticipationAnalyticsFilters = AdminReportFilters & {
-  /** arabic | international | all */
+  /** arabic | international | all — legacy single */
   section?: string;
+  /** Multi section filter */
+  sections?: string[];
   /** achievement.domain or free text */
   domain?: string;
   /** achievementClassification exact or contains */
@@ -395,9 +397,18 @@ export const buildParticipationAnalytics = async (input: {
       postStages.push({ $match: { effGender: gender } });
     }
   }
-  const section = String(filters.section || "").trim();
-  if (section && section !== "all") {
-    postStages.push({ $match: { effSection: section } });
+
+  const sectionList =
+    filters.sections && filters.sections.length > 0
+      ? filters.sections
+      : (() => {
+          const s = String(filters.section || "").trim();
+          return s && s !== "all" ? [s] : [];
+        })();
+  if (sectionList.length === 1) {
+    postStages.push({ $match: { effSection: sectionList[0] } });
+  } else if (sectionList.length > 1) {
+    postStages.push({ $match: { effSection: { $in: sectionList } } });
   }
   if (multi.mawhibaValues.length > 0) {
     const wantYes = multi.mawhibaValues.includes("yes");
@@ -1167,6 +1178,7 @@ export const parseParticipationFiltersFromSearchParams = (
     grade: String(sp.get("grade") || "all").trim(),
     grades: deserializeMultiFilterWithLegacy(sp.get("grades"), sp.get("grade")),
     section: String(sp.get("section") || "all").trim(),
+    sections: deserializeMultiFilterWithLegacy(sp.get("sections"), sp.get("section")),
     categories: parseReportCsvParam(sp.get("category")),
     achievementName: String(sp.get("achievementName") || "").trim() || undefined,
     achievementNames: deserializeMultiFilterWithLegacy(

@@ -6,6 +6,7 @@ import type { FocusedActivityOptionRow, FocusedActivityReportPayload } from "@/t
 import { CompetitionDecisionSections } from "@/components/admin/CompetitionDecisionSections";
 import { CollapsibleSection } from "@/components/admin/CollapsibleSection";
 import { LazyChartMount } from "@/components/admin/LazyChartMount";
+import { ExecutiveChartPanel } from "@/components/analytics/ExecutiveChartPanel";
 import { ANJAL_CHART } from "@/lib/anjal-chart-theme";
 import {
   CI_DELTA_HEAT,
@@ -17,12 +18,48 @@ import {
   CI_TYPOGRAPHY,
 } from "@/lib/competition-intelligence-theme";
 import { describeFocusedEmptyContext } from "@/lib/competition-intelligence-consistency";
+import { validateChartSeries, validateTrendSeries } from "@/lib/analytics/chart-data-validator";
 import {
-  chartEmptyMessage,
-  validateChartSeries,
-  validateTrendSeries,
-} from "@/lib/analytics/chart-data-validator";
+  validateCountBarSeries,
+  validateStackedGenderSeries,
+} from "@/lib/analytics/runtime/chart-runtime-guard";
 import { ciRedactLine, logEmptyDatasetIntel, logVirtualizationIntel } from "@/lib/competition-intelligence-debug";
+import {
+  selectFocusedCharts,
+  selectFocusedInsights,
+  selectFocusedParticipants,
+  selectFocusedTrends,
+} from "@/lib/analytics/focused-derived-selectors";
+import { FocusedSummarySection } from "@/components/analytics/focused/sections/FocusedSummarySection";
+import { FocusedChartsSection } from "@/components/analytics/focused/sections/FocusedChartsSection";
+import { FocusedParticipantsSection } from "@/components/analytics/focused/sections/FocusedParticipantsSection";
+import { FocusedInsightsSection } from "@/components/analytics/focused/sections/FocusedInsightsSection";
+import { FocusedCompareSection } from "@/components/analytics/focused/sections/FocusedCompareSection";
+import { FocusedTrendsSection } from "@/components/analytics/focused/sections/FocusedTrendsSection";
+import { FocusedYoYChart } from "@/components/analytics/focused/charts/FocusedYoYChart";
+import { FocusedDemographicChart } from "@/components/analytics/focused/charts/FocusedDemographicChart";
+import { FocusedStageDistributionChart } from "@/components/analytics/focused/charts/FocusedStageDistributionChart";
+import { FocusedGenderDistributionChart } from "@/components/analytics/focused/charts/FocusedGenderDistributionChart";
+import { FocusedMawhibaChart } from "@/components/analytics/focused/charts/FocusedMawhibaChart";
+import { FocusedStackedTrendChart } from "@/components/analytics/focused/charts/FocusedStackedTrendChart";
+import { buildFocusedProgressiveShell } from "@/lib/analytics/focused-progressive-shell";
+import { ExecutiveErrorCard } from "@/components/analytics/ExecutiveErrorCard";
+import { useClientMounted } from "@/hooks/useClientMounted";
+import {
+  adaptDemographicChartData,
+  adaptGenderChartData,
+  adaptMawhibaChartData,
+  adaptStageChartData,
+  adaptTrendChartData,
+  adaptYoYChartData,
+} from "@/lib/analytics/focused-chart-adapters";
+import {
+  selectDemographicSeries,
+  selectDistributionSeries,
+  selectParticipationSeries,
+  selectTrendSeries,
+  selectYoYSeries,
+} from "@/lib/analytics/chart-derived-selectors";
 import {
   Bar,
   BarChart,
@@ -356,6 +393,18 @@ export type FocusedExecutiveIntelligencePanelProps = {
     outcome: string;
     primaryType: string;
   };
+  fetchFocusedFacet?: (input: {
+    scope: "summary" | "participants" | "charts" | "trends" | "insights" | "compare";
+    pick: string;
+    outcome: string;
+    page?: number;
+    pageSize?: number;
+    signal?: AbortSignal;
+  }) => Promise<Record<string, unknown>>;
+  /** Manual refresh from filter context — re-runs facet hydration. */
+  refreshNonce?: number;
+  /** Full report shell for external decision workspace (export/PDF paths). */
+  onDecisionReportReady?: (report: FocusedActivityReportPayload | null) => void;
 };
 
 export const FocusedExecutiveIntelligencePanel = memo((props: FocusedExecutiveIntelligencePanelProps) => {
@@ -390,29 +439,17 @@ export const FocusedExecutiveIntelligencePanel = memo((props: FocusedExecutiveIn
     reportLoadError,
     onRelaxReportFilters,
     filterContext,
+    fetchFocusedFacet,
+    refreshNonce = 0,
+    onDecisionReportReady,
   } = props;
 
-  const [highContrast, setHighContrast] = useState(() => {
-    if (typeof window === "undefined") return false;
-    try {
-      return localStorage.getItem(CI_STORAGE_KEYS.highContrast) === "1";
-    } catch {
-      return false;
-    }
-  });
+  const clientMounted = useClientMounted();
+  const [highContrast, setHighContrast] = useState(false);
 
   const [tableQuery, setTableQuery] = useState("");
   const [debouncedTableQuery, setDebouncedTableQuery] = useState("");
-  const [viewDensity, setViewDensity] = useState<"executive" | "detailed">(() => {
-    if (typeof window === "undefined") return "detailed";
-    try {
-      const v = localStorage.getItem(CI_STORAGE_KEYS.detailMode);
-      if (v === "executive" || v === "detailed") return v;
-    } catch {
-      /* ignore */
-    }
-    return "detailed";
-  });
+  const [viewDensity, setViewDensity] = useState<"executive" | "detailed">("detailed");
   const [sortKey, setSortKey] = useState<
     "name" | "result" | "level" | "score" | "year" | ""
   >("");
@@ -421,13 +458,327 @@ export const FocusedExecutiveIntelligencePanel = memo((props: FocusedExecutiveIn
   const [tableDensity, setTableDensity] = useState<"normal" | "compact">("normal");
   const tableScrollRef = useRef<HTMLDivElement | null>(null);
   const [virtWindow, setVirtWindow] = useState<{ start: number; end: number }>({ start: 0, end: 120 });
+  type FacetState<T> = {
+    data: T | null;
+    loading: boolean;
+    hydrated: boolean;
+    error: string | null;
+    lastUpdated: number | null;
+  };
+  const initFacet = <T,>(): FacetState<T> => ({
+    data: null,
+    loading: false,
+    hydrated: false,
+    error: null,
+    lastUpdated: null,
+  });
+  const [summaryFacet, setSummaryFacet] = useState<
+    FacetState<Partial<FocusedActivityReportPayload> & { kpis?: FocusedActivityReportPayload["kpis"] }>
+  >(initFacet);
+  const [participantsFacet, setParticipantsFacet] = useState<
+    FacetState<{
+      participants?: FocusedActivityReportPayload["participants"];
+      page?: number;
+      pageSize?: number;
+      totalParticipants?: number;
+      participantsLightMode?: boolean;
+      meta?: { approvedRecords?: number; distinctStudents?: number };
+    }>
+  >(initFacet);
+  const [chartsFacet, setChartsFacet] = useState<FacetState<{ charts?: FocusedActivityReportPayload["charts"] }>>(
+    initFacet
+  );
+  const [trendsFacet, setTrendsFacet] = useState<
+    FacetState<{ executive?: Pick<FocusedActivityReportPayload["executive"], "yearComparison"> }>
+  >(initFacet);
+  const [insightsFacet, setInsightsFacet] = useState<
+    FacetState<{ decisionPlatform?: FocusedActivityReportPayload["decisionPlatform"] }>
+  >(initFacet);
+  const [compareFacet, setCompareFacet] = useState<
+    FacetState<{ executive?: FocusedActivityReportPayload["executive"]; charts?: FocusedActivityReportPayload["charts"]; kpis?: FocusedActivityReportPayload["kpis"] }>
+  >(initFacet);
+  const hydrationEpochRef = useRef(0);
+  const facetAbortRef = useRef<Map<string, AbortController>>(new Map());
+  const chartsHeavyLoadedKeyRef = useRef<string | null>(null);
+  const [analyticsInView, setAnalyticsInView] = useState(false);
+  const analyticsIoRef = useRef<HTMLDivElement | null>(null);
 
   const VROW = 40;
   const VIRT_OVERSCAN = 10;
 
   useEffect(() => {
+    if (!clientMounted) return;
+    try {
+      setHighContrast(localStorage.getItem(CI_STORAGE_KEYS.highContrast) === "1");
+      const v = localStorage.getItem(CI_STORAGE_KEYS.detailMode);
+      if (v === "executive" || v === "detailed") setViewDensity(v);
+    } catch {
+      /* ignore */
+    }
+  }, [clientMounted]);
+
+  useEffect(() => {
+    if (!clientMounted) return;
+    const el = analyticsIoRef.current;
+    if (!el) return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) setAnalyticsInView(true);
+      },
+      { rootMargin: "140px 0px", threshold: 0.01 }
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [clientMounted]);
+
+  const logHydration = useCallback((tag: string, payload: Record<string, unknown>) => {
+    if (process.env.NODE_ENV === "production") return;
+    // eslint-disable-next-line no-console
+    console.info(tag, payload);
+  }, []);
+
+  const resetFacets = useCallback(() => {
+    setSummaryFacet(initFacet());
+    setParticipantsFacet(initFacet());
+    setChartsFacet(initFacet());
+    setTrendsFacet(initFacet());
+    setInsightsFacet(initFacet());
+    setCompareFacet(initFacet());
+  }, []);
+
+  useEffect(() => {
+    if (!pick) {
+      resetFacets();
+      return;
+    }
+    if (!fetchFocusedFacet) return;
+    hydrationEpochRef.current += 1;
+    const epoch = hydrationEpochRef.current;
+    for (const ctl of facetAbortRef.current.values()) ctl.abort();
+    facetAbortRef.current.clear();
+
+    const runFacet = async <T,>(
+      facet: "summary" | "participants" | "charts" | "trends" | "insights",
+      setter: React.Dispatch<React.SetStateAction<FacetState<T>>>,
+      params: { page?: number } = {}
+    ) => {
+      const ctl = new AbortController();
+      facetAbortRef.current.set(facet, ctl);
+      setter((p) => ({ ...p, loading: true, error: null }));
+      const t0 = performance.now();
+      try {
+        const payload = (await fetchFocusedFacet({
+          scope: facet,
+          pick,
+          outcome,
+          page: params.page ?? page,
+          pageSize: 25,
+          signal: ctl.signal,
+        })) as T;
+        if (ctl.signal.aborted || epoch !== hydrationEpochRef.current) return;
+        setter({ data: payload, loading: false, hydrated: true, error: null, lastUpdated: Date.now() });
+        logHydration(`[FOCUSED_${facet.toUpperCase()}_HYDRATED]`, {
+          ms: Math.round(performance.now() - t0),
+          source: "facet",
+        });
+      } catch (e) {
+        if (ctl.signal.aborted || epoch !== hydrationEpochRef.current) return;
+        setter((p) => ({ ...p, loading: false, hydrated: false, error: e instanceof Error ? e.message : "Facet failed" }));
+      } finally {
+        facetAbortRef.current.delete(facet);
+      }
+    };
+
+    void (async () => {
+      await runFacet("summary", setSummaryFacet);
+      await runFacet("participants", setParticipantsFacet);
+      await runFacet("insights", setInsightsFacet);
+    })();
+
+    return () => {
+      for (const ctl of facetAbortRef.current.values()) ctl.abort();
+      facetAbortRef.current.clear();
+    };
+  }, [pick, outcome, page, fetchFocusedFacet, resetFacets, logHydration, refreshNonce]);
+
+  useEffect(() => {
+    if (!pick || !fetchFocusedFacet || !analyticsInView) return;
+    const heavyKey = `${pick}:${outcome}`;
+    if (chartsHeavyLoadedKeyRef.current === heavyKey) return;
+    chartsHeavyLoadedKeyRef.current = heavyKey;
+    hydrationEpochRef.current += 1;
+    const epoch = hydrationEpochRef.current;
+    const ctl = new AbortController();
+    facetAbortRef.current.set("charts-heavy", ctl);
+
+    const runHeavy = async <T,>(
+      facet: "charts" | "trends",
+      setter: React.Dispatch<React.SetStateAction<FacetState<T>>>
+    ) => {
+      setter((p) => ({ ...p, loading: true, error: null }));
+      try {
+        const payload = (await fetchFocusedFacet({
+          scope: facet,
+          pick,
+          outcome,
+          signal: ctl.signal,
+        })) as T;
+        if (ctl.signal.aborted || epoch !== hydrationEpochRef.current) return;
+        setter({ data: payload, loading: false, hydrated: true, error: null, lastUpdated: Date.now() });
+      } catch (e) {
+        if (ctl.signal.aborted || epoch !== hydrationEpochRef.current) return;
+        setter((p) => ({
+          ...p,
+          loading: false,
+          hydrated: false,
+          error: e instanceof Error ? e.message : "Facet failed",
+        }));
+      }
+    };
+
+    void (async () => {
+      await runHeavy("charts", setChartsFacet);
+      await runHeavy("trends", setTrendsFacet);
+    })();
+
+    return () => {
+      ctl.abort();
+      facetAbortRef.current.delete("charts-heavy");
+    };
+  }, [pick, outcome, analyticsInView, fetchFocusedFacet, refreshNonce]);
+
+  useEffect(() => {
+    if (!compareEnabled || !comparePick || !fetchFocusedFacet) {
+      for (const [k, ctl] of facetAbortRef.current.entries()) {
+        if (k.startsWith("compare")) ctl.abort();
+      }
+      setCompareFacet(initFacet());
+      return;
+    }
+    const ctl = new AbortController();
+    facetAbortRef.current.set("compare", ctl);
+    setCompareFacet((p) => ({ ...p, loading: true, error: null }));
+    const t0 = performance.now();
+    void (async () => {
+      try {
+        const payload = (await fetchFocusedFacet({
+          scope: "compare",
+          pick: comparePick,
+          outcome,
+          page: 1,
+          pageSize: 25,
+          signal: ctl.signal,
+        })) as { executive?: FocusedActivityReportPayload["executive"]; charts?: FocusedActivityReportPayload["charts"]; kpis?: FocusedActivityReportPayload["kpis"] };
+        if (ctl.signal.aborted) return;
+        setCompareFacet({
+          data: payload,
+          loading: false,
+          hydrated: true,
+          error: null,
+          lastUpdated: Date.now(),
+        });
+        logHydration("[FOCUSED_COMPARE_HYDRATED]", {
+          ms: Math.round(performance.now() - t0),
+          source: "facet",
+        });
+      } catch (e) {
+        if (ctl.signal.aborted) return;
+        setCompareFacet((p) => ({ ...p, loading: false, hydrated: false, error: e instanceof Error ? e.message : "Compare facet failed" }));
+      } finally {
+        facetAbortRef.current.delete("compare");
+      }
+    })();
+    return () => ctl.abort();
+  }, [compareEnabled, comparePick, outcome, fetchFocusedFacet, logHydration]);
+
+  const activeData = useMemo(() => {
+    const sep = pick.indexOf("\u001f");
+    const focusType = sep === -1 ? pick : pick.slice(0, sep);
+    const focusRaw = sep === -1 ? "" : pick.slice(sep + 1);
+    const shell =
+      data ??
+      (summaryFacet.hydrated && summaryFacet.data
+        ? buildFocusedProgressiveShell({
+            ...summaryFacet.data,
+            focusType: summaryFacet.data.focusType ?? focusType,
+            focusRaw: summaryFacet.data.focusRaw ?? focusRaw,
+            focusedOutcome: summaryFacet.data.focusedOutcome ?? outcome,
+            activityLabelAr: summaryFacet.data.activityLabelAr ?? "",
+            activityLabelEn: summaryFacet.data.activityLabelEn ?? "",
+            filters: summaryFacet.data.filters ?? {},
+          })
+        : null);
+    if (!shell) return null;
+    return {
+      ...shell,
+      kpis: summaryFacet.data?.kpis ?? shell.kpis,
+      participants: participantsFacet.data?.participants ?? shell.participants,
+      page: participantsFacet.data?.page ?? shell.page,
+      pageSize: participantsFacet.data?.pageSize ?? shell.pageSize,
+      totalParticipants: participantsFacet.data?.totalParticipants ?? shell.totalParticipants,
+      charts: chartsFacet.data?.charts ?? shell.charts,
+      executive: trendsFacet.data?.executive
+        ? {
+            ...shell.executive,
+            yearComparison:
+              trendsFacet.data.executive.yearComparison ?? shell.executive.yearComparison,
+          }
+        : shell.executive,
+      decisionPlatform: insightsFacet.data?.decisionPlatform ?? shell.decisionPlatform,
+    };
+  }, [data, pick, outcome, summaryFacet.hydrated, summaryFacet.data, participantsFacet.data, chartsFacet.data, trendsFacet.data, insightsFacet.data]);
+
+  const activeCompareData = useMemo(() => {
+    if (!compareFacet.data && !compareData) return null;
+    const base = compareData ?? (compareFacet.data as FocusedActivityReportPayload | null);
+    if (!base) return null;
+    if (!compareFacet.data) return base;
+    return {
+      ...base,
+      executive: compareFacet.data.executive ?? base.executive,
+      charts: compareFacet.data.charts ?? base.charts,
+      kpis: compareFacet.data.kpis ?? base.kpis,
+    };
+  }, [compareData, compareFacet.data]);
+  const hydratedData = activeData ?? data;
+  const hydratedCompareData = activeCompareData ?? compareData;
+
+  useEffect(() => {
+    if (!onDecisionReportReady) return;
+    if (!hydratedData?.decisionPlatform?.narrativeEn && !hydratedData?.decisionPlatform?.narrativeAr) {
+      onDecisionReportReady(null);
+      return;
+    }
+    onDecisionReportReady(hydratedData);
+  }, [hydratedData, onDecisionReportReady]);
+
+  const facetLoadError = useMemo(() => {
+    if (reportLoadError) return reportLoadError;
+    const errs = [
+      summaryFacet.error,
+      participantsFacet.error,
+      chartsFacet.error,
+      trendsFacet.error,
+      insightsFacet.error,
+    ].filter(Boolean);
+    return errs[0] ?? null;
+  }, [
+    reportLoadError,
+    summaryFacet.error,
+    participantsFacet.error,
+    chartsFacet.error,
+    trendsFacet.error,
+    insightsFacet.error,
+  ]);
+
+  const isProgressiveLoading =
+    Boolean(pick) &&
+    !hydratedData &&
+    (summaryFacet.loading || participantsFacet.loading || insightsFacet.loading);
+
+  useEffect(() => {
     setSelectedIds(new Set());
-  }, [pick, outcome, page, data?.generatedAt]);
+  }, [pick, outcome, page, hydratedData?.generatedAt]);
 
   useEffect(() => {
     const id = window.setTimeout(() => setDebouncedTableQuery(tableQuery), 300);
@@ -457,92 +808,114 @@ export const FocusedExecutiveIntelligencePanel = memo((props: FocusedExecutiveIn
 
   const isExecutiveDensity = viewDensity === "executive";
 
+  const derivedCharts = useMemo(() => selectFocusedCharts(hydratedData, isAr), [hydratedData, isAr]);
+
   const resultDonutValidation = useMemo(() => {
-    if (!data?.charts?.resultBars?.length) {
+    if (!derivedCharts.resultDonut.length) {
       return { ok: false as const, data: [] as Array<{ key: string; name: string; value: number; fill?: string; pct?: number }>, total: 0 };
     }
-    const validated = validateChartSeries(
-      data.charts.resultBars.map((x) => ({
-        key: x.key,
-        name: isAr ? x.labelAr : x.labelEn,
-        value: x.count,
+    return validateChartSeries(
+      derivedCharts.resultDonut.map((x) => ({
+        ...x,
         fill: RESULT_SLICE_FILL[x.key] ?? x.fill,
       }))
     );
-    return validated;
-  }, [data, isAr]);
+  }, [derivedCharts.resultDonut]);
 
   const resultDonutData = resultDonutValidation.data;
+  const yoySeries = useMemo(
+    () => selectYoYSeries(`${pick}:${outcome}:${hydrationEpochRef.current}`, adaptYoYChartData(derivedCharts.yoyBars)),
+    [pick, outcome, derivedCharts.yoyBars]
+  );
+  const sectionGenderSeries = useMemo(
+    () =>
+      selectDemographicSeries(
+        `${pick}:${outcome}:section:${hydrationEpochRef.current}`,
+        adaptDemographicChartData(derivedCharts.sectionGender)
+      ),
+    [pick, outcome, derivedCharts.sectionGender]
+  );
+  const mawhibaGenderSeries = useMemo(
+    () =>
+      selectDemographicSeries(
+        `${pick}:${outcome}:mawhiba:${hydrationEpochRef.current}`,
+        adaptDemographicChartData(derivedCharts.mawhibaGender)
+      ),
+    [pick, outcome, derivedCharts.mawhibaGender]
+  );
+  const stageSeries = useMemo(
+    () =>
+      selectDistributionSeries(
+        `${pick}:${outcome}:stage:${hydrationEpochRef.current}`,
+        adaptStageChartData(derivedCharts.stageBars)
+      ),
+    [pick, outcome, derivedCharts.stageBars]
+  );
+  const genderDistributionSeries = useMemo(
+    () =>
+      selectParticipationSeries(
+        `${pick}:${outcome}:gender:${hydrationEpochRef.current}`,
+        adaptGenderChartData(
+          (hydratedData?.charts?.genderPie ?? []).map((row) => ({
+            key: row.name,
+            name: isAr ? row.nameAr : row.nameEn,
+            value: row.value,
+          }))
+        )
+      ),
+    [pick, outcome, hydratedData?.charts?.genderPie, isAr]
+  );
+  const mawhibaDistributionSeries = useMemo(
+    () =>
+      selectParticipationSeries(
+        `${pick}:${outcome}:mawhiba-pie:${hydrationEpochRef.current}`,
+        adaptMawhibaChartData(
+          (hydratedData?.charts?.mawhibaPie ?? []).map((row) => ({
+            key: row.name,
+            name: isAr ? row.nameAr : row.nameEn,
+            value: row.value,
+          }))
+        )
+      ),
+    [pick, outcome, hydratedData?.charts?.mawhibaPie, isAr]
+  );
 
   const yoyChartValidation = useMemo(() => {
-    if (!data?.executive?.yearComparison?.length) {
+    if (!derivedCharts.yoyBars.length) {
       return { ok: false, data: [] as Array<Record<string, unknown>> };
     }
-    return validateTrendSeries(
-      data.executive.yearComparison.map((y) => ({
-        year: String(y.year),
-        participants: y.distinctStudents,
-        medals: y.totalMedals,
-        excellence: y.excellenceRatePct,
-      })),
-      ["participants", "medals", "excellence"]
-    );
-  }, [data]);
+    return validateTrendSeries(derivedCharts.yoyBars, ["participants", "medals", "excellence"]);
+  }, [derivedCharts.yoyBars]);
 
   const yoyChartData = yoyChartValidation.data;
 
-  const stackSection = useMemo(() => {
-    if (!data?.executive?.demographicStacks?.sectionGender) return [];
-    return data.executive.demographicStacks.sectionGender.map((r) => ({
-      name: isAr ? r.labelAr : r.labelEn,
-      male: r.male,
-      female: r.female,
-    }));
-  }, [data, isAr]);
+  const stackSectionValidation = useMemo(
+    () => validateStackedGenderSeries("focused-stack-section-gender", derivedCharts.sectionGender),
+    [derivedCharts.sectionGender]
+  );
+  const stackMawValidation = useMemo(
+    () => validateStackedGenderSeries("focused-stack-mawhiba-gender", derivedCharts.mawhibaGender),
+    [derivedCharts.mawhibaGender]
+  );
+  const stackStageValidation = useMemo(
+    () => validateCountBarSeries("focused-stage-horizontal", derivedCharts.stageBars, "n"),
+    [derivedCharts.stageBars]
+  );
+  const stackSectionData = stackSectionValidation.data;
+  const stackMawData = stackMawValidation.data;
+  const stackStageData = stackStageValidation.data;
 
-  const stackMaw = useMemo(() => {
-    if (!data?.executive?.demographicStacks?.mawhibaGender) return [];
-    return data.executive.demographicStacks.mawhibaGender.map((r) => ({
-      name: isAr ? r.labelAr : r.labelEn,
-      male: r.male,
-      female: r.female,
-    }));
-  }, [data, isAr]);
-
-  const stackStage = useMemo(() => {
-    if (!data?.executive?.demographicStacks?.stageBreakdown) return [];
-    return data.executive.demographicStacks.stageBreakdown.map((r) => ({
-      name: isAr ? r.labelAr : r.labelEn,
-      n: r.count,
-    }));
-  }, [data, isAr]);
-
-  const processedParticipants = useMemo(() => {
-    let rows = data?.participants ?? [];
-    const nq = normalizeSearch(debouncedTableQuery);
-    if (nq) {
-      rows = rows.filter((r) => {
-        const blob = normalizeSearch(
-          `${r.studentNameAr} ${r.studentNameEn} ${r.resultLineAr} ${r.resultLineEn} ${r.levelLabelAr} ${r.schoolOrOrganization}`
-        );
-        return blob.includes(nq);
-      });
-    }
-    const mul = sortDir === "asc" ? 1 : -1;
-    const sorted = [...rows];
-    if (sortKey === "name") {
-      sorted.sort((a, b) => mul * (isAr ? a.studentNameAr : a.studentNameEn).localeCompare(isAr ? b.studentNameAr : b.studentNameEn));
-    } else if (sortKey === "year") {
-      sorted.sort((a, b) => mul * ((a.year ?? -1) - (b.year ?? -1)));
-    } else if (sortKey === "score") {
-      sorted.sort((a, b) => mul * ((a.scoreNumeric ?? -1e9) - (b.scoreNumeric ?? -1e9)));
-    } else if (sortKey === "level") {
-      sorted.sort((a, b) => mul * (isAr ? a.levelLabelAr : a.levelLabelEn).localeCompare(isAr ? b.levelLabelAr : b.levelLabelEn));
-    } else if (sortKey === "result") {
-      sorted.sort((a, b) => mul * (isAr ? a.resultLineAr : a.resultLineEn).localeCompare(isAr ? b.resultLineAr : b.resultLineEn));
-    }
-    return sorted;
-  }, [data, debouncedTableQuery, sortKey, sortDir, isAr]);
+  const processedParticipants = useMemo(
+    () =>
+      selectFocusedParticipants({
+        participants: hydratedData?.participants ?? [],
+        isAr,
+        query: debouncedTableQuery,
+        sortKey,
+        sortDir,
+      }),
+    [hydratedData?.participants, isAr, debouncedTableQuery, sortKey, sortDir]
+  );
 
   const virtEnabled = processedParticipants.length > 300;
   const virtPadTop = virtEnabled ? virtWindow.start * VROW : 0;
@@ -575,16 +948,16 @@ export const FocusedExecutiveIntelligencePanel = memo((props: FocusedExecutiveIn
       el.removeEventListener("scroll", sync);
       ro?.disconnect();
     };
-  }, [processedParticipants.length, pick, page, data?.generatedAt]);
+  }, [processedParticipants.length, pick, page, hydratedData?.generatedAt]);
 
   useEffect(() => {
-    if (!data) return;
+    if (!hydratedData) return;
     logVirtualizationIntel({
       active: virtEnabled,
       rowCount: processedParticipants.length,
       threshold: 300,
     });
-  }, [data, virtEnabled, processedParticipants.length]);
+  }, [hydratedData, virtEnabled, processedParticipants.length]);
 
   useEffect(() => {
     const el = tableScrollRef.current;
@@ -592,9 +965,9 @@ export const FocusedExecutiveIntelligencePanel = memo((props: FocusedExecutiveIn
   }, [sortKey, sortDir, tableQuery]);
 
   const compareYoyBars = useMemo(() => {
-    if (!compareEnabled || !data || !compareData) return [];
-    const ycA = data.executive.yearComparison;
-    const ycB = compareData.executive.yearComparison;
+    if (!compareEnabled || !hydratedData || !hydratedCompareData) return [];
+    const ycA = hydratedData.executive.yearComparison;
+    const ycB = hydratedCompareData.executive.yearComparison;
     const years = [...new Set([...ycA.map((y) => y.year), ...ycB.map((y) => y.year)])].sort((a, b) => a - b);
     return years.map((year) => ({
       year: String(year),
@@ -605,19 +978,57 @@ export const FocusedExecutiveIntelligencePanel = memo((props: FocusedExecutiveIn
       aEx: ycA.find((y) => y.year === year)?.excellenceRatePct ?? 0,
       bEx: ycB.find((y) => y.year === year)?.excellenceRatePct ?? 0,
     }));
-  }, [compareEnabled, data, compareData]);
+  }, [compareEnabled, hydratedData, hydratedCompareData]);
+  const derivedTrends = useMemo(() => selectFocusedTrends(hydratedData), [hydratedData]);
+  const derivedInsights = useMemo(() => selectFocusedInsights(hydratedData), [hydratedData]);
+
+  useEffect(() => {
+    if (process.env.NODE_ENV === "production") return;
+    const epoch = hydrationEpochRef.current;
+    const emit = (section: string, hasData: boolean, error: string | null) => {
+      if (error) {
+        // eslint-disable-next-line no-console
+        console.info("[FOCUSED_SECTION_RENDER]", { section, status: "error", hydrationEpoch: epoch });
+        return;
+      }
+      if (!hasData) {
+        // eslint-disable-next-line no-console
+        console.info("[FOCUSED_SECTION_EMPTY]", { section, source: "facet", hydrationEpoch: epoch });
+        return;
+      }
+      // eslint-disable-next-line no-console
+      console.info("[FOCUSED_SECTION_RECOVERED]", { section, source: "facet", hydrationEpoch: epoch });
+    };
+    emit("summary", Boolean(hydratedData?.kpis), summaryFacet.error);
+    emit("charts", Boolean(resultDonutData.length || yoyChartData.length), chartsFacet.error);
+    emit("trends", Boolean(derivedTrends.length), trendsFacet.error);
+    emit("insights", Boolean(derivedInsights), insightsFacet.error);
+    emit("participants", Boolean(processedParticipants.length), participantsFacet.error);
+  }, [
+    hydratedData?.kpis,
+    summaryFacet.error,
+    resultDonutData.length,
+    yoyChartData.length,
+    chartsFacet.error,
+    derivedTrends.length,
+    trendsFacet.error,
+    derivedInsights,
+    insightsFacet.error,
+    processedParticipants.length,
+    participantsFacet.error,
+  ]);
 
   const emptyDatasetInsight = useMemo(() => {
-    if (!data || data.kpis.totalRecords !== 0) return null;
+    if (!hydratedData || hydratedData.kpis.totalRecords !== 0) return null;
     return describeFocusedEmptyContext({
       hasActivityPick: Boolean(pick),
-      totalRecords: data.kpis.totalRecords,
+      totalRecords: hydratedData.kpis.totalRecords,
       academicYear: filterContext?.academicYear ?? "all",
       stage: filterContext?.stage ?? "all",
       outcome: filterContext?.outcome ?? "all",
       primaryType: filterContext?.primaryType ?? "all",
     });
-  }, [data, pick, filterContext]);
+  }, [hydratedData, pick, filterContext]);
 
   useEffect(() => {
     if (!emptyDatasetInsight?.codes.length) return;
@@ -810,7 +1221,7 @@ export const FocusedExecutiveIntelligencePanel = memo((props: FocusedExecutiveIn
         </div>
       </div>
 
-      {compareEnabled && (compareLoading || compareData) ? (
+      {compareEnabled && (compareLoading || hydratedCompareData) ? (
         <CollapsibleSection
           sectionId="compare"
           persistKey={CI_STORAGE_KEYS.collapse}
@@ -821,6 +1232,21 @@ export const FocusedExecutiveIntelligencePanel = memo((props: FocusedExecutiveIn
           }
           className="print:border-violet-200"
         >
+        <FocusedCompareSection
+          isAr={isAr}
+          enabled={compareEnabled}
+          loading={compareLoading}
+          hydrated={compareFacet.hydrated}
+          error={compareFacet.error ? new Error(compareFacet.error) : null}
+          data={hydratedCompareData ? { charts: hydratedCompareData.charts, executive: hydratedCompareData.executive } : undefined}
+          fallbackData={compareData ? { charts: compareData.charts, executive: compareData.executive } : undefined}
+          onRetry={() => {
+            if (process.env.NODE_ENV !== "production") {
+              // eslint-disable-next-line no-console
+              console.info("[FOCUSED_SECTION_RETRY]", { section: "compare", hydrationEpoch: hydrationEpochRef.current });
+            }
+          }}
+        >
         <div className="rounded-xl border border-violet-100 bg-violet-50/30 p-3 print:break-inside-avoid">
           <p className="text-xs text-violet-900">
             {isAr ? "نفس فلاتر التقرير ونوع الإنجاز." : "Same report filters and outcome type."}
@@ -830,7 +1256,7 @@ export const FocusedExecutiveIntelligencePanel = memo((props: FocusedExecutiveIn
               <Loader2 className="h-4 w-4 animate-spin" />
               {isAr ? "جاري تحميل المقارنة…" : "Loading comparison…"}
             </div>
-          ) : compareData && data ? (
+          ) : hydratedCompareData && hydratedData ? (
             <div className="mt-4 space-y-4">
               {(() => {
                 const deltaLine = (a: number, b: number) => {
@@ -859,38 +1285,38 @@ export const FocusedExecutiveIntelligencePanel = memo((props: FocusedExecutiveIn
                   })?.value ?? 0;
                 const medals = (d: FocusedActivityReportPayload) =>
                   rb(d, "gold") + rb(d, "silver") + rb(d, "bronze");
-                const ycA = data.executive.yearComparison;
-                const ycB = compareData.executive.yearComparison;
+                const ycA = hydratedData.executive.yearComparison;
+                const ycB = hydratedCompareData.executive.yearComparison;
                 const lastYoY = (yc: typeof ycA) =>
                   yc.length > 1 ? (yc[yc.length - 1]?.excellenceRatePct ?? 0) - (yc[yc.length - 2]?.excellenceRatePct ?? 0) : 0;
                 const growA = lastYoY(ycA);
                 const growB = lastYoY(ycB);
                 const medalWin =
-                  medals(data) === medals(compareData) ? "tie" : medals(data) > medals(compareData) ? "A" : "B";
+                  medals(hydratedData) === medals(hydratedCompareData) ? "tie" : medals(hydratedData) > medals(hydratedCompareData) ? "A" : "B";
                 const growWin = growA === growB ? "tie" : growA > growB ? "A" : "B";
                 const rateWin =
-                  data.kpis.excellenceRatePct === compareData.kpis.excellenceRatePct
+                  hydratedData.kpis.excellenceRatePct === hydratedCompareData.kpis.excellenceRatePct
                     ? "tie"
-                    : data.kpis.excellenceRatePct > compareData.kpis.excellenceRatePct
+                    : hydratedData.kpis.excellenceRatePct > hydratedCompareData.kpis.excellenceRatePct
                       ? "A"
                       : "B";
                 const intlWin =
-                  intlCount(data) === intlCount(compareData)
+                  intlCount(hydratedData) === intlCount(hydratedCompareData)
                     ? "tie"
-                    : intlCount(data) > intlCount(compareData)
+                    : intlCount(hydratedData) > intlCount(hydratedCompareData)
                       ? "A"
                       : "B";
                 const rows: [string, number, number][] = [
-                  [isAr ? "سجلات" : "Records", data.kpis.totalRecords, compareData.kpis.totalRecords],
-                  [isAr ? "طلاب فريدون" : "Distinct students", data.kpis.distinctStudents, compareData.kpis.distinctStudents],
-                  [isAr ? "نسبة التميز %" : "Excellence %", data.kpis.excellenceRatePct, compareData.kpis.excellenceRatePct],
-                  [isAr ? "🥇 ذهبية" : "🥇 Gold", rb(data, "gold"), rb(compareData, "gold")],
-                  [isAr ? "🥈 فضية" : "🥈 Silver", rb(data, "silver"), rb(compareData, "silver")],
-                  [isAr ? "🥉 برونزية" : "🥉 Bronze", rb(data, "bronze"), rb(compareData, "bronze")],
-                  [isAr ? "ترشيحات" : "Nominations", rb(data, "nomination"), rb(compareData, "nomination")],
-                  [isAr ? "مشاركة فقط" : "Participation only", rb(data, "participation"), rb(compareData, "participation")],
-                  [isAr ? "موهبة (مخطط)" : "Mawhiba (slice)", mawCount(data), mawCount(compareData)],
-                  [isAr ? "قسم دولي (مخطط)" : "International (slice)", intlCount(data), intlCount(compareData)],
+                  [isAr ? "سجلات" : "Records", hydratedData.kpis.totalRecords, hydratedCompareData.kpis.totalRecords],
+                  [isAr ? "الطلاب المشاركون" : "Participating students", hydratedData.kpis.distinctStudents, hydratedCompareData.kpis.distinctStudents],
+                  [isAr ? "نسبة التميز %" : "Excellence %", hydratedData.kpis.excellenceRatePct, hydratedCompareData.kpis.excellenceRatePct],
+                  [isAr ? "🥇 ذهبية" : "🥇 Gold", rb(hydratedData, "gold"), rb(hydratedCompareData, "gold")],
+                  [isAr ? "🥈 فضية" : "🥈 Silver", rb(hydratedData, "silver"), rb(hydratedCompareData, "silver")],
+                  [isAr ? "🥉 برونزية" : "🥉 Bronze", rb(hydratedData, "bronze"), rb(hydratedCompareData, "bronze")],
+                  [isAr ? "ترشيحات" : "Nominations", rb(hydratedData, "nomination"), rb(hydratedCompareData, "nomination")],
+                  [isAr ? "مشاركة فقط" : "Participation only", rb(hydratedData, "participation"), rb(hydratedCompareData, "participation")],
+                  [isAr ? "موهبة (مخطط)" : "Mawhiba (slice)", mawCount(hydratedData), mawCount(hydratedCompareData)],
+                  [isAr ? "قسم دولي (مخطط)" : "International (slice)", intlCount(hydratedData), intlCount(hydratedCompareData)],
                 ];
                 const winChip = (key: string, w: "A" | "B" | "tie", ar: string, en: string) => (
                   <div
@@ -917,17 +1343,17 @@ export const FocusedExecutiveIntelligencePanel = memo((props: FocusedExecutiveIn
                           <tr className="border-b border-slate-200 bg-slate-50 text-slate-700">
                             <th className="px-2 py-2 font-black">{isAr ? "المؤشر" : "KPI"}</th>
                             <th className="px-2 py-2 font-black" style={{ color: ANJAL_CHART.anjalBlue }} dir="auto">
-                              {isAr ? data.activityLabelAr : data.activityLabelEn}
+                              {isAr ? hydratedData.activityLabelAr : hydratedData.activityLabelEn}
                             </th>
                             <th className="px-2 py-2 font-black text-violet-800">{isAr ? "فرق" : "Δ"}</th>
                             <th className="px-2 py-2 font-black text-violet-950" dir="auto">
-                              {isAr ? compareData.activityLabelAr : compareData.activityLabelEn}
+                              {isAr ? hydratedCompareData.activityLabelAr : hydratedCompareData.activityLabelEn}
                             </th>
                           </tr>
                         </thead>
                         <tbody>
-                          {rows.map(([label, av, bv]) => (
-                            <tr key={label} className="border-b border-slate-100">
+                          {rows.map(([label, av, bv], rowIdx) => (
+                            <tr key={`compare-row-${rowIdx}-${label}`} className="border-b border-slate-100">
                               <td className="px-2 py-2 font-semibold text-slate-800">{label}</td>
                               <td className="px-2 py-2 tabular-nums font-bold text-slate-900">{av}</td>
                               <td className={`px-2 py-2 tabular-nums text-xs font-black ${deltaCellClass(av, bv)}`}>
@@ -947,28 +1373,16 @@ export const FocusedExecutiveIntelligencePanel = memo((props: FocusedExecutiveIn
                   <p className="mb-2 text-[10px] font-black uppercase text-slate-500">
                     {isAr ? "السنوات × الطلاب والميداليات" : "Years × students & medals"}
                   </p>
-                  <div className="h-56 min-h-[220px] w-full">
-                    {compareYoyBars.length > 0 ? (
-                      <LazyChartMount minHeight={220} chartId="compare-yoy-participation">
-                        <ResponsiveContainer width="100%" height="100%">
-                          <BarChart data={compareYoyBars} margin={{ top: 8, right: 8, left: 0, bottom: 4 }}>
-                            <CartesianGrid strokeDasharray="3 3" stroke={ANJAL_CHART.grid} />
-                            <XAxis dataKey="year" tick={{ fontSize: 10 }} />
-                            <YAxis tick={{ fontSize: 10 }} allowDecimals={false} />
-                            <Tooltip />
-                            <Legend />
-                            <Bar dataKey="aPart" fill={ANJAL_CHART.anjalBlue} name={isAr ? "أ نشاط طلاب" : "A students"} radius={[4, 4, 0, 0]} />
-                            <Bar dataKey="bPart" fill={ANJAL_CHART.nominationViolet} name={isAr ? "ب نشاط طلاب" : "B students"} radius={[4, 4, 0, 0]} />
-                            <Bar dataKey="aMed" fill={ANJAL_CHART.gold} name={isAr ? "أ ميداليات" : "A medals"} radius={[4, 4, 0, 0]} />
-                            <Bar dataKey="bMed" fill={ANJAL_CHART.silver} name={isAr ? "ب ميداليات" : "B medals"} radius={[4, 4, 0, 0]} />
-                          </BarChart>
-                        </ResponsiveContainer>
-                      </LazyChartMount>
-                    ) : (
-                      <div className="flex h-full min-h-[220px] items-center justify-center text-xs text-slate-400">
-                        {isAr ? "لا بيانات سنوات" : "No YoY rows"}
-                      </div>
-                    )}
+                  <div className="w-full">
+                    <FocusedStackedTrendChart
+                      rows={selectTrendSeries(
+                        `${pick}:${outcome}:compare-trend:${hydrationEpochRef.current}`,
+                        adaptTrendChartData(compareYoyBars)
+                      )}
+                      isAr={isAr}
+                      hydrationEpoch={hydrationEpochRef.current}
+                      onRelaxFilters={onRelaxReportFilters}
+                    />
                   </div>
                 </div>
                 <div className="rounded-xl border border-white bg-white/90 p-3 shadow-sm" dir="ltr">
@@ -999,21 +1413,25 @@ export const FocusedExecutiveIntelligencePanel = memo((props: FocusedExecutiveIn
                 </div>
               </div>
               <div className="grid gap-3 md:grid-cols-2">
-                {[data, compareData].map((d, i) => (
-                  <div key={i} className="rounded-xl border border-slate-100 bg-white p-3 shadow-sm" dir="ltr">
+                {[hydratedData, hydratedCompareData].map((d) => (
+                  <div
+                    key={`${d.focusType}:${d.focusRaw}:${d.focusedOutcome}`}
+                    className="rounded-xl border border-slate-100 bg-white p-3 shadow-sm"
+                    dir="ltr"
+                  >
                     <p className="text-xs font-black text-slate-900" dir="auto">
                       {isAr ? d.activityLabelAr : d.activityLabelEn}
                     </p>
                     <p className="mb-1 mt-1 text-[10px] font-bold text-slate-500">{isAr ? "جنس / قسم / موهبة" : "Gender / section / Mawhiba"}</p>
                     <div className="grid grid-cols-3 gap-2 text-[10px]">
-                      {d.charts.genderPie.map((s) => (
-                        <div key={s.name} className="rounded-lg bg-slate-50 p-2">
+                      {d.charts.genderPie.map((s, sliceIdx) => (
+                        <div key={`gender-${d.focusRaw}-${s.name}-${sliceIdx}`} className="rounded-lg bg-slate-50 p-2">
                           <span className="text-slate-500">{isAr ? s.nameAr : s.nameEn}</span>
                           <p className="font-black tabular-nums text-slate-900">{s.value}</p>
                         </div>
                       ))}
-                      {d.charts.sectionPie.map((s) => (
-                        <div key={s.name} className="rounded-lg bg-slate-50 p-2">
+                      {d.charts.sectionPie.map((s, sliceIdx) => (
+                        <div key={`section-${d.focusRaw}-${s.name}-${sliceIdx}`} className="rounded-lg bg-slate-50 p-2">
                           <span className="text-slate-500">{isAr ? s.nameAr : s.nameEn}</span>
                           <p className="font-black tabular-nums text-slate-900">{s.value}</p>
                         </div>
@@ -1029,6 +1447,7 @@ export const FocusedExecutiveIntelligencePanel = memo((props: FocusedExecutiveIn
             </p>
           )}
         </div>
+        </FocusedCompareSection>
         </CollapsibleSection>
       ) : null}
 
@@ -1038,20 +1457,27 @@ export const FocusedExecutiveIntelligencePanel = memo((props: FocusedExecutiveIn
             ? "اختر النشاط أعلاه لعرض التقرير التنفيذي والمقارنات والجدول."
             : "Select an activity above for the executive report, charts, and register."}
         </div>
-      ) : loading && !data ? (
+      ) : (loading || isProgressiveLoading) && !hydratedData ? (
         <div className="flex min-h-[12rem] items-center justify-center gap-2 py-16 text-slate-600">
           <Loader2 className="h-6 w-6 shrink-0 animate-spin" aria-hidden />
           <span>{isAr ? "جاري بناء التقرير…" : "Building report…"}</span>
         </div>
-      ) : reportLoadError ? (
-        <div
-          className="rounded-2xl border border-red-200 bg-red-50/90 p-5 text-sm text-red-900"
-          role="alert"
-        >
-          <p className="font-black">{isAr ? "تعذر تحميل التقرير" : "Could not load report"}</p>
-          <p className="mt-2 leading-relaxed">{reportLoadError}</p>
-        </div>
-      ) : pick && !loading && !data ? (
+      ) : facetLoadError && !hydratedData ? (
+        <ExecutiveErrorCard
+          isAr={isAr}
+          message={
+            facetLoadError === "focused_report_unavailable"
+              ? isAr
+                ? "تعذر تجميع التحليل لهذا النطاق. جرّب تخفيف الفلاتر أو التحديث."
+                : "Analytics could not be assembled for this scope. Relax filters or retry."
+              : facetLoadError
+          }
+          onRetry={() => {
+            resetFacets();
+            hydrationEpochRef.current += 1;
+          }}
+        />
+      ) : pick && !loading && !isProgressiveLoading && !hydratedData ? (
         <div className="rounded-2xl border border-slate-200 bg-white p-6 text-sm leading-relaxed text-slate-800">
           <p className="font-black text-slate-900">{isAr ? "لا توجد بيانات مطابقة" : "No matching analytics"}</p>
           <ul className="mt-3 list-disc space-y-2 ps-5 text-slate-700">
@@ -1069,7 +1495,7 @@ export const FocusedExecutiveIntelligencePanel = memo((props: FocusedExecutiveIn
             </button>
           ) : null}
         </div>
-      ) : data ? (
+      ) : hydratedData ? (
         <>
           <div className="flex flex-wrap items-center justify-between gap-3 print:hidden">
             <p className={CI_TYPOGRAPHY.micro}>{isAr ? "كثافة العرض" : "View density"}</p>
@@ -1113,7 +1539,22 @@ export const FocusedExecutiveIntelligencePanel = memo((props: FocusedExecutiveIn
             </div>
           </div>
 
-          {data.kpis.totalRecords === 0 ? (
+          <FocusedSummarySection
+            isAr={isAr}
+            hydrationEpoch={hydrationEpochRef.current}
+            loading={summaryFacet.loading && !hydratedData}
+            hydrated={summaryFacet.hydrated}
+            error={summaryFacet.error ? new Error(summaryFacet.error) : null}
+            data={hydratedData?.kpis}
+            fallbackData={hydratedData.kpis}
+            onRetry={() => {
+              if (process.env.NODE_ENV !== "production") {
+                // eslint-disable-next-line no-console
+                console.info("[FOCUSED_SECTION_RETRY]", { section: "summary", hydrationEpoch: hydrationEpochRef.current });
+              }
+            }}
+          >
+          {hydratedData.kpis.totalRecords === 0 ? (
             <div
               className="rounded-2xl border border-amber-200 bg-amber-50/90 p-4 text-sm text-amber-950"
               role="status"
@@ -1140,41 +1581,50 @@ export const FocusedExecutiveIntelligencePanel = memo((props: FocusedExecutiveIn
             aria-label={isAr ? "بطاقة تنفيذية" : "Executive hero"}
           >
             <h2 className={CI_TYPOGRAPHY.heroTitle} dir="auto">
-              {isAr ? data.activityLabelAr : data.activityLabelEn}
+              {isAr ? hydratedData.activityLabelAr : hydratedData.activityLabelEn}
             </h2>
             <p className={`mt-1 ${CI_TYPOGRAPHY.heroMeta}`}>
               {academicYearLine} · {outcomeLine}
             </p>
-            {data.decisionPlatform?.alerts?.[0] ? (
+            {hydratedData.decisionPlatform?.alerts?.[0] ? (
               <div className="mt-3 rounded-xl border border-amber-200/90 bg-amber-50/90 p-3 text-xs text-amber-950">
                 <span className="font-black">{isAr ? "أهم تنبيه" : "Top alert"}</span>
                 <span className="mx-1 font-bold">—</span>
                 <span className="font-bold">
-                  {isAr ? data.decisionPlatform.alerts[0].titleAr : data.decisionPlatform.alerts[0].titleEn}
+                  {isAr
+                    ? hydratedData.decisionPlatform.alerts[0].titleAr
+                    : hydratedData.decisionPlatform.alerts[0].titleEn}
                 </span>
                 <p className="mt-1 line-clamp-2 text-[11px] leading-snug">
-                  {isAr ? data.decisionPlatform.alerts[0].detailAr : data.decisionPlatform.alerts[0].detailEn}
+                  {isAr
+                    ? hydratedData.decisionPlatform.alerts[0].detailAr
+                    : hydratedData.decisionPlatform.alerts[0].detailEn}
                 </p>
               </div>
             ) : null}
-            {data.decisionPlatform ? (
+            {hydratedData.decisionPlatform ? (
               <>
                 <p className={`mt-3 ${CI_TYPOGRAPHY.sectionHint}`}>
                   {isAr ? "ملخص تنفيذي (مختصر)" : "Executive snapshot"}
                 </p>
                 <p className="mt-1 text-sm leading-relaxed text-slate-800 line-clamp-3" dir="auto">
-                  {(isAr ? data.decisionPlatform.narrativeAr : data.decisionPlatform.narrativeEn).length > 280
-                    ? `${(isAr ? data.decisionPlatform.narrativeAr : data.decisionPlatform.narrativeEn).slice(0, 277)}…`
+                  {(isAr
+                    ? hydratedData.decisionPlatform.narrativeAr
+                    : hydratedData.decisionPlatform.narrativeEn
+                  ).length > 280
+                    ? `${(isAr ? hydratedData.decisionPlatform.narrativeAr : hydratedData.decisionPlatform.narrativeEn).slice(0, 277)}…`
                     : isAr
-                      ? data.decisionPlatform.narrativeAr
-                      : data.decisionPlatform.narrativeEn}
+                      ? hydratedData.decisionPlatform.narrativeAr
+                      : hydratedData.decisionPlatform.narrativeEn}
                 </p>
                 <details className="mt-2 text-xs text-slate-600">
                   <summary className="cursor-pointer font-bold text-indigo-800 outline-none ring-offset-2 focus-visible:ring-2 focus-visible:ring-indigo-400">
                     {isAr ? "عرض الملخص الكامل" : "View full narrative"}
                   </summary>
                   <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-slate-800" dir="auto">
-                    {isAr ? data.decisionPlatform.narrativeAr : data.decisionPlatform.narrativeEn}
+                    {isAr
+                      ? hydratedData.decisionPlatform.narrativeAr
+                      : hydratedData.decisionPlatform.narrativeEn}
                   </p>
                 </details>
               </>
@@ -1182,7 +1632,10 @@ export const FocusedExecutiveIntelligencePanel = memo((props: FocusedExecutiveIn
           </section>
 
           <section className={`grid gap-3 print:grid-cols-2 ${isExecutiveDensity ? "sm:grid-cols-2 lg:grid-cols-4" : "sm:grid-cols-2 lg:grid-cols-5"}`}>
-            {(isExecutiveDensity ? data.executive.kpiCards.slice(0, 4) : data.executive.kpiCards).map((c) => (
+            {(isExecutiveDensity
+              ? hydratedData.executive.kpiCards.slice(0, 4)
+              : hydratedData.executive.kpiCards
+            ).map((c) => (
               <KpiExecutiveCard
                 key={c.id}
                 isAr={isAr}
@@ -1196,6 +1649,7 @@ export const FocusedExecutiveIntelligencePanel = memo((props: FocusedExecutiveIn
               />
             ))}
           </section>
+          </FocusedSummarySection>
 
           <CollapsibleSection
             sectionId="decision"
@@ -1204,11 +1658,25 @@ export const FocusedExecutiveIntelligencePanel = memo((props: FocusedExecutiveIn
             subtitle={isAr ? "تنبيهات، توصيات، ميداليات، مقارنة مرجعية، ترتيب الأنشطة." : "Alerts, recommendations, medals, benchmarks, activity ranking."}
             defaultOpen
           >
-            {data.decisionPlatform ? (
+            <FocusedInsightsSection
+              isAr={isAr}
+              loading={insightsFacet.loading && !derivedInsights}
+              hydrated={insightsFacet.hydrated}
+              error={insightsFacet.error ? new Error(insightsFacet.error) : null}
+              data={derivedInsights ?? undefined}
+              fallbackData={hydratedData?.decisionPlatform}
+              onRetry={() => {
+                if (process.env.NODE_ENV !== "production") {
+                  // eslint-disable-next-line no-console
+                  console.info("[FOCUSED_SECTION_RETRY]", { section: "insights", hydrationEpoch: hydrationEpochRef.current });
+                }
+              }}
+            >
+            {hydratedData.decisionPlatform ? (
               <CompetitionDecisionSections
                 isAr={isAr}
-                dp={data.decisionPlatform}
-                activityLabel={isAr ? data.activityLabelAr : data.activityLabelEn}
+                dp={hydratedData.decisionPlatform}
+                activityLabel={isAr ? hydratedData.activityLabelAr : hydratedData.activityLabelEn}
                 hideNarrative
               />
             ) : (
@@ -1216,6 +1684,7 @@ export const FocusedExecutiveIntelligencePanel = memo((props: FocusedExecutiveIn
                 {isAr ? "لا تتوفر بيانات منصة القرار لهذا النشاط." : "No decision-platform payload for this activity."}
               </p>
             )}
+            </FocusedInsightsSection>
           </CollapsibleSection>
 
           <CollapsibleSection
@@ -1225,7 +1694,25 @@ export const FocusedExecutiveIntelligencePanel = memo((props: FocusedExecutiveIn
             subtitle={isAr ? "توزيع النتائج، السنوات، التركيبات الديموغرافية." : "Results mix, years, demographic composition."}
             defaultOpen={!isExecutiveDensity}
           >
-          <section className="grid gap-4 lg:grid-cols-2">
+          <FocusedChartsSection
+            isAr={isAr}
+            loading={chartsFacet.loading && !chartsFacet.hydrated && !hydratedData?.charts}
+            hydrated={chartsFacet.hydrated}
+            error={chartsFacet.error ? new Error(chartsFacet.error) : null}
+            data={{ resultDonut: resultDonutData, yoyBars: yoyChartData }}
+            fallbackData={
+              hydratedData?.charts
+                ? { resultDonut: hydratedData.charts.resultBars, yoyBars: hydratedData.executive.yearComparison }
+                : undefined
+            }
+            onRetry={() => {
+              if (process.env.NODE_ENV !== "production") {
+                // eslint-disable-next-line no-console
+                console.info("[FOCUSED_SECTION_RETRY]", { section: "charts", hydrationEpoch: hydrationEpochRef.current });
+              }
+            }}
+          >
+          <section ref={analyticsIoRef} className="grid gap-4 lg:grid-cols-2">
             <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm print:break-inside-avoid">
               <h3 className="text-sm font-black text-slate-900">
                 {isAr ? "توزيع النتائج" : "Result distribution"}
@@ -1234,21 +1721,16 @@ export const FocusedExecutiveIntelligencePanel = memo((props: FocusedExecutiveIn
                 {isAr ? "دائري مع النسب المئوية" : "Donut with percentages"}
               </p>
               <div className="mt-2 h-64 min-h-[256px] w-full overflow-hidden" dir="ltr">
-                {!resultDonutValidation.ok ? (
-                  <div className="flex h-64 w-full items-center justify-center rounded-lg border border-dashed border-slate-200 bg-slate-50 text-sm font-semibold text-slate-600">
-                    {chartEmptyMessage(isAr)}
-                  </div>
-                ) : (
-                <LazyChartMount
-                  minHeight={256}
+                <ExecutiveChartPanel
                   chartId="focused-result-donut"
-                  fallback={
-                    <div className="flex h-64 w-full items-center justify-center rounded-lg bg-slate-100 text-[11px] text-slate-500">
-                      {isAr ? "مرورًا لعرض الرسم…" : "Scroll to load chart…"}
-                    </div>
-                  }
+                  isAr={isAr}
+                  minHeight={256}
+                  ready={resultDonutValidation.ok}
+                  guardReason={resultDonutValidation.ok ? "ok" : "empty"}
+                  onRelaxFilters={onRelaxReportFilters}
+                  loadingLabel={isAr ? "تحميل توزيع النتائج…" : "Loading result mix…"}
                 >
-                  <ResponsiveContainer width="100%" height="100%">
+                  <ResponsiveContainer width="100%" height={256}>
                     <PieChart>
                       <Pie
                         data={resultDonutData}
@@ -1263,8 +1745,8 @@ export const FocusedExecutiveIntelligencePanel = memo((props: FocusedExecutiveIn
                           `${String(name ?? "")} ${((percent ?? 0) * 100).toFixed(0)}%`
                         }
                       >
-                        {resultDonutData.map((e) => (
-                          <Cell key={e.key} fill={e.fill} />
+                        {resultDonutData.map((e, sliceIdx) => (
+                          <Cell key={e.key ? `slice-${e.key}` : `slice-idx-${sliceIdx}`} fill={e.fill} />
                         ))}
                       </Pie>
                       <Tooltip
@@ -1276,8 +1758,7 @@ export const FocusedExecutiveIntelligencePanel = memo((props: FocusedExecutiveIn
                       />
                     </PieChart>
                   </ResponsiveContainer>
-                </LazyChartMount>
-                )}
+                </ExecutiveChartPanel>
               </div>
               {resultDonutValidation.ok ? (
               <p className="mt-1 text-center text-xs font-bold text-slate-600">
@@ -1293,129 +1774,84 @@ export const FocusedExecutiveIntelligencePanel = memo((props: FocusedExecutiveIn
               <p className="text-[11px] text-slate-500">
                 {isAr ? "مقارنة مباشرة بين السنوات (ضمن النطاق)" : "Direct multi-year comparison (scope)"}
               </p>
-              <div className="mt-2 h-64 min-h-[256px] w-full overflow-hidden" dir="ltr">
-                {!yoyChartValidation.ok ? (
-                  <div className="flex h-64 w-full items-center justify-center rounded-lg border border-dashed border-slate-200 bg-slate-50 text-sm font-semibold text-slate-600">
-                    {chartEmptyMessage(isAr)}
-                  </div>
-                ) : (
-                <LazyChartMount
-                  minHeight={256}
-                  chartId="focused-yoy-bars"
-                  fallback={
-                    <div className="flex h-64 w-full items-center justify-center rounded-lg bg-slate-100 text-[11px] text-slate-500">
-                      {isAr ? "مرورًا لعرض الرسم…" : "Scroll to load chart…"}
-                    </div>
-                  }
-                >
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={yoyChartData} margin={{ top: 8, right: 8, left: 0, bottom: 4 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke={ANJAL_CHART.grid} />
-                      <XAxis dataKey="year" tick={{ fontSize: 10 }} />
-                      <YAxis yAxisId="a" tick={{ fontSize: 10 }} allowDecimals={false} />
-                      <YAxis yAxisId="b" orientation="right" tick={{ fontSize: 10 }} allowDecimals={false} />
-                      <Tooltip />
-                      <Legend />
-                      <Bar
-                        yAxisId="a"
-                        dataKey="participants"
-                        fill={ANJAL_CHART.anjalBlue}
-                        name={isAr ? "طلاب" : "Students"}
-                        radius={[6, 6, 0, 0]}
-                      />
-                      <Bar
-                        yAxisId="a"
-                        dataKey="medals"
-                        fill={ANJAL_CHART.gold}
-                        name={isAr ? "ميداليات" : "Medals"}
-                        radius={[6, 6, 0, 0]}
-                      />
-                      <Bar
-                        yAxisId="b"
-                        dataKey="excellence"
-                        fill={ANJAL_CHART.successGreen}
-                        name={isAr ? "تميز %" : "Excellence %"}
-                        radius={[6, 6, 0, 0]}
-                      />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </LazyChartMount>
-                )}
+              <div className="mt-2 w-full overflow-hidden" dir="ltr">
+                <FocusedYoYChart
+                  rows={yoySeries}
+                  isAr={isAr}
+                  hydrationEpoch={hydrationEpochRef.current}
+                  onRelaxFilters={onRelaxReportFilters}
+                />
               </div>
             </div>
           </section>
 
           {!isExecutiveDensity ? (
-          <section className="grid gap-4 lg:grid-cols-3 print:grid-cols-1">
+          <FocusedTrendsSection
+            isAr={isAr}
+            loading={trendsFacet.loading}
+            hydrated={trendsFacet.hydrated}
+            error={trendsFacet.error ? new Error(trendsFacet.error) : null}
+            data={derivedTrends}
+            fallbackData={hydratedData?.executive?.yearComparison}
+            onRetry={() => {
+              if (process.env.NODE_ENV !== "production") {
+                // eslint-disable-next-line no-console
+                console.info("[FOCUSED_SECTION_RETRY]", { section: "trends", hydrationEpoch: hydrationEpochRef.current });
+              }
+            }}
+          >
+          <section className="grid gap-4 lg:grid-cols-2 xl:grid-cols-4 print:grid-cols-1">
             <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
               <h3 className="text-sm font-black text-slate-900">
                 {isAr ? "عربي / دولي × الجنس" : "Section × gender"}
               </h3>
-              <div className="mt-2 h-56 min-h-[220px] w-full overflow-hidden" dir="ltr">
-                <LazyChartMount
-                  minHeight={220}
-                  chartId="focused-stack-section-gender"
-                  fallback={<div className="h-56 animate-pulse rounded-lg bg-slate-100" aria-hidden />}
-                >
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={stackSection} margin={{ top: 4, right: 8, left: 0, bottom: 4 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke={ANJAL_CHART.grid} />
-                      <XAxis dataKey="name" tick={{ fontSize: 10 }} />
-                      <YAxis allowDecimals={false} tick={{ fontSize: 10 }} />
-                      <Tooltip />
-                      <Legend />
-                      <Bar dataKey="male" stackId="a" fill={ANJAL_CHART.male} name={isAr ? "بنين" : "Male"} radius={[0, 0, 0, 0]} />
-                      <Bar dataKey="female" stackId="a" fill={ANJAL_CHART.female} name={isAr ? "بنات" : "Female"} radius={[4, 4, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </LazyChartMount>
+              <div className="mt-2 w-full overflow-hidden" dir="ltr">
+                <FocusedDemographicChart
+                  rows={sectionGenderSeries}
+                  isAr={isAr}
+                  hydrationEpoch={hydrationEpochRef.current}
+                  onRelaxFilters={onRelaxReportFilters}
+                />
               </div>
             </div>
             <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
               <h3 className="text-sm font-black text-slate-900">{isAr ? "موهبة × الجنس" : "Mawhiba × gender"}</h3>
-              <div className="mt-2 h-56 min-h-[220px] w-full overflow-hidden" dir="ltr">
-                <LazyChartMount
-                  minHeight={220}
-                  chartId="focused-stack-mawhiba-gender"
-                  fallback={<div className="h-56 animate-pulse rounded-lg bg-slate-100" aria-hidden />}
-                >
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={stackMaw} margin={{ top: 4, right: 8, left: 0, bottom: 4 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke={ANJAL_CHART.grid} />
-                      <XAxis dataKey="name" tick={{ fontSize: 10 }} />
-                      <YAxis allowDecimals={false} tick={{ fontSize: 10 }} />
-                      <Tooltip />
-                      <Legend />
-                      <Bar dataKey="male" stackId="m" fill={ANJAL_CHART.successGreen} name={isAr ? "بنين" : "Male"} />
-                      <Bar dataKey="female" stackId="m" fill={ANJAL_CHART.nominationViolet} name={isAr ? "بنات" : "Female"} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </LazyChartMount>
+              <div className="mt-2 w-full overflow-hidden" dir="ltr">
+                <FocusedMawhibaChart
+                  rows={mawhibaDistributionSeries}
+                  isAr={isAr}
+                  hydrationEpoch={hydrationEpochRef.current}
+                  onRelaxFilters={onRelaxReportFilters}
+                />
               </div>
             </div>
             <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
               <h3 className="text-sm font-black text-slate-900">{isAr ? "المراحل" : "Stages"}</h3>
-              <div className="mt-2 h-56 min-h-[220px] w-full overflow-hidden" dir="ltr">
-                <LazyChartMount
-                  minHeight={220}
-                  chartId="focused-stage-horizontal"
-                  fallback={<div className="h-56 animate-pulse rounded-lg bg-slate-100" aria-hidden />}
-                >
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={stackStage} layout="vertical" margin={{ top: 4, right: 8, left: 8, bottom: 4 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke={ANJAL_CHART.grid} horizontal={false} />
-                      <XAxis type="number" tick={{ fontSize: 10 }} allowDecimals={false} />
-                      <YAxis type="category" dataKey="name" width={72} tick={{ fontSize: 10 }} />
-                      <Tooltip />
-                      <Bar dataKey="n" fill={ANJAL_CHART.participationBlue} name={isAr ? "عدد" : "Count"} radius={[0, 6, 6, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </LazyChartMount>
+              <div className="mt-2 w-full overflow-hidden" dir="ltr">
+                <FocusedStageDistributionChart
+                  rows={stageSeries}
+                  isAr={isAr}
+                  hydrationEpoch={hydrationEpochRef.current}
+                  onRelaxFilters={onRelaxReportFilters}
+                />
+              </div>
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+              <h3 className="text-sm font-black text-slate-900">{isAr ? "توزيع الجنس" : "Gender distribution"}</h3>
+              <div className="mt-2 w-full overflow-hidden" dir="ltr">
+                <FocusedGenderDistributionChart
+                  rows={genderDistributionSeries}
+                  isAr={isAr}
+                  hydrationEpoch={hydrationEpochRef.current}
+                  onRelaxFilters={onRelaxReportFilters}
+                />
               </div>
             </div>
           </section>
+          </FocusedTrendsSection>
           ) : null}
 
+          </FocusedChartsSection>
           </CollapsibleSection>
 
           <CollapsibleSection
@@ -1429,9 +1865,15 @@ export const FocusedExecutiveIntelligencePanel = memo((props: FocusedExecutiveIn
             <div className="grid gap-4 lg:grid-cols-3">
               {(
                 [
-                  [isAr ? "أفضل الأداء (مرجّح)" : "Top weighted score", data.executive.topPerformers.byWeighted],
-                  [isAr ? "أكثر مشاركة" : "Most participation", data.executive.topPerformers.byParticipation],
-                  [isAr ? "أكثر ميداليات" : "Most medals", data.executive.topPerformers.byMedals],
+                  [
+                    isAr ? "أفضل الأداء (مرجّح)" : "Top weighted score",
+                    hydratedData.executive.topPerformers.byWeighted,
+                  ],
+                  [
+                    isAr ? "أكثر مشاركة" : "Most participation",
+                    hydratedData.executive.topPerformers.byParticipation,
+                  ],
+                  [isAr ? "أكثر ميداليات" : "Most medals", hydratedData.executive.topPerformers.byMedals],
                 ] as const
               ).map(([ttl, list]) => (
                 <div key={ttl} className="rounded-xl border border-slate-100 bg-slate-50/50 p-3">
@@ -1479,10 +1921,34 @@ export const FocusedExecutiveIntelligencePanel = memo((props: FocusedExecutiveIn
             subtitle={isAr ? "فرز، بحث، تصدير دفعات." : "Sort, search, and batch export."}
             defaultOpen
           >
+          <FocusedParticipantsSection
+            isAr={isAr}
+            loading={participantsFacet.loading && !hydratedData?.participants}
+            hydrated={participantsFacet.hydrated}
+            error={participantsFacet.error ? new Error(participantsFacet.error) : null}
+            data={processedParticipants}
+            fallbackData={hydratedData?.participants}
+            onRetry={() => {
+              if (process.env.NODE_ENV !== "production") {
+                // eslint-disable-next-line no-console
+                console.info("[FOCUSED_SECTION_RETRY]", { section: "participants", hydrationEpoch: hydrationEpochRef.current });
+              }
+            }}
+          >
           <section
             className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm print:border-0"
             aria-label={isAr ? "جدول المشاركين" : "Participant register"}
           >
+            {participantsFacet.data?.participantsLightMode ? (
+              <p
+                className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-950 print:hidden"
+                role="status"
+              >
+                {isAr
+                  ? "وضع الجدول المخفّف نشط — سجلات كثيرة؛ يُعرض صفحة واحدة فقط مع إحصاءات أساسية."
+                  : "Light register mode — large dataset; paginated rows with minimal stats only."}
+              </p>
+            ) : null}
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex flex-wrap items-center gap-2 print:hidden">
                 <button
@@ -1660,6 +2126,7 @@ export const FocusedExecutiveIntelligencePanel = memo((props: FocusedExecutiveIn
               </button>
             </div>
           </section>
+          </FocusedParticipantsSection>
           </CollapsibleSection>
         </>
       ) : null}

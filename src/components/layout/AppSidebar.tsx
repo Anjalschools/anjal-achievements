@@ -42,7 +42,8 @@ import {
   FileSpreadsheet,
 } from "lucide-react";
 import { useUnreadNotificationCount } from "@/hooks/useUnreadNotificationCount";
-import { getLocale } from "@/lib/i18n";
+import { defaultLocale, getLocale } from "@/lib/i18n";
+import { useClientMounted } from "@/hooks/useClientMounted";
 import { isStaffAdminNavRole, isAlumniPlatformAdminRole } from "@/lib/app-navigation-roles";
 import { useAppSession } from "@/contexts/AppSessionContext";
 import { roleHasCapability, type RoleCapabilityKey } from "@/lib/app-role-scope-matrix";
@@ -54,7 +55,8 @@ import { canAccessAlumniCommunity } from "@/lib/alumni/canAccessAlumniCommunity"
 const AppSidebar = () => {
   const [isOpen, setIsOpen] = useState(false);
   const pathname = usePathname();
-  const locale = getLocale();
+  const mounted = useClientMounted();
+  const locale = mounted ? getLocale() : defaultLocale;
   const { count: unreadNotifications } = useUnreadNotificationCount();
   const { profile } = useAppSession();
   const navRole = profile?.role ?? null;

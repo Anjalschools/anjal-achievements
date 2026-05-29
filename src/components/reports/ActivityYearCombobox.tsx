@@ -41,10 +41,11 @@ const ActivityYearCombobox = ({
   const [options, setOptions] = useState<ActivityYearOption[]>([]);
   const [loading, setLoading] = useState(false);
   const [highlightIndex, setHighlightIndex] = useState(0);
-  const cacheRef = useRef<Map<string, ActivityYearOption[]>>(new Map());
+  const cacheRef = useRef<Map<string, { at: number; list: ActivityYearOption[] }>>(new Map());
+  const CACHE_TTL_MS = 10 * 60_000;
 
   useEffect(() => {
-    const t = window.setTimeout(() => setDebouncedQuery(query.trim()), 200);
+    const t = window.setTimeout(() => setDebouncedQuery(query.trim()), 400);
     return () => window.clearTimeout(t);
   }, [query]);
 
@@ -54,8 +55,8 @@ const ActivityYearCombobox = ({
   const loadOptions = useCallback(async () => {
     const cacheKey = `${paramsKey}\u001f${debouncedQuery}`;
     const cached = cacheRef.current.get(cacheKey);
-    if (cached) {
-      setOptions(cached);
+    if (cached && Date.now() - cached.at < CACHE_TTL_MS) {
+      setOptions(cached.list);
       return;
     }
     setLoading(true);
@@ -68,7 +69,7 @@ const ActivityYearCombobox = ({
       );
       const j = (await res.json().catch(() => ({}))) as { options?: ActivityYearOption[] };
       const list = Array.isArray(j.options) ? j.options : [];
-      cacheRef.current.set(cacheKey, list);
+      cacheRef.current.set(cacheKey, { at: Date.now(), list });
       setOptions(list);
     } catch {
       setOptions([]);

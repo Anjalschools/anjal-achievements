@@ -103,13 +103,24 @@ export class CiRouteMemoryCache<T> {
     if (this.store.size <= this.config.maxEntries) return;
     const now = Date.now();
     for (const [k, v] of this.store) {
-      if (now - v.at > this.config.staleTtlMs) this.store.delete(k);
+      if (now - v.at > this.config.staleTtlMs) {
+        this.store.delete(k);
+        if (process.env.NODE_ENV !== "production") {
+          // eslint-disable-next-line no-console
+          console.info("[CACHE_STALE_PURGE]", { key: k, cache: "route" });
+        }
+      }
     }
     if (this.store.size > this.config.maxEntries) {
       const oldest = [...this.store.entries()].sort((a, b) => a[1].at - b[1].at);
       const drop = this.store.size - this.config.maxEntries;
       for (let i = 0; i < drop; i++) {
-        this.store.delete(oldest[i]![0]);
+        const key = oldest[i]![0];
+        this.store.delete(key);
+        if (process.env.NODE_ENV !== "production") {
+          // eslint-disable-next-line no-console
+          console.info("[CACHE_EVICT]", { key, reason: "lru", cache: "route" });
+        }
       }
     }
   }

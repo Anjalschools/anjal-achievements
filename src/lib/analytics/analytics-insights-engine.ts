@@ -5,6 +5,10 @@
 import type { AnalyticsCanonicalSnapshot } from "@/lib/analytics/analytics-canonical-snapshot";
 import type { ParticipationAnalyticsPayload } from "@/lib/achievement-participation-analytics";
 import type { FocusedActivityReportPayload } from "@/types/focused-activity-report";
+import {
+  computeMedalConversionRate,
+  computeInternationalAchievementRate,
+} from "@/lib/analytics/analytics-metrics-definitions";
 
 export type AnalyticsInsightSeverity = "info" | "warn" | "critical";
 
@@ -17,6 +21,10 @@ export type AnalyticsInsight = {
   bodyAr: string;
   bodyEn: string;
   metricKeys: string[];
+  metricSource?: string;
+  evidenceAr?: string;
+  evidenceEn?: string;
+  affectedScope?: string;
 };
 
 export type AnalyticsInsightsBundle = {
@@ -25,6 +33,13 @@ export type AnalyticsInsightsBundle = {
 };
 
 const pct = (a: number, b: number): number => (b > 0 ? Math.round((a / b) * 1000) / 10 : 0);
+
+const pushInsight = (
+  insights: AnalyticsInsight[],
+  row: AnalyticsInsight
+): void => {
+  insights.push(row);
+};
 
 export const buildAnalyticsInsights = (input: {
   snapshot: AnalyticsCanonicalSnapshot;
@@ -43,8 +58,147 @@ export const buildAnalyticsInsights = (input: {
   if (g?.kpis) {
     const femalePct = g.kpis.femalePct ?? 0;
     const intlPct = g.kpis.internationalSectionPct ?? 0;
+    const medalRate = computeMedalConversionRate(g);
+    const intlAchRate = computeInternationalAchievementRate(g);
+
+    if (g.charts.yearTrend.length >= 2) {
+      const sorted = [...g.charts.yearTrend].sort((a, b) => a.year - b.year);
+      const last = sorted[sorted.length - 1]!;
+      const prev = sorted[sorted.length - 2]!;
+      if (prev.totalRows > 0) {
+        const yoy = ((last.totalRows - prev.totalRows) / prev.totalRows) * 100;
+        if (yoy >= 40) {
+          pushInsight(insights, {
+            id: "yearly_participation_spike",
+            severity: "info",
+            confidence: 0.82,
+            titleAr: "قفزة سنوية في المشاركة",
+            titleEn: "Yearly participation spike",
+            bodyAr: `قفزة ${Math.round(yoy)}% بين ${prev.year} و${last.year}.`,
+            bodyEn: `Spike of ${Math.round(yoy)}% between ${prev.year} and ${last.year}.`,
+            metricKeys: ["yearTrend"],
+            metricSource: "participationAnalytics.yearTrend",
+            evidenceAr: `${prev.year}: ${prev.totalRows} → ${last.year}: ${last.totalRows}`,
+            evidenceEn: `${prev.year}: ${prev.totalRows} → ${last.year}: ${last.totalRows}`,
+            affectedScope: "school-wide",
+          });
+        }
+        if (yoy <= -25) {
+          pushInsight(insights, {
+            id: "participation_drop_alert",
+            severity: "warn",
+            confidence: 0.8,
+            titleAr: "تنبيه انخفاض المشاركة",
+            titleEn: "Participation drop alert",
+            bodyAr: `انخفاض ${Math.round(Math.abs(yoy))}% بين ${prev.year} و${last.year}.`,
+            bodyEn: `Drop of ${Math.round(Math.abs(yoy))}% between ${prev.year} and ${last.year}.`,
+            metricKeys: ["yearTrend"],
+            metricSource: "participationAnalytics.yearTrend",
+            evidenceAr: `${last.totalRows} سجل مقابل ${prev.totalRows}`,
+            evidenceEn: `${last.totalRows} records vs ${prev.totalRows}`,
+            affectedScope: "school-wide",
+          });
+        }
+      }
+    }
+
+    const gold = g.charts.resultOutcomeCompare.find((x) => x.key === "gold")?.count ?? 0;
+    const silver = g.charts.resultOutcomeCompare.find((x) => x.key === "silver")?.count ?? 0;
+    if (gold > 0 && silver > 0 && gold < silver * 0.5) {
+      pushInsight(insights, {
+        id: "medal_trend_gold_below_silver",
+        severity: "warn",
+        confidence: 0.68,
+        titleAr: "تراجع نسبي للذهبية",
+        titleEn: "Gold medal share lagging",
+        bodyAr: `ذهبية ${gold} مقابل فضية ${silver} ضمن النطاق المفلتر.`,
+        bodyEn: `Gold ${gold} vs silver ${silver} under current filters.`,
+        metricKeys: ["medalConversionRate", "resultOutcomeCompare"],
+        metricSource: "analytics-metrics-definitions.medalConversionRate",
+        evidenceAr: `معدل تحويل ميداليات: ${medalRate}%`,
+        evidenceEn: `Medal conversion rate: ${medalRate}%`,
+        affectedScope: "filtered-cohort",
+      });
+    }
+
+    const arabic = g.charts.sectionParticipation.find((x) => x.key === "arabic")?.count ?? 0;
+    const international = g.charts.sectionParticipation.find((x) => x.key === "international")?.count ?? 0;
+    const sectionTotal = arabic + international;
+    if (sectionTotal >= 30) {
+      const intlShare = pct(international, sectionTotal);
+      const arShare = pct(arabic, sectionTotal);
+      if (intlShare >= 72 || arShare >= 72) {
+        pushInsight(insights, {
+          id: "division_imbalance",
+          severity: "warn",
+          confidence: 0.74,
+          titleAr: "اختلال توازن الأقسام",
+          titleEn: "Division imbalance",
+          bodyAr: `عربي ${arShare}% · دولي ${intlShare}% من المشاركات.`,
+          bodyEn: `Arabic ${arShare}% · International ${intlShare}% of participations.`,
+          metricKeys: ["sectionParticipation"],
+          metricSource: "participationAnalytics.sectionParticipation",
+          evidenceAr: `${arabic} عربي / ${international} دولي`,
+          evidenceEn: `${arabic} Arabic / ${international} international`,
+          affectedScope: "sections",
+        });
+      }
+    }
+
+    if (intlAchRate >= 20) {
+      pushInsight(insights, {
+        id: "international_participation_alert",
+        severity: "info",
+        confidence: 0.77,
+        titleAr: "تنبيه مشاركة دولية",
+        titleEn: "International participation alert",
+        bodyAr: `نسبة إنجازات دولية ${intlAchRate}%.`,
+        bodyEn: `International achievement rate is ${intlAchRate}%.`,
+        metricKeys: ["internationalAchievementRate"],
+        metricSource: "analytics-metrics-definitions.internationalAchievementRate",
+        evidenceAr: `${intlPct}% من المشاركات — قسم دولي`,
+        evidenceEn: `${intlPct}% participations — international section`,
+        affectedScope: "international-section",
+      });
+    }
+
+    const inactive = g.table.filter((r) => r.totalParticipations === 0);
+    if (inactive.length >= 3 && g.table.length >= 8) {
+      pushInsight(insights, {
+        id: "inactive_activities_detection",
+        severity: "info",
+        confidence: 0.7,
+        titleAr: "أنشطة بلا مشاركات",
+        titleEn: "Inactive activities detected",
+        bodyAr: `${inactive.length} نشاط/أنشطة بدون سجلات ضمن الفلاتر.`,
+        bodyEn: `${inactive.length} activity row(s) with zero records under filters.`,
+        metricKeys: ["activityTable"],
+        metricSource: "participationAnalytics.table",
+        affectedScope: "activities",
+      });
+    }
+
+    const growthActs = [...g.table]
+      .filter((r) => r.totalParticipations >= 5)
+      .sort((a, b) => b.totalParticipations - a.totalParticipations)
+      .slice(0, 3);
+    if (growthActs.length > 0 && growthActs[0]!.totalParticipations >= 15) {
+      pushInsight(insights, {
+        id: "growth_activities_detection",
+        severity: "info",
+        confidence: 0.76,
+        titleAr: "أنشطة نمو عالية",
+        titleEn: "High-growth activities",
+        bodyAr: `أعلى نشاط: ${growthActs[0]!.activityLabelAr} (${growthActs[0]!.totalParticipations} سجل).`,
+        bodyEn: `Top activity: ${growthActs[0]!.activityLabelEn} (${growthActs[0]!.totalParticipations} records).`,
+        metricKeys: ["topActivityScore"],
+        metricSource: "participationAnalytics.table",
+        affectedScope: growthActs[0]!.activityKey,
+      });
+    }
+
     if (femalePct > 0 && femalePct < 35) {
-      insights.push({
+      pushInsight(insights, {
         id: "gender_gap_low_female_share",
         severity: "warn",
         confidence: 0.72,
@@ -55,8 +209,25 @@ export const buildAnalyticsInsights = (input: {
         metricKeys: ["genderParticipation"],
       });
     }
+    if (medalRate >= 35 && g.kpis.totalParticipations >= 25) {
+      pushInsight(insights, {
+        id: "medal_density_anomaly_high",
+        severity: "info",
+        confidence: 0.71,
+        titleAr: "كثافة ميداليات مرتفعة",
+        titleEn: "High medal density anomaly",
+        bodyAr: `معدل تحويل ${medalRate}% أعلى من المتوسط المعتاد.`,
+        bodyEn: `Conversion rate ${medalRate}% is above typical baseline.`,
+        metricKeys: ["medalConversionRate"],
+        metricSource: "analytics-metrics-definitions.medalConversionRate",
+        evidenceAr: `${g.kpis.goldMedalCount} ذهبية من ${g.kpis.totalParticipations}`,
+        evidenceEn: `${g.kpis.goldMedalCount} gold of ${g.kpis.totalParticipations}`,
+        affectedScope: "filtered-cohort",
+      });
+    }
+
     if (intlPct >= 15) {
-      insights.push({
+      pushInsight(insights, {
         id: "international_share_elevated",
         severity: "info",
         confidence: 0.8,
@@ -153,5 +324,5 @@ export const buildAnalyticsInsights = (input: {
     }
   }
 
-  return { insights: insights.slice(0, 12), hasData: true };
+  return { insights: insights.slice(0, 16), hasData: true };
 };

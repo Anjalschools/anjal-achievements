@@ -8,22 +8,39 @@ const MAX_SAVED = 12;
 /** Serializable filter slice for executive restore (matches participation report filter shape). */
 export type ExecutiveFilterSnapshot = {
   academicYear: string;
+  /** @deprecated prefer `genders[]` */
   gender: string;
+  /** @deprecated prefer `mawhibaValues[]` */
   mawhiba: string;
+  /** @deprecated prefer `stages[]` */
   stage: string;
+  /** @deprecated prefer `grades[]` */
   grade: string;
+  /** @deprecated prefer `sections[]` */
   section: string;
   categories: string[];
   primaryType: string;
   levels: string[];
   resultTokens: string[];
+  /** @deprecated prefer `statuses[]` */
   status: string;
+  /** @deprecated prefer `certificateStatuses[]` */
   certificateStatus: string;
   fromDate: string;
   toDate: string;
   domain: string;
   classification: string;
   organization: string;
+  activityYears: string[];
+  achievementNames: string[];
+  genders: string[];
+  mawhibaValues: string[];
+  stages: string[];
+  grades: string[];
+  sections: string[];
+  statuses: string[];
+  certificateStatuses: string[];
+  standardizedTestTypes: string[];
 };
 
 export type ExecutiveUiSnapshot = {
@@ -59,7 +76,29 @@ export const defaultExecutiveFilterSnapshot = (): ExecutiveFilterSnapshot => ({
   domain: "",
   classification: "",
   organization: "",
+  activityYears: [],
+  achievementNames: [],
+  genders: [],
+  mawhibaValues: [],
+  stages: [],
+  grades: [],
+  sections: [],
+  statuses: [],
+  certificateStatuses: [],
+  standardizedTestTypes: [],
 });
+
+const mergeMultiFromLegacy = (
+  plural: string[] | undefined,
+  legacy: string | undefined,
+  allToken = "all"
+): string[] => {
+  const base = Array.isArray(plural) ? plural.filter(Boolean) : [];
+  const leg = String(legacy || "").trim();
+  if (base.length > 0) return base;
+  if (leg && leg !== allToken) return [leg];
+  return [];
+};
 
 export const mergeExecutiveSnapshotIntoFilter = (snap: Partial<ExecutiveUiSnapshot>): ExecutiveFilterSnapshot => {
   const base = defaultExecutiveFilterSnapshot();
@@ -86,7 +125,24 @@ export const mergeExecutiveSnapshotIntoFilter = (snap: Partial<ExecutiveUiSnapsh
     if (Array.isArray(f.categories)) base.categories = f.categories.filter((x) => typeof x === "string");
     if (Array.isArray(f.levels)) base.levels = f.levels.filter((x) => typeof x === "string");
     if (Array.isArray(f.resultTokens)) base.resultTokens = f.resultTokens.filter((x) => typeof x === "string");
+    if (Array.isArray(f.activityYears)) base.activityYears = f.activityYears.map(String);
+    if (Array.isArray(f.achievementNames)) base.achievementNames = f.achievementNames.filter((x) => typeof x === "string");
+    if (Array.isArray(f.genders)) base.genders = f.genders.filter((x) => typeof x === "string");
+    if (Array.isArray(f.mawhibaValues)) base.mawhibaValues = f.mawhibaValues.filter((x) => typeof x === "string");
+    if (Array.isArray(f.stages)) base.stages = f.stages.filter((x) => typeof x === "string");
+    if (Array.isArray(f.grades)) base.grades = f.grades.filter((x) => typeof x === "string");
+    if (Array.isArray(f.sections)) base.sections = f.sections.filter((x) => typeof x === "string");
+    if (Array.isArray(f.statuses)) base.statuses = f.statuses.filter((x) => typeof x === "string");
+    if (Array.isArray(f.certificateStatuses)) base.certificateStatuses = f.certificateStatuses.filter((x) => typeof x === "string");
+    if (Array.isArray(f.standardizedTestTypes)) base.standardizedTestTypes = f.standardizedTestTypes.filter((x) => typeof x === "string");
   }
+  base.genders = mergeMultiFromLegacy(base.genders, base.gender);
+  base.mawhibaValues = mergeMultiFromLegacy(base.mawhibaValues, base.mawhiba);
+  base.stages = mergeMultiFromLegacy(base.stages, base.stage);
+  base.grades = mergeMultiFromLegacy(base.grades, base.grade);
+  base.sections = mergeMultiFromLegacy(base.sections, base.section);
+  base.statuses = mergeMultiFromLegacy(base.statuses, base.status);
+  base.certificateStatuses = mergeMultiFromLegacy(base.certificateStatuses, base.certificateStatus);
   if (typeof snap.academicYear === "string" && snap.academicYear.trim() && !f?.academicYear) {
     base.academicYear = snap.academicYear;
   }
@@ -132,6 +188,16 @@ export const cloneExecutiveFilterSnapshot = (f: ExecutiveFilterSnapshot): Execut
   categories: [...f.categories],
   levels: [...f.levels],
   resultTokens: [...f.resultTokens],
+  activityYears: [...f.activityYears],
+  achievementNames: [...f.achievementNames],
+  genders: [...f.genders],
+  mawhibaValues: [...f.mawhibaValues],
+  stages: [...f.stages],
+  grades: [...f.grades],
+  sections: [...f.sections],
+  statuses: [...f.statuses],
+  certificateStatuses: [...f.certificateStatuses],
+  standardizedTestTypes: [...f.standardizedTestTypes],
 });
 
 export type SavedExecutiveView = {

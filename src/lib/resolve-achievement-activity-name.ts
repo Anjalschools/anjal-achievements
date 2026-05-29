@@ -53,14 +53,30 @@ export const pickAchievementActivityRawString = (doc: AchievementActivityNameInp
 export const resolveAchievementActivityName = (
   achievementTypeKey: string,
   activityRaw: string,
-  loc: "ar" | "en"
+  loc: "ar" | "en",
+  options?: { fallbackRaw?: string; allowUnspecified?: boolean }
 ): string => {
   const t = String(achievementTypeKey || "").trim();
-  const r = String(activityRaw || "").trim();
+  let r = String(activityRaw || "").trim();
+  const fallback = String(options?.fallbackRaw ?? "").trim();
+  if ((!r || r === t) && fallback && fallback !== t) {
+    r = fallback;
+  }
   const typeOnly = getDbAchievementTypeLabel(t, loc);
 
-  if (!r || r === t) {
+  if (!r) {
+    if (options?.allowUnspecified === false) return typeOnly;
     return loc === "ar" ? `${typeOnly} (بدون اسم محدد)` : `${typeOnly} (unspecified name)`;
+  }
+
+  if (r === t) {
+    if (fallback && fallback !== t) {
+      r = fallback;
+    } else if (options?.allowUnspecified === false) {
+      return typeOnly;
+    } else {
+      return loc === "ar" ? `${typeOnly} (بدون اسم محدد)` : `${typeOnly} (unspecified name)`;
+    }
   }
 
   const named = getAchievementDisplayName(

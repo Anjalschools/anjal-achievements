@@ -10,6 +10,10 @@
 #     GET  https://<your-render-domain>/api/cron/alumni-analytics-snapshots
 #     Schedule: 0 3 * * *
 #     Header: Authorization: Bearer ${CRON_SECRET}
+#   Job: executive-analytics-snapshots
+#     GET  https://<your-render-domain>/api/cron/executive-analytics-snapshots
+#     Schedule: 0 4 * * *
+#     Header: Authorization: Bearer ${CRON_SECRET}
 #
 # Before applying blueprint: rename web service reference below to your Render Web Service name.
 
@@ -42,6 +46,23 @@ services:
         sync: false
       - key: CRON_ENDPOINT
         value: /api/cron/alumni-analytics-snapshots
+      - key: APP_URL
+        fromService:
+          type: web
+          name: al-anjal-achievements-platform
+          envVarKey: RENDER_EXTERNAL_URL
+
+  - type: cron
+    name: executive-analytics-snapshots
+    runtime: node
+    schedule: "0 4 * * *"
+    buildCommand: npm ci
+    startCommand: npm run cron:executive-snapshots
+    envVars:
+      - key: CRON_SECRET
+        sync: false
+      - key: CRON_ENDPOINT
+        value: /api/cron/executive-analytics-snapshots
       - key: APP_URL
         fromService:
           type: web

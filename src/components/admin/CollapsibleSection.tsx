@@ -78,7 +78,7 @@ export const CollapsibleSection = memo(
             open ? "max-h-[8000px] opacity-100" : "max-h-0 opacity-0 print:!max-h-none print:!opacity-100"
           }`}
         >
-          <div className={open ? "" : "hidden print:block"}>{children}</div>
+          {children}
         </div>
       </section>
     );

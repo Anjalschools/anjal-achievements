@@ -22,7 +22,9 @@ export const parseAdminReportFiltersFromSearchParams = (
     searchParams.get("achievementName")
   ),
   levels: parseReportCsvParam(searchParams.get("level")),
-  resultTokens: parseReportCsvParam(searchParams.get("result")),
+  resultTokens: parseReportCsvParam(
+    searchParams.get("result") || searchParams.get("results") || searchParams.get("outcomes")
+  ),
   status: String(searchParams.get("status") || "").trim() || undefined,
   statuses: deserializeMultiFilterWithLegacy(searchParams.get("statuses"), searchParams.get("status")),
   certificateStatus: String(searchParams.get("certificateStatus") || "").trim() || undefined,
@@ -80,7 +82,11 @@ export const buildAdminReportSearchParams = (
   if (levels?.length) set("level", levels.join(","));
 
   const resultTokens = f.resultTokens as string[] | undefined;
-  if (resultTokens?.length) set("result", resultTokens.join(","));
+  if (resultTokens?.length) {
+    const csv = resultTokens.join(",");
+    set("result", csv);
+    set("outcomes", csv);
+  }
 
   const activityYears = f.activityYears as string[] | undefined;
   if (activityYears?.length) set("activityYears", activityYears.join(","));

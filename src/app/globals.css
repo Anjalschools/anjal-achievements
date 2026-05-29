@@ -133,3 +133,57 @@
     min-height: 44px;
   }
 }
+
+/* Executive intelligence workspace — layout architecture */
+.executive-workspace-root {
+  width: 100%;
+  min-width: 0;
+}
+
+.executive-workspace-content {
+  min-height: 0;
+}
+
+.executive-workspace-title {
+  font-size: clamp(1.35rem, 1.1rem + 1.2vw, 2rem);
+  font-weight: 800;
+  line-height: 1.25;
+  text-wrap: balance;
+  word-break: normal;
+  overflow-wrap: anywhere;
+  max-width: 100%;
+}
+
+.executive-workspace-subtitle {
+  font-size: clamp(0.875rem, 0.8rem + 0.35vw, 1.05rem);
+  line-height: 1.55;
+  max-width: 52rem;
+}
+
+.executive-control-bar .rounded-xl,
+.executive-control-bar .rounded-lg {
+  flex-shrink: 0;
+}
+
+.analytics-layout,
+.analytics-layout-body,
+.executive-dashboard-grid {
+  min-height: 0;
+}
+
+.analytics-mobile-content {
+  min-width: 0;
+}
+
+@media print {
+  [data-executive="1"] .executive-print-summary {
+    break-inside: avoid;
+  }
+  [data-executive="1"] #analytics-data-table {
+    max-height: none !important;
+    overflow: visible !important;
+  }
+  .analytics-layout .print\\:hidden {
+    display: none !important;
+  }
+}

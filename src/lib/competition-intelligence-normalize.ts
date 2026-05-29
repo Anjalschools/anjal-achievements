@@ -32,26 +32,44 @@ export const ciBuildFiltersSummary = (
   f: {
     academicYear: string;
     gender: string;
+    genders?: string[];
     stage: string;
+    stages?: string[];
     grade: string;
+    grades?: string[];
     section: string;
+    sections?: string[];
     mawhiba: string;
+    mawhibaValues?: string[];
+    activityYears?: string[];
+    achievementNames?: string[];
     categories: string[];
     levels: string[];
     resultTokens: string[];
+    statuses?: string[];
+    certificateStatuses?: string[];
+    standardizedTestTypes?: string[];
   },
   isAr: boolean
 ): string => {
-  const parts = [
-    `${isAr ? "عام" : "Yr"}:${f.academicYear}`,
-    `${isAr ? "ج" : "G"}:${f.gender}`,
-    `${isAr ? "مرحلة" : "Stg"}:${f.stage}`,
-    `${isAr ? "صف" : "Gr"}:${f.grade}`,
-    `${isAr ? "قسم" : "Sec"}:${f.section}`,
-    `${isAr ? "موهبة" : "Mwb"}:${f.mawhiba}`,
-  ];
+  const parts = [`${isAr ? "عام" : "Yr"}:${f.academicYear}`];
+  const genders = f.genders?.length ? f.genders : f.gender !== "all" ? [f.gender] : [];
+  if (genders.length) parts.push(`${isAr ? "ج" : "G"}:${genders.join(",")}`);
+  const stages = f.stages?.length ? f.stages : f.stage !== "all" ? [f.stage] : [];
+  if (stages.length) parts.push(`${isAr ? "مرحلة" : "Stg"}:${stages.join(",")}`);
+  const grades = f.grades?.length ? f.grades : f.grade !== "all" ? [f.grade] : [];
+  if (grades.length) parts.push(`${isAr ? "صف" : "Gr"}:${grades.join(",")}`);
+  const sections = f.sections?.length ? f.sections : f.section !== "all" ? [f.section] : [];
+  if (sections.length) parts.push(`${isAr ? "قسم" : "Sec"}:${sections.join(",")}`);
+  const maw = f.mawhibaValues?.length ? f.mawhibaValues : f.mawhiba !== "all" ? [f.mawhiba] : [];
+  if (maw.length) parts.push(`${isAr ? "موهبة" : "Mwb"}:${maw.join(",")}`);
+  if (f.activityYears?.length) parts.push(`${isAr ? "سنة" : "ActYr"}:${f.activityYears.join(",")}`);
+  if (f.achievementNames?.length) parts.push(`${isAr ? "أنشطة" : "Act"}:${f.achievementNames.length}`);
   if (f.categories.length) parts.push(`${isAr ? "فئات" : "Cat"}:${f.categories.length}`);
   if (f.levels.length) parts.push(`${isAr ? "مستويات" : "Lvl"}:${f.levels.length}`);
   if (f.resultTokens.length) parts.push(`${isAr ? "نتائج" : "Res"}:${f.resultTokens.length}`);
+  if (f.statuses?.length) parts.push(`${isAr ? "حالة" : "St"}:${f.statuses.length}`);
+  if (f.certificateStatuses?.length) parts.push(`${isAr ? "شهادة" : "Cert"}:${f.certificateStatuses.length}`);
+  if (f.standardizedTestTypes?.length) parts.push(`${isAr ? "اختبار" : "Test"}:${f.standardizedTestTypes.length}`);
   return parts.join(" · ");
 };

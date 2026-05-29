@@ -777,6 +777,15 @@ AchievementSchema.index({ achievementCategory: 1, createdAt: -1 });
 AchievementSchema.index({ resultType: 1, medalType: 1 });
 AchievementSchema.index({ achievementName: 1 });
 AchievementSchema.index({ inferredField: 1 });
+/** Participation / student-intelligence analytics — common filter compounds */
+AchievementSchema.index({ status: 1, activityYear: 1, achievementType: 1, resultType: 1 });
+AchievementSchema.index({ status: 1, participantId: 1, activityYear: 1 });
+AchievementSchema.index({ status: 1, achievementName: 1, activityYear: 1 });
+AchievementSchema.index({ status: 1, achievementClassification: 1, achievementType: 1 });
+AchievementSchema.index({ status: 1, achievementYear: 1, achievementType: 1, resultType: 1, medalType: 1 });
+/** Focused participants paginated register — match + sort by createdAt */
+AchievementSchema.index({ status: 1, achievementType: 1, createdAt: -1 });
+AchievementSchema.index({ achievementType: 1, status: 1, createdAt: -1 });
 
 const Achievement: Model<IAchievement> =
   mongoose.models.Achievement ||

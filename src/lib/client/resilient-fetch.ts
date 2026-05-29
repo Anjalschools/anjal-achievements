@@ -54,6 +54,12 @@ export const resilientFetchJson = async <T>(
   for (let attempt = 0; attempt <= retries; attempt++) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
+    const upstream = init?.signal;
+    const onUpstreamAbort = () => controller.abort();
+    if (upstream) {
+      if (upstream.aborted) controller.abort();
+      else upstream.addEventListener("abort", onUpstreamAbort, { once: true });
+    }
     try {
       const res = await fetch(url, {
         ...init,
@@ -61,6 +67,7 @@ export const resilientFetchJson = async <T>(
         cache: "no-store",
       });
       clearTimeout(timer);
+      if (upstream) upstream.removeEventListener("abort", onUpstreamAbort);
       lastStatus = res.status;
       const correlationId = res.headers.get("x-correlation-id") ?? undefined;
       const degraded = res.headers.get("x-degraded") === "1";
@@ -82,7 +89,11 @@ export const resilientFetchJson = async <T>(
       return { ok: true, data, degraded, ...(correlationId ? {} : {}) };
     } catch (e) {
       clearTimeout(timer);
+      if (upstream) upstream.removeEventListener("abort", onUpstreamAbort);
       if (e instanceof DOMException && e.name === "AbortError") {
+        if (upstream?.aborted) {
+          return { ok: false, status: 499, error: "Request aborted" };
+        }
         lastError = "Request timed out";
         lastStatus = 504;
       } else {

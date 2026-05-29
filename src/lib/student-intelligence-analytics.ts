@@ -129,11 +129,18 @@ const toRow = (r: AggRow, distinctActivityCount = 0): StudentIntelRow => {
   };
 };
 
+export type StudentIntelligenceBuildOptions = {
+  /** Skips expensive diversity/growth facets for dashboard highlights (same response shape). */
+  lite?: boolean;
+};
+
 export const buildStudentIntelligence = async (
-  filters: ParticipationAnalyticsFilters
+  filters: ParticipationAnalyticsFilters,
+  opts?: StudentIntelligenceBuildOptions
 ): Promise<StudentIntelligencePayload> => {
   await connectDB();
   const intelT0 = Date.now();
+  const lite = opts?.lite === true;
   const shaped = buildShapedStages(filters);
 
   const facetBody: Record<string, mongoose.PipelineStage[]> = {
@@ -148,7 +155,7 @@ export const buildStudentIntelligence = async (
           _id: 1,
         },
       },
-      { $limit: 8000 },
+      { $limit: lite ? 600 : 5000 },
     ],
     byParticipation: [
       {
@@ -180,7 +187,7 @@ export const buildStudentIntelligence = async (
         },
       },
       { $sort: { recordCount: -1 } },
-      { $limit: 20 },
+      { $limit: lite ? 8 : 20 },
     ],
     byMedals: [
       {
@@ -212,8 +219,11 @@ export const buildStudentIntelligence = async (
         },
       },
       { $sort: { medalCount: -1, recordCount: -1 } },
-      { $limit: 20 },
+      { $limit: lite ? 8 : 20 },
     ],
+    ...(lite
+      ? {}
+      : {
     byFastestGrowth: [
       {
         $group: {
@@ -258,6 +268,10 @@ export const buildStudentIntelligence = async (
       { $sort: { growthIndex: -1, recordCount: -1 } },
       { $limit: 20 },
     ],
+      }),
+    ...(lite
+      ? {}
+      : {
     byDiversity: [
       {
         $group: {
@@ -300,12 +314,16 @@ export const buildStudentIntelligence = async (
       { $sort: { divN: -1, recordCount: -1 } },
       { $limit: 20 },
     ],
+      }),
   };
 
-  const [res] = await Achievement.aggregate([
-    ...shaped,
-    { $facet: facetBody },
-  ] as mongoose.PipelineStage[]).allowDiskUse(true);
+  const [res] = await Achievement.aggregate(
+    [
+      ...shaped,
+      { $facet: facetBody },
+    ] as mongoose.PipelineStage[],
+    { allowDiskUse: true, maxTimeMS: lite ? 22_000 : 45_000 }
+  );
 
   const part = ((res?.byParticipation || []) as AggRow[]).map((r) => toRow(r, 0));
   const medals = ((res?.byMedals || []) as AggRow[]).map((r) => toRow(r, 0));
@@ -326,11 +344,13 @@ export const buildStudentIntelligence = async (
     rank: String(doc.rank || ""),
     achievementLevel: String(doc.achievementLevel || ""),
   }));
-  const weightedScores = buildWeightedStudentRankings(rankPool, { limit: 40 });
+  const weightedScores = buildWeightedStudentRankings(rankPool, { limit: lite ? 12 : 40 });
   const scoreById = new Map(weightedScores.map((w) => [w.participantId, w.weightedScore]));
   const metaRows = [...part, ...medals];
-  const byWeightedScore = sortIntelRowsByWeightedScore(metaRows, scoreById).slice(0, 20);
-  const divRaw = (res?.byDiversity || []) as Array<AggRow & { divN?: number; distinctActivities?: unknown[] }>;
+  const byWeightedScore = sortIntelRowsByWeightedScore(metaRows, scoreById).slice(0, lite ? 8 : 20);
+  const divRaw = lite
+    ? []
+    : ((res?.byDiversity || []) as Array<AggRow & { divN?: number; distinctActivities?: unknown[] }>);
   const byDiversity = divRaw.map((r) =>
     toRow(r, Array.isArray(r.distinctActivities) ? r.distinctActivities.length : Number(r.divN ?? 0))
   );
@@ -343,8 +363,10 @@ export const buildStudentIntelligence = async (
     )
     .slice(0, 20);
 
-  const growRaw = (res?.byFastestGrowth || []) as GrowthAggRow[];
-  const byFastestGrowth = enrichGrowthRows(
+  const growRaw = lite ? [] : ((res?.byFastestGrowth || []) as GrowthAggRow[]);
+  const byFastestGrowth = lite
+    ? []
+    : enrichGrowthRows(
     growRaw.map((x) => ({
       _id: String(x._id ?? ""),
       recordCount: Number(x.recordCount || 0),

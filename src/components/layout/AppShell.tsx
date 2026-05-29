@@ -6,8 +6,10 @@ import { usePathname, useRouter } from "next/navigation";
 import AppSidebar from "./AppSidebar";
 import UnifiedHeader from "./UnifiedHeader";
 import UnifiedFooter from "./UnifiedFooter";
-import { getLocale } from "@/lib/i18n";
+import { defaultLocale, getLocale } from "@/lib/i18n";
 import { useAppSession } from "@/contexts/AppSessionContext";
+import { UnreadNotificationProvider } from "@/contexts/UnreadNotificationContext";
+import { useClientMounted } from "@/hooks/useClientMounted";
 import { resolveHeaderAppHome } from "@/lib/header-app-home";
 
 type AppShellProps = {
@@ -15,7 +17,8 @@ type AppShellProps = {
 };
 
 const AppShell = ({ children }: AppShellProps) => {
-  const locale = getLocale();
+  const mounted = useClientMounted();
+  const locale = mounted ? getLocale() : defaultLocale;
   const isArabic = locale === "ar";
   const pathname = usePathname();
   const router = useRouter();
@@ -44,6 +47,7 @@ const AppShell = ({ children }: AppShellProps) => {
     !pathname.startsWith("/admin");
 
   return (
+    <UnreadNotificationProvider>
     <div className="flex min-h-screen min-w-0 flex-col bg-gray-50">
       <UnifiedHeader
         variant="default"
@@ -92,6 +96,7 @@ const AppShell = ({ children }: AppShellProps) => {
       </div>
       <UnifiedFooter />
     </div>
+    </UnreadNotificationProvider>
   );
 };
 

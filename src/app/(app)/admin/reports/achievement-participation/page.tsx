@@ -1,10 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, Suspense } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import PageContainer from "@/components/layout/PageContainer";
-import PageHeader from "@/components/layout/PageHeader";
+import ExecutiveWorkspaceShell from "@/components/analytics/layouts/ExecutiveWorkspaceShell";
+import ExecutivePageChrome from "@/components/analytics/layouts/ExecutivePageChrome";
+import ExecutiveControlBar, {
+  ExecutiveControlBarGroup,
+} from "@/components/analytics/layouts/ExecutiveControlBar";
+import ExecutiveWorkspaceEmptyState from "@/components/analytics/ExecutiveWorkspaceEmptyState";
 import { FocusedExecutiveIntelligencePanel } from "@/components/admin/FocusedExecutiveIntelligencePanel";
 import {
   exportFocusedCompetitionAnalyticsPdf,
@@ -12,6 +17,7 @@ import {
   exportFocusedParticipantSelectionPdf,
   exportLandscapeExecutivePdfView,
   exportRowsToExcelWorkbook,
+  decisionRowsForExport,
   type ExecutivePdfMetadata,
 } from "@/lib/report-export";
 import { CompetitionExportOverlay } from "@/components/admin/CompetitionExportOverlay";
@@ -34,6 +40,11 @@ import {
 } from "@/lib/competition-intelligence-persistence";
 import { competitionIntelDebug, isCompetitionIntelDebugEnabled } from "@/lib/competition-intelligence-diagnostics";
 import { ciBuildFiltersSummary, ciMedalsPer100, CI_EXPORT_PARTICIPANT_ROW_CAP } from "@/lib/competition-intelligence-normalize";
+import {
+  medalConversionRate,
+  outcomeCount,
+  topYearFromTrend,
+} from "@/lib/analytics/participation-dashboard-derivations";
 import { AnalyticsFilterProvider, useAnalyticsFilters, useAnalyticsDerivedState } from "@/contexts/AnalyticsFilterContext";
 import {
   ciRedactLine,
@@ -47,47 +58,58 @@ import {
 } from "@/lib/competition-intelligence-export-audit";
 import { CI_AGGREGATION_VERSION } from "@/lib/competition/analytics/aggregation-version";
 import { getCompetitionIntelAccess } from "@/lib/competition-intelligence-permissions";
-import { GRADE_OPTIONS } from "@/constants/grades";
 import type { StudentIntelligencePayload, StudentProfileInsightPayload } from "@/lib/student-intelligence-analytics";
 import { CI_PDF_PRESET_LABELS, CI_STORAGE_KEYS, type CiPdfExportPreset } from "@/lib/competition-intelligence-theme";
 import { Loader2, RefreshCw } from "lucide-react";
 import type { ParticipationActivityRow } from "@/lib/achievement-participation-analytics";
 import { FOCUSED_ACHIEVEMENT_OUTCOMES, type FocusedActivityReportPayload } from "@/types/focused-activity-report";
+import { buildAnalyticsCacheKey, fetchWithAnalyticsSwr } from "@/lib/analytics/analytics-client-cache";
+import { mergeAbortSignals } from "@/lib/analytics/runtime/analytics-inflight-registry";
+import {
+  logFocusedClientTelemetry,
+  sanitizeFocusedClientError,
+} from "@/lib/analytics/focused-client-telemetry";
+import {
+  initExecAnalyticsRuntimeDevExpose,
+  recordExecExportRuntimeEnd,
+  recordExecExportRuntimeStart,
+  recordExecFacetEnd,
+  recordExecFacetStart,
+  recordExecInflightEnd,
+  recordExecInflightStart,
+  recordExecRequestAborted,
+  sampleExecClientMemory,
+} from "@/lib/analytics/runtime/runtime-health-registry";
+import {
+  endExecExportRuntime,
+  startExecExportRuntime,
+} from "@/lib/analytics/runtime/exec-export-runtime";
+import { ExecutiveRuntimeRecoveryBoundary } from "@/components/analytics/runtime/ExecutiveRuntimeRecoveryBoundary";
+import { ExecutiveRuntimeDebugOverlay } from "@/components/analytics/runtime/ExecutiveRuntimeDebugOverlay";
 
-const MiniHBar = ({
-  label,
-  value,
-  max,
-  isAr,
-  barClassName,
-  barStyle,
-}: {
-  label: string;
-  value: number;
-  max: number;
-  isAr: boolean;
-  barClassName?: string;
-  barStyle?: CSSProperties;
-}) => {
-  const pct = max > 0 ? Math.min(100, Math.round((value / max) * 100)) : 0;
-  return (
-    <div className="space-y-1">
-      <div className="flex justify-between text-[11px] font-bold text-slate-600">
-        <span className="truncate">{label}</span>
-        <span className="tabular-nums text-slate-900">{value}</span>
-      </div>
-      <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100" dir={isAr ? "rtl" : "ltr"}>
-        <div
-          className={barClassName ?? "h-full rounded-full bg-primary transition-[width]"}
-          style={{ width: `${pct}%`, ...barStyle }}
-        />
-      </div>
-    </div>
-  );
-};
+import ResponsiveAnalyticsFilters from "@/components/analytics/ResponsiveAnalyticsFilters";
+import AnalyticsSavedViewsPanel from "@/components/analytics/AnalyticsSavedViewsPanel";
+import ParticipationIntelligenceDashboard from "@/components/analytics/ParticipationIntelligenceDashboard";
+import HistoricalTablesWorkspace from "@/components/analytics/HistoricalTablesWorkspace";
+import AnalyticsPerspectiveBridge from "@/components/analytics/AnalyticsPerspectiveBridge";
+import GlobalPerspectiveToolbar from "@/components/analytics/GlobalPerspectiveToolbar";
+import { StudentExcellenceWorkspace } from "@/components/analytics/StudentExcellenceWorkspace";
+import StudentIntelligenceBoundary from "@/components/analytics/runtime/StudentIntelligenceBoundary";
+import LazyStudentIntelligenceTrigger from "@/components/analytics/runtime/LazyStudentIntelligenceTrigger";
+import { ExecutiveDecisionWorkspace } from "@/components/analytics/ExecutiveDecisionWorkspace";
+import { CompetitionDecisionWorkspace } from "@/components/admin/CompetitionDecisionWorkspace";
+import { useAnalyticsPerspective } from "@/lib/analytics/analytics-perspective-context";
+import { clearParticipationFilters } from "@/components/analytics/AnalyticsFilterBreadcrumb";
+import {
+  pageTitle,
+  pageSubtitle,
+  formatAvgParticipationsPerStudentLine,
+  t,
+} from "@/lib/analytics/analytics-semantics";
 
-const AdminParticipationAnalyticsPageInner = () => {
+const AdminParticipationAnalyticsPageContent = () => {
   const router = useRouter();
+  const { exportTitleSuffix } = useAnalyticsPerspective();
   const {
     isAr,
     allowed,
@@ -128,13 +150,32 @@ const AdminParticipationAnalyticsPageInner = () => {
     categoryOptions,
     levelOptions,
     resultOptions,
+    genderOptions,
+    mawhibaOptions,
+    stageOptions,
+    gradeOptions,
+    statusOptions,
+    certificateOptions,
+    stdTestOptions,
+    sectionOptions,
     insights,
     analyticsTrustReport,
     cacheAgeLabel,
     debugDiagnostics,
     buildFocusedParams,
     fetchData,
+    copyShareUrl,
+    traceMeta,
+    executiveMode,
+    setExecutiveMode,
+    executiveBundle,
+    executiveBundleMeta,
+    executiveAiDecisions,
+    filterKey,
     refreshAll,
+    fetchFocusedReport,
+    focusedRefreshNonce,
+    fetchStudentIntelligence,
   } = useAnalyticsFilters();
   const { canonicalSnapshot } = useAnalyticsDerivedState();
 
@@ -156,8 +197,18 @@ const AdminParticipationAnalyticsPageInner = () => {
   const [savedExecutiveViews, setSavedExecutiveViews] = useState<SavedExecutiveView[]>([]);
   const exportAttemptRef = useRef(1);
   const lastCompareLatencyMsRef = useRef<number | null>(null);
+  const [focusedDecisionReport, setFocusedDecisionReport] = useState<FocusedActivityReportPayload | null>(null);
+
+  const handleFocusedDecisionReady = useCallback((report: FocusedActivityReportPayload | null) => {
+    setFocusedDecisionReport(report);
+  }, []);
 
   const intelAccess = useMemo(() => getCompetitionIntelAccess(viewerRole || undefined), [viewerRole]);
+  const [focusedRuntimeRecoveryKey, setFocusedRuntimeRecoveryKey] = useState(0);
+
+  useEffect(() => {
+    initExecAnalyticsRuntimeDevExpose();
+  }, []);
 
   useEffect(() => {
     void (async () => {
@@ -262,7 +313,7 @@ const AdminParticipationAnalyticsPageInner = () => {
     });
   }, [data?.ok, data?.table?.length, data?.tableTotal, f.academicYear, f.stage]);
 
-  const title = isAr ? "منصة ذكاء المسابقات والبرامج — مدارس الأنجال" : "Competition Intelligence Platform — Al-Anjal Schools";
+  const title = pageTitle(isAr ? "ar" : "en");
 
   const headers = useMemo(
     () =>
@@ -273,7 +324,7 @@ const AdminParticipationAnalyticsPageInner = () => {
             "التصنيف الفرعي",
             "المستوى",
             "النتيجة",
-            "مشاركون فريدون",
+            "الطلاب المشاركون",
             "بنين",
             "بنات",
             "عربي",
@@ -288,7 +339,7 @@ const AdminParticipationAnalyticsPageInner = () => {
             "مشاركة فقط",
             "نسبة التميز %",
             "معتمد",
-            "إجمالي السجلات",
+            t("export.totalParticipations", "ar"),
           ]
         : [
             "Activity name",
@@ -311,7 +362,7 @@ const AdminParticipationAnalyticsPageInner = () => {
             "Participation only",
             "Excellence rate %",
             "Approved",
-            "Total records",
+            t("export.totalParticipations", "en"),
           ],
     [isAr]
   );
@@ -326,7 +377,7 @@ const AdminParticipationAnalyticsPageInner = () => {
             "التصنيف الفرعي": r.classificationLabelAr,
             المستوى: r.levelLabelAr,
             النتيجة: r.participationResultAr,
-            "مشاركون فريدون": r.distinctParticipants,
+            "الطلاب المشاركون": r.distinctParticipants,
             بنين: r.maleParticipants,
             بنات: r.femaleParticipants,
             عربي: r.arabicParticipants,
@@ -341,7 +392,7 @@ const AdminParticipationAnalyticsPageInner = () => {
             "مشاركة فقط": r.participationOnlyCount,
             "نسبة التميز %": r.excellenceRatePct,
             معتمد: r.approvedAchievements,
-            "إجمالي السجلات": r.totalParticipations,
+            [t("export.totalParticipations", "ar")]: r.totalParticipations,
           }
         : {
             "Activity name": r.activityLabelEn,
@@ -364,7 +415,7 @@ const AdminParticipationAnalyticsPageInner = () => {
             "Participation only": r.participationOnlyCount,
             "Excellence rate %": r.excellenceRatePct,
             Approved: r.approvedAchievements,
-            "Total records": r.totalParticipations,
+            [t("export.totalParticipations", "en")]: r.totalParticipations,
           };
       return base as unknown as Record<string, string | number>;
     });
@@ -373,39 +424,81 @@ const AdminParticipationAnalyticsPageInner = () => {
   const kpi = data?.kpis;
 
   const summaryLines = useMemo(() => {
-    if (!kpi) return [];
+    if (!kpi || !data) return [];
+    const silver = outcomeCount(data, "silver");
+    const bronze = outcomeCount(data, "bronze");
+    const conversion = medalConversionRate(data);
+    const peakYear = topYearFromTrend(data);
+    const avgLine = formatAvgParticipationsPerStudentLine(
+      kpi.totalParticipations,
+      kpi.distinctStudents,
+      isAr ? "ar" : "en"
+    );
     const lines = isAr
       ? [
           `إجمالي المشاركات: ${kpi.totalParticipations}`,
-          `طلاب مشاركون (فريدون): ${kpi.distinctStudents}`,
-          `نسبة مشاركات موهبة: ${kpi.mawhibaParticipationPct}%`,
-          `نسبة البنات (سجلات): ${kpi.femalePct}%`,
-          `نسبة القسم الدولي (سجلات): ${kpi.internationalSectionPct}%`,
-          `ميداليات ذهبية: ${kpi.goldMedalCount}`,
-          `مراكز أولى: ${kpi.firstPlaceCount}`,
-          `ترشيحات: ${kpi.nominationCount}`,
-          `أعلى مستوى: ${kpi.highestLevelLabelAr}`,
-          `أنشطة في الجدول: ${kpi.activeProgramsCount}`,
+          `الطلاب المشاركون: ${kpi.distinctStudents}`,
+          `متوسط المشاركات لكل طالب: ${avgLine}`,
+          `ذهبية: ${kpi.goldMedalCount} · فضية: ${silver} · برونزية: ${bronze}`,
+          `معدل تحويل الميداليات: ${conversion}%`,
+          `أعلى نشاط: ${kpi.topProgramLabelAr}`,
+          `أعلى قسم: ${kpi.topSectionLabelAr}`,
+          peakYear ? `أعلى سنة: ${peakYear.year} (${peakYear.rows} سجل)` : null,
+          `إنجازات دولية: ${kpi.internationalAchievementPct}%`,
+          `مراكز أولى: ${kpi.firstPlaceCount} · ترشيحات: ${kpi.nominationCount}`,
         ]
       : [
-          `Total participation records: ${kpi.totalParticipations}`,
-          `Distinct students: ${kpi.distinctStudents}`,
-          `Mawhiba participation %: ${kpi.mawhibaParticipationPct}%`,
-          `Female share (records): ${kpi.femalePct}%`,
-          `International section share (records): ${kpi.internationalSectionPct}%`,
-          `Gold medals: ${kpi.goldMedalCount}`,
-          `First places: ${kpi.firstPlaceCount}`,
-          `Nominations: ${kpi.nominationCount}`,
-          `Highest level: ${kpi.highestLevelLabelEn}`,
-          `Rows in table: ${kpi.activeProgramsCount}`,
+          `Total participations: ${kpi.totalParticipations}`,
+          `Participating students: ${kpi.distinctStudents}`,
+          `Average participations per student: ${avgLine}`,
+          `Gold: ${kpi.goldMedalCount} · Silver: ${silver} · Bronze: ${bronze}`,
+          `Medal conversion rate: ${conversion}%`,
+          `Top activity: ${kpi.topProgramLabelEn}`,
+          `Top section: ${kpi.topSectionLabelEn}`,
+          peakYear ? `Peak year: ${peakYear.year} (${peakYear.rows} records)` : null,
+          `International achievements: ${kpi.internationalAchievementPct}%`,
+          `First places: ${kpi.firstPlaceCount} · Nominations: ${kpi.nominationCount}`,
         ];
-    return lines;
-  }, [kpi, isAr]);
+    return lines.filter((x): x is string => Boolean(x));
+  }, [kpi, data, isAr]);
 
-  const reportTitle = title;
+  const reportTitle = `${title} — ${exportTitleSuffix}`;
 
-  const handleExcel = () =>
-    void exportRowsToExcelWorkbook(tableRows, headers, reportTitle, "participation-analytics", { rtlSheet: isAr });
+  const handleExcel = () => {
+    const decisionExport =
+      executiveAiDecisions?.bundle.hasData ?
+        decisionRowsForExport(executiveAiDecisions, isAr)
+      : null;
+    const decisionSummary =
+      decisionExport ?
+        [
+          {
+            metric: isAr ? "قرار تنفيذي" : "Executive decision",
+            value: isAr ? executiveAiDecisions!.boardSummary.headlineAr : executiveAiDecisions!.boardSummary.headlineEn,
+          },
+          ...decisionExport.rows.map((r, i) => ({
+            metric: `${isAr ? "قرار" : "Decision"} ${i + 1}`,
+            value: String(r[decisionExport.headers[0]!] ?? ""),
+          })),
+        ]
+      : [];
+    void exportRowsToExcelWorkbook(tableRows, headers, reportTitle, "participation-analytics", {
+      rtlSheet: isAr,
+      trace: {
+        generatedAt: traceMeta.generatedAt,
+        analyticsBuildId: traceMeta.analyticsBuildId,
+        datasetVersion: traceMeta.datasetVersion,
+        filterHash: traceMeta.canonicalFilterHash,
+      },
+      summaryRows: [
+        ...summaryLines.map((line, i) => ({
+          metric: `line_${i + 1}`,
+          value: line,
+        })),
+        ...decisionSummary,
+      ],
+    });
+  };
 
   const handlePdf = () => {
     const esc = (t: string) =>
@@ -428,34 +521,21 @@ const AdminParticipationAnalyticsPageInner = () => {
       }
       blocks += `</table></div>`;
     }
+    if (executiveAiDecisions?.bundle.hasData) {
+      const { headers: dHeaders, rows: dRows } = decisionRowsForExport(executiveAiDecisions, isAr);
+      blocks += `<div style="margin-bottom:14px;font-size:11px"><strong>${esc(isAr ? "قرارات تنفيذية (ذكاء القرار)" : "AI executive decisions")}</strong>`;
+      blocks += `<p style="margin:6px 0">${esc(isAr ? executiveAiDecisions.boardSummary.headlineAr : executiveAiDecisions.boardSummary.headlineEn)}</p>`;
+      blocks += `<table style="width:100%;border-collapse:collapse"><tr>${dHeaders.map((h) => `<th style="border:1px solid #cbd5e1;padding:4px">${esc(h)}</th>`).join("")}</tr>`;
+      for (const row of dRows.slice(0, 12)) {
+        blocks += `<tr>${dHeaders.map((h) => `<td style="border:1px solid #cbd5e1;padding:4px">${esc(String(row[h] ?? ""))}</td>`).join("")}</tr>`;
+      }
+      blocks += `</table></div>`;
+    }
     void exportLandscapeExecutivePdfView(summaryLines, tableRows, headers, reportTitle, "/report-header.png", {
       blocksHtml: blocks || undefined,
     });
   };
 
-  const genderMax = useMemo(
-    () => Math.max(1, ...(data?.charts.genderParticipation.map((x) => x.count) || [0])),
-    [data]
-  );
-  const sectionMax = useMemo(
-    () => Math.max(1, ...(data?.charts.sectionParticipation.map((x) => x.count) || [0])),
-    [data]
-  );
-  const mawMax = useMemo(() => Math.max(1, ...(data?.charts.mawhibaSplit.map((x) => x.count) || [0])), [data]);
-  const resultMax = useMemo(() => Math.max(1, ...(data?.charts.resultDistribution.map((x) => x.count) || [0])), [data]);
-  const levelMax = useMemo(() => Math.max(1, ...(data?.charts.levelDistribution.map((x) => x.count) || [0])), [data]);
-  const horizMax = useMemo(
-    () => Math.max(1, ...(data?.charts.activityHorizontal.map((x) => x.studentCount) || [0])),
-    [data]
-  );
-  const resultCompareMax = useMemo(
-    () => Math.max(1, ...(data?.charts.resultOutcomeCompare.map((x) => x.count) || [0])),
-    [data]
-  );
-  const yearTrendMax = useMemo(
-    () => Math.max(1, ...(data?.charts.yearTrend.map((x) => x.totalRows) || [0])),
-    [data]
-  );
 
   const focusedOutcomeOptions = useMemo(() => {
     const rows: { value: (typeof FOCUSED_ACHIEVEMENT_OUTCOMES)[number]; label: string }[] = [
@@ -517,7 +597,7 @@ const AdminParticipationAnalyticsPageInner = () => {
   );
 
   const focusedTableRows = useMemo(() => {
-    if (!focusedData?.participants.length) return [];
+    if (!focusedData?.participants?.length) return [];
     return focusedData.participants.map((r) => {
       const base: Record<string, string | number> = isAr
         ? {
@@ -583,6 +663,124 @@ const AdminParticipationAnalyticsPageInner = () => {
     });
   };
 
+  const fetchFocusedFacet = useCallback(
+    async (input: {
+      scope: "summary" | "participants" | "charts" | "trends" | "insights" | "compare";
+      pick: string;
+      outcome: string;
+      page?: number;
+      pageSize?: number;
+      signal?: AbortSignal;
+    }) => {
+      const sep = input.pick.indexOf("\u001f");
+      const focusType = sep === -1 ? input.pick : input.pick.slice(0, sep);
+      const focusRaw = sep === -1 ? "" : input.pick.slice(sep + 1);
+      const sp = buildFocusedParams();
+      sp.set("focusType", focusType);
+      sp.set("focusRaw", focusRaw);
+      sp.set("focusedOutcome", input.outcome);
+      sp.set("scope", input.scope);
+      sp.set("page", String(input.page ?? focusedPage));
+      sp.set("pageSize", String(input.pageSize ?? 25));
+      const cacheKey = buildAnalyticsCacheKey("focused-facet", Object.fromEntries(sp.entries()));
+      const correlationId =
+        typeof crypto !== "undefined" && "randomUUID" in crypto
+          ? crypto.randomUUID()
+          : `fc-${Date.now()}`;
+
+      logFocusedClientTelemetry("[FOCUSED_FETCH_START]", { scope: input.scope, correlationId, cacheKey });
+      recordExecInflightStart(cacheKey, input.scope);
+      recordExecFacetStart(input.scope, cacheKey, correlationId);
+
+      try {
+        const { data: body, fromCache } = await fetchWithAnalyticsSwr(
+          cacheKey,
+          async (swrSignal) => {
+            const signal = mergeAbortSignals(swrSignal, input.signal);
+            const res = await fetch(`/api/admin/reports/achievement-participation/focused?${sp.toString()}`, {
+              cache: "no-store",
+              credentials: "include",
+              signal,
+              headers: { "X-Correlation-Id": correlationId },
+            });
+            const parsed = (await res.json()) as Record<string, unknown> & {
+              ok?: boolean;
+              error?: string;
+              correlationId?: string;
+              userMessage?: string;
+            };
+            if (!res.ok || !parsed.ok) {
+              const raw =
+                typeof parsed.userMessage === "string"
+                  ? parsed.userMessage
+                  : typeof parsed.error === "string"
+                    ? parsed.error
+                    : "Facet request failed";
+              throw new Error(sanitizeFocusedClientError(raw));
+            }
+            return parsed;
+          },
+          { ttlMs: 28_000, staleMs: 10_000 }
+        );
+
+        logFocusedClientTelemetry(
+          fromCache ? "[FOCUSED_FETCH_DEDUPED]" : "[FOCUSED_FETCH_SUCCESS]",
+          { scope: input.scope, correlationId, cacheKey, fromCache }
+        );
+        recordExecFacetEnd(input.scope, cacheKey);
+        return body;
+      } catch (e) {
+        if (input.signal?.aborted) {
+          logFocusedClientTelemetry("[FOCUSED_FETCH_ABORT]", { scope: input.scope, correlationId });
+          recordExecRequestAborted(cacheKey, input.scope);
+        }
+        throw e;
+      } finally {
+        recordExecInflightEnd(cacheKey);
+        sampleExecClientMemory();
+      }
+    },
+    [buildFocusedParams, focusedPage]
+  );
+
+  /** Export-only full payload — does not hydrate React `focusedData` (UI stays progressive). */
+  const ensureFullFocusedPayload = useCallback(async (): Promise<FocusedActivityReportPayload | null> => {
+    if (focusedData?.decisionPlatform && focusedData?.executive && focusedData?.charts) {
+      return focusedData;
+    }
+    if (!focusedPick) return null;
+    const sep = focusedPick.indexOf("\u001f");
+    const focusType = sep === -1 ? focusedPick : focusedPick.slice(0, sep);
+    const focusRaw = sep === -1 ? "" : focusedPick.slice(sep + 1);
+    const correlationId = createCorrelationId();
+    const exportHandle = startExecExportRuntime(correlationId);
+    recordExecExportRuntimeStart();
+    const t0 = Date.now();
+    try {
+      const sp = buildFocusedParams();
+      sp.set("focusType", focusType);
+      sp.set("focusRaw", focusRaw);
+      sp.set("focusedOutcome", focusedOutcome);
+      sp.set("scope", "full");
+      sp.set("page", String(focusedPage));
+      sp.set("pageSize", "25");
+      const res = await fetch(`/api/admin/reports/achievement-participation/focused?${sp.toString()}`, {
+        cache: "no-store",
+        credentials: "include",
+        headers: { "X-Correlation-Id": correlationId },
+      });
+      const body = (await res.json()) as FocusedActivityReportPayload & { ok?: boolean; error?: string };
+      if (!res.ok || !body.ok) throw new Error(typeof body.error === "string" ? body.error : "Export payload failed");
+      endExecExportRuntime(exportHandle, { ok: true });
+      recordExecExportRuntimeEnd(Date.now() - t0);
+      return body;
+    } catch (e) {
+      endExecExportRuntime(exportHandle, { ok: false });
+      recordExecExportRuntimeEnd(Date.now() - t0);
+      throw e;
+    }
+  }, [buildFocusedParams, focusedPick, focusedOutcome, focusedPage, focusedData]);
+
   const handleFocusedExcel = () =>
     void exportRowsToExcelWorkbook(
       focusedTableRows,
@@ -620,6 +818,9 @@ const AdminParticipationAnalyticsPageInner = () => {
   const handleFocusedPdf = async (opts?: { retry?: boolean }) => {
     if (!intelAccess.executive_reports || !intelAccess.export_reports) return;
     if (!focusedPick || !focusedData) return;
+    const exportReport = await ensureFullFocusedPayload();
+    const reportForExport = exportReport ?? focusedData;
+    if (!reportForExport) return;
     if (!opts?.retry) exportAttemptRef.current = 1;
     else exportAttemptRef.current += 1;
     const correlationId = createCorrelationId();
@@ -632,7 +833,7 @@ const AdminParticipationAnalyticsPageInner = () => {
       correlationId,
     });
     const metaPdf: ExecutivePdfMetadata = {
-      generatedAtIso: new Date().toISOString(),
+      generatedAtIso: traceMeta.generatedAt,
       generatedBy: userExportLabel || undefined,
       filtersSummary: ciBuildFiltersSummary(f, isAr),
       activityFocus: isAr ? focusedData.activityLabelAr : focusedData.activityLabelEn,
@@ -641,6 +842,11 @@ const AdminParticipationAnalyticsPageInner = () => {
       correlationId,
       aggregationVersion: CI_AGGREGATION_VERSION,
       trustStatus: analyticsTrustReport.level,
+      analyticsBuildId: traceMeta.analyticsBuildId,
+      datasetVersion: traceMeta.datasetVersion,
+      filterHash: traceMeta.canonicalFilterHash,
+      canonicalFilterHash: traceMeta.canonicalFilterHash,
+      queryHash: traceMeta.queryHash,
     };
     const sep = focusedPick.indexOf("\u001f");
     const focusType = sep === -1 ? focusedPick : focusedPick.slice(0, sep);
@@ -729,13 +935,15 @@ const AdminParticipationAnalyticsPageInner = () => {
               : `Table shows first ${exportPayload.participants.length} of ${exportPayload.totalParticipants} records. Narrow filters or use Excel for full extracts.`
             : undefined;
 
-        const dp = focusedData.decisionPlatform;
+        const dp = reportForExport.decisionPlatform;
         if (dp) {
+          if (!reportForExport.executive?.kpiCards?.length) return;
+          if (!reportForExport.charts?.resultBars?.length) return;
           await exportFocusedExecutiveReportPdf(
             {
               isAr,
               docTitle: isAr ? "تقرير تنفيذي — منصة الذكاء" : "Executive intelligence report",
-              activityTitle: isAr ? focusedData.activityLabelAr : focusedData.activityLabelEn,
+              activityTitle: isAr ? reportForExport.activityLabelAr : reportForExport.activityLabelEn,
               academicYearLine: `${isAr ? "العام الدراسي" : "Academic year"}: ${f.academicYear}`,
               outcomeLine: `${isAr ? "نوع الإنجاز" : "Outcome"}: ${focusedOutcomeOptions.find((x) => x.value === focusedOutcome)?.label ?? focusedOutcome}`,
               narrativeAr: dp.narrativeAr,
@@ -748,7 +956,7 @@ const AdminParticipationAnalyticsPageInner = () => {
               recommendations: dp.recommendations.map((r) => ({
                 text: isAr ? r.textAr : r.textEn,
               })),
-              kpis: focusedData.executive.kpiCards.map((c) => ({
+              kpis: (reportForExport.executive?.kpiCards ?? []).map((c) => ({
                 label: isAr ? c.labelAr : c.labelEn,
                 value: c.value,
               })),
@@ -770,23 +978,23 @@ const AdminParticipationAnalyticsPageInner = () => {
                 medalsPer100: String(ciMedalsPer100(r.totalMedals, r.records)),
               })),
               charts: {
-                resultBars: focusedData.charts.resultBars.map((b) => ({
+                resultBars: (reportForExport.charts?.resultBars ?? []).map((b) => ({
                   label: isAr ? b.labelAr : b.labelEn,
                   count: b.count,
                 })),
-                genderSlices: focusedData.charts.genderPie.map((s) => ({
+                genderSlices: (reportForExport.charts?.genderPie ?? []).map((s) => ({
                   label: isAr ? s.nameAr : s.nameEn,
                   value: s.value,
                 })),
-                sectionSlices: focusedData.charts.sectionPie.map((s) => ({
+                sectionSlices: (reportForExport.charts?.sectionPie ?? []).map((s) => ({
                   label: isAr ? s.nameAr : s.nameEn,
                   value: s.value,
                 })),
-                mawhibaSlices: focusedData.charts.mawhibaPie.map((s) => ({
+                mawhibaSlices: (reportForExport.charts?.mawhibaPie ?? []).map((s) => ({
                   label: isAr ? s.nameAr : s.nameEn,
                   value: s.value,
                 })),
-                yearTrend: focusedData.charts.yearTrend.map((y) => ({
+                yearTrend: (reportForExport.charts?.yearTrend ?? []).map((y) => ({
                   year: y.year,
                   records: y.records,
                   distinctStudents: y.distinctStudents,
@@ -842,29 +1050,29 @@ const AdminParticipationAnalyticsPageInner = () => {
             academicYearLine: `${isAr ? "العام الدراسي" : "Academic year"}: ${f.academicYear}`,
             outcomeLine: `${isAr ? "نوع الإنجاز" : "Outcome"}: ${focusedOutcomeOptions.find((x) => x.value === focusedOutcome)?.label ?? focusedOutcome}`,
             kpis: [
-              { label: isAr ? "إجمالي السجلات" : "Total records", value: String(focusedData.kpis.totalRecords) },
-              { label: isAr ? "طلاب فريدون" : "Distinct students", value: String(focusedData.kpis.distinctStudents) },
-              { label: isAr ? "معتمد" : "Approved", value: String(focusedData.kpis.approvedRecords) },
-              { label: isAr ? "نسبة التميز %" : "Excellence %", value: `${focusedData.kpis.excellenceRatePct}%` },
+              { label: isAr ? "إجمالي السجلات" : "Total records", value: String(focusedData.kpis?.totalRecords ?? 0) },
+              { label: isAr ? "الطلاب المشاركون" : "Participating students", value: String(focusedData.kpis?.distinctStudents ?? 0) },
+              { label: isAr ? "معتمد" : "Approved", value: String(focusedData.kpis?.approvedRecords ?? 0) },
+              { label: isAr ? "نسبة التميز %" : "Excellence %", value: `${focusedData.kpis?.excellenceRatePct ?? 0}%` },
             ],
             charts: {
-              resultBars: focusedData.charts.resultBars.map((b) => ({
+              resultBars: (focusedData.charts?.resultBars ?? []).map((b) => ({
                 label: isAr ? b.labelAr : b.labelEn,
                 count: b.count,
               })),
-              genderSlices: focusedData.charts.genderPie.map((s) => ({
+              genderSlices: (focusedData.charts?.genderPie ?? []).map((s) => ({
                 label: isAr ? s.nameAr : s.nameEn,
                 value: s.value,
               })),
-              sectionSlices: focusedData.charts.sectionPie.map((s) => ({
+              sectionSlices: (focusedData.charts?.sectionPie ?? []).map((s) => ({
                 label: isAr ? s.nameAr : s.nameEn,
                 value: s.value,
               })),
-              mawhibaSlices: focusedData.charts.mawhibaPie.map((s) => ({
+              mawhibaSlices: (focusedData.charts?.mawhibaPie ?? []).map((s) => ({
                 label: isAr ? s.nameAr : s.nameEn,
                 value: s.value,
               })),
-              yearTrend: focusedData.charts.yearTrend,
+              yearTrend: focusedData.charts?.yearTrend ?? [],
             },
             participantHeaders: focusedParticipantHeaders,
             participantRows: rowsForPdf,
@@ -925,7 +1133,7 @@ const AdminParticipationAnalyticsPageInner = () => {
 
   const totalPages = data ? Math.max(1, Math.ceil(data.tableTotal / data.pageSize)) : 1;
   const focusedTotalPages = focusedData
-    ? Math.max(1, Math.ceil(focusedData.totalParticipants / focusedData.pageSize))
+    ? Math.max(1, Math.ceil((focusedData.totalParticipants ?? 0) / (focusedData.pageSize ?? 25)))
     : 1;
 
   if (allowed === false) {
@@ -938,9 +1146,173 @@ const AdminParticipationAnalyticsPageInner = () => {
     );
   }
 
+  const exportControls = (
+    <ExecutiveControlBar isAr={isAr}>
+      <ExecutiveControlBarGroup isAr={isAr} label={isAr ? "البيانات" : "Data"}>
+        <button
+          type="button"
+          onClick={() => {
+            if (activeTab === "general") void fetchData();
+            else if (activeTab === "focused") handleFocusedRefresh();
+            else refreshAll();
+          }}
+          disabled={
+            activeTab === "general"
+              ? loading
+              : activeTab === "focused"
+                ? focusedLoading || focusedOptionsLoading
+                : studentIntelLoading
+          }
+          className="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-text shadow-sm hover:bg-gray-50 disabled:opacity-50"
+        >
+          {activeTab === "general" && loading ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : activeTab === "focused" && (focusedLoading || focusedOptionsLoading) ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : activeTab === "studentIntel" && studentIntelLoading ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <RefreshCw className="h-4 w-4" />
+          )}
+          {isAr ? "تحديث" : "Refresh"}
+        </button>
+      </ExecutiveControlBarGroup>
+      <ExecutiveControlBarGroup isAr={isAr} label={isAr ? "تصدير" : "Export"}>
+        {activeTab === "focused" ? (
+          <>
+            <label className="flex flex-col gap-0.5 text-[10px] font-semibold text-slate-700">
+              <span>{isAr ? "قالب PDF" : "PDF preset"}</span>
+              <select
+                value={pdfPreset}
+                onChange={(e) => {
+                  const v = e.target.value as CiPdfExportPreset;
+                  setPdfPreset(v);
+                  try {
+                    localStorage.setItem(CI_STORAGE_KEYS.pdfPreset, v);
+                  } catch {
+                    /* ignore */
+                  }
+                }}
+                className="min-w-[9rem] rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-xs font-medium text-slate-900"
+                aria-label={isAr ? "قالب التصدير التنفيذي" : "Executive export preset"}
+              >
+                {(Object.keys(CI_PDF_PRESET_LABELS) as CiPdfExportPreset[]).map((k) => (
+                  <option key={k} value={k}>
+                    {isAr ? CI_PDF_PRESET_LABELS[k].ar : CI_PDF_PRESET_LABELS[k].en}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex flex-col gap-0.5 text-[10px] font-semibold text-slate-700">
+              <span>{isAr ? "عرض محفوظ" : "Saved view"}</span>
+              <select
+                defaultValue=""
+                onChange={(e) => {
+                  const v = e.target.value;
+                  if (!v) return;
+                  handleApplySavedExecutiveView(v);
+                  e.currentTarget.value = "";
+                }}
+                className="min-w-[8rem] rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-xs font-medium text-slate-900"
+                aria-label={isAr ? "تحميل عرض تنفيذي محفوظ" : "Load saved executive view"}
+              >
+                <option value="">{isAr ? "— تحميل —" : "— Load —"}</option>
+                {savedExecutiveViews.map((sv) => (
+                  <option key={sv.id} value={sv.id}>
+                    {isAr ? sv.nameAr : sv.nameEn}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button
+              type="button"
+              onClick={() => {
+                const name = window.prompt(isAr ? "اسم العرض المحفوظ" : "Saved view name");
+                if (!name?.trim()) return;
+                const snapshot: ExecutiveUiSnapshot = {
+                  v: 1,
+                  focusedPick,
+                  comparePick,
+                  compareEnabled,
+                  pdfPreset,
+                  focusedOutcome,
+                  filter: cloneExecutiveFilterSnapshot(f),
+                  ...captureExecutiveAuxLocalState(),
+                };
+                upsertSavedExecutiveView({
+                  id: `sv_${Date.now()}`,
+                  nameAr: name.trim(),
+                  nameEn: name.trim(),
+                  snapshot,
+                });
+                setSavedExecutiveViews(readSavedExecutiveViews());
+              }}
+              className="self-end rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs font-bold text-indigo-900 hover:bg-indigo-100"
+            >
+              {isAr ? "حفظ العرض" : "Save view"}
+            </button>
+          </>
+        ) : null}
+        <button
+          type="button"
+          onClick={() => {
+            if (activeTab === "general") handlePdf();
+            else if (activeTab === "focused") void handleFocusedPdf();
+          }}
+          disabled={
+            (activeTab === "focused" &&
+              (!focusedData || !focusedPick || !intelAccess.export_reports)) ||
+            activeTab === "studentIntel"
+          }
+          className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-text shadow-sm hover:bg-gray-50 disabled:opacity-40"
+        >
+          PDF
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            if (activeTab === "general") handleExcel();
+            else if (activeTab === "focused") handleFocusedExcel();
+          }}
+          disabled={
+            (activeTab === "focused" && focusedTableRows.length === 0) || activeTab === "studentIntel"
+          }
+          className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-text shadow-sm hover:bg-gray-50 disabled:opacity-40"
+        >
+          Excel
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            const url = copyShareUrl();
+            if (!url) return;
+            void navigator.clipboard?.writeText(url);
+          }}
+          className="rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm font-semibold text-indigo-900 shadow-sm hover:bg-indigo-100"
+          title={isAr ? "نسخ رابط التقرير مع الفلاتر الحالية" : "Copy report link with current filters"}
+        >
+          {isAr ? "نسخ الرابط" : "Copy link"}
+        </button>
+        <button
+          type="button"
+          onClick={() => window.print()}
+          className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-text shadow-sm hover:bg-gray-50"
+        >
+          {isAr ? "طباعة" : "Print"}
+        </button>
+      </ExecutiveControlBarGroup>
+    </ExecutiveControlBar>
+  );
+
   return (
-    <PageContainer>
-      <div dir={isAr ? "rtl" : "ltr"}>
+    <PageContainer className="max-w-[1440px]">
+      <ExecutiveWorkspaceShell isAr={isAr}>
+        <ExecutivePageChrome
+          title={title}
+          subtitle={pageSubtitle(isAr ? "ar" : "en")}
+          isAr={isAr}
+          controlBar={exportControls}
+        />
         {dataDegraded && activeTab === "general" ? (
           <div
             role="status"
@@ -951,156 +1323,6 @@ const AdminParticipationAnalyticsPageInner = () => {
             : "Showing cached or snapshot data due to server load. Use Refresh to fetch live data."}
           </div>
         ) : null}
-        <PageHeader
-          title={title}
-          subtitle={
-            isAr
-              ? "قراءة تنفيذية، مقارنات، تنبيهات قواعدية، وتصدير PDF متعدد الأقسام — دون المساس ببقية النظام."
-              : "Executive reading, comparisons, rule-based alerts, and multi-section PDF export — without altering the rest of the system."
-          }
-          actions={
-            <div className="flex flex-wrap items-end gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  if (activeTab === "general") void fetchData();
-                  else if (activeTab === "focused") handleFocusedRefresh();
-                  else refreshAll();
-                }}
-                disabled={
-                  activeTab === "general"
-                    ? loading
-                    : activeTab === "focused"
-                      ? focusedLoading || focusedOptionsLoading
-                      : studentIntelLoading
-                }
-                className="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-text shadow-sm hover:bg-gray-50 disabled:opacity-50"
-              >
-                {activeTab === "general" && loading ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : activeTab === "focused" && (focusedLoading || focusedOptionsLoading) ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : activeTab === "studentIntel" && studentIntelLoading ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <RefreshCw className="h-4 w-4" />
-                )}
-                {isAr ? "تحديث" : "Refresh"}
-              </button>
-              {activeTab === "focused" ? (
-                <>
-                  <label className="flex flex-col gap-1 text-xs font-semibold text-slate-700">
-                    <span>{isAr ? "قالب PDF" : "PDF preset"}</span>
-                    <select
-                      value={pdfPreset}
-                      onChange={(e) => {
-                        const v = e.target.value as CiPdfExportPreset;
-                        setPdfPreset(v);
-                        try {
-                          localStorage.setItem(CI_STORAGE_KEYS.pdfPreset, v);
-                        } catch {
-                          /* ignore */
-                        }
-                      }}
-                      className="min-w-[10rem] rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-xs font-medium text-slate-900"
-                      aria-label={isAr ? "قالب التصدير التنفيذي" : "Executive export preset"}
-                    >
-                      {(Object.keys(CI_PDF_PRESET_LABELS) as CiPdfExportPreset[]).map((k) => (
-                        <option key={k} value={k}>
-                          {isAr ? CI_PDF_PRESET_LABELS[k].ar : CI_PDF_PRESET_LABELS[k].en}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="flex flex-col gap-1 text-xs font-semibold text-slate-700">
-                    <span>{isAr ? "عرض محفوظ" : "Saved view"}</span>
-                    <select
-                      defaultValue=""
-                      onChange={(e) => {
-                        const v = e.target.value;
-                        if (!v) return;
-                        handleApplySavedExecutiveView(v);
-                        e.currentTarget.value = "";
-                      }}
-                      className="min-w-[9rem] rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-xs font-medium text-slate-900"
-                      aria-label={isAr ? "تحميل عرض تنفيذي محفوظ" : "Load saved executive view"}
-                    >
-                      <option value="">{isAr ? "— تحميل —" : "— Load —"}</option>
-                      {savedExecutiveViews.map((sv) => (
-                        <option key={sv.id} value={sv.id}>
-                          {isAr ? sv.nameAr : sv.nameEn}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const name = window.prompt(isAr ? "اسم العرض المحفوظ" : "Saved view name");
-                      if (!name?.trim()) return;
-                      const snapshot: ExecutiveUiSnapshot = {
-                        v: 1,
-                        focusedPick,
-                        comparePick,
-                        compareEnabled,
-                        pdfPreset,
-                        focusedOutcome,
-                        filter: cloneExecutiveFilterSnapshot(f),
-                        ...captureExecutiveAuxLocalState(),
-                      };
-                      upsertSavedExecutiveView({
-                        id: `sv_${Date.now()}`,
-                        nameAr: name.trim(),
-                        nameEn: name.trim(),
-                        snapshot,
-                      });
-                      setSavedExecutiveViews(readSavedExecutiveViews());
-                    }}
-                    className="self-end rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs font-bold text-indigo-900 hover:bg-indigo-100"
-                  >
-                    {isAr ? "حفظ العرض" : "Save view"}
-                  </button>
-                </>
-              ) : null}
-              <button
-                type="button"
-                onClick={() => {
-                  if (activeTab === "general") handlePdf();
-                  else if (activeTab === "focused") void handleFocusedPdf();
-                }}
-                disabled={
-                  (activeTab === "focused" &&
-                    (!focusedData || !focusedPick || !intelAccess.export_reports)) ||
-                  activeTab === "studentIntel"
-                }
-                className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-text shadow-sm hover:bg-gray-50 disabled:opacity-40"
-              >
-                PDF
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  if (activeTab === "general") handleExcel();
-                  else if (activeTab === "focused") handleFocusedExcel();
-                }}
-                disabled={
-                  (activeTab === "focused" && focusedTableRows.length === 0) || activeTab === "studentIntel"
-                }
-                className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-text shadow-sm hover:bg-gray-50 disabled:opacity-40"
-              >
-                Excel
-              </button>
-              <button
-                type="button"
-                onClick={() => window.print()}
-                className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-text shadow-sm hover:bg-gray-50"
-              >
-                {isAr ? "طباعة" : "Print"}
-              </button>
-            </div>
-          }
-        />
-
         {allowed === true && analyticsTrustReport.level !== "synced" ? (
           <div
             className="mb-4 flex flex-wrap items-center gap-3 rounded-2xl border border-slate-200 bg-white p-3 text-sm shadow-sm print:hidden"
@@ -1138,25 +1360,6 @@ const AdminParticipationAnalyticsPageInner = () => {
           </div>
         ) : null}
 
-        {allowed === true && insights.hasData && insights.insights.length > 0 ? (
-          <section className="mb-4 rounded-2xl border border-indigo-100 bg-indigo-50/40 p-4 print:hidden">
-            <h2 className="text-sm font-black text-indigo-950">
-              {isAr ? "رؤى تحليلية" : "Analytics insights"}
-            </h2>
-            <ul className="mt-3 space-y-2">
-              {insights.insights.map((ins) => (
-                <li
-                  key={ins.id}
-                  className="rounded-xl border border-white/80 bg-white/90 px-3 py-2 text-xs shadow-sm"
-                >
-                  <p className="font-bold text-slate-900">{isAr ? ins.titleAr : ins.titleEn}</p>
-                  <p className="mt-1 text-slate-600">{isAr ? ins.bodyAr : ins.bodyEn}</p>
-                </li>
-              ))}
-            </ul>
-          </section>
-        ) : null}
-
         {debugDiagnostics ? (
           <section
             className="mb-4 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-3 font-mono text-[10px] text-slate-600 print:hidden"
@@ -1180,8 +1383,23 @@ const AdminParticipationAnalyticsPageInner = () => {
           </Link>
         </div>
 
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-2 print:hidden">
+          <button
+            type="button"
+            onClick={() => setExecutiveMode(!executiveMode)}
+            className={`rounded-xl border px-4 py-2 text-sm font-bold transition ${
+              executiveMode
+                ? "border-indigo-300 bg-indigo-600 text-white"
+                : "border-slate-200 bg-white text-slate-800 hover:bg-slate-50"
+            }`}
+            aria-pressed={executiveMode}
+          >
+            {isAr ? (executiveMode ? "وضع القيادة: مفعّل" : "وضع القيادة") : executiveMode ? "Executive mode: on" : "Executive mode"}
+          </button>
+        </div>
+
         <div
-          className="mb-4 flex flex-wrap gap-2 rounded-2xl border border-slate-200 bg-slate-50/80 p-2 print:hidden"
+          className="mb-4 flex flex-nowrap gap-2 overflow-x-auto rounded-2xl border border-slate-200 bg-slate-50/80 p-2 pb-3 print:hidden sm:flex-wrap"
           role="tablist"
           aria-label={isAr ? "نوع التقرير" : "Report mode"}
         >
@@ -1232,12 +1450,54 @@ const AdminParticipationAnalyticsPageInner = () => {
           >
             {isAr ? "تميّز الطلاب" : "Student distinction"}
           </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === "decisions"}
+            className={`rounded-xl px-4 py-2 text-sm font-bold transition ${
+              activeTab === "decisions"
+                ? "bg-white text-slate-900 shadow-sm ring-1 ring-indigo-200"
+                : "text-slate-600 hover:bg-white/70"
+            }`}
+            onClick={() => setActiveTab("decisions")}
+          >
+            {isAr ? "قرارات تنفيذية" : "Executive decisions"}
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === "historical"}
+            className={`rounded-xl px-4 py-2 text-sm font-bold transition ${
+              activeTab === "historical"
+                ? "bg-white text-slate-900 shadow-sm ring-1 ring-violet-200"
+                : "text-slate-600 hover:bg-white/70"
+            }`}
+            onClick={() => {
+              setActiveTab("historical");
+            }}
+          >
+            {t("historical.tab", isAr ? "ar" : "en")}
+          </button>
         </div>
 
-        <section className="mb-4 rounded-2xl border border-slate-200 bg-white p-4 print:hidden">
-          <h2 className="text-sm font-black text-slate-900">{isAr ? "الفلاتر" : "Filters"}</h2>
-          <p className="mt-1 text-xs text-slate-500">
-            {activeTab === "general"
+        <ResponsiveAnalyticsFilters
+          isAr={isAr}
+          f={f}
+          setF={setF}
+          onPageReset={() => setPage(1)}
+          categoryOptions={categoryOptions}
+          levelOptions={levelOptions}
+          resultOptions={resultOptions}
+          genderOptions={genderOptions}
+          mawhibaOptions={mawhibaOptions}
+          stageOptions={stageOptions}
+          gradeOptions={gradeOptions}
+          statusOptions={statusOptions}
+          certificateOptions={certificateOptions}
+          stdTestOptions={stdTestOptions}
+          sectionOptions={sectionOptions}
+          subtitle={
+            activeTab === "general"
               ? isAr
                 ? "نطاق عام لجميع الأنشطة ضمن الفلاتر. للتقرير التفصيلي لمسابقة واحدة استخدم تبويب قرار المسابقات."
                 : "Broad analytics for all activities under the filters. Use the competition decision tab for a single activity drill-down."
@@ -1245,272 +1505,28 @@ const AdminParticipationAnalyticsPageInner = () => {
                 ? isAr
                   ? "اضبط الفلاتر أدناه، ثم استخدم لوحة الذكاء لاختيار النشاط والمقارنة والتصدير التنفيذي."
                   : "Set filters below, then use the intelligence panel for activity selection, comparison, and executive export."
-                : isAr
-                  ? "نفس فلاتر النطاق العام لعرض أكثر الطلاب تميزًا حسب المشاركة، الميداليات، معدل النجاح، وتنوع الأنشطة."
-                  : "Same global filters to rank students by participation, medals, success rate, and activity diversity."}
-          </p>
-          <div className="mt-3 grid gap-3 md:grid-cols-2 lg:grid-cols-4">
-            <label className="flex flex-col text-xs font-semibold text-slate-600">
-              {isAr ? "العام الدراسي" : "Academic year"}
-              <select
-                value={f.academicYear}
-                onChange={(e) => {
-                  setPage(1);
-                  setF((p) => ({ ...p, academicYear: e.target.value }));
-                }}
-                className="mt-1 rounded-lg border border-slate-200 px-2 py-2 text-sm"
-              >
-                <option value="2025-2026م">2025-2026م</option>
-                <option value="2024-2025م">2024-2025م</option>
-                <option value="2023-2024م">2023-2024م</option>
-              </select>
-            </label>
-            <label className="flex flex-col text-xs font-semibold text-slate-600">
-              {isAr ? "الجنس" : "Gender"}
-              <select
-                value={f.gender}
-                onChange={(e) => {
-                  setPage(1);
-                  setF((p) => ({ ...p, gender: e.target.value }));
-                }}
-                className="mt-1 rounded-lg border border-slate-200 px-2 py-2 text-sm"
-              >
-                <option value="all">{isAr ? "الكل" : "All"}</option>
-                <option value="male">{isAr ? "بنين" : "Boys"}</option>
-                <option value="female">{isAr ? "بنات" : "Girls"}</option>
-              </select>
-            </label>
-            <label className="flex flex-col text-xs font-semibold text-slate-600">
-              {isAr ? "القسم" : "Section"}
-              <select
-                value={f.section}
-                onChange={(e) => {
-                  setPage(1);
-                  setF((p) => ({ ...p, section: e.target.value }));
-                }}
-                className="mt-1 rounded-lg border border-slate-200 px-2 py-2 text-sm"
-              >
-                <option value="all">{isAr ? "الكل" : "All"}</option>
-                <option value="arabic">{isAr ? "عربي" : "Arabic"}</option>
-                <option value="international">{isAr ? "دولي" : "International"}</option>
-              </select>
-            </label>
-            <label className="flex flex-col text-xs font-semibold text-slate-600">
-              {isAr ? "موهبة" : "Mawhiba"}
-              <select
-                value={f.mawhiba}
-                onChange={(e) => {
-                  setPage(1);
-                  setF((p) => ({ ...p, mawhiba: e.target.value }));
-                }}
-                className="mt-1 rounded-lg border border-slate-200 px-2 py-2 text-sm"
-              >
-                <option value="all">{isAr ? "الكل" : "All"}</option>
-                <option value="yes">{isAr ? "موهبة" : "Mawhiba"}</option>
-                <option value="no">{isAr ? "غير موهبة" : "Non‑Mawhiba"}</option>
-              </select>
-            </label>
-            <label className="flex flex-col text-xs font-semibold text-slate-600">
-              {isAr ? "المرحلة" : "Stage"}
-              <select
-                value={f.stage}
-                onChange={(e) => {
-                  setPage(1);
-                  setF((p) => ({ ...p, stage: e.target.value }));
-                }}
-                className="mt-1 rounded-lg border border-slate-200 px-2 py-2 text-sm"
-              >
-                <option value="all">{isAr ? "الكل" : "All"}</option>
-                <option value="primary">{isAr ? "ابتدائي" : "Primary"}</option>
-                <option value="middle">{isAr ? "متوسط" : "Middle"}</option>
-                <option value="secondary">{isAr ? "ثانوي" : "Secondary"}</option>
-              </select>
-            </label>
-            <label className="flex flex-col text-xs font-semibold text-slate-600">
-              {isAr ? "الصف" : "Grade"}
-              <select
-                value={f.grade}
-                onChange={(e) => {
-                  setPage(1);
-                  setF((p) => ({ ...p, grade: e.target.value }));
-                }}
-                className="mt-1 rounded-lg border border-slate-200 px-2 py-2 text-sm"
-              >
-                <option value="all">{isAr ? "الكل" : "All"}</option>
-                {GRADE_OPTIONS.map((g) => (
-                  <option key={g.value} value={g.value}>
-                    {isAr ? g.ar : g.en}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="flex flex-col text-xs font-semibold text-slate-600">
-              {isAr ? "حالة الإنجاز" : "Achievement status"}
-              <select
-                value={f.status}
-                onChange={(e) => {
-                  setPage(1);
-                  setF((p) => ({ ...p, status: e.target.value }));
-                }}
-                className="mt-1 rounded-lg border border-slate-200 px-2 py-2 text-sm"
-              >
-                <option value="all">{isAr ? "الكل" : "All"}</option>
-                <option value="approved">{isAr ? "معتمد" : "Approved"}</option>
-                <option value="pending">{isAr ? "قيد المراجعة" : "Pending"}</option>
-                <option value="pending_review">{isAr ? "قيد المراجعة" : "Pending review"}</option>
-                <option value="needs_revision">{isAr ? "يحتاج تعديل" : "Needs revision"}</option>
-                <option value="rejected">{isAr ? "مرفوض" : "Rejected"}</option>
-              </select>
-            </label>
-            <label className="flex flex-col text-xs font-semibold text-slate-600">
-              {isAr ? "الشهادة" : "Certificate"}
-              <select
-                value={f.certificateStatus}
-                onChange={(e) => {
-                  setPage(1);
-                  setF((p) => ({ ...p, certificateStatus: e.target.value }));
-                }}
-                className="mt-1 rounded-lg border border-slate-200 px-2 py-2 text-sm"
-              >
-                <option value="all">{isAr ? "الكل" : "All"}</option>
-                <option value="issued">{isAr ? "صادرة" : "Issued"}</option>
-                <option value="not_issued">{isAr ? "غير صادرة" : "Not issued"}</option>
-              </select>
-            </label>
-            <label className="flex flex-col text-xs font-semibold text-slate-600">
-              {isAr ? "من تاريخ" : "From date"}
-              <input
-                type="date"
-                value={f.fromDate}
-                onChange={(e) => {
-                  setPage(1);
-                  setF((p) => ({ ...p, fromDate: e.target.value }));
-                }}
-                className="mt-1 rounded-lg border border-slate-200 px-2 py-2 text-sm"
-              />
-            </label>
-            <label className="flex flex-col text-xs font-semibold text-slate-600">
-              {isAr ? "إلى تاريخ" : "To date"}
-              <input
-                type="date"
-                value={f.toDate}
-                onChange={(e) => {
-                  setPage(1);
-                  setF((p) => ({ ...p, toDate: e.target.value }));
-                }}
-                className="mt-1 rounded-lg border border-slate-200 px-2 py-2 text-sm"
-              />
-            </label>
-            <label className="flex flex-col text-xs font-semibold text-slate-600 md:col-span-2">
-              {isAr ? "بحث في المجال / الاسم / المستنتج" : "Domain / name / inferred search"}
-              <input
-                value={f.domain}
-                onChange={(e) => {
-                  setPage(1);
-                  setF((p) => ({ ...p, domain: e.target.value }));
-                }}
-                className="mt-1 rounded-lg border border-slate-200 px-2 py-2 text-sm"
-                placeholder={isAr ? "نص جزئي…" : "Partial text…"}
-              />
-            </label>
-            <label className="flex flex-col text-xs font-semibold text-slate-600">
-              {isAr ? "تصنيف المادة" : "Classification"}
-              <input
-                value={f.classification}
-                onChange={(e) => {
-                  setPage(1);
-                  setF((p) => ({ ...p, classification: e.target.value }));
-                }}
-                className="mt-1 rounded-lg border border-slate-200 px-2 py-2 text-sm"
-              />
-            </label>
-            <label className="flex flex-col text-xs font-semibold text-slate-600 md:col-span-2">
-              {isAr ? "جهة / منظمة" : "Organization"}
-              <input
-                value={f.organization}
-                onChange={(e) => {
-                  setPage(1);
-                  setF((p) => ({ ...p, organization: e.target.value }));
-                }}
-                className="mt-1 rounded-lg border border-slate-200 px-2 py-2 text-sm"
-              />
-            </label>
-          </div>
-          <div className="mt-4 grid gap-2 md:grid-cols-3">
-            <div>
-              <p className="text-xs font-bold text-slate-600">{isAr ? "أنواع الأنشطة" : "Activity types"}</p>
-              <div className="mt-1 max-h-28 overflow-y-auto rounded-lg border border-slate-100 p-2 text-xs">
-                {categoryOptions.map((o) => (
-                  <label key={o.value} className="flex cursor-pointer items-center gap-2 py-0.5">
-                    <input
-                      type="checkbox"
-                      checked={f.categories.includes(o.value)}
-                      onChange={(e) => {
-                        setPage(1);
-                        setF((p) => ({
-                          ...p,
-                          categories: e.target.checked
-                            ? [...p.categories, o.value]
-                            : p.categories.filter((x) => x !== o.value),
-                        }));
-                      }}
-                    />
-                    <span>{o.label}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
-            <div>
-              <p className="text-xs font-bold text-slate-600">{isAr ? "مستوى الإنجاز" : "Achievement level"}</p>
-              <div className="mt-1 max-h-28 overflow-y-auto rounded-lg border border-slate-100 p-2 text-xs">
-                {levelOptions.map((o) => (
-                  <label key={o.value} className="flex cursor-pointer items-center gap-2 py-0.5">
-                    <input
-                      type="checkbox"
-                      checked={f.levels.includes(o.value)}
-                      onChange={(e) => {
-                        setPage(1);
-                        setF((p) => ({
-                          ...p,
-                          levels: e.target.checked
-                            ? [...p.levels, o.value]
-                            : p.levels.filter((x) => x !== o.value),
-                        }));
-                      }}
-                    />
-                    <span>{o.label}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
-            <div>
-              <p className="text-xs font-bold text-slate-600">{isAr ? "النتيجة" : "Result"}</p>
-              <div className="mt-1 max-h-28 overflow-y-auto rounded-lg border border-slate-100 p-2 text-xs">
-                {resultOptions.map((o) => (
-                  <label key={o.value} className="flex cursor-pointer items-center gap-2 py-0.5">
-                    <input
-                      type="checkbox"
-                      checked={f.resultTokens.includes(o.value)}
-                      onChange={(e) => {
-                        setPage(1);
-                        setF((p) => ({
-                          ...p,
-                          resultTokens: e.target.checked
-                            ? [...p.resultTokens, o.value]
-                            : p.resultTokens.filter((x) => x !== o.value),
-                        }));
-                      }}
-                    />
-                    <span>{o.label}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
-          </div>
-        </section>
+                : activeTab === "historical"
+                  ? isAr
+                    ? "اختر السنوات والنشاط لبناء جداول مقارنة احترافية متعددة الأبعاد."
+                    : "Select years and activities to build professional multi-dimensional comparison tables."
+                  : isAr
+                    ? "نفس فلاتر النطاق العام لعرض أكثر الطلاب تميزًا حسب المشاركة، الميداليات، معدل النجاح، وتنوع الأنشطة."
+                    : "Same global filters to rank students by participation, medals, success rate, and activity diversity."
+          }
+        />
 
-        {activeTab === "studentIntel" && studentIntelError ? (
-          <div className="mb-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">{studentIntelError}</div>
+        <AnalyticsSavedViewsPanel isAr={isAr} />
+
+        {activeTab === "general" && allowed === true ? (
+          <div className="mb-4">
+            <GlobalPerspectiveToolbar />
+          </div>
+        ) : null}
+
+        {activeTab === "historical" && allowed === true ? (
+          <div className="mb-4">
+            <GlobalPerspectiveToolbar />
+          </div>
         ) : null}
 
         {activeTab === "general" && error ? (
@@ -1525,104 +1541,33 @@ const AdminParticipationAnalyticsPageInner = () => {
           <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">{compareError}</div>
         ) : null}
 
-        {activeTab === "studentIntel" && allowed === true && !studentIntelData && studentIntelLoading ? (
-          <div className="flex items-center gap-2 py-12 text-slate-600">
-            <Loader2 className="h-5 w-5 animate-spin" />
-            {isAr ? "جاري تحميل تميّز الطلاب…" : "Loading student intelligence…"}
-          </div>
-        ) : null}
-
-        {activeTab === "studentIntel" && studentIntelData ? (
+        {activeTab === "studentIntel" && allowed === true ? (
           <section className="mb-6 space-y-6 print:hidden" dir={isAr ? "rtl" : "ltr"}>
-            <div className="rounded-2xl border border-teal-100 bg-gradient-to-br from-teal-50/50 to-white p-4 shadow-sm ring-1 ring-teal-100/60">
-              <h2 className="text-sm font-black text-teal-950">
-                {isAr ? "تميّز الطلاب ضمن الفلاتر الحالية" : "Student distinction under current filters"}
-              </h2>
-              <p className="mt-1 text-xs text-teal-900/80">
-                {isAr
-                  ? "قوائم حتمية من الخادم — صورة، مرحلة، قسم، موهبة، وإجمالي الإنجازات."
-                  : "Server-driven lists — photo, stage, section, Mawhiba, and total achievement footprint."}
-              </p>
-            </div>
-            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-              {(
-                [
-                  [isAr ? "أفضل الأداء (مرجّح)" : "Top weighted score", studentIntelData.byWeightedScore],
-                  [isAr ? "أكثر المشاركة" : "Most participation", studentIntelData.byParticipation],
-                  [isAr ? "أكثر الميداليات" : "Most medals", studentIntelData.byMedals],
-                  [isAr ? "أعلى معدل نجاح (ميداليات/سجل)" : "Highest success rate (medals/record)", studentIntelData.bySuccessRate],
-                  [isAr ? "أوسع تنوع أنشطة" : "Broadest activity mix", studentIntelData.byActivityDiversity],
-                  [isAr ? "أسرع تطور (زخم سنوي)" : "Fastest growth (yearly momentum)", studentIntelData.byFastestGrowth],
-                ] as const
-              ).map(([label, list]) => (
-                <div key={label} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                  <h3 className="text-xs font-black uppercase tracking-wide text-slate-500">{label}</h3>
-                  <ul className="mt-3 space-y-2">
-                    {list.length === 0 ? (
-                      <li className="text-xs text-slate-500">{isAr ? "لا بيانات." : "No rows."}</li>
-                    ) : (
-                      list.slice(0, 10).map((row) => (
-                        <li key={`${label}-${row.participantId}`} className="list-none">
-                          <button
-                            type="button"
-                            className="flex w-full items-start gap-3 rounded-xl border border-slate-100 bg-slate-50/50 p-2 text-start transition hover:border-indigo-200 hover:bg-indigo-50/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400"
-                            onClick={() => setStudentProfilePid(row.participantId)}
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter" || e.key === " ") {
-                                e.preventDefault();
-                                setStudentProfilePid(row.participantId);
-                              }
-                            }}
-                            aria-label={
-                              isAr
-                                ? `عرض ملف ${row.nameAr}`
-                                : `Open profile for ${row.nameEn}`
-                            }
-                          >
-                            {row.avatarUrl ? (
-                              // eslint-disable-next-line @next/next/no-img-element
-                              <img
-                                src={row.avatarUrl}
-                                alt=""
-                                className="h-11 w-11 shrink-0 rounded-full object-cover ring-1 ring-slate-200"
-                              />
-                            ) : (
-                              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-slate-200 text-sm font-bold text-slate-600">
-                                {(isAr ? row.nameAr : row.nameEn).slice(0, 1)}
-                              </div>
-                            )}
-                            <div className="min-w-0 flex-1">
-                              <p className="truncate text-sm font-bold text-slate-900" dir="auto">
-                                {isAr ? row.nameAr : row.nameEn}
-                              </p>
-                              <p className="mt-0.5 text-[11px] text-slate-600" dir="auto">
-                                {isAr ? row.stageLabelAr : row.stageLabelEn} ·{" "}
-                                {row.sectionKey === "international" ? (isAr ? "دولي" : "Intl.") : isAr ? "عربي" : "Arabic"}{" "}
-                                · {row.mawhiba ? (isAr ? "موهبة" : "Mawhiba") : isAr ? "غير موهبة" : "Non‑Mawhiba"}
-                              </p>
-                              <p className="mt-1 text-[11px] font-semibold tabular-nums text-slate-800">
-                                {isAr ? "سجلات" : "Rec"} {row.recordCount} · {isAr ? "ميداليات" : "Med"} {row.medalCount} ·{" "}
-                                {isAr ? "أنشطة" : "Acts"} {row.distinctActivityCount} · {isAr ? "نسبة" : "Ratio"}{" "}
-                                {row.medalRatioPct}%
-                                {typeof row.growthIndex === "number" ? (
-                                  <>
-                                    {" "}
-                                    · {isAr ? "زخم" : "Mom."} {row.growthIndex}
-                                    {typeof row.yearSpan === "number" && row.yearSpan > 0
-                                      ? ` /${row.yearSpan}${isAr ? "س" : "y"}`
-                                      : ""}
-                                  </>
-                                ) : null}
-                              </p>
-                            </div>
-                          </button>
-                        </li>
-                      ))
-                    )}
-                  </ul>
+            <LazyStudentIntelligenceTrigger enabled lite={false} />
+            <StudentIntelligenceBoundary
+              isAr={isAr}
+              error={studentIntelError}
+              loading={studentIntelLoading}
+              onRetry={() => void fetchStudentIntelligence({ lite: false, force: true })}
+            >
+              {studentIntelLoading && !studentIntelData ? (
+                <div className="flex items-center gap-2 py-12 text-slate-600">
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                  {isAr ? "جاري تحميل تميّز الطلاب…" : "Loading student intelligence…"}
                 </div>
-              ))}
-            </div>
+              ) : null}
+              {studentIntelData ? (
+                <StudentExcellenceWorkspace
+                  isAr={isAr}
+                  data={studentIntelData}
+                  onSelectStudent={(pid) => setStudentProfilePid(pid)}
+                />
+              ) : !studentIntelLoading && !studentIntelError ? (
+                <p className="text-sm text-slate-500">
+                  {isAr ? "لا توجد بيانات طلاب ضمن الفلاتر." : "No student data for current filters."}
+                </p>
+              ) : null}
+            </StudentIntelligenceBoundary>
 
             {studentProfilePid ? (
               <div
@@ -1736,329 +1681,137 @@ const AdminParticipationAnalyticsPageInner = () => {
           </section>
         ) : null}
 
-        {activeTab === "general" && allowed === true && !data && loading ? (
-          <div className="flex items-center gap-2 py-12 text-slate-600">
-            <Loader2 className="h-5 w-5 animate-spin" />
-            {isAr ? "جاري التحميل…" : "Loading…"}
-          </div>
+        {activeTab === "general" && allowed === true && !data ? (
+          <ExecutiveWorkspaceEmptyState
+            isAr={isAr}
+            f={f}
+            loading={loading}
+            onRefresh={() => void fetchData()}
+            onClearFilters={() => {
+              setF((prev) => clearParticipationFilters(prev));
+              setPage(1);
+            }}
+          />
+        ) : null}
+
+        {activeTab === "decisions" && data ? (
+          <ExecutiveDecisionWorkspace
+            isAr={isAr}
+            filterFingerprint={executiveBundle?.filterFingerprint ?? filterKey}
+            data={data}
+            insights={insights}
+            narratives={executiveBundle?.narratives ?? []}
+            strategicInsights={executiveBundle?.strategicInsights ?? []}
+            precomputed={executiveAiDecisions}
+            studentIntelRows={studentIntelData?.byWeightedScore?.slice(0, 15)}
+          />
+        ) : null}
+
+        {activeTab === "historical" && allowed === true ? (
+          <HistoricalTablesWorkspace isAr={isAr} />
         ) : null}
 
         {activeTab === "general" && data && kpi ? (
-          <>
-            <section className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              {[
-                [isAr ? "إجمالي المشاركات" : "Total participations", kpi.totalParticipations],
-                [isAr ? "طلاب مشاركون (فريدون)" : "Distinct students", kpi.distinctStudents],
-                [isAr ? "نسبة موهبة (سجلات)" : "Mawhiba % (records)", `${kpi.mawhibaParticipationPct}%`],
-                [isAr ? "نسبة البنات" : "Female %", `${kpi.femalePct}%`],
-                [isAr ? "قسم دولي %" : "Intl. section %", `${kpi.internationalSectionPct}%`],
-                [isAr ? "ذهبية" : "Gold medals", kpi.goldMedalCount],
-                [isAr ? "مراكز أولى" : "First places", kpi.firstPlaceCount],
-                [isAr ? "ترشيحات" : "Nominations", kpi.nominationCount],
-                [isAr ? "أعلى مستوى" : "Highest level", isAr ? kpi.highestLevelLabelAr : kpi.highestLevelLabelEn],
-                [isAr ? "إنجازات دولية %" : "Intl. achievements %", `${kpi.internationalAchievementPct}%`],
-                [isAr ? "إنجازات عالمية %" : "Global achievements %", `${kpi.globalAchievementPct}%`],
-                [isAr ? "أعلى برنامج" : "Top program", isAr ? kpi.topProgramLabelAr : kpi.topProgramLabelEn],
-              ].map(([k, v]) => (
-                <div key={String(k)} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                  <p className="text-xs font-bold text-slate-500">{k}</p>
-                  <p className="mt-1 text-lg font-black text-slate-900">{v}</p>
-                </div>
-              ))}
-            </section>
-
-            <section className="mb-6 grid gap-4 lg:grid-cols-2 print:grid-cols-1">
-              <div className="rounded-2xl border border-slate-200 bg-gradient-to-br from-white to-slate-50/80 p-4 shadow-sm">
-                <h3 className="text-sm font-black text-slate-900">
-                  {isAr ? "مقارنة النتائج (نطاق الفلاتر)" : "Result comparison (filtered scope)"}
-                </h3>
-                <p className="mt-1 text-[11px] text-slate-500">
-                  {isAr ? "ذهبية، فضية، برونزية، ترشيح، مراكز، مشاركة فقط" : "Gold, silver, bronze, nomination, ranks, participation"}
-                </p>
-                <div className="mt-3 space-y-2">
-                  {data.charts.resultOutcomeCompare.map((r) => (
-                    <MiniHBar
-                      key={r.key}
-                      label={isAr ? r.labelAr : r.labelEn}
-                      value={r.count}
-                      max={resultCompareMax}
-                      isAr={isAr}
-                      barClassName="h-full rounded-full transition-[width]"
-                      barStyle={{ backgroundColor: r.color }}
-                    />
-                  ))}
-                </div>
-              </div>
-              <div className="rounded-2xl border border-slate-200 bg-gradient-to-br from-white to-slate-50/80 p-4 shadow-sm">
-                <h3 className="text-sm font-black text-slate-900">
-                  {isAr ? "تطور السنوات" : "Year-over-year"}
-                </h3>
-                <p className="mt-1 text-[11px] text-slate-500">
-                  {isAr
-                    ? "حسب سنة الإنجاز أو تاريخ السجل عند غياب السنة"
-                    : "By achievement year or record date when year is missing"}
-                </p>
-                <div className="mt-3 space-y-2">
-                  {data.charts.yearTrend.length === 0 ? (
-                    <p className="text-xs text-slate-500">
-                      {isAr ? "لا تتوفر بيانات سنوات كافية ضمن الفلاتر." : "Not enough year data under current filters."}
-                    </p>
-                  ) : (
-                    data.charts.yearTrend.map((y) => (
-                      <MiniHBar
-                        key={y.year}
-                        label={`${y.year} · ${isAr ? "سجلات" : "rows"} ${y.totalRows} · ${isAr ? "طلاب" : "students"} ${y.distinctStudents} · 🥇 ${y.goldMedals}`}
-                        value={y.totalRows}
-                        max={yearTrendMax}
-                        isAr={isAr}
-                        barClassName="h-full rounded-full bg-teal-600 transition-[width]"
-                      />
-                    ))
-                  )}
-                </div>
-              </div>
-            </section>
-
-            <section className="mb-6 grid gap-4 lg:grid-cols-2 print:grid-cols-1">
-              <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                <h3 className="text-sm font-black text-slate-900">{isAr ? "الجنس" : "Gender"}</h3>
-                <div className="mt-3 space-y-2">
-                  {data.charts.genderParticipation.map((r) => (
-                    <MiniHBar key={r.key} label={isAr ? r.labelAr : r.labelEn} value={r.count} max={genderMax} isAr={isAr} />
-                  ))}
-                </div>
-              </div>
-              <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                <h3 className="text-sm font-black text-slate-900">{isAr ? "القسم" : "Section"}</h3>
-                <div className="mt-3 space-y-2">
-                  {data.charts.sectionParticipation.map((r) => (
-                    <MiniHBar key={r.key} label={isAr ? r.labelAr : r.labelEn} value={r.count} max={sectionMax} isAr={isAr} />
-                  ))}
-                </div>
-              </div>
-              <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                <h3 className="text-sm font-black text-slate-900">{isAr ? "موهبة" : "Mawhiba"}</h3>
-                <div className="mt-3 space-y-2">
-                  {data.charts.mawhibaSplit.map((r) => (
-                    <MiniHBar key={r.key} label={isAr ? r.labelAr : r.labelEn} value={r.count} max={mawMax} isAr={isAr} />
-                  ))}
-                </div>
-              </div>
-              <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                <h3 className="text-sm font-black text-slate-900">{isAr ? "توزيع النتائج" : "Result mix"}</h3>
-                <div className="mt-3 max-h-56 space-y-2 overflow-y-auto pr-1">
-                  {data.charts.resultDistribution.map((r, i) => (
-                    <MiniHBar
-                      key={`${r.labelAr}-${i}`}
-                      label={isAr ? r.labelAr : r.labelEn}
-                      value={r.count}
-                      max={resultMax}
-                      isAr={isAr}
-                    />
-                  ))}
-                </div>
-              </div>
-              <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                <h3 className="text-sm font-black text-slate-900">{isAr ? "توزيع المستويات" : "Levels"}</h3>
-                <div className="mt-3 space-y-2">
-                  {data.charts.levelDistribution.map((r, i) => (
-                    <MiniHBar
-                      key={`${r.labelAr}-${i}`}
-                      label={isAr ? r.labelAr : r.labelEn}
-                      value={r.count}
-                      max={levelMax}
-                      isAr={isAr}
-                    />
-                  ))}
-                </div>
-              </div>
-              <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm lg:col-span-2">
-                <h3 className="text-sm font-black text-slate-900">
-                  {isAr ? "أعلى الأنشطة (طلاب فريدون)" : "Top activities (distinct students)"}
-                </h3>
-                <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                  {data.charts.activityHorizontal.map((r, i) => (
-                    <MiniHBar
-                      key={`${r.labelAr}-${i}`}
-                      label={isAr ? r.labelAr : r.labelEn}
-                      value={r.studentCount}
-                      max={horizMax}
-                      isAr={isAr}
-                    />
-                  ))}
-                </div>
-              </div>
-              <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm lg:col-span-2">
-                <h3 className="text-sm font-black text-slate-900">
-                  {isAr ? "ميداليات ومراكز حسب الجنس" : "Medals & ranks by gender"}
-                </h3>
-                <div className="mt-3 overflow-x-auto">
-                  <table className="w-full min-w-[360px] text-left text-xs">
-                    <thead>
-                      <tr className="border-b border-slate-200 text-slate-600">
-                        <th className="py-2 pe-3">{isAr ? "الجنس" : "Gender"}</th>
-                        <th className="py-2 pe-3">🥇</th>
-                        <th className="py-2 pe-3">🥈</th>
-                        <th className="py-2 pe-3">🥉</th>
-                        <th className="py-2">{isAr ? "مراكز" : "Ranks"}</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {data.charts.genderResultStack.map((r) => (
-                        <tr key={r.gender} className="border-b border-slate-100">
-                          <td className="py-2 pe-3 font-semibold">{isAr ? r.labelAr : r.labelEn}</td>
-                          <td className="py-2 pe-3 tabular-nums">{r.gold}</td>
-                          <td className="py-2 pe-3 tabular-nums">{r.silver}</td>
-                          <td className="py-2 pe-3 tabular-nums">{r.bronze}</td>
-                          <td className="py-2 tabular-nums">{r.ranks}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </section>
-
-            <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm print:border-0">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <h3 className="text-sm font-black text-slate-900">{isAr ? "الجدول التحليلي" : "Analytics table"}</h3>
-                <p className="text-xs text-slate-500">
-                  {isAr ? `صفحة ${page} من ${totalPages}` : `Page ${page} of ${totalPages}`}
-                </p>
-              </div>
-              <div className="mt-3 overflow-x-auto">
-                <table className="w-full min-w-[1280px] border-collapse text-left text-xs">
-                  <thead>
-                    <tr className="border-b border-slate-200 bg-slate-50 text-slate-700">
-                      {headers.map((h) => (
-                        <th key={h} className="whitespace-nowrap px-2 py-2 font-bold">
-                          {h}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {data.table.length === 0 ? (
-                      <tr>
-                        <td colSpan={headers.length} className="px-2 py-8 text-center text-slate-500">
-                          {isAr ? "لا توجد بيانات ضمن الفلاتر الحالية." : "No data for the current filters."}
-                        </td>
-                      </tr>
-                    ) : (
-                      data.table.map((r) => (
-                        <tr key={r.activityKey} className="border-b border-slate-100 hover:bg-slate-50/80">
-                          <td className="max-w-[220px] px-2 py-2 font-semibold text-slate-900">
-                            {isAr ? r.activityLabelAr : r.activityLabelEn}
-                          </td>
-                          <td className="px-2 py-2">{isAr ? r.typeLabelAr : r.typeLabelEn}</td>
-                          <td className="max-w-[120px] px-2 py-2 text-slate-700">
-                            {isAr ? r.classificationLabelAr : r.classificationLabelEn}
-                          </td>
-                          <td className="px-2 py-2">{isAr ? r.levelLabelAr : r.levelLabelEn}</td>
-                          <td className="max-w-[160px] px-2 py-2">
-                            {isAr ? r.participationResultAr : r.participationResultEn}
-                          </td>
-                          <td className="px-2 py-2 tabular-nums">{r.distinctParticipants}</td>
-                          <td className="px-2 py-2 tabular-nums">{r.maleParticipants}</td>
-                          <td className="px-2 py-2 tabular-nums">{r.femaleParticipants}</td>
-                          <td className="px-2 py-2 tabular-nums">{r.arabicParticipants}</td>
-                          <td className="px-2 py-2 tabular-nums">{r.internationalParticipants}</td>
-                          <td className="px-2 py-2 tabular-nums">{r.mawhibaParticipants}</td>
-                          <td className="px-2 py-2 tabular-nums">{r.nonMawhibaParticipants}</td>
-                          <td className="px-2 py-2 tabular-nums text-amber-800">{r.goldMedalCount}</td>
-                          <td className="px-2 py-2 tabular-nums text-slate-600">{r.silverMedalCount}</td>
-                          <td className="px-2 py-2 tabular-nums text-amber-950/80">{r.bronzeMedalCount}</td>
-                          <td className="px-2 py-2 tabular-nums">{r.rankCount}</td>
-                          <td className="px-2 py-2 tabular-nums">{r.nominationCount}</td>
-                          <td className="px-2 py-2 tabular-nums">{r.participationOnlyCount}</td>
-                          <td className="px-2 py-2 tabular-nums">{r.excellenceRatePct}%</td>
-                          <td className="px-2 py-2 tabular-nums">{r.approvedAchievements}</td>
-                          <td className="px-2 py-2 tabular-nums font-semibold">{r.totalParticipations}</td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-              <div className="mt-4 flex flex-wrap items-center justify-between gap-2 print:hidden">
-                <button
-                  type="button"
-                  disabled={page <= 1 || loading}
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
-                  className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-semibold disabled:opacity-40"
-                >
-                  {isAr ? "السابق" : "Prev"}
-                </button>
-                <button
-                  type="button"
-                  disabled={page >= totalPages || loading}
-                  onClick={() => setPage((p) => p + 1)}
-                  className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-semibold disabled:opacity-40"
-                >
-                  {isAr ? "التالي" : "Next"}
-                </button>
-              </div>
-            </section>
-          </>
+          <ParticipationIntelligenceDashboard
+            isAr={isAr}
+            data={data}
+            insights={insights}
+            loading={loading}
+            page={page}
+            totalPages={totalPages}
+            onPageChange={setPage}
+            f={f}
+            studentIntelData={studentIntelData}
+            studentIntelLoading={studentIntelLoading}
+            onSelectStudent={setStudentProfilePid}
+            onClearFilters={() => {
+              setF((prev) => clearParticipationFilters(prev));
+              setPage(1);
+            }}
+            executivePrecomputed={executiveBundle}
+            executivePrecomputedMeta={executiveBundleMeta}
+          />
         ) : null}
 
         {activeTab === "focused" ? (
-          <FocusedExecutiveIntelligencePanel
-            isAr={isAr}
-            primaryType={f.primaryType}
-            onPrimaryTypeChange={(v) => {
-              setF((p) => ({ ...p, primaryType: v }));
-              setFocusedPick("");
-              setComparePick("");
-            }}
-            categoryOptions={categoryOptions}
-            activityOptions={focusedActivityOptions}
-            optionsLoading={focusedOptionsLoading}
-            pick={focusedPick}
-            onPickChange={setFocusedPick}
-            compareEnabled={compareEnabled}
-            onCompareEnabledChange={(v) => {
-              setCompareEnabled(v);
-              if (!v) setComparePick("");
-            }}
-            comparePick={comparePick}
-            onComparePickChange={setComparePick}
-            compareData={compareData}
-            compareLoading={compareLoading}
-            outcome={focusedOutcome}
-            onOutcomeChange={setFocusedOutcome}
-            outcomeOptions={focusedOutcomeOptions.map((o) => ({ value: String(o.value), label: o.label }))}
-            data={focusedData}
-            loading={focusedLoading}
-            page={focusedPage}
-            onPageChange={setFocusedPage}
-            totalPages={focusedTotalPages}
-            focusedParticipantHeaders={focusedParticipantHeaders}
-            onExportSelectedExcel={handleFocusedExportSelectionExcel}
-            onExportSelectedPdf={handleFocusedExportSelectionPdf}
-            academicYearLine={isAr ? `العام الدراسي: ${f.academicYear}` : `Academic year: ${f.academicYear}`}
-            outcomeLine={`${isAr ? "نوع الإنجاز" : "Outcome"}: ${
-              focusedOutcomeOptions.find((x) => x.value === focusedOutcome)?.label ?? focusedOutcome
-            }`}
-            reportLoadError={focusedError}
-            onRelaxReportFilters={() => {
-              setF((p) => ({
-                ...p,
-                categories: [],
-                levels: [],
-                resultTokens: [],
-                domain: "",
-                organization: "",
-                classification: "",
-              }));
-            }}
-            filterContext={{
-              academicYear: f.academicYear,
-              stage: f.stage,
-              outcome: focusedOutcome,
-              primaryType: f.primaryType,
-            }}
-          />
+          <div className="space-y-6">
+            <ExecutiveRuntimeRecoveryBoundary
+              isAr={isAr}
+              sectionId="focused-executive-panel"
+              onSoftReset={() => {
+                setFocusedRuntimeRecoveryKey((n) => n + 1);
+                void refreshAll();
+              }}
+              onFacetRetry={() => void refreshAll()}
+            >
+            <FocusedExecutiveIntelligencePanel
+              key={focusedRuntimeRecoveryKey}
+              isAr={isAr}
+              primaryType={f.primaryType}
+              onPrimaryTypeChange={(v) => {
+                setF((p) => ({ ...p, primaryType: v }));
+                setFocusedPick("");
+                setComparePick("");
+              }}
+              categoryOptions={categoryOptions}
+              activityOptions={focusedActivityOptions}
+              optionsLoading={focusedOptionsLoading}
+              pick={focusedPick}
+              onPickChange={setFocusedPick}
+              compareEnabled={compareEnabled}
+              onCompareEnabledChange={(v) => {
+                setCompareEnabled(v);
+                if (!v) setComparePick("");
+              }}
+              comparePick={comparePick}
+              onComparePickChange={setComparePick}
+              compareData={compareData}
+              compareLoading={compareLoading}
+              outcome={focusedOutcome}
+              onOutcomeChange={setFocusedOutcome}
+              outcomeOptions={focusedOutcomeOptions.map((o) => ({ value: String(o.value), label: o.label }))}
+              data={focusedData}
+              loading={focusedLoading}
+              page={focusedPage}
+              onPageChange={setFocusedPage}
+              totalPages={focusedTotalPages}
+              focusedParticipantHeaders={focusedParticipantHeaders}
+              onExportSelectedExcel={handleFocusedExportSelectionExcel}
+              onExportSelectedPdf={handleFocusedExportSelectionPdf}
+              academicYearLine={isAr ? `العام الدراسي: ${f.academicYear}` : `Academic year: ${f.academicYear}`}
+              outcomeLine={`${isAr ? "نوع الإنجاز" : "Outcome"}: ${
+                focusedOutcomeOptions.find((x) => x.value === focusedOutcome)?.label ?? focusedOutcome
+              }`}
+              reportLoadError={focusedError}
+              onRelaxReportFilters={() => {
+                setF((p) => ({
+                  ...p,
+                  categories: [],
+                  levels: [],
+                  resultTokens: [],
+                  domain: "",
+                  organization: "",
+                  classification: "",
+                }));
+              }}
+              filterContext={{
+                academicYear: f.academicYear,
+                stage: f.stage,
+                outcome: focusedOutcome,
+                primaryType: f.primaryType,
+              }}
+              fetchFocusedFacet={fetchFocusedFacet}
+              refreshNonce={focusedRefreshNonce}
+              onDecisionReportReady={handleFocusedDecisionReady}
+            />
+
+            {focusedDecisionReport ? (
+              <div className="print:hidden">
+                <CompetitionDecisionWorkspace isAr={isAr} report={focusedDecisionReport} />
+              </div>
+            ) : null}
+            </ExecutiveRuntimeRecoveryBoundary>
+          </div>
         ) : null}
         {isCompetitionIntelDebugEnabled() ? (
           <section
@@ -2106,15 +1859,30 @@ const AdminParticipationAnalyticsPageInner = () => {
           onDismiss={() => setExportOverlayOpen(false)}
           onRetry={() => void handleFocusedPdf({ retry: true })}
         />
-      </div>
+        <ExecutiveRuntimeDebugOverlay />
+      </ExecutiveWorkspaceShell>
     </PageContainer>
   );
 };
 
+const AdminParticipationAnalyticsPageInner = () => (
+  <AnalyticsPerspectiveBridge>
+    <AdminParticipationAnalyticsPageContent />
+  </AnalyticsPerspectiveBridge>
+);
+
 const AdminParticipationAnalyticsPage = () => (
-  <AnalyticsFilterProvider>
-    <AdminParticipationAnalyticsPageInner />
-  </AnalyticsFilterProvider>
+  <Suspense
+    fallback={
+      <PageContainer>
+        <p className="py-12 text-center text-sm text-slate-600">Loading analytics…</p>
+      </PageContainer>
+    }
+  >
+    <AnalyticsFilterProvider enableUrlSync>
+      <AdminParticipationAnalyticsPageInner />
+    </AnalyticsFilterProvider>
+  </Suspense>
 );
 
 export default AdminParticipationAnalyticsPage;

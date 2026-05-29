@@ -69,7 +69,7 @@ const parseYearFromAcademicYear = (v: unknown): number | null => {
   if (!s) return null;
   const matches = [...s.matchAll(/(20\d{2})/g)].map((m) => Number(m[1]));
   if (matches.length === 0) return null;
-  return Math.max(...matches);
+  return Math.min(...matches);
 };
 
 /** Extract year from achievement document / row fields. */
