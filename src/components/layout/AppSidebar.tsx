@@ -12,11 +12,13 @@ import {
   Menu,
   X,
   ClipboardCheck,
+  ClipboardList,
   Bell,
   Gauge,
   UserCog,
   FileBarChart,
   Star,
+  Building2,
   Briefcase,
   SlidersHorizontal,
   ScrollText,
@@ -31,12 +33,14 @@ import {
   BadgeCheck,
   type LucideIcon,
   MessagesSquare,
+  Mail,
   Newspaper,
   BarChart3,
   Bot,
   Megaphone,
   Users,
   Activity,
+  Award,
   Search,
   Images,
   FileSpreadsheet,
@@ -44,7 +48,12 @@ import {
 import { useUnreadNotificationCount } from "@/hooks/useUnreadNotificationCount";
 import { defaultLocale, getLocale } from "@/lib/i18n";
 import { useClientMounted } from "@/hooks/useClientMounted";
-import { isStaffAdminNavRole, isAlumniPlatformAdminRole } from "@/lib/app-navigation-roles";
+import {
+  isStaffAdminNavRole,
+  isAlumniPlatformAdminRole,
+  isPartnershipSupervisorRole,
+  isTrainingInstitutionRole,
+} from "@/lib/app-navigation-roles";
 import { useAppSession } from "@/contexts/AppSessionContext";
 import { roleHasCapability, type RoleCapabilityKey } from "@/lib/app-role-scope-matrix";
 import AuthGuardLink from "@/components/auth/AuthGuardLink";
@@ -63,6 +72,8 @@ const AppSidebar = () => {
 
   const isStaffNav = isStaffAdminNavRole(navRole);
   const isAlumniAdminOnly = isAlumniPlatformAdminRole(navRole);
+  const isPartnershipSupervisorOnly = isPartnershipSupervisorRole(navRole);
+  const isTrainingInstitutionOnly = isTrainingInstitutionRole(navRole);
 
   const can = (key: RoleCapabilityKey) => roleHasCapability(navRole, key);
 
@@ -75,6 +86,61 @@ const AppSidebar = () => {
     href: "/letter-requests",
     icon: ScrollText,
     label: locale === "ar" ? "الإفادة وخطاب التوصية" : "Testimonials & letters",
+  };
+  const summerTrainingStudentItem = {
+    href: "/summer-training",
+    icon: Briefcase,
+    label: locale === "ar" ? "التدريب الصيفي والشراكات" : "Summer training",
+  };
+  const summerTrainingMessagesStudentItem = {
+    href: "/summer-training/messages",
+    icon: Mail,
+    label: locale === "ar" ? "رسائل التدريب" : "Training messages",
+  };
+  const summerTrainingFinalReportStudentItem = {
+    href: "/summer-training/final-report",
+    icon: FileSpreadsheet,
+    label: locale === "ar" ? "التقرير النهائي" : "Final report",
+  };
+  const careerProfileStudentItem = {
+    href: "/career-profile",
+    icon: Briefcase,
+    label: locale === "ar" ? "الملف المهني" : "Career profile",
+  };
+  const partnershipsAdminItem = {
+    href: "/admin/partnerships",
+    icon: Briefcase,
+    label: locale === "ar" ? "التدريب والشراكات" : "Training & partnerships",
+  };
+  const partnershipsApplicationsAdminItem = {
+    href: "/admin/partnerships/applications",
+    icon: ScrollText,
+    label: locale === "ar" ? "طلبات التدريب" : "Training applications",
+  };
+  const partnershipsMessagesAdminItem = {
+    href: "/admin/partnerships/messages",
+    icon: Mail,
+    label: locale === "ar" ? "رسائل الشراكات" : "Partnership messages",
+  };
+  const partnershipsFinalReportsAdminItem = {
+    href: "/admin/partnerships/final-reports",
+    icon: FileSpreadsheet,
+    label: locale === "ar" ? "تقارير التدريب" : "Training reports",
+  };
+  const partnershipsTrainingAchievementsAdminItem = {
+    href: "/admin/partnerships/training-achievements",
+    icon: Award,
+    label: locale === "ar" ? "إنجازات التدريب" : "Training achievements",
+  };
+  const partnershipsSettingsAdminItem = {
+    href: "/admin/partnerships/settings",
+    icon: SlidersHorizontal,
+    label: locale === "ar" ? "إعدادات الشراكات" : "Partnership settings",
+  };
+  const partnershipsAuditAdminItem = {
+    href: "/admin/partnerships/audit",
+    icon: FileBarChart,
+    label: locale === "ar" ? "تدقيق الشراكات" : "Partnership audit",
   };
   const letterRequestsAdminItem = {
     href: "/admin/letter-requests",
@@ -264,6 +330,31 @@ const AppSidebar = () => {
     icon: LineChart,
     label: locale === "ar" ? "الإحصاءات المتقدمة" : "Advanced analytics",
   };
+  const careerAnalyticsAdminItem = {
+    href: "/admin/career/analytics",
+    icon: Briefcase,
+    label: locale === "ar" ? "جاهزية مهنية وجامعية" : "Career readiness analytics",
+  };
+  const executiveIntelligenceAdminItem = {
+    href: "/admin/executive-intelligence",
+    icon: LineChart,
+    label: locale === "ar" ? "الذكاء التنفيذي" : "Executive intelligence",
+  };
+  const schoolIntelligenceAdminItem = {
+    href: "/admin/school-intelligence",
+    icon: GraduationCap,
+    label: locale === "ar" ? "الذكاء المدرسي" : "School intelligence",
+  };
+  const schoolImprovementAdminItem = {
+    href: "/admin/school-improvement-intelligence",
+    icon: ClipboardList,
+    label: locale === "ar" ? "تحسين مدرسي وإجراءات" : "School improvement & actions",
+  };
+  const systemHealthAdminItem = {
+    href: "/admin/system-health",
+    icon: Activity,
+    label: locale === "ar" ? "صحة النظام والاعتماد" : "System health & certification",
+  };
   const aiNewsItem = {
     href: "/admin/ai/news",
     icon: Sparkles,
@@ -273,6 +364,11 @@ const AppSidebar = () => {
     href: "/admin/audit-log",
     icon: ScrollText,
     label: locale === "ar" ? "سجل العمليات" : "Audit log",
+  };
+  const academicYearsAdminItem = {
+    href: "/admin/academic-years",
+    icon: CalendarDays,
+    label: locale === "ar" ? "الأعوام الدراسية" : "Academic years",
   };
   const adminSettingsItem = {
     href: "/admin/settings",
@@ -346,8 +442,14 @@ const AppSidebar = () => {
     { ...participationAnalyticsItem, capability: "reports" },
     { ...leaderboardItem, capability: "reviewAchievements" },
     { ...homeHighlightsItem, capability: "homeHighlights" },
+    { ...academicYearsAdminItem, capability: "academicYearsRead" },
     { ...homeCeremonySettingsItem, capability: "platformSettings" },
     { ...analyticsItem, capability: "advancedAnalytics" },
+    { ...careerAnalyticsAdminItem, capability: "advancedAnalytics" },
+    { ...executiveIntelligenceAdminItem, capability: "advancedAnalytics" },
+    { ...schoolIntelligenceAdminItem, capability: "advancedAnalytics" },
+    { ...schoolImprovementAdminItem, capability: "advancedAnalytics" },
+    { ...systemHealthAdminItem, capability: "platformSettings" },
     { ...hallOfFameItem, capability: "viewAchievements" },
     { ...achievementsItem, capability: "viewAchievements" },
     { ...notificationsItem, capability: null },
@@ -355,6 +457,13 @@ const AppSidebar = () => {
     { ...aiNewsItem, capability: "aiNews" },
     { ...contactMessagesItem, capability: "contactMessages" },
     { ...letterRequestsAdminItem, capability: "letterRequests" },
+    { ...partnershipsAdminItem, capability: "partnershipsManagement" },
+    { ...partnershipsApplicationsAdminItem, capability: "partnershipsManagement" },
+    { ...partnershipsMessagesAdminItem, capability: "partnershipsManagement" },
+    { ...partnershipsFinalReportsAdminItem, capability: "partnershipsManagement" },
+    { ...partnershipsTrainingAchievementsAdminItem, capability: "partnershipsManagement" },
+    { ...partnershipsSettingsAdminItem, capability: "partnershipsManagement" },
+    { ...partnershipsAuditAdminItem, capability: "partnershipsManagement" },
     { ...alumniOnboardingAdminItem, capability: "alumniVerification" },
     { ...alumniVerificationCenterItem, capability: "alumniVerification" },
     { ...alumniStoriesAdminItem, capability: "alumniModeration" },
@@ -422,8 +531,60 @@ const AppSidebar = () => {
     { ...settingsItem, capability: null },
   ];
 
+  const institutionTrainingPortalItem = {
+    href: "/institution/training",
+    icon: Building2,
+    label: locale === "ar" ? "بوابة المؤسسة التدريبية" : "Institution training portal",
+  };
+
+  const institutionMessagesItem = {
+    href: "/institution/training/messages",
+    icon: Mail,
+    label: locale === "ar" ? "رسائل المؤسسة" : "Institution messages",
+  };
+
+  const partnershipSupervisorNavCandidates: Array<{
+    href: string;
+    icon: LucideIcon;
+    label: string;
+    capability: RoleCapabilityKey | null;
+    badgeCount?: number;
+  }> = [
+    { ...partnershipsAdminItem, capability: "partnershipsManagement" },
+    { ...partnershipsApplicationsAdminItem, capability: "partnershipsManagement" },
+    { ...partnershipsMessagesAdminItem, capability: "partnershipsManagement" },
+    { ...partnershipsFinalReportsAdminItem, capability: "partnershipsManagement" },
+    { ...partnershipsTrainingAchievementsAdminItem, capability: "partnershipsManagement" },
+    { ...partnershipsSettingsAdminItem, capability: "partnershipsManagement" },
+    { ...partnershipsAuditAdminItem, capability: "partnershipsManagement" },
+    { ...academicYearsAdminItem, capability: "academicYearsRead" },
+    { ...notificationsItem, capability: null },
+    { ...profileItem, capability: null },
+    { ...settingsItem, capability: null },
+  ];
+
+  const trainingInstitutionNavCandidates: Array<{
+    href: string;
+    icon: LucideIcon;
+    label: string;
+    capability: RoleCapabilityKey | null;
+    badgeCount?: number;
+  }> = [
+    { ...institutionTrainingPortalItem, capability: null },
+    { ...institutionMessagesItem, capability: null },
+    { ...notificationsItem, capability: null },
+    { ...profileItem, capability: null },
+    { ...settingsItem, capability: null },
+  ];
+
   const navItems = isAlumniAdminOnly
     ? alumniAdminNavCandidates
+        .filter((row) => row.capability === null || can(row.capability))
+        .map(({ capability: _omit, ...rest }) => rest)
+    : isTrainingInstitutionOnly
+    ? trainingInstitutionNavCandidates.map(({ capability: _omit, ...rest }) => rest)
+    : isPartnershipSupervisorOnly
+    ? partnershipSupervisorNavCandidates
         .filter((row) => row.capability === null || can(row.capability))
         .map(({ capability: _omit, ...rest }) => rest)
     : isStaffNav
@@ -437,7 +598,17 @@ const AppSidebar = () => {
         ...(showAcademicAdvisorNav ? [alumniAssistantNavItem] : []),
         ...(!isAlumniAccount ? [hallOfFameItem] : []),
         ...(showAlumniCommunityNav ? [alumniDiscoverySearchItem, alumniCommunityFeedStudentItem] : []),
-        ...(!isAlumniAccount ? [achievementsItem, letterRequestsStudentItem, addAchievementItem] : []),
+        ...(!isAlumniAccount
+          ? [
+              achievementsItem,
+              letterRequestsStudentItem,
+              summerTrainingStudentItem,
+              summerTrainingMessagesStudentItem,
+              summerTrainingFinalReportStudentItem,
+              careerProfileStudentItem,
+              addAchievementItem,
+            ]
+          : []),
         notificationsItem,
         profileItem,
         settingsItem,
@@ -474,11 +645,35 @@ const AppSidebar = () => {
     if (href === "/admin/analytics") {
       return pathname === "/admin/analytics" || pathname?.startsWith("/admin/analytics/");
     }
+    if (href === "/admin/career/analytics") {
+      return pathname === "/admin/career/analytics" || pathname?.startsWith("/admin/career/analytics/");
+    }
+    if (href === "/admin/executive-intelligence") {
+      return pathname === "/admin/executive-intelligence" || pathname?.startsWith("/admin/executive-intelligence/");
+    }
+    if (href === "/admin/school-intelligence") {
+      return pathname === "/admin/school-intelligence" || pathname?.startsWith("/admin/school-intelligence/");
+    }
+    if (href === "/admin/school-improvement-intelligence") {
+      return (
+        pathname === "/admin/school-improvement-intelligence" ||
+        pathname?.startsWith("/admin/school-improvement-intelligence/")
+      );
+    }
+    if (href === "/admin/system-health") {
+      return pathname === "/admin/system-health" || pathname?.startsWith("/admin/system-health/");
+    }
+    if (href === "/career-profile") {
+      return pathname === "/career-profile" || pathname?.startsWith("/career-profile/");
+    }
     if (href === "/admin/ai/news") {
       return pathname === "/admin/ai/news" || pathname?.startsWith("/admin/ai/");
     }
     if (href === "/admin/audit-log") {
       return pathname === "/admin/audit-log";
+    }
+    if (href === "/admin/academic-years") {
+      return pathname === "/admin/academic-years" || pathname?.startsWith("/admin/academic-years/");
     }
     if (href === "/admin/settings") {
       return pathname === "/admin/settings";
@@ -497,6 +692,61 @@ const AppSidebar = () => {
     }
     if (href === "/admin/contact-messages") {
       return pathname === "/admin/contact-messages" || pathname?.startsWith("/admin/contact-messages/");
+    }
+    if (href === "/admin/partnerships/applications") {
+      return (
+        pathname === "/admin/partnerships/applications" ||
+        pathname?.startsWith("/admin/partnerships/applications/")
+      );
+    }
+    if (href === "/admin/partnerships") {
+      return (
+        pathname === "/admin/partnerships" ||
+        (pathname?.startsWith("/admin/partnerships/") &&
+          !pathname?.startsWith("/admin/partnerships/applications") &&
+          !pathname?.startsWith("/admin/partnerships/messages") &&
+          !pathname?.startsWith("/admin/partnerships/final-reports") &&
+          !pathname?.startsWith("/admin/partnerships/training-achievements") &&
+          !pathname?.startsWith("/admin/partnerships/settings") &&
+          !pathname?.startsWith("/admin/partnerships/audit"))
+      );
+    }
+    if (href === "/summer-training/messages") {
+      return pathname === "/summer-training/messages" || pathname?.startsWith("/summer-training/messages/");
+    }
+    if (href === "/summer-training/final-report") {
+      return pathname === "/summer-training/final-report" || pathname?.startsWith("/summer-training/final-report/");
+    }
+    if (href === "/summer-training") {
+      return (
+        (pathname === "/summer-training" || pathname?.startsWith("/summer-training/")) &&
+        !pathname?.startsWith("/summer-training/messages") &&
+        !pathname?.startsWith("/summer-training/final-report")
+      );
+    }
+    if (href === "/institution/training") {
+      return pathname === "/institution/training" || pathname?.startsWith("/institution/training/");
+    }
+    if (href === "/admin/partnerships/messages") {
+      return pathname === "/admin/partnerships/messages" || pathname?.startsWith("/admin/partnerships/messages/");
+    }
+    if (href === "/admin/partnerships/final-reports") {
+      return (
+        pathname === "/admin/partnerships/final-reports" ||
+        pathname?.startsWith("/admin/partnerships/final-reports/")
+      );
+    }
+    if (href === "/admin/partnerships/training-achievements") {
+      return (
+        pathname === "/admin/partnerships/training-achievements" ||
+        pathname?.startsWith("/admin/partnerships/training-achievements/")
+      );
+    }
+    if (href === "/admin/partnerships/settings") {
+      return pathname === "/admin/partnerships/settings" || pathname?.startsWith("/admin/partnerships/settings/");
+    }
+    if (href === "/admin/partnerships/audit") {
+      return pathname === "/admin/partnerships/audit" || pathname?.startsWith("/admin/partnerships/audit/");
     }
     if (href === "/alumni/community") {
       return pathname === "/alumni/community" || pathname?.startsWith("/alumni/community/");

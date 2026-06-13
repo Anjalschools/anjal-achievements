@@ -22,8 +22,16 @@ import {
   Link2,
   Copy,
   QrCode,
+  Briefcase,
+  GraduationCap,
+  Building2,
+  Mail,
+  FileText,
 } from "lucide-react";
 import { getLocale } from "@/lib/i18n";
+import StudentTrainingStatusWidget from "@/components/partnerships/StudentTrainingStatusWidget";
+import TrainingApplicationStatusBadge from "@/components/partnerships/TrainingApplicationStatusBadge";
+import type { StudentTrainingDashboardContext } from "@/lib/partnerships/partnerships-student-dashboard-context";
 import { useAppSession } from "@/contexts/AppSessionContext";
 import AchievementStatusBadge from "@/components/achievements/AchievementStatusBadge";
 import StudentAchievementDataRows from "@/components/achievements/StudentAchievementDataRows";
@@ -40,6 +48,7 @@ type DashboardPayload = {
   participationCount: number;
   lastAchievement: { id: string; title: string; date: string | null } | null;
   recentAchievements: DashboardAchievementRow[];
+  trainingContext?: StudentTrainingDashboardContext | null;
 };
 
 type UserRankPayload = {
@@ -294,6 +303,37 @@ const DashboardPage = () => {
         />
       </div>
 
+      {data?.trainingContext?.stats ? (
+        <div className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <StatCard
+            title={isAr ? "فرص التدريب" : "Training applications"}
+            value={data.trainingContext.stats.applicationsSubmitted}
+            icon={Briefcase}
+          />
+          <StatCard
+            title={isAr ? "التدريب المعتمد" : "Approved training"}
+            value={data.trainingContext.stats.acceptedOpportunities}
+            icon={GraduationCap}
+          />
+          <StatCard
+            title={isAr ? "ساعات التدريب" : "Training hours"}
+            value={data.trainingContext.stats.approvedTrainingHours}
+            icon={Clock}
+          />
+          <StatCard
+            title={isAr ? "المؤسسات التدريبية" : "Training institutions"}
+            value={data.trainingContext.stats.trainingInstitutions}
+            icon={Building2}
+          />
+        </div>
+      ) : null}
+
+      <StudentTrainingStatusWidget
+        data={data?.trainingContext?.widget ?? null}
+        isAr={isAr}
+        loading={isLoading}
+      />
+
       <SectionCard className="mb-8">
         <h2 className="mb-4 text-xl font-bold text-text">{isAr ? "إحصاءات الترتيب" : "Ranking stats"}</h2>
         {rankLoading ? (
@@ -328,121 +368,9 @@ const DashboardPage = () => {
         )}
       </SectionCard>
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        <SectionCard>
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-xl font-bold text-text">
-              {isAr ? "أحدث الإنجازات" : "Recent achievements"}
-            </h2>
-            <Link
-              href="/achievements"
-              className="text-sm font-medium text-primary hover:text-primary-dark"
-            >
-              {isAr ? "عرض الكل" : "View all"}
-            </Link>
-          </div>
-
-          {!isLoading && recentAchievements.length > 0 ? (
-            <div className="space-y-3">
-              {recentAchievements.map((achievement) => (
-                <Link
-                  key={achievement.id}
-                  href={`/achievements/${achievement.id}`}
-                  className="block rounded-lg border border-gray-200 bg-gray-50 p-4 transition-colors hover:border-primary hover:bg-primary/5"
-                >
-                  <div className="flex items-start justify-between">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <h3 className="font-semibold text-text">{achievement.title}</h3>
-                        {(achievement.featured || achievement.isFeatured) && (
-                          <span className="rounded-full bg-secondary/20 px-2 py-0.5 text-xs font-medium text-secondary">
-                            {isAr ? "مميز" : "Featured"}
-                          </span>
-                        )}
-                      </div>
-                      <div className="mt-2">
-                        <StudentAchievementDataRows
-                          locale={isAr ? "ar" : "en"}
-                          levelKey={achievement.summary.levelKey}
-                          medalType={achievement.summary.medalType}
-                          resultType={achievement.summary.resultType}
-                          content={{
-                            typeLabel: achievement.summary.typeLabel,
-                            fieldLabel: achievement.summary.fieldLabel,
-                            resultTypeLabel: achievement.summary.resultTypeLabel,
-                            resultLine: achievement.summary.resultLine,
-                            levelLabel: achievement.summary.levelLabel,
-                            participationLabel: achievement.summary.participationLabel,
-                            yearLabel: achievement.summary.yearLabel,
-                            scoreLabel: achievement.summary.scoreLabel,
-                            scoreExplanation: achievement.summary.scoreExplanation ?? undefined,
-                          }}
-                          compact
-                        />
-                      </div>
-                      <p className="mt-2 flex flex-wrap items-center gap-2 text-xs text-text-muted">
-                        <span>
-                          {achievement.date
-                            ? new Date(achievement.date).toLocaleDateString(isAr ? "ar-SA" : "en-US", {
-                                day: "numeric",
-                                month: "long",
-                                year: "numeric",
-                              })
-                            : "—"}
-                        </span>
-                        <AchievementStatusBadge
-                          status={achievement.workflowStatus as WorkflowDisplayStatus}
-                          locale={isAr ? "ar" : "en"}
-                        />
-                        <span
-                          className={`rounded-full px-2 py-0.5 text-[0.65rem] font-semibold ${
-                            achievement.certificateStatus === "issued"
-                              ? "bg-emerald-100 text-emerald-900"
-                              : achievement.certificateStatus === "revoked"
-                                ? "bg-red-100 text-red-800"
-                                : "bg-slate-100 text-slate-700"
-                          }`}
-                        >
-                          {achievement.certificateLabel}
-                        </span>
-                      </p>
-                    </div>
-                  </div>
-                </Link>
-              ))}
-            </div>
-          ) : !isLoading && recentAchievements.length === 0 ? (
-            <EmptyState
-              icon={Trophy}
-              title={isAr ? "لا توجد إنجازات بعد" : "No achievements yet"}
-              description={isAr ? "ابدأ بإضافة إنجازك الأول" : "Start by adding your first achievement"}
-              action={
-                <AuthGuardLink
-                  href="/achievements/new"
-                  className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-primary-dark"
-                >
-                  <PlusCircle className="h-4 w-4" />
-                  <span>{isAr ? "إضافة إنجاز" : "Add achievement"}</span>
-                </AuthGuardLink>
-              }
-            />
-          ) : (
-            <div className="space-y-3">
-              {[1, 2, 3].map((i) => (
-                <div
-                  key={i}
-                  className="h-24 animate-pulse rounded-lg border border-gray-100 bg-gray-100"
-                />
-              ))}
-            </div>
-          )}
-        </SectionCard>
-
-        <SectionCard>
-          <h2 className="mb-4 text-xl font-bold text-text">
-            {isAr ? "إجراءات سريعة" : "Quick actions"}
-          </h2>
-          <div className="space-y-3">
+      <SectionCard className="mb-8">
+        <h2 className="mb-4 text-xl font-bold text-text">{isAr ? "إجراءات سريعة" : "Quick actions"}</h2>
+        <div className="space-y-3">
             <AuthGuardLink
               href="/achievements/new"
               className="flex items-center gap-3 rounded-lg border border-gray-200 bg-white p-4 transition-colors hover:border-primary hover:bg-primary/5"
@@ -494,7 +422,7 @@ const DashboardPage = () => {
 
             <Link
               href="/profile"
-              className="flex items-center gap-3 rounded-lg border border-gray-200 bg-white p-4 transition-colors hover:border-primary hover:bg-primary/5"
+              className="flex items-center gap-3 rounded-lg border border-gray-200 bg-white p-4 transition-colors hover:border-primary hover:bg-primary/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
             >
               <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
                 <User className="h-5 w-5 text-primary" />
@@ -506,6 +434,89 @@ const DashboardPage = () => {
                 </p>
               </div>
             </Link>
+
+            {data?.trainingContext?.quickActions.showApplicationStatus &&
+            data.trainingContext.quickActions.opportunityId ? (
+              <Link
+                href={`/summer-training/${data.trainingContext.quickActions.opportunityId}`}
+                className="flex items-center gap-3 rounded-lg border border-cyan-200 bg-cyan-50/50 p-4 transition-colors hover:border-cyan-300 hover:bg-cyan-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+                aria-label={isAr ? "عرض حالة طلب التدريب" : "View training application status"}
+              >
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-cyan-100">
+                  <Briefcase className="h-5 w-5 text-cyan-800" />
+                </div>
+                <div className="flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="font-semibold text-text">{isAr ? "حالة طلب التدريب" : "Training application status"}</h3>
+                    {data.trainingContext.widget.applicationStatus ? (
+                      <TrainingApplicationStatusBadge
+                        status={data.trainingContext.widget.applicationStatus}
+                        isAr={isAr}
+                        size="sm"
+                      />
+                    ) : null}
+                  </div>
+                  <p className="text-sm text-text-light">
+                    {data.trainingContext.widget.opportunityTitle || (isAr ? "متابعة طلبك" : "Follow your application")}
+                  </p>
+                </div>
+              </Link>
+            ) : null}
+
+            {data?.trainingContext?.quickActions.showMessages ? (
+              <Link
+                href="/summer-training/messages"
+                className="flex items-center gap-3 rounded-lg border border-cyan-200 bg-white p-4 transition-colors hover:border-cyan-300 hover:bg-cyan-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+                aria-label={isAr ? "فتح رسائل التدريب" : "Open training messages"}
+              >
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-cyan-100">
+                  <Mail className="h-5 w-5 text-cyan-800" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="font-semibold text-text">{isAr ? "رسائل التدريب" : "Training messages"}</h3>
+                  <p className="text-sm text-text-light">
+                    {isAr ? "تواصل مع مشرف الشراكات" : "Contact the partnerships supervisor"}
+                  </p>
+                </div>
+              </Link>
+            ) : null}
+
+            {data?.trainingContext?.quickActions.showFinalReport ? (
+              <Link
+                href="/summer-training/final-report"
+                className="flex items-center gap-3 rounded-lg border border-cyan-200 bg-white p-4 transition-colors hover:border-cyan-300 hover:bg-cyan-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+                aria-label={isAr ? "رفع التقرير النهائي" : "Submit final report"}
+              >
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-cyan-100">
+                  <FileText className="h-5 w-5 text-cyan-800" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="font-semibold text-text">{isAr ? "التقرير النهائي" : "Final report"}</h3>
+                  <p className="text-sm text-text-light">
+                    {isAr ? "رفع أو متابعة تقرير التدريب" : "Submit or track your training report"}
+                  </p>
+                </div>
+              </Link>
+            ) : null}
+
+            {data?.trainingContext?.quickActions.showCertificate &&
+            data.trainingContext.quickActions.certificateAchievementId ? (
+              <Link
+                href={`/achievements/${data.trainingContext.quickActions.certificateAchievementId}/certificate`}
+                className="flex items-center gap-3 rounded-lg border border-emerald-200 bg-emerald-50/50 p-4 transition-colors hover:border-emerald-300 hover:bg-emerald-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+                aria-label={isAr ? "عرض شهادة التدريب" : "View training certificate"}
+              >
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-100">
+                  <Award className="h-5 w-5 text-emerald-800" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="font-semibold text-text">{isAr ? "شهادة التدريب" : "Training certificate"}</h3>
+                  <p className="text-sm text-text-light">
+                    {isAr ? "عرض أو تحميل شهادتك" : "View or download your certificate"}
+                  </p>
+                </div>
+              </Link>
+            ) : null}
 
             <div className="rounded-lg border border-gray-200 bg-white p-4">
               <div className="flex items-start gap-3">
@@ -580,8 +591,116 @@ const DashboardPage = () => {
               )}
             </div>
           </div>
-        </SectionCard>
-      </div>
+      </SectionCard>
+
+      <SectionCard className="mb-8">
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-xl font-bold text-text">
+            {isAr ? "أحدث الإنجازات" : "Recent achievements"}
+          </h2>
+          <Link
+            href="/achievements"
+            className="text-sm font-medium text-primary hover:text-primary-dark"
+          >
+            {isAr ? "عرض الكل" : "View all"}
+          </Link>
+        </div>
+
+        {!isLoading && recentAchievements.length > 0 ? (
+          <div className="space-y-3">
+            {recentAchievements.map((achievement) => (
+              <Link
+                key={achievement.id}
+                href={`/achievements/${achievement.id}`}
+                className="block rounded-lg border border-gray-200 bg-gray-50 p-4 transition-colors hover:border-primary hover:bg-primary/5"
+              >
+                <div className="flex items-start justify-between">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h3 className="font-semibold text-text">{achievement.title}</h3>
+                      {(achievement.featured || achievement.isFeatured) && (
+                        <span className="rounded-full bg-secondary/20 px-2 py-0.5 text-xs font-medium text-secondary">
+                          {isAr ? "مميز" : "Featured"}
+                        </span>
+                      )}
+                    </div>
+                    <div className="mt-2">
+                      <StudentAchievementDataRows
+                        locale={isAr ? "ar" : "en"}
+                        levelKey={achievement.summary.levelKey}
+                        medalType={achievement.summary.medalType}
+                        resultType={achievement.summary.resultType}
+                        content={{
+                          typeLabel: achievement.summary.typeLabel,
+                          fieldLabel: achievement.summary.fieldLabel,
+                          resultTypeLabel: achievement.summary.resultTypeLabel,
+                          resultLine: achievement.summary.resultLine,
+                          levelLabel: achievement.summary.levelLabel,
+                          participationLabel: achievement.summary.participationLabel,
+                          yearLabel: achievement.summary.yearLabel,
+                          scoreLabel: achievement.summary.scoreLabel,
+                          scoreExplanation: achievement.summary.scoreExplanation ?? undefined,
+                        }}
+                        compact
+                      />
+                    </div>
+                    <p className="mt-2 flex flex-wrap items-center gap-2 text-xs text-text-muted">
+                      <span>
+                        {achievement.date
+                          ? new Date(achievement.date).toLocaleDateString(isAr ? "ar-SA" : "en-US", {
+                              day: "numeric",
+                              month: "long",
+                              year: "numeric",
+                            })
+                          : "—"}
+                      </span>
+                      <AchievementStatusBadge
+                        status={achievement.workflowStatus as WorkflowDisplayStatus}
+                        locale={isAr ? "ar" : "en"}
+                      />
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-[0.65rem] font-semibold ${
+                          achievement.certificateStatus === "issued"
+                            ? "bg-emerald-100 text-emerald-900"
+                            : achievement.certificateStatus === "revoked"
+                              ? "bg-red-100 text-red-800"
+                              : "bg-slate-100 text-slate-700"
+                        }`}
+                      >
+                        {achievement.certificateLabel}
+                      </span>
+                    </p>
+                  </div>
+                </div>
+              </Link>
+            ))}
+          </div>
+        ) : !isLoading && recentAchievements.length === 0 ? (
+          <EmptyState
+            icon={Trophy}
+            title={isAr ? "لا توجد إنجازات بعد" : "No achievements yet"}
+            description={isAr ? "ابدأ بإضافة إنجازك الأول" : "Start by adding your first achievement"}
+            action={
+              <AuthGuardLink
+                href="/achievements/new"
+                className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-primary-dark"
+              >
+                <PlusCircle className="h-4 w-4" />
+                <span>{isAr ? "إضافة إنجاز" : "Add achievement"}</span>
+              </AuthGuardLink>
+            }
+          />
+        ) : (
+          <div className="space-y-3">
+            {[1, 2, 3].map((i) => (
+              <div
+                key={i}
+                className="h-24 animate-pulse rounded-lg border border-gray-100 bg-gray-100"
+              />
+            ))}
+          </div>
+        )}
+      </SectionCard>
     </PageContainer>
   );
 };

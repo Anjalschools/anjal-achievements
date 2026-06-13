@@ -92,6 +92,8 @@ export type PublicPortfolioSuccess = {
   };
   achievements: PublicPortfolioAchievementItem[];
   portfolioUrl: string;
+  /** Optional career readiness extension (Phase 7). */
+  careerExtension?: import("@/lib/career/public-career-portfolio-extension").PublicCareerPortfolioExtension;
 };
 
 export type PublicPortfolioFailure =
@@ -520,6 +522,16 @@ export const loadPublicPortfolioPayload = async (
     outcome: achievements.length > 0 ? "ok" : "empty_state",
   });
 
+  let careerExtension: PublicPortfolioSuccess["careerExtension"];
+  try {
+    const { loadPublicCareerPortfolioExtension } = await import(
+      "@/lib/career/public-career-portfolio-extension"
+    );
+    careerExtension = (await loadPublicCareerPortfolioExtension(String(u._id))) || undefined;
+  } catch {
+    careerExtension = undefined;
+  }
+
   return {
     ok: true,
     branding,
@@ -544,5 +556,6 @@ export const loadPublicPortfolioPayload = async (
     stats,
     achievements,
     portfolioUrl,
+    ...(careerExtension ? { careerExtension } : {}),
   };
 };

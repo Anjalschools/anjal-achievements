@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import mongoose from "mongoose";
 import connectDB from "@/lib/mongodb";
 import { getCurrentDbUser } from "@/lib/auth";
+import { applyAcademicYearCreateFields } from "@/lib/academic-years/academic-year-integration";
 import Achievement from "@/models/Achievement";
 import { OLYMPIAD_EVENT_OTHER_VALUE } from "@/constants/achievement-ui-categories";
 import { inferAchievementField } from "@/lib/achievement-field-inference";
@@ -420,6 +421,12 @@ export async function POST(request: NextRequest) {
     }
 
     // Create achievement
+    try {
+      await applyAcademicYearCreateFields(achievementData);
+    } catch {
+      /* backward compatible when no current academic year is configured */
+    }
+
     const achievement = await Achievement.create(achievementData);
 
     const ai = await runAchievementAiReview({

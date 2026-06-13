@@ -29,6 +29,7 @@ export const REPORT_CATEGORY_VALUES = [
   "early_university_admission",
   "entrepreneurship",
   "training_courses",
+  "summer_training",
   "other",
 ] as const;
 

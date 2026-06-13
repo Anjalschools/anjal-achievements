@@ -10,7 +10,8 @@ export type NotificationType =
   | "ai_flag_notice"
   | "achievement_submitted_for_review"
   | "achievement_updated_for_review"
-  | "system";
+  | "system"
+  | "partnership_message";
 
 export interface INotification extends Document {
   userId: mongoose.Types.ObjectId;
@@ -49,6 +50,7 @@ const NotificationSchema = new Schema(
         "achievement_submitted_for_review",
         "achievement_updated_for_review",
         "system",
+        "partnership_message",
       ],
       required: true,
       index: true,

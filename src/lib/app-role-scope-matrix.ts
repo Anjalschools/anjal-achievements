@@ -10,7 +10,8 @@ export type AppRole =
   | "schoolAdmin"
   | "teacher"
   | "judge"
-  | "alumniAdmin";
+  | "alumniAdmin"
+  | "partnershipSupervisor";
 
 /** Fine-grained capabilities for APIs + UI. */
 export type RoleCapabilityKey =
@@ -29,6 +30,7 @@ export type RoleCapabilityKey =
   | "socialIntegrations"
   | "aiNews"
   | "schoolYearsAdmin"
+  | "academicYearsRead"
   | "newsAdmin"
   | "accessMatrix"
   | "contactMessages"
@@ -40,7 +42,8 @@ export type RoleCapabilityKey =
   | "alumniModeration"
   | "alumniVerification"
   | "alumniAnalytics"
-  | "alumniNetworking";
+  | "alumniNetworking"
+  | "partnershipsManagement";
 
 export type ScopeMode = "none" | "full" | "scoped";
 
@@ -68,6 +71,7 @@ const deny: Record<RoleCapabilityKey, boolean> = {
   socialIntegrations: false,
   aiNews: false,
   schoolYearsAdmin: false,
+  academicYearsRead: false,
   newsAdmin: false,
   accessMatrix: false,
   contactMessages: false,
@@ -80,6 +84,7 @@ const deny: Record<RoleCapabilityKey, boolean> = {
   alumniVerification: false,
   alumniAnalytics: false,
   alumniNetworking: false,
+  partnershipsManagement: false,
 };
 
 const allStaffCaps: Record<RoleCapabilityKey, boolean> = {
@@ -99,6 +104,7 @@ const allStaffCaps: Record<RoleCapabilityKey, boolean> = {
   socialIntegrations: true,
   aiNews: true,
   schoolYearsAdmin: true,
+  academicYearsRead: true,
   newsAdmin: true,
   accessMatrix: true,
   contactMessages: true,
@@ -111,6 +117,7 @@ const allStaffCaps: Record<RoleCapabilityKey, boolean> = {
   alumniVerification: true,
   alumniAnalytics: true,
   alumniNetworking: true,
+  partnershipsManagement: true,
 };
 
 const alumniPlatformAdminCaps: Record<RoleCapabilityKey, boolean> = {
@@ -190,6 +197,7 @@ export const APP_ROLE_MATRIX: Record<AppRole, RoleDefinition> = {
       socialIntegrations: false,
       aiNews: false,
       schoolYearsAdmin: false,
+      academicYearsRead: true,
       newsAdmin: false,
       accessMatrix: false,
       contactMessages: true,
@@ -257,6 +265,17 @@ export const APP_ROLE_MATRIX: Record<AppRole, RoleDefinition> = {
     scopeMode: "none",
     capabilities: alumniPlatformAdminCaps,
   },
+  partnershipSupervisor: {
+    labelAr: "مشرف التدريب والشراكات",
+    labelEn: "Partnership supervisor",
+    scopeMode: "none",
+    capabilities: {
+      ...deny,
+      staffArea: true,
+      partnershipsManagement: true,
+      academicYearsRead: true,
+    },
+  },
 };
 
 export const normalizeAppRole = (role: string | null | undefined): AppRole | null => {
@@ -295,6 +314,7 @@ export const ROLE_CAPABILITY_LABELS: Record<RoleCapabilityKey, { ar: string; en:
   socialIntegrations: { ar: "التكاملات الاجتماعية", en: "Social integrations" },
   aiNews: { ar: "إنشاء خبر بالذكاء الاصطناعي", en: "AI news authoring" },
   schoolYearsAdmin: { ar: "إدارة السنوات الدراسية", en: "School years admin" },
+  academicYearsRead: { ar: "عرض الأعوام الدراسية", en: "Academic years read" },
   newsAdmin: { ar: "إدارة الأخبار", en: "News admin" },
   accessMatrix: { ar: "مصفوفة الصلاحيات (داخلية)", en: "Access matrix (internal)" },
   contactMessages: { ar: "رسائل التواصل", en: "Contact messages" },
@@ -307,6 +327,7 @@ export const ROLE_CAPABILITY_LABELS: Record<RoleCapabilityKey, { ar: string; en:
   alumniVerification: { ar: "توثيق الخريجين والطلبات", en: "Alumni verification" },
   alumniAnalytics: { ar: "تحليلات الخريجين", en: "Alumni analytics" },
   alumniNetworking: { ar: "الشبكة المهنية وCRM", en: "Alumni networking & CRM" },
+  partnershipsManagement: { ar: "برنامج التدريب والشراكات", en: "Summer training & partnerships" },
 };
 
 export const ROLE_CAPABILITY_AUDIT_ORDER: RoleCapabilityKey[] = [
@@ -325,6 +346,7 @@ export const ROLE_CAPABILITY_AUDIT_ORDER: RoleCapabilityKey[] = [
   "socialIntegrations",
   "aiNews",
   "schoolYearsAdmin",
+  "academicYearsRead",
   "newsAdmin",
   "accessMatrix",
   "contactMessages",
@@ -337,6 +359,7 @@ export const ROLE_CAPABILITY_AUDIT_ORDER: RoleCapabilityKey[] = [
   "alumniVerification",
   "alumniAnalytics",
   "alumniNetworking",
+  "partnershipsManagement",
 ];
 
 /** Route prefixes under /admin — must stay in sync with AppSidebar + API guards */
@@ -352,12 +375,18 @@ export const ADMIN_ROUTE_REQUIRED_CAPABILITY: Array<{
   { prefix: "/admin/access-matrix", capability: "accessMatrix" },
   { prefix: "/admin/ai/news", capability: "aiNews" },
   { prefix: "/admin/analytics", capability: "advancedAnalytics" },
+  { prefix: "/admin/career/analytics", capability: "advancedAnalytics" },
+  { prefix: "/admin/executive-intelligence", capability: "advancedAnalytics" },
+  { prefix: "/admin/school-intelligence", capability: "advancedAnalytics" },
+  { prefix: "/admin/school-improvement-intelligence", capability: "advancedAnalytics" },
+  { prefix: "/admin/system-health", capability: "platformSettings" },
   { prefix: "/admin/achievements/add", capability: "adminAddAchievement" },
   { prefix: "/admin/reports", capability: "reports" },
   { prefix: "/admin/achievements/reports", capability: "reports" },
   { prefix: "/admin/leaderboard", capability: "reviewAchievements" },
   { prefix: "/admin/achievements/review", capability: "reviewAchievements" },
   { prefix: "/admin/school-years", capability: "schoolYearsAdmin" },
+  { prefix: "/admin/academic-years", capability: "academicYearsRead" },
   { prefix: "/admin/home-highlights", capability: "homeHighlights" },
   { prefix: "/admin/contact-messages", capability: "contactMessages" },
   { prefix: "/admin/letter-requests", capability: "letterRequests" },
@@ -378,6 +407,7 @@ export const ADMIN_ROUTE_REQUIRED_CAPABILITY: Array<{
   { prefix: "/admin/alumni/community-feed", capability: "alumniAnalytics" },
   { prefix: "/admin/alumni/crm", capability: "alumniNetworking" },
   { prefix: "/admin/alumni", capability: "alumniManagement" },
+  { prefix: "/admin/partnerships", capability: "partnershipsManagement" },
   /** Any other /admin/* screen requires at least staff (prevents students from loading admin shell). */
   { prefix: "/admin", capability: "staffArea" },
 ];

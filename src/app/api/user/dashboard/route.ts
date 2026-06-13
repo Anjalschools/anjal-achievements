@@ -9,6 +9,7 @@ import { formatAchievementForDashboard } from "@/lib/dashboard-achievement-forma
 import { getScoringConfig } from "@/lib/getScoringConfig";
 import type { AchievementLabelLocale } from "@/lib/achievement-labels";
 import { perfElapsed, perfLog, perfNow } from "@/lib/perf-debug";
+import { loadStudentTrainingDashboardContext, createFallbackStudentTrainingDashboardContext } from "@/lib/partnerships/partnerships-student-dashboard-context";
 
 export const dynamic = "force-dynamic";
 
@@ -137,6 +138,19 @@ export async function GET(request: NextRequest) {
     const last = sortedForRecent[0];
     const lastFormatted = last ? formatAchievementForDashboard(last, loc, scoringConfig) : null;
 
+    let trainingContext: Awaited<ReturnType<typeof loadStudentTrainingDashboardContext>> | null = null;
+    if (
+      String(user.role || "") === "student" &&
+      String(user.accountType || "student").trim().toLowerCase() !== "alumni"
+    ) {
+      try {
+        trainingContext = await loadStudentTrainingDashboardContext(user._id);
+      } catch (trainingError) {
+        console.error("[GET /api/user/dashboard] training context", trainingError);
+        trainingContext = createFallbackStudentTrainingDashboardContext();
+      }
+    }
+
     perfLog("page:dashboard:data=ok", { totalAchievements, points });
 
     return NextResponse.json({
@@ -154,6 +168,7 @@ export async function GET(request: NextRequest) {
           }
         : null,
       recentAchievements,
+      trainingContext,
     });
   } catch (error) {
     console.error("[GET /api/user/dashboard]", error);

@@ -6,17 +6,22 @@
 export const UI_CATEGORY_EARLY_UNIVERSITY = "early_university_admission" as const;
 export const UI_CATEGORY_ENTREPRENEURSHIP = "entrepreneurship" as const;
 export const UI_CATEGORY_TRAINING_COURSES = "training_courses" as const;
+export const UI_CATEGORY_SUMMER_TRAINING = "summer_training" as const;
 
 export type SpecialUiAchievementCategory =
   | typeof UI_CATEGORY_EARLY_UNIVERSITY
   | typeof UI_CATEGORY_ENTREPRENEURSHIP
-  | typeof UI_CATEGORY_TRAINING_COURSES;
+  | typeof UI_CATEGORY_TRAINING_COURSES
+  | typeof UI_CATEGORY_SUMMER_TRAINING;
 
 export const SPECIAL_UI_CATEGORY_VALUES: ReadonlySet<string> = new Set([
   UI_CATEGORY_EARLY_UNIVERSITY,
   UI_CATEGORY_ENTREPRENEURSHIP,
   UI_CATEGORY_TRAINING_COURSES,
+  UI_CATEGORY_SUMMER_TRAINING,
 ]);
+
+export const SUMMER_TRAINING_ACHIEVEMENT_NAME = "summer_training" as const;
 
 export const isSpecialUiCategory = (ui: string | null | undefined): boolean =>
   SPECIAL_UI_CATEGORY_VALUES.has(String(ui || "").trim());

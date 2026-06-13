@@ -16,6 +16,11 @@ export const PERMISSIONS = {
   aiNewsCreate: "ai.news.create",
   contactMessagesManage: "contact.messages.manage",
   accessMatrixView: "access.matrix.view",
+  partnershipsView: "partnerships.view",
+  partnershipsManage: "partnerships.manage",
+  partnershipsApproveStudents: "partnerships.approveStudents",
+  partnershipsSendMessages: "partnerships.sendMessages",
+  partnershipsManageOrganizations: "partnerships.manageOrganizations",
 } as const;
 
 export type PermissionKey = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
@@ -40,5 +45,10 @@ export const PERMISSION_LABELS: Record<PermissionKey, { ar: string; en: string }
   [PERMISSIONS.aiNewsCreate]: { ar: "إنشاء خبر بالذكاء الاصطناعي", en: "Create AI news" },
   [PERMISSIONS.contactMessagesManage]: { ar: "إدارة رسائل التواصل", en: "Manage contact messages" },
   [PERMISSIONS.accessMatrixView]: { ar: "عرض مصفوفة الصلاحيات", en: "View access matrix" },
+  [PERMISSIONS.partnershipsView]: { ar: "عرض برنامج التدريب والشراكات", en: "View partnerships program" },
+  [PERMISSIONS.partnershipsManage]: { ar: "إدارة برنامج التدريب والشراكات", en: "Manage partnerships program" },
+  [PERMISSIONS.partnershipsApproveStudents]: { ar: "اعتماد طلاب التدريب", en: "Approve training students" },
+  [PERMISSIONS.partnershipsSendMessages]: { ar: "مراسلات التدريب والشراكات", en: "Partnerships messaging" },
+  [PERMISSIONS.partnershipsManageOrganizations]: { ar: "إدارة مؤسسات الشراكة", en: "Manage partner organizations" },
 };
 

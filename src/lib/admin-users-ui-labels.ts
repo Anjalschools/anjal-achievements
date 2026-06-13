@@ -10,6 +10,8 @@ export const adminRoleLabel = (role: string, isAr: boolean): string => {
     schoolAdmin: ["مدير مدرسة", "School admin"],
     judge: ["محكم", "Judge"],
     alumniAdmin: ["مسؤول منصة الخريجين", "Alumni platform admin"],
+    partnershipSupervisor: ["مشرف التدريب والشراكات", "Partnership supervisor"],
+    trainingInstitution: ["مسؤول مؤسسة التدريب", "Training institution admin"],
   };
   const p = m[role];
   return p ? (isAr ? p[0] : p[1]) : role;
@@ -24,6 +26,8 @@ export const adminRoleBadgeClass = (role: string): string => {
     schoolAdmin: "bg-emerald-100 text-emerald-900 ring-emerald-200",
     judge: "bg-violet-100 text-violet-900 ring-violet-200",
     alumniAdmin: "bg-teal-100 text-teal-900 ring-teal-200",
+    partnershipSupervisor: "bg-cyan-100 text-cyan-900 ring-cyan-200",
+    trainingInstitution: "bg-orange-100 text-orange-900 ring-orange-200",
   };
   return c[role] || "bg-gray-100 text-gray-800 ring-gray-200";
 };
@@ -50,4 +54,6 @@ export const ROLE_OPTIONS_FOR_FORM: { value: AdminManageableRole; ar: string; en
   { value: "schoolAdmin", ar: "مدير مدرسة", en: "School admin" },
   { value: "judge", ar: "محكم", en: "Judge" },
   { value: "alumniAdmin", ar: "مسؤول منصة الخريجين", en: "Alumni platform admin" },
+  { value: "partnershipSupervisor", ar: "مشرف التدريب والشراكات", en: "Partnership supervisor" },
+  { value: "trainingInstitution", ar: "مسؤول مؤسسة التدريب", en: "Training institution admin" },
 ];

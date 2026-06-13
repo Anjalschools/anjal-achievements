@@ -23,6 +23,7 @@ import {
 import { getBaseUrl } from "@/lib/get-base-url";
 import { ensureStudentPublicPortfolioReady } from "@/lib/public-portfolio-bootstrap";
 import { queueHomeStatsRefresh } from "@/lib/home-stats-service";
+import { linkInstitutionUserToOrganization } from "@/lib/partnerships/institution-experience-service";
 
 const LIST_FIELDS =
   "fullName fullNameAr fullNameEn username email role status studentId nationalId phone profilePhoto preferredLanguage gender section grade isMawhibaStudent createdAt updatedAt lastLoginAt publicPortfolioEnabled publicPortfolioSlug publicPortfolioPublishedAt staffScope";
@@ -206,6 +207,7 @@ export type AdminCreateUserInput = {
   isMawhibaStudent?: boolean;
   preferredLanguage?: "ar" | "en";
   staffScope?: StaffScopePayload | null;
+  partnerOrganizationId?: string;
 };
 
 const validatePhone = (phone?: string): string | undefined => {
@@ -235,6 +237,9 @@ export const adminCreateUser = async (input: AdminCreateUserInput): Promise<Admi
   const phone = validatePhone(input.phone);
   if (input.password.length < 8) throw new Error("Password must be at least 8 characters");
   if (!isAdminManageableRole(input.role)) throw new Error("Invalid role");
+  if (input.role === "trainingInstitution" && !input.partnerOrganizationId?.trim()) {
+    throw new Error("Partner organization is required for training institution role");
+  }
 
   const fullNameAr = input.fullNameAr.trim();
   const fullNameEn = input.fullNameEn?.trim();
@@ -282,6 +287,10 @@ export const adminCreateUser = async (input: AdminCreateUserInput): Promise<Admi
 
   if (input.role === "student") {
     await ensureStudentPublicPortfolioReady(String(doc._id));
+  }
+
+  if (input.role === "trainingInstitution" && input.partnerOrganizationId?.trim()) {
+    await linkInstitutionUserToOrganization(String(doc._id), input.partnerOrganizationId.trim());
   }
 
   queueHomeStatsRefresh();

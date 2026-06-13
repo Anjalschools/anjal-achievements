@@ -15,7 +15,7 @@ const STANDARDIZED_TYPES = [
   "ielts",
   "toefl",
 ];
-const TRAINING_MODE_SLUGS = ["online", "in_person"];
+const TRAINING_MODE_SLUGS = ["online", "in_person", "summer_training"];
 
 /**
  * Mongo `$addFields` expression: canonical analytics category per row.
@@ -48,6 +48,14 @@ export const mongoAnalyticsCategoryExpression = (): Record<string, unknown> => (
           {
             case: { $eq: [{ $substrCP: ["$$name", 0, 4] }, "ent_"] },
             then: "entrepreneurship",
+          },
+          {
+            case: { $eq: ["$$name", "summer_training"] },
+            then: "summer_training",
+          },
+          {
+            case: { $in: ["$$typ", ["summer_training"]] },
+            then: "summer_training",
           },
           {
             case: { $in: ["$$name", TRAINING_MODE_SLUGS] },

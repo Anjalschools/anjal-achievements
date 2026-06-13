@@ -21,6 +21,20 @@ export const ALUMNI_PLATFORM_ADMIN_ROLE = "alumniAdmin" as const;
 export const isAlumniPlatformAdminRole = (role: string | undefined | null): boolean =>
   String(role || "").trim().toLowerCase() === String(ALUMNI_PLATFORM_ADMIN_ROLE).toLowerCase();
 
-/** May load the `/admin` App Router shell (achievements staff OR alumni-only admins). */
+/** Dedicated summer training & partnerships administration (no achievements platform access). */
+export const PARTNERSHIP_SUPERVISOR_ROLE = "partnershipSupervisor" as const;
+
+export const isPartnershipSupervisorRole = (role: string | undefined | null): boolean =>
+  String(role || "").trim() === PARTNERSHIP_SUPERVISOR_ROLE;
+
+/** Training institution portal users (Model B). */
+export const TRAINING_INSTITUTION_ROLE = "trainingInstitution" as const;
+
+export const isTrainingInstitutionRole = (role: string | undefined | null): boolean =>
+  String(role || "").trim() === TRAINING_INSTITUTION_ROLE;
+
+/** May load the `/admin` App Router shell (achievements staff OR alumni-only OR partnerships-only admins). */
 export const isAdminShellRole = (role: string | undefined | null): boolean =>
-  isAchievementReviewerRole(role) || isAlumniPlatformAdminRole(role);
+  isAchievementReviewerRole(role) ||
+  isAlumniPlatformAdminRole(role) ||
+  isPartnershipSupervisorRole(role);

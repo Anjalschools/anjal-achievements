@@ -48,6 +48,8 @@ const AdminUsersNewPage = () => {
   const [isMawhibaStudent, setIsMawhibaStudent] = useState(false);
   const [preferredLanguage, setPreferredLanguage] = useState<"ar" | "en">("ar");
   const [staffScopeForm, setStaffScopeForm] = useState<AdminStaffScopeFormValue>(emptyStaffScopeForm);
+  const [organizations, setOrganizations] = useState<Array<{ id: string; name: string }>>([]);
+  const [partnerOrganizationId, setPartnerOrganizationId] = useState("");
 
   useEffect(() => {
     (async () => {
@@ -76,12 +78,38 @@ const AdminUsersNewPage = () => {
     if (!roleSupportsStaffScopeStorage(role)) setStaffScopeForm(emptyStaffScopeForm());
   }, [role]);
 
+  useEffect(() => {
+    if (role !== "trainingInstitution") {
+      setPartnerOrganizationId("");
+      return;
+    }
+    (async () => {
+      try {
+        const res = await fetch("/api/partnerships/organizations", { cache: "no-store" });
+        const json = await res.json().catch(() => ({}));
+        if (res.ok && Array.isArray(json.items)) {
+          setOrganizations(
+            json.items.map((row: { id: string; name: string }) => ({
+              id: row.id,
+              name: row.name,
+            }))
+          );
+        }
+      } catch {
+        setOrganizations([]);
+      }
+    })();
+  }, [role]);
+
   const handleSubmit = useCallback(
     async (e: React.FormEvent) => {
       e.preventDefault();
       setError(null);
       setBusy(true);
       try {
+        if (role === "trainingInstitution" && !partnerOrganizationId.trim()) {
+          throw new Error(isAr ? "يجب اختيار المؤسسة التابعة" : "Partner organization is required");
+        }
         const academic = roleNeedsAcademicFields(role);
         const staffPayload =
           roleSupportsStaffScopeStorage(role) &&
@@ -113,6 +141,7 @@ const AdminUsersNewPage = () => {
             ...(academic ? { section, grade, isMawhibaStudent } : {}),
             preferredLanguage,
             ...(staffPayload ? { staffScope: staffPayload } : {}),
+            ...(role === "trainingInstitution" ? { partnerOrganizationId: partnerOrganizationId.trim() } : {}),
           }),
         });
         const j = await res.json().catch(() => ({}));
@@ -144,6 +173,7 @@ const AdminUsersNewPage = () => {
       isMawhibaStudent,
       preferredLanguage,
       staffScopeForm,
+      partnerOrganizationId,
       router,
     ]
   );
@@ -306,6 +336,24 @@ const AdminUsersNewPage = () => {
               >
                 <option value="no">{isAr ? "لا" : "No"}</option>
                 <option value="yes">{isAr ? "نعم" : "Yes"}</option>
+              </select>
+            </label>
+          ) : null}
+          {role === "trainingInstitution" ? (
+            <label className="block text-xs font-semibold text-text-light">
+              {isAr ? "المؤسسة التابعة *" : "Partner organization *"}
+              <select
+                required
+                className={inputCls}
+                value={partnerOrganizationId}
+                onChange={(e) => setPartnerOrganizationId(e.target.value)}
+              >
+                <option value="">{isAr ? "اختر المؤسسة" : "Select organization"}</option>
+                {organizations.map((org) => (
+                  <option key={org.id} value={org.id}>
+                    {org.name}
+                  </option>
+                ))}
               </select>
             </label>
           ) : null}

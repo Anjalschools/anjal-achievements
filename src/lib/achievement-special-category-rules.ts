@@ -11,9 +11,11 @@ import {
   isInternationalUniversitySlug,
   isSaudiArabUniversitySlug,
   isSpecialUiCategory,
+  SUMMER_TRAINING_ACHIEVEMENT_NAME,
   TRAINING_MODE_VALUES,
   UI_CATEGORY_EARLY_UNIVERSITY,
   UI_CATEGORY_ENTREPRENEURSHIP,
+  UI_CATEGORY_SUMMER_TRAINING,
   UI_CATEGORY_TRAINING_COURSES,
   getEarlyUniversityEventLabel,
 } from "@/constants/achievement-special-categories";
@@ -265,6 +267,10 @@ export const inferUiCategoryFromStoredAchievement = (input: {
 
   if (TRAINING_MODE_VALUES.has(name)) {
     return UI_CATEGORY_TRAINING_COURSES;
+  }
+
+  if (name === SUMMER_TRAINING_ACHIEVEMENT_NAME || String(input.achievementType || "") === UI_CATEGORY_SUMMER_TRAINING) {
+    return UI_CATEGORY_SUMMER_TRAINING;
   }
 
   if (

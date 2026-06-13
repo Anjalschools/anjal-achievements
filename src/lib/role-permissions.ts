@@ -60,6 +60,14 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<AppRole, PermissionKey[]> = {
     PERMISSIONS.accessMatrixView,
   ],
   alumniAdmin: [PERMISSIONS.dashboardView],
+  partnershipSupervisor: [
+    PERMISSIONS.dashboardView,
+    PERMISSIONS.partnershipsView,
+    PERMISSIONS.partnershipsManage,
+    PERMISSIONS.partnershipsApproveStudents,
+    PERMISSIONS.partnershipsSendMessages,
+    PERMISSIONS.partnershipsManageOrganizations,
+  ],
 };
 
 export const getRolePermissions = (

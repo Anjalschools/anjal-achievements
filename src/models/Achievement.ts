@@ -168,6 +168,10 @@ export interface IAchievement extends Document {
   achievementYear: number;
   /** Optional explicit activity year override (analytics / reports). */
   activityYear?: number;
+  /** Phase 11.1 — optional academic year engine linkage (backward compatible). */
+  academicYearId?: mongoose.Types.ObjectId;
+  academicYear?: string;
+  academicYearLabel?: string;
   /** Optional competition edition label e.g. "2025" or "bebras-2025". */
   competitionEdition?: string;
   evidenceUrl?: string;
@@ -249,6 +253,7 @@ const AchievementSchema: Schema = new Schema(
         "ielts",
         "toefl",
         "other",
+        "summer_training",
       ],
       index: true,
     },
@@ -267,6 +272,7 @@ const AchievementSchema: Schema = new Schema(
         "early_university_admission",
         "entrepreneurship",
         "training_courses",
+        "summer_training",
         "other",
       ],
       trim: true,
@@ -610,6 +616,9 @@ const AchievementSchema: Schema = new Schema(
       index: true,
       sparse: true,
     },
+    academicYearId: { type: Schema.Types.ObjectId, ref: "AcademicYear", sparse: true, index: true },
+    academicYear: { type: String, trim: true, maxlength: 80, sparse: true },
+    academicYearLabel: { type: String, trim: true, maxlength: 80, sparse: true },
     competitionEdition: {
       type: String,
       trim: true,

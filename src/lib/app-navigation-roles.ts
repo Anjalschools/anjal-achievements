@@ -2,7 +2,13 @@
  * Client-safe navigation role helpers (sidebar, menus).
  * Admin manager = platform operators who can manage users (full admin only; supervisors are scoped reviewers).
  */
-import { isAchievementReviewerRole, isAlumniPlatformAdminRole, isAdminShellRole } from "@/lib/achievement-reviewer-roles";
+import {
+  isAchievementReviewerRole,
+  isAlumniPlatformAdminRole,
+  isAdminShellRole,
+  isPartnershipSupervisorRole,
+  isTrainingInstitutionRole,
+} from "@/lib/achievement-reviewer-roles";
 
 export const ADMIN_MANAGER_ROLES = ["admin"] as const;
 
@@ -14,4 +20,4 @@ export { isAchievementReviewerRole as isReviewerNavRole };
 /** Anyone who should see the staff-style sidebar (achievements admin area OR alumni-only admins). */
 export { isAdminShellRole as isStaffAdminNavRole };
 
-export { isAlumniPlatformAdminRole };
+export { isAlumniPlatformAdminRole, isPartnershipSupervisorRole, isTrainingInstitutionRole };

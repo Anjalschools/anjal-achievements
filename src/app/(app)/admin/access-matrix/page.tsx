@@ -28,6 +28,7 @@ const STAFF_ROLES_FOR_MATRIX: AppRole[] = [
   "admin",
   "supervisor",
   "alumniAdmin",
+  "partnershipSupervisor",
 ];
 
 const SAMPLE_ADMIN_PATHS = [

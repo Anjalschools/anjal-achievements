@@ -280,6 +280,13 @@ const buildCertificateResultSummary = (ach: Record<string, unknown>, loc: Loc): 
     return loc === "ar" ? "نتيجة مسجلة" : "Recorded result";
   }
   if (rt === "completion") {
+    if (String(ach.achievementType || "") === "summer_training" || slugKey(String(ach.achievementName || "")) === "summer_training") {
+      if (rv) return rv;
+      const org = safeTrim(ach.organization) || safeTrim(ach.customProgramName);
+      return loc === "ar"
+        ? `شهادة تدريب صيفي${org ? ` — ${org}` : ""}`
+        : `Summer training certificate${org ? ` — ${org}` : ""}`;
+    }
     if (rv && slugKey(rv) !== "other") {
       if (isNextStageText(rv)) {
         return loc === "ar" ? "التأهل للمرحلة التالية" : "Qualified for the Next Stage";

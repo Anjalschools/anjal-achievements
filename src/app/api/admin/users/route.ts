@@ -99,6 +99,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Invalid status" }, { status: 400 });
     }
 
+    const partnerOrganizationId = String(body.partnerOrganizationId || "").trim();
+    if (roleRaw === "trainingInstitution" && !partnerOrganizationId) {
+      return NextResponse.json({ error: "Partner organization is required for training institution role" }, { status: 400 });
+    }
+
     const input: AdminCreateUserInput = {
       fullNameAr,
       fullNameEn,
@@ -115,6 +120,7 @@ export async function POST(request: NextRequest) {
       ...(roleRaw === "student" ? { isMawhibaStudent: body.isMawhibaStudent === true } : {}),
       preferredLanguage,
       ...(staffScope !== undefined ? { staffScope } : {}),
+      ...(partnerOrganizationId ? { partnerOrganizationId } : {}),
     };
 
     const user = await adminCreateUser(input);

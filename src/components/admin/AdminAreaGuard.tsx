@@ -4,9 +4,14 @@ import { useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useAppSession } from "@/contexts/AppSessionContext";
 import { canAccessAdminPath } from "@/lib/app-role-scope-matrix";
-import { isAdminShellRole, isAlumniPlatformAdminRole } from "@/lib/achievement-reviewer-roles";
+import {
+  isAdminShellRole,
+  isAlumniPlatformAdminRole,
+  isPartnershipSupervisorRole,
+} from "@/lib/achievement-reviewer-roles";
 
 const ALUMNI_ADMIN_HOME = "/admin/alumni";
+const PARTNERSHIPS_ADMIN_HOME = "/admin/partnerships";
 
 /**
  * Redirects away from /admin routes the current role cannot access (RBAC + route matrix).
@@ -31,8 +36,23 @@ const AdminAreaGuard = ({ children }: { children: React.ReactNode }) => {
         return;
       }
     }
+    if (isPartnershipSupervisorRole(role)) {
+      const path = pathname.split("?")[0] || "";
+      if (!path.startsWith("/admin/partnerships")) {
+        router.replace(PARTNERSHIPS_ADMIN_HOME);
+        return;
+      }
+    }
     if (!canAccessAdminPath(role, pathname)) {
-      router.replace(isAlumniPlatformAdminRole(role) ? ALUMNI_ADMIN_HOME : "/admin/dashboard");
+      if (isAlumniPlatformAdminRole(role)) {
+        router.replace(ALUMNI_ADMIN_HOME);
+        return;
+      }
+      if (isPartnershipSupervisorRole(role)) {
+        router.replace(PARTNERSHIPS_ADMIN_HOME);
+        return;
+      }
+      router.replace("/admin/dashboard");
     }
   }, [loading, pathname, profile?.role, router]);
 
