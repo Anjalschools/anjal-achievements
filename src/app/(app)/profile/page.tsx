@@ -222,6 +222,10 @@ const ProfilePage = () => {
 
         const profileData = (await profileResponse.json()) as Record<string, unknown>;
         const resolvedRole = String(profileData.role || "");
+        if (resolvedRole === "trainingInstitution") {
+          router.replace("/institution/profile");
+          return;
+        }
         setUserRole(resolvedRole);
         setAccountType(profileData.accountType === "alumni" ? "alumni" : "student");
         setUserData({

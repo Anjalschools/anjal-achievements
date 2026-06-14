@@ -7,10 +7,18 @@ import PageContainer from "@/components/layout/PageContainer";
 import PageHeader from "@/components/layout/PageHeader";
 import SectionCard from "@/components/layout/SectionCard";
 import InstitutionStudentProfileCard from "@/components/institution/InstitutionStudentProfileCard";
+import InstitutionContactAccessCard from "@/components/institution/InstitutionContactAccessCard";
+import InstitutionCandidateScorecard from "@/components/institution/InstitutionCandidateScorecard";
+import InstitutionDocumentTracker from "@/components/institution/InstitutionDocumentTracker";
+import InstitutionInterviewWorkspace from "@/components/institution/InstitutionInterviewWorkspace";
+import InstitutionPrivateNotesPanel from "@/components/institution/InstitutionPrivateNotesPanel";
+import InstitutionCandidateTagsPanel from "@/components/institution/InstitutionCandidateTagsPanel";
+import type { InstitutionContactAccessView } from "@/components/institution/InstitutionContactAccessCard";
 import TrainingApplicationTimeline from "@/components/partnerships/TrainingApplicationTimeline";
 import TrainingApplicationStatusBadge from "@/components/partnerships/TrainingApplicationStatusBadge";
 import { getLocale } from "@/lib/i18n";
 import type { InstitutionStudentProfileSummary } from "@/lib/partnerships/institution-student-profile-service";
+import type { CandidateScorecard } from "@/lib/partnerships/institution-candidate-pipeline-service";
 import {
   ArrowLeft,
   ArrowRight,
@@ -30,13 +38,28 @@ type ApplicationDetail = {
   rejectionReason?: string;
   timeline: Array<{ at: string | null; action: string; note: string; actorName: string }>;
   studentProfile: InstitutionStudentProfileSummary;
+  scorecard: CandidateScorecard | null;
+  documentTracker: Array<{ id: string; titleAr: string; titleEn: string; status: string }>;
+  tags: Array<{ id: string; tag: string }>;
+  privateNotes: Array<{ id: string; category: string; body: string; createdAt: string | null }>;
   requirements: Array<{ id: string; title: string; status: string; dueDate: string | null }>;
-  interviews: Array<{ id: string; scheduledAt: string; status: string; location: string; meetingUrl: string }>;
+  interviews: Array<{
+    id: string;
+    scheduledAt: string;
+    status: string;
+    location: string;
+    meetingUrl: string;
+    notes: string;
+    recordingUrl?: string;
+    attendance?: string;
+    resultNotes?: string;
+  }>;
   assessments: Array<{ id: string; title: string; type: string; status: string }>;
   evaluation: {
     finalRecommendation: string;
     institutionNotes: string;
   } | null;
+  contactAccess: InstitutionContactAccessView;
 };
 
 const InstitutionApplicationDetailPage = () => {
@@ -172,6 +195,8 @@ const InstitutionApplicationDetailPage = () => {
             <div className="space-y-6">
               <InstitutionStudentProfileCard profile={detail.studentProfile} isAr={isAr} />
 
+              <InstitutionCandidateScorecard scorecard={detail.scorecard} isAr={isAr} />
+
               <SectionCard>
                 <h3 className="mb-3 text-base font-bold text-foreground">
                   {isAr ? "لوحة قرار المؤسسة" : "Institution decision workspace"}
@@ -236,28 +261,30 @@ const InstitutionApplicationDetailPage = () => {
 
               <SectionCard>
                 <h3 className="mb-3 text-base font-bold text-foreground">
-                  {isAr ? "المستندات المطلوبة" : "Required documents"}
+                  {isAr ? "متابعة المستندات" : "Document tracker"}
                 </h3>
-                <div className="mb-3 flex flex-wrap gap-2">
+                <InstitutionDocumentTracker documents={detail.documentTracker} isAr={isAr} />
+                <div className="mt-3 flex flex-wrap gap-2">
                   <input
                     value={reqTitle}
                     onChange={(e) => setReqTitle(e.target.value)}
-                    placeholder={isAr ? "عنوان المستند" : "Document title"}
+                    placeholder={isAr ? "عنوان مستند إضافي" : "Additional document title"}
                     className="min-w-[200px] flex-1 rounded-xl border border-border px-3 py-2 text-sm"
                   />
+                  <button
+                    type="button"
+                    disabled={saving || !reqTitle.trim()}
+                    onClick={() => void postAction({ action: "create_requirement", title: reqTitle.trim() }).then(() => setReqTitle(""))}
+                    className="rounded-xl border border-primary bg-primary/10 px-3 py-2 text-sm font-bold text-primary disabled:opacity-60"
+                  >
+                    {isAr ? "طلب مستند" : "Request document"}
+                  </button>
                 </div>
-                <ul className="space-y-2 text-sm">
-                  {detail.requirements.map((row) => (
-                    <li key={row.id} className="rounded-lg border border-border/60 px-3 py-2">
-                      {row.title} — <span className="text-text-light">{row.status}</span>
-                    </li>
-                  ))}
-                </ul>
               </SectionCard>
 
               <SectionCard>
                 <h3 className="mb-3 text-base font-bold text-foreground">
-                  {isAr ? "المقابلات" : "Interviews"}
+                  {isAr ? "مساحة المقابلة" : "Interview workspace"}
                 </h3>
                 <div className="mb-3 flex flex-wrap gap-2">
                   <input
@@ -278,16 +305,39 @@ const InstitutionApplicationDetailPage = () => {
                     className="inline-flex items-center gap-2 rounded-xl border border-violet-300 bg-violet-50 px-3 py-2 text-sm font-bold text-violet-900 disabled:opacity-60"
                   >
                     <CalendarDays className="h-4 w-4" aria-hidden />
-                    {isAr ? "جدولة" : "Schedule"}
+                    {isAr ? "جدولة مقابلة" : "Schedule interview"}
                   </button>
                 </div>
-                <ul className="space-y-2 text-sm">
-                  {detail.interviews.map((row) => (
-                    <li key={row.id} className="rounded-lg border border-border/60 px-3 py-2">
-                      {new Date(row.scheduledAt).toLocaleString(isAr ? "ar-SA" : "en-US")} — {row.status}
-                    </li>
-                  ))}
-                </ul>
+                <InstitutionInterviewWorkspace
+                  applicationId={applicationId}
+                  interviews={detail.interviews}
+                  isAr={isAr}
+                  onUpdated={load}
+                />
+              </SectionCard>
+
+              <SectionCard>
+                <h3 className="mb-3 text-base font-bold text-foreground">
+                  {isAr ? "وسوم المرشح" : "Candidate tags"}
+                </h3>
+                <InstitutionCandidateTagsPanel
+                  applicationId={applicationId}
+                  tags={detail.tags}
+                  isAr={isAr}
+                  onUpdated={load}
+                />
+              </SectionCard>
+
+              <SectionCard>
+                <h3 className="mb-3 text-base font-bold text-foreground">
+                  {isAr ? "ملاحظات خاصة" : "Private notes"}
+                </h3>
+                <InstitutionPrivateNotesPanel
+                  applicationId={applicationId}
+                  notes={detail.privateNotes}
+                  isAr={isAr}
+                  onUpdated={load}
+                />
               </SectionCard>
 
               <SectionCard>
@@ -400,6 +450,10 @@ const InstitutionApplicationDetailPage = () => {
             </div>
 
             <div className="space-y-6">
+              {detail.contactAccess ? (
+                <InstitutionContactAccessCard contactAccess={detail.contactAccess} isAr={isAr} />
+              ) : null}
+
               <SectionCard>
                 <h3 className="mb-3 text-base font-bold text-foreground">
                   {isAr ? "الجدول الزمني" : "Timeline"}

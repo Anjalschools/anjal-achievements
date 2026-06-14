@@ -17,6 +17,14 @@ export interface IPartnerOrganization extends Document {
   subCategory?: string;
   averageRating?: number;
   ratingCount?: number;
+  institutionNotificationSettings?: {
+    newStudents?: boolean;
+    interviews?: boolean;
+    documents?: boolean;
+    messages?: boolean;
+    decisions?: boolean;
+    finalReports?: boolean;
+  };
   institutionUserId?: Types.ObjectId;
   institutionUserIds?: Types.ObjectId[];
   active: boolean;
@@ -38,6 +46,14 @@ const PartnerOrganizationSchema = new Schema<IPartnerOrganization>(
     subCategory: { type: String, trim: true, maxlength: 200 },
     averageRating: { type: Number, min: 0, max: 5, default: 0 },
     ratingCount: { type: Number, min: 0, default: 0 },
+    institutionNotificationSettings: {
+      newStudents: { type: Boolean, default: true },
+      interviews: { type: Boolean, default: true },
+      documents: { type: Boolean, default: true },
+      messages: { type: Boolean, default: true },
+      decisions: { type: Boolean, default: true },
+      finalReports: { type: Boolean, default: true },
+    },
     institutionUserId: { type: Schema.Types.ObjectId, ref: "User", sparse: true, unique: true, index: true },
     institutionUserIds: [{ type: Schema.Types.ObjectId, ref: "User", index: true }],
     active: { type: Boolean, default: true, index: true },

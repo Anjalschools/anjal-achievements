@@ -7,6 +7,7 @@ import {
   submitInstitutionCompletionEvaluation,
   updateTrainingInterview,
 } from "@/lib/partnerships/institution-experience-service";
+import { updateTrainingInterviewWorkspace } from "@/lib/partnerships/institution-candidate-pipeline-service";
 import { requireTrainingInstitution } from "@/lib/partnerships/partnerships-institution-auth";
 
 export const dynamic = "force-dynamic";
@@ -61,6 +62,22 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       });
       if (!result.ok) return NextResponse.json({ error: result.error, code: result.code }, { status: 400 });
       return NextResponse.json({ ok: true, id: result.id });
+    }
+
+    if (action === "update_interview_workspace") {
+      const result = await updateTrainingInterviewWorkspace({
+        interviewId: String(body.interviewId || ""),
+        organizationId,
+        actor,
+        recordingUrl: body.recordingUrl !== undefined ? String(body.recordingUrl) : undefined,
+        attendance: body.attendance as "pending" | "attended" | "no_show" | undefined,
+        resultNotes: body.resultNotes !== undefined ? String(body.resultNotes) : undefined,
+        notes: body.notes !== undefined ? String(body.notes) : undefined,
+        status: body.status as "scheduled" | "completed" | "cancelled" | "rescheduled" | undefined,
+        request,
+      });
+      if (!result.ok) return NextResponse.json({ error: result.error, code: result.code }, { status: 400 });
+      return NextResponse.json({ ok: true });
     }
 
     if (action === "update_interview") {

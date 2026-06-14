@@ -421,6 +421,16 @@ const AppSidebar = () => {
     icon: Settings,
     label: locale === "ar" ? "الإعدادات" : "Settings",
   };
+  const institutionProfileItem = {
+    href: "/institution/profile",
+    icon: User,
+    label: locale === "ar" ? "ملف المؤسسة" : "Institution profile",
+  };
+  const institutionSettingsItem = {
+    href: "/institution/settings",
+    icon: Settings,
+    label: locale === "ar" ? "إعدادات المؤسسة" : "Institution settings",
+  };
 
   /**
    * Students: dashboard + hall + achievements + student add + notifications + profile + settings.
@@ -573,8 +583,8 @@ const AppSidebar = () => {
     { ...institutionTrainingPortalItem, capability: null },
     { ...institutionMessagesItem, capability: null },
     { ...notificationsItem, capability: null },
-    { ...profileItem, capability: null },
-    { ...settingsItem, capability: null },
+    { ...institutionProfileItem, capability: null },
+    { ...institutionSettingsItem, capability: null },
   ];
 
   const navItems = isAlumniAdminOnly
@@ -725,7 +735,17 @@ const AppSidebar = () => {
       );
     }
     if (href === "/institution/training") {
-      return pathname === "/institution/training" || pathname?.startsWith("/institution/training/");
+      return (
+        pathname === "/institution/training" ||
+        (pathname?.startsWith("/institution/training/") &&
+          !pathname?.startsWith("/institution/training/messages"))
+      );
+    }
+    if (href === "/institution/profile") {
+      return pathname === "/institution/profile";
+    }
+    if (href === "/institution/settings") {
+      return pathname === "/institution/settings";
     }
     if (href === "/admin/partnerships/messages") {
       return pathname === "/admin/partnerships/messages" || pathname?.startsWith("/admin/partnerships/messages/");

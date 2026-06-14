@@ -13,6 +13,7 @@ import {
   updateStudentTrainingApplicationContent,
   withdrawStudentTrainingApplication,
 } from "@/lib/partnerships/partnerships-student-application-service";
+import { resolveStudentInstitutionContactView } from "@/lib/partnerships/institution-contact-access-service";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -53,7 +54,8 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
     if (!item) {
       return NextResponse.json({ error: "Application not found" }, { status: 404 });
     }
-    return NextResponse.json({ ok: true, item });
+    const institutionContact = await resolveStudentInstitutionContactView(id, String(gate.user._id));
+    return NextResponse.json({ ok: true, item, institutionContact });
   } catch (error) {
     console.error("[GET /api/partnerships/applications/[id]]", error);
     return jsonInternalServerError(error);

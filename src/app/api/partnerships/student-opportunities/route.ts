@@ -15,6 +15,10 @@ import {
 import { serializeTrainingOpportunity } from "@/lib/partnerships/partnerships-serialize";
 import { loadStudentApplicationForOpportunity } from "@/lib/partnerships/partnerships-student-application-service";
 import { loadStudentOpportunityCommunication } from "@/lib/partnerships/partnerships-student-communication-context";
+import {
+  resolveStudentInstitutionContactView,
+} from "@/lib/partnerships/institution-contact-access-service";
+import { stripOrganizationContactForStudent } from "@/lib/partnerships/institution-contact-access-constants";
 import { getOpportunityQuotaStats } from "@/lib/partnerships/partnerships-quotas";
 import {
   createFallbackStudentTrainingDashboardContext,
@@ -153,10 +157,23 @@ export async function GET(request: NextRequest) {
       const studentApplication = getStudentApplicationForOpportunity(trainingContext, id);
       const certificate =
         trainingContext.certificates.find((row) => row.opportunityId === id) || null;
+
+      const serialized = serializeTrainingOpportunity(row, organization);
+      let institutionContact = null;
+      if (application?.id) {
+        institutionContact = await resolveStudentInstitutionContactView(application.id, String(gate.user._id));
+      }
+      const safeOrganization = stripOrganizationContactForStudent(
+        serialized.organization,
+        institutionContact
+      );
+
       return NextResponse.json({
         ok: true,
         item: {
-          ...serializeTrainingOpportunity(row, organization),
+          ...serialized,
+          organization: safeOrganization,
+          institutionContact,
           ...applyMeta,
           studentApplication,
           application,

@@ -30,6 +30,13 @@ import {
   listTrainingAssessments,
   listTrainingInterviews,
 } from "@/lib/partnerships/institution-experience-service";
+import { resolveInstitutionStudentContactView } from "@/lib/partnerships/institution-contact-access-service";
+import {
+  buildCandidateScorecard,
+  buildDocumentTracker,
+  listInstitutionCandidateTags,
+  listInstitutionPrivateNotes,
+} from "@/lib/partnerships/institution-candidate-pipeline-service";
 
 export type InstitutionReviewAction = "accept" | "reject" | "interview";
 
@@ -296,7 +303,8 @@ export const getInstitutionApplicationDetail = async (
 
   const organization = await PartnerOrganization.findById(organizationId).select("name city sector").lean();
 
-  const [studentProfile, requirements, interviews, assessments, evaluation] = await Promise.all([
+  const [studentProfile, requirements, interviews, assessments, evaluation, contactAccess, scorecard, documentTracker, tags, privateNotes] =
+    await Promise.all([
     buildInstitutionStudentProfileSummary(
       String(application.studentId),
       application.studentSnapshot,
@@ -306,6 +314,11 @@ export const getInstitutionApplicationDetail = async (
     listTrainingInterviews(applicationId, organizationId),
     listTrainingAssessments(applicationId, organizationId),
     getInstitutionEvaluationForApplication(applicationId),
+    resolveInstitutionStudentContactView(applicationId, organizationId),
+    buildCandidateScorecard(applicationId, organizationId, locale),
+    buildDocumentTracker(applicationId, organizationId),
+    listInstitutionCandidateTags(applicationId, organizationId),
+    listInstitutionPrivateNotes(applicationId, organizationId),
   ]);
 
   return {
@@ -331,6 +344,11 @@ export const getInstitutionApplicationDetail = async (
     interviews: interviews.ok ? interviews.items : [],
     assessments: assessments.ok ? assessments.items : [],
     evaluation,
+    contactAccess,
+    scorecard,
+    documentTracker,
+    tags: tags.ok ? tags.items : [],
+    privateNotes: privateNotes.ok ? privateNotes.items : [],
   };
 };
 

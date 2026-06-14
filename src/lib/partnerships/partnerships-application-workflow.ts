@@ -74,6 +74,15 @@ export const timelineActionLabel = (action: string, isAr: boolean): string => {
     institution_school_approval_rejected: { ar: "رفض اعتماد المدرسة", en: "School approval rejected" },
     institution_message_sent: { ar: "رسالة من المؤسسة", en: "Institution message" },
     application_reopened: { ar: "تمت إعادة فتح الطلب", en: "Application reopened" },
+    contact_access_granted: { ar: "تمت مشاركة بيانات التواصل", en: "Contact access granted" },
+    contact_access_updated: { ar: "تم تحديث مشاركة بيانات التواصل", en: "Contact access updated" },
+    contact_access_revoked: { ar: "تم إلغاء مشاركة بيانات التواصل", en: "Contact access revoked" },
+    document_requested: { ar: "طلب مستند", en: "Document requested" },
+    document_uploaded: { ar: "رفع مستند", en: "Document uploaded" },
+    interview_completed: { ar: "اكتمال مقابلة", en: "Interview completed" },
+    candidate_tag_added: { ar: "إضافة وسم للمرشح", en: "Candidate tag added" },
+    candidate_note_added: { ar: "ملاحظة خاصة على المرشح", en: "Private candidate note added" },
+    candidate_compared: { ar: "مقارنة مرشحين", en: "Candidates compared" },
   };
   const row = map[action];
   return row ? (isAr ? row.ar : row.en) : action;

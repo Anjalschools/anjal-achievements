@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { jsonInternalServerError } from "@/lib/api-safe-response";
 import {
+  listInstitutionMessagingCenter,
   listInstitutionThreadMessages,
-  listInstitutionThreads,
+  sendInstitutionSupervisorMessage,
   sendInstitutionThreadMessage,
 } from "@/lib/partnerships/institution-messaging-service";
 import { requireTrainingInstitution } from "@/lib/partnerships/partnerships-institution-auth";
@@ -29,11 +30,25 @@ export async function GET(request: NextRequest) {
         organizationId
       );
       if (!result.ok) return NextResponse.json({ error: result.error }, { status: 404 });
-      return NextResponse.json({ ok: true, applicationId: result.applicationId, items: result.items });
+      return NextResponse.json({
+        ok: true,
+        threadKind: result.threadKind,
+        applicationId: result.applicationId,
+        items: result.items,
+      });
     }
 
-    const items = await listInstitutionThreads(String(gate.user._id), organizationId);
-    return NextResponse.json({ ok: true, items });
+    const center = await listInstitutionMessagingCenter(
+      String(gate.user._id),
+      organizationId,
+      gate.organization?.name
+    );
+    return NextResponse.json({
+      ok: true,
+      studentThreads: center.studentThreads,
+      supervisorThread: center.supervisorThread,
+      items: center.items,
+    });
   } catch (error) {
     console.error("[GET /api/institution/training/messages]", error);
     return jsonInternalServerError(error);
@@ -52,14 +67,32 @@ export async function POST(request: NextRequest) {
   try {
     const body = (await request.json()) as Record<string, unknown>;
     const applicationId = String(body.applicationId || "").trim();
+    const threadKind = String(body.threadKind || "student").trim();
     const messageBody = String(body.body || "").trim();
-    if (!applicationId || !messageBody) {
-      return NextResponse.json({ error: "applicationId and body are required" }, { status: 400 });
+    if (!messageBody) {
+      return NextResponse.json({ error: "body is required" }, { status: 400 });
     }
 
     const actorName = String(
       gate.user.fullNameAr || gate.user.fullName || gate.organization?.name || gate.user.email || ""
     ).trim();
+
+    if (threadKind === "supervisor" || !applicationId) {
+      const result = await sendInstitutionSupervisorMessage({
+        organizationId,
+        institutionUserId: String(gate.user._id),
+        body: messageBody,
+        actorName,
+        organizationName: gate.organization?.name,
+        request,
+      });
+      if (!result.ok) return NextResponse.json({ error: result.error, code: result.code }, { status: 400 });
+      return NextResponse.json({ ok: true, threadId: result.threadId });
+    }
+
+    if (!applicationId) {
+      return NextResponse.json({ error: "applicationId is required" }, { status: 400 });
+    }
 
     const result = await sendInstitutionThreadMessage({
       applicationId,
@@ -67,6 +100,7 @@ export async function POST(request: NextRequest) {
       institutionUserId: String(gate.user._id),
       body: messageBody,
       actorName,
+      request,
     });
 
     if (!result.ok) return NextResponse.json({ error: result.error, code: result.code }, { status: 400 });

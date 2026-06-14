@@ -2,58 +2,138 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import PageContainer from "@/components/layout/PageContainer";
 import PageHeader from "@/components/layout/PageHeader";
 import SectionCard from "@/components/layout/SectionCard";
 import { getLocale } from "@/lib/i18n";
+import InstitutionBrandingHeader from "@/components/institution/InstitutionBrandingHeader";
+import InstitutionCandidateComparison from "@/components/institution/InstitutionCandidateComparison";
+import InstitutionCandidateScorecard from "@/components/institution/InstitutionCandidateScorecard";
+import InstitutionRecruitmentAnalytics from "@/components/institution/InstitutionRecruitmentAnalytics";
+import {
+  CANDIDATE_TAG_LABELS,
+  INSTITUTION_PIPELINE_STAGE_LABELS,
+  INSTITUTION_PIPELINE_STAGES,
+  type InstitutionPipelineStage,
+  type PredefinedCandidateTag,
+} from "@/lib/partnerships/institution-candidate-pipeline-constants";
+import type { CandidateScorecard } from "@/lib/partnerships/institution-candidate-pipeline-service";
 import {
   trainingApplicationStatusBadgeClass,
   trainingApplicationStatusLabel,
 } from "@/lib/partnerships/partnerships-application-status-ui";
-import { Building2, CheckCircle2, Loader2, MessageSquare, XCircle } from "lucide-react";
+import {
+  GitCompare,
+  Building2,
+  Calendar,
+  CheckCircle2,
+  ClipboardList,
+  FileText,
+  Loader2,
+  MessageSquare,
+  UserPlus,
+  XCircle,
+} from "lucide-react";
 
 type ApplicationItem = {
   id: string;
   status: string;
   institutionStatus: string;
+  pipelineStage: InstitutionPipelineStage;
   opportunityTitle: string;
   studentName: string;
   studentGrade: string;
   submittedAt: string | null;
   rejectionReason?: string;
+  tags?: string[];
+  scorecard: CandidateScorecard | null;
+};
+
+type AnalyticsPayload = {
+  totalCandidates: number;
+  acceptanceRatePct: number;
+  rejectionRatePct: number;
+  interviewCount: number;
+  documentsRequested: number;
+  finalReportsCount: number;
 };
 
 type PortalPayload = {
-  organization: { id: string; name: string; city: string; sector: string } | null;
+  organization: { id: string; name: string; city: string; sector: string; logo?: string } | null;
+  profile?: {
+    organization: {
+      name: string;
+      logo: string;
+      sector: string;
+      city: string;
+      categoryLabelAr: string;
+      categoryLabelEn: string;
+    };
+    metrics: {
+      partnershipYears: number;
+      historicallyTrainedStudents: number;
+    };
+  } | null;
+  recentActivity?: Array<{
+    id: string;
+    kind: string;
+    labelAr: string;
+    labelEn: string;
+    at: string | null;
+    applicationId?: string;
+  }>;
   items: ApplicationItem[];
-  counts: {
-    new: number;
-    inReview: number;
-    accepted: number;
-    rejected: number;
-    interview: number;
-    inProgress: number;
-    completed: number;
-  };
+  counts: Record<InstitutionPipelineStage, number>;
+  stageCounts: Record<InstitutionPipelineStage, number>;
+  analytics: AnalyticsPayload | null;
+};
+
+const LEGACY_TAB_MAP: Record<string, InstitutionPipelineStage> = {
+  new: "new",
+  inReview: "inReview",
+  interview: "awaitingInterview",
+  accepted: "accepted",
+  rejected: "rejected",
+  inProgress: "inTraining",
+  completed: "completed",
+};
+
+const tagLabel = (tag: string, isAr: boolean) => {
+  const predefined = CANDIDATE_TAG_LABELS[tag as PredefinedCandidateTag];
+  if (predefined) return isAr ? predefined.ar : predefined.en;
+  return tag;
 };
 
 const InstitutionTrainingPortalPage = () => {
   const locale = getLocale();
   const isAr = locale === "ar";
+  const searchParams = useSearchParams();
+  const tabParam = searchParams.get("tab");
+  const initialTab: InstitutionPipelineStage =
+    tabParam && (INSTITUTION_PIPELINE_STAGES as readonly string[]).includes(tabParam)
+      ? (tabParam as InstitutionPipelineStage)
+      : tabParam && LEGACY_TAB_MAP[tabParam]
+        ? LEGACY_TAB_MAP[tabParam]
+        : "new";
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<PortalPayload | null>(null);
   const [notesById, setNotesById] = useState<Record<string, string>>({});
-  const [activeTab, setActiveTab] = useState<
-    "new" | "inReview" | "accepted" | "rejected" | "interview" | "inProgress" | "completed"
-  >("new");
+  const [activeTab, setActiveTab] = useState<InstitutionPipelineStage>(initialTab);
+  const [compareIds, setCompareIds] = useState<string[]>([]);
+  const [showComparison, setShowComparison] = useState(false);
+
+  useEffect(() => {
+    setActiveTab(initialTab);
+  }, [initialTab]);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/institution/training/applications", { cache: "no-store" });
+      const res = await fetch("/api/institution/dashboard", { cache: "no-store" });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(typeof json.error === "string" ? json.error : "Failed");
       setData(json as PortalPayload);
@@ -101,34 +181,24 @@ const InstitutionTrainingPortalPage = () => {
     }
   };
 
-  const tabs: Array<{ id: typeof activeTab; label: string; count: number }> = [
-    { id: "new", label: isAr ? "طلبات جديدة" : "New applications", count: data?.counts.new ?? 0 },
-    { id: "inReview", label: isAr ? "قيد المراجعة" : "In review", count: data?.counts.inReview ?? 0 },
-    { id: "interview", label: isAr ? "مقابلات" : "Interviews", count: data?.counts.interview ?? 0 },
-    { id: "accepted", label: isAr ? "مقبولة" : "Accepted", count: data?.counts.accepted ?? 0 },
-    { id: "inProgress", label: isAr ? "تدريب جارٍ" : "In progress", count: data?.counts.inProgress ?? 0 },
-    { id: "completed", label: isAr ? "تدريب مكتمل" : "Completed", count: data?.counts.completed ?? 0 },
-    { id: "rejected", label: isAr ? "مرفوضة" : "Rejected", count: data?.counts.rejected ?? 0 },
-  ];
+  const stageCounts = data?.stageCounts || data?.counts;
 
-  const filteredItems =
-    data?.items.filter((row) => {
-      if (activeTab === "new") {
-        return row.status === "institution_review" && row.institutionStatus === "institution_pending";
-      }
-      if (activeTab === "inReview") {
-        return (
-          row.status === "institution_review" &&
-          row.institutionStatus !== "institution_pending"
-        );
-      }
-      if (activeTab === "accepted") return row.status === "accepted";
-      if (activeTab === "rejected") return row.status === "rejected";
-      if (activeTab === "interview") return row.status === "interview_requested";
-      if (activeTab === "inProgress") return row.status === "accepted";
-      if (activeTab === "completed") return row.status === "completed";
-      return true;
-    }) || [];
+  const tabs: Array<{ id: InstitutionPipelineStage; label: string; count: number }> =
+    INSTITUTION_PIPELINE_STAGES.map((id) => ({
+      id,
+      label: INSTITUTION_PIPELINE_STAGE_LABELS[id][isAr ? "ar" : "en"],
+      count: stageCounts?.[id] ?? 0,
+    }));
+
+  const filteredItems = data?.items.filter((row) => row.pipelineStage === activeTab) || [];
+
+  const handleToggleCompare = (applicationId: string) => {
+    setCompareIds((prev) => {
+      if (prev.includes(applicationId)) return prev.filter((id) => id !== applicationId);
+      if (prev.length >= 6) return prev;
+      return [...prev, applicationId];
+    });
+  };
 
   return (
     <PageContainer>
@@ -152,27 +222,125 @@ const InstitutionTrainingPortalPage = () => {
         <SectionCard>
           <p className="py-8 text-center text-red-600">{error}</p>
         </SectionCard>
+      ) : !data ? (
+        <SectionCard>
+          <p className="py-8 text-center text-text-light">
+            {isAr ? "لا توجد بيانات." : "No data available."}
+          </p>
+        </SectionCard>
       ) : (
         <>
-          {error ? <p className="mb-4 text-sm text-red-600">{error}</p> : null}
+          {error ? <p className="mb-3 text-sm text-red-600">{error}</p> : null}
 
-          <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-            {[
-              { key: "new", label: isAr ? "طلبات جديدة" : "New", value: data?.counts.new ?? 0 },
-              { key: "interview", label: isAr ? "مقابلات" : "Interviews", value: data?.counts.interview ?? 0 },
-              { key: "accepted", label: isAr ? "مقبولة" : "Accepted", value: data?.counts.accepted ?? 0 },
-              { key: "rejected", label: isAr ? "مرفوضة" : "Rejected", value: data?.counts.rejected ?? 0 },
-              { key: "inProgress", label: isAr ? "تدريب جارٍ" : "In progress", value: data?.counts.inProgress ?? 0 },
-              { key: "completed", label: isAr ? "تدريب مكتمل" : "Completed", value: data?.counts.completed ?? 0 },
-            ].map((card) => (
-              <div
-                key={card.key}
-                className="rounded-2xl border border-border/70 bg-white px-4 py-3 shadow-sm"
-              >
-                <p className="text-xs font-bold text-text-light">{card.label}</p>
-                <p className="mt-1 text-2xl font-black text-foreground">{card.value}</p>
+          {data.profile?.organization ? (
+            <div className="mb-4">
+              <InstitutionBrandingHeader
+                isAr={isAr}
+                compact
+                data={{
+                  name: data.profile.organization.name,
+                  logo: data.profile.organization.logo,
+                  sector: data.profile.organization.sector,
+                  categoryLabelAr: data.profile.organization.categoryLabelAr,
+                  categoryLabelEn: data.profile.organization.categoryLabelEn,
+                  city: data.profile.organization.city,
+                  partnershipYears: data.profile.metrics.partnershipYears,
+                  historicallyTrainedStudents: data.profile.metrics.historicallyTrainedStudents,
+                }}
+              />
+            </div>
+          ) : null}
+
+          <div className="mb-4 grid gap-3 lg:grid-cols-[1fr_280px]">
+            <SectionCard padding="sm">
+              <h3 className="mb-3 text-sm font-bold text-foreground">
+                {isAr ? "النشاط الحديث" : "Recent activity"}
+              </h3>
+              {(data.recentActivity || []).length === 0 ? (
+                <p className="text-xs text-text-light">
+                  {isAr ? "لا يوجد نشاط حديث." : "No recent activity."}
+                </p>
+              ) : (
+                <ul className="max-h-48 space-y-2 overflow-y-auto">
+                  {(data.recentActivity || []).slice(0, 8).map((row) => (
+                    <li key={row.id} className="rounded-lg border border-border/60 px-3 py-2 text-xs">
+                      <p className="font-semibold text-foreground">{isAr ? row.labelAr : row.labelEn}</p>
+                      {row.applicationId ? (
+                        <Link
+                          href={`/institution/training/${encodeURIComponent(row.applicationId)}`}
+                          className="text-primary hover:underline"
+                        >
+                          {isAr ? "عرض" : "View"}
+                        </Link>
+                      ) : null}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </SectionCard>
+
+            <SectionCard padding="sm">
+              <h3 className="mb-3 text-sm font-bold text-foreground">
+                {isAr ? "إجراءات سريعة" : "Quick actions"}
+              </h3>
+              <div className="grid gap-2">
+                <Link
+                  href="/institution/training?tab=new"
+                  className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-xs font-bold hover:bg-gray-50"
+                >
+                  <UserPlus className="h-3.5 w-3.5 text-primary" aria-hidden />
+                  {isAr ? "طلاب جدد" : "New candidates"} ({stageCounts?.new ?? 0})
+                </Link>
+                <Link
+                  href="/institution/training/messages"
+                  className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-xs font-bold hover:bg-gray-50"
+                >
+                  <MessageSquare className="h-3.5 w-3.5 text-primary" aria-hidden />
+                  {isAr ? "الرسائل" : "Messages"}
+                </Link>
+                <Link
+                  href="/institution/training?tab=awaitingInterview"
+                  className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-xs font-bold hover:bg-gray-50"
+                >
+                  <Calendar className="h-3.5 w-3.5 text-primary" aria-hidden />
+                  {isAr ? "المقابلات" : "Interviews"} ({stageCounts?.awaitingInterview ?? 0})
+                </Link>
+                <Link
+                  href="/institution/training?tab=inTraining"
+                  className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-xs font-bold hover:bg-gray-50"
+                >
+                  <ClipboardList className="h-3.5 w-3.5 text-primary" aria-hidden />
+                  {isAr ? "التقييمات" : "Evaluations"}
+                </Link>
+                <Link
+                  href="/institution/training?tab=completed"
+                  className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-xs font-bold hover:bg-gray-50"
+                >
+                  <FileText className="h-3.5 w-3.5 text-primary" aria-hidden />
+                  {isAr ? "التقارير النهائية" : "Final reports"}
+                </Link>
               </div>
-            ))}
+            </SectionCard>
+          </div>
+
+          <div className="mb-4">
+            <InstitutionRecruitmentAnalytics analytics={data.analytics} isAr={isAr} />
+          </div>
+
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+            <p className="text-xs text-text-light">
+              {isAr ? "اختر 2–6 مرشحين للمقارنة" : "Select 2–6 candidates to compare"}
+            </p>
+            {compareIds.length >= 2 ? (
+              <button
+                type="button"
+                onClick={() => setShowComparison(true)}
+                className="inline-flex items-center gap-2 rounded-xl border border-primary bg-primary/10 px-3 py-2 text-xs font-bold text-primary"
+              >
+                <GitCompare className="h-4 w-4" aria-hidden />
+                {isAr ? `مقارنة (${compareIds.length})` : `Compare (${compareIds.length})`}
+              </button>
+            ) : null}
           </div>
 
           <div className="mb-6 flex flex-wrap gap-2">
@@ -202,21 +370,45 @@ const InstitutionTrainingPortalPage = () => {
                 {filteredItems.map((row) => (
                   <li key={row.id} className="rounded-2xl border border-border/70 bg-white p-4 shadow-sm">
                     <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div>
-                        <p className="text-lg font-bold text-foreground">{row.studentName}</p>
-                        <p className="text-sm text-text-light">
-                          {row.opportunityTitle}
-                          {row.studentGrade ? ` · ${isAr ? "الصف" : "Grade"} ${row.studentGrade}` : ""}
-                        </p>
-                        <p className="mt-1 text-xs text-text-light">
-                          {isAr ? "تاريخ التقديم:" : "Submitted:"} {formatDate(row.submittedAt)}
-                        </p>
+                      <div className="flex items-start gap-3">
+                        <input
+                          type="checkbox"
+                          checked={compareIds.includes(row.id)}
+                          onChange={() => handleToggleCompare(row.id)}
+                          aria-label={isAr ? "اختيار للمقارنة" : "Select for comparison"}
+                          className="mt-1 h-4 w-4 rounded border-border"
+                        />
+                        <div>
+                          <p className="text-lg font-bold text-foreground">{row.studentName}</p>
+                          <p className="text-sm text-text-light">
+                            {row.opportunityTitle}
+                            {row.studentGrade ? ` · ${isAr ? "الصف" : "Grade"} ${row.studentGrade}` : ""}
+                          </p>
+                          <p className="mt-1 text-xs text-text-light">
+                            {isAr ? "تاريخ التقديم:" : "Submitted:"} {formatDate(row.submittedAt)}
+                          </p>
+                          {(row.tags || []).length > 0 ? (
+                            <div className="mt-2 flex flex-wrap gap-1">
+                              {(row.tags || []).map((tag) => (
+                                <span
+                                  key={tag}
+                                  className="rounded-full border border-primary/20 bg-primary/5 px-2 py-0.5 text-[10px] font-bold text-primary"
+                                >
+                                  {tagLabel(tag, isAr)}
+                                </span>
+                              ))}
+                            </div>
+                          ) : null}
+                        </div>
                       </div>
-                      <span
-                        className={`inline-flex rounded-full px-3 py-1 text-xs font-bold ring-1 ${trainingApplicationStatusBadgeClass(row.status)}`}
-                      >
-                        {trainingApplicationStatusLabel(row.status, isAr)}
-                      </span>
+                      <div className="flex flex-col items-end gap-2">
+                        <span
+                          className={`inline-flex rounded-full px-3 py-1 text-xs font-bold ring-1 ${trainingApplicationStatusBadgeClass(row.status)}`}
+                        >
+                          {trainingApplicationStatusLabel(row.status, isAr)}
+                        </span>
+                        <InstitutionCandidateScorecard scorecard={row.scorecard} isAr={isAr} compact />
+                      </div>
                     </div>
 
                     <div className="mt-3">
@@ -284,10 +476,18 @@ const InstitutionTrainingPortalPage = () => {
             <Building2 className="h-4 w-4" aria-hidden />
             <span>
               {isAr
-                ? "تُحدَّث حالات الطلبات تلقائياً في نظام التدريب الصيفي."
-                : "Application statuses sync automatically with the summer training system."}
+                ? "مراحل المرشحين تُشتق من حالة الطلب والمستندات والمقابلات — دون تغيير سير العمل."
+                : "Candidate stages are derived from application status, documents, and interviews — without changing workflow."}
             </span>
           </div>
+
+          {showComparison ? (
+            <InstitutionCandidateComparison
+              selectedIds={compareIds}
+              isAr={isAr}
+              onClose={() => setShowComparison(false)}
+            />
+          ) : null}
         </>
       )}
     </PageContainer>

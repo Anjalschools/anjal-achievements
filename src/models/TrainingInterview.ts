@@ -8,6 +8,9 @@ export interface ITrainingInterview extends Document {
   location?: string;
   meetingUrl?: string;
   notes?: string;
+  recordingUrl?: string;
+  attendance?: "pending" | "attended" | "no_show";
+  resultNotes?: string;
   status: (typeof TRAINING_INTERVIEW_STATUSES)[number];
   createdBy: Types.ObjectId;
   createdAt: Date;
@@ -32,6 +35,13 @@ const TrainingInterviewSchema = new Schema<ITrainingInterview>(
     location: { type: String, trim: true, maxlength: 500 },
     meetingUrl: { type: String, trim: true, maxlength: 2000 },
     notes: { type: String, trim: true, maxlength: 4000 },
+    recordingUrl: { type: String, trim: true, maxlength: 2000 },
+    attendance: {
+      type: String,
+      enum: ["pending", "attended", "no_show"],
+      default: "pending",
+    },
+    resultNotes: { type: String, trim: true, maxlength: 4000 },
     status: {
       type: String,
       enum: TRAINING_INTERVIEW_STATUSES,

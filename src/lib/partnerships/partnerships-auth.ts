@@ -58,8 +58,7 @@ export const requirePartnershipsSendMessages = async (): Promise<PartnershipsGat
   return gate;
 };
 
-/** Reopen rejected training applications — admin or partnership supervisor only. */
-export const requirePartnershipsReopenApplication = async (): Promise<PartnershipsGate> => {
+const requireAdminOrPartnershipSupervisorGate = async (): Promise<PartnershipsGate> => {
   const gate = await requireSession();
   if (!gate.ok) return gate;
 
@@ -82,6 +81,14 @@ export const requirePartnershipsReopenApplication = async (): Promise<Partnershi
 
   return { ok: false, response: NextResponse.json({ error: "Forbidden" }, { status: 403 }) };
 };
+
+/** Reopen rejected training applications — admin or partnership supervisor only. */
+export const requirePartnershipsReopenApplication = async (): Promise<PartnershipsGate> =>
+  requireAdminOrPartnershipSupervisorGate();
+
+/** View / manage student–institution contact sharing — admin or partnership supervisor only. */
+export const requirePartnershipsContactAccessManage = async (): Promise<PartnershipsGate> =>
+  requireAdminOrPartnershipSupervisorGate();
 
 /** Enrolled student accounts only (not staff or alumni). */
 export const requireStudentApplicant = async (): Promise<PartnershipsGate> => {

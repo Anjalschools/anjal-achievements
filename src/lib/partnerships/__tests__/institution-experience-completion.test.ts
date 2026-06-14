@@ -37,7 +37,9 @@ describe("institution experience completion", () => {
   it("exports institution messaging service helpers", async () => {
     const mod = await import("@/lib/partnerships/institution-messaging-service");
     expect(typeof mod.listInstitutionThreads).toBe("function");
+    expect(typeof mod.listInstitutionMessagingCenter).toBe("function");
     expect(typeof mod.sendInstitutionThreadMessage).toBe("function");
+    expect(typeof mod.sendInstitutionSupervisorMessage).toBe("function");
   });
 
   it("exports institution student profile summary builder", async () => {

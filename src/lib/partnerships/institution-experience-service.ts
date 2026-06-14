@@ -10,6 +10,7 @@ import TrainingAssessment from "@/models/TrainingAssessment";
 import TrainingAttachment from "@/models/TrainingAttachment";
 import TrainingInterview from "@/models/TrainingInterview";
 import { logAuditEvent } from "@/lib/audit-log-service";
+import { CANDIDATE_TIMELINE_ACTIONS } from "@/lib/partnerships/institution-candidate-pipeline-constants";
 import { appendTimelineEvent } from "@/lib/partnerships/partnerships-application-workflow";
 import type { InstitutionFinalRecommendation } from "@/lib/partnerships/institution-experience-constants";
 import {
@@ -156,6 +157,13 @@ export const createApplicationRequirement = async (input: {
     note: input.title,
   });
 
+  await appendApplicationTimeline(input.applicationId, {
+    action: CANDIDATE_TIMELINE_ACTIONS.documentRequested,
+    actorId: input.actor.id,
+    actorName: input.actor.name,
+    note: input.title,
+  });
+
   await auditInstitutionAction({
     actionType: "institution_requirement_created",
     entityType: "ApplicationRequirement",
@@ -220,6 +228,12 @@ export const submitApplicationRequirement = async (input: {
     note: requirement.title,
   });
 
+  await appendApplicationTimeline(String(requirement.applicationId), {
+    action: CANDIDATE_TIMELINE_ACTIONS.documentUploaded,
+    actorId: input.studentId,
+    note: requirement.title,
+  });
+
   await auditInstitutionAction({
     actionType: "institution_requirement_submitted",
     entityType: "ApplicationRequirement",
@@ -263,6 +277,9 @@ export const listTrainingInterviews = async (applicationId: string, organization
       location: row.location || "",
       meetingUrl: row.meetingUrl || "",
       notes: row.notes || "",
+      recordingUrl: row.recordingUrl || "",
+      attendance: row.attendance || "pending",
+      resultNotes: row.resultNotes || "",
       status: row.status,
     })),
   };

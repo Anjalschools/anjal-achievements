@@ -15,6 +15,8 @@ import TrainingAcceptedBanner from "@/components/partnerships/TrainingAcceptedBa
 import TrainingCertificateActions, {
   type TrainingCertificateSummary,
 } from "@/components/partnerships/TrainingCertificateActions";
+import StudentInstitutionContactCard from "@/components/partnerships/StudentInstitutionContactCard";
+import type { StudentInstitutionContactView } from "@/components/partnerships/StudentInstitutionContactCard";
 import type { StudentTrainingApplicationSummary } from "@/lib/partnerships/partnerships-student-dashboard-context";
 import {
   ArrowLeft,
@@ -89,6 +91,7 @@ type OpportunityDetail = {
     sector?: string;
     logo?: string;
   };
+  institutionContact?: StudentInstitutionContactView | null;
 };
 
 const stageLabel = (stage: string, isAr: boolean) => {
@@ -489,6 +492,10 @@ const SummerTrainingDetailPage = () => {
                   </div>
                 </dl>
               </SectionCard>
+
+              {item.institutionContact ? (
+                <StudentInstitutionContactCard institutionContact={item.institutionContact} isAr={isAr} />
+              ) : null}
 
               <SectionCard id="apply">
                 <h2 className="mb-3 text-base font-bold text-foreground">
