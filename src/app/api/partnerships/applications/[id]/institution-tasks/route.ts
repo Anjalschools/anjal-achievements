@@ -67,6 +67,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           type: inferTrainingAttachmentType(fileName, mimeType),
           fileName,
           storageKey,
+          mimeType: mimeType || undefined,
+          storageProvider: body.storageProvider === "r2" || body.storageProvider === "cloudinary"
+            ? body.storageProvider
+            : "r2",
         },
         request,
       });

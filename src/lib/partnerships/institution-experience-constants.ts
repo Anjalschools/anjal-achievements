@@ -3,8 +3,13 @@ export const APPLICATION_REQUIREMENT_STATUSES = [
   "submitted",
   "overdue",
   "waived",
+  "accepted",
+  "rejected",
 ] as const;
 export type ApplicationRequirementStatus = (typeof APPLICATION_REQUIREMENT_STATUSES)[number];
+
+export const APPLICATION_REQUIREMENT_TYPES = ["general", "parent_consent"] as const;
+export type ApplicationRequirementType = (typeof APPLICATION_REQUIREMENT_TYPES)[number];
 
 export const TRAINING_INTERVIEW_STATUSES = [
   "scheduled",

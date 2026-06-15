@@ -1,0 +1,315 @@
+"use client";
+
+import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
+import PageContainer from "@/components/layout/PageContainer";
+import PageHeader from "@/components/layout/PageHeader";
+import SectionCard from "@/components/layout/SectionCard";
+import PartnershipIntelligenceWidget from "@/components/admin/PartnershipIntelligenceWidget";
+import { getLocale } from "@/lib/i18n";
+import { AlertTriangle, BarChart3, Loader2, Star, Trophy } from "lucide-react";
+
+type RankingRow = {
+  organizationId: string;
+  organizationName: string;
+  qualityScore: number;
+  qualityLabelAr: string;
+  qualityLabelEn: string;
+  applicantCount: number;
+  acceptedCount: number;
+  completedTraineeCount: number;
+  acceptanceRatePct: number;
+  avgStudentRating: number;
+  averageResponseTimeDays: number;
+  activityScore: number;
+};
+
+type AlertRow = {
+  id: string;
+  type: string;
+  organizationName: string;
+  severity: string;
+  titleAr: string;
+  titleEn: string;
+  detailAr: string;
+  detailEn: string;
+};
+
+type Dashboard = {
+  generatedAt: string;
+  academicYearLabel: string;
+  summary: {
+    totalPartnerships: number;
+    activeInstitutions: number;
+    totalTrainees: number;
+    avgQualityScore: number;
+    bestInstitution: RankingRow | null;
+    weakestInstitution: RankingRow | null;
+  };
+  rankings: {
+    topRated: RankingRow[];
+    mostActive: RankingRow[];
+    highestAcceptance: RankingRow[];
+    highestRated: RankingRow[];
+    fastestResponse: RankingRow[];
+  };
+  alerts: AlertRow[];
+  schoolImprovementIndicators: {
+    careerReadiness: number;
+    externalPartnerships: number;
+    professionalExposure: number;
+    studentPlacementSuccess: number;
+  };
+  parentConsentAnalytics: {
+    required: number;
+    uploaded: number;
+    approved: number;
+    suspiciousCount: number;
+    avgConfidenceScore: number;
+    outdatedDetectedCount: number;
+    regeneratedCount: number;
+    templateCompatibilityRate: number;
+  };
+  executiveWidget: {
+    partnershipCount: number;
+    activeInstitutions: number;
+    bestInstitutionName: string;
+    weakestInstitutionName: string;
+    traineeCount: number;
+    avgQualityScore: number;
+  };
+};
+
+const RankingTable = ({
+  rows,
+  isAr,
+  valueKey,
+}: {
+  rows: RankingRow[];
+  isAr: boolean;
+  valueKey: keyof RankingRow;
+}) => (
+  <div className="overflow-x-auto">
+    <table className="min-w-full text-sm">
+      <thead>
+        <tr className="border-b border-border text-start">
+          <th className="px-2 py-2">{isAr ? "المؤسسة" : "Institution"}</th>
+          <th className="px-2 py-2">{isAr ? "القيمة" : "Value"}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.length === 0 ? (
+          <tr>
+            <td colSpan={2} className="px-2 py-4 text-center text-text-light">
+              {isAr ? "لا توجد بيانات." : "No data."}
+            </td>
+          </tr>
+        ) : (
+          rows.map((row) => (
+            <tr key={`${valueKey}-${row.organizationId}`} className="border-b border-border/50">
+              <td className="px-2 py-2">
+                <Link
+                  href={`/admin/partnerships/organizations/${encodeURIComponent(row.organizationId)}`}
+                  className="font-semibold text-primary hover:underline"
+                >
+                  {row.organizationName}
+                </Link>
+              </td>
+              <td className="px-2 py-2 font-bold">{String(row[valueKey])}</td>
+            </tr>
+          ))
+        )}
+      </tbody>
+    </table>
+  </div>
+);
+
+const PartnershipIntelligencePage = () => {
+  const locale = getLocale();
+  const isAr = locale === "ar";
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [data, setData] = useState<Dashboard | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/admin/partnerships/intelligence", { cache: "no-store" });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(typeof json.error === "string" ? json.error : "Failed");
+      setData(json.dashboard as Dashboard);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Error");
+      setData(null);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const indicatorCards = data
+    ? [
+        { label: isAr ? "الجاهزية المهنية" : "Career readiness", value: `${data.schoolImprovementIndicators.careerReadiness}%` },
+        { label: isAr ? "الشراكات الخارجية" : "External partnerships", value: `${data.schoolImprovementIndicators.externalPartnerships}%` },
+        { label: isAr ? "التعرض المهني" : "Professional exposure", value: `${data.schoolImprovementIndicators.professionalExposure}%` },
+        { label: isAr ? "نجاح التوظيف" : "Placement success", value: `${data.schoolImprovementIndicators.studentPlacementSuccess}%` },
+      ]
+    : [];
+
+  const parentConsentCards = data?.parentConsentAnalytics
+    ? [
+        { label: isAr ? "موافقات مطلوبة" : "Required consents", value: data.parentConsentAnalytics.required },
+        { label: isAr ? "مرفوعة" : "Uploaded", value: data.parentConsentAnalytics.uploaded },
+        { label: isAr ? "معتمدة" : "Approved", value: data.parentConsentAnalytics.approved },
+        { label: isAr ? "مشبوهة" : "Suspicious", value: data.parentConsentAnalytics.suspiciousCount },
+        {
+          label: isAr ? "متوسط الثقة" : "Avg confidence",
+          value: `${data.parentConsentAnalytics.avgConfidenceScore}%`,
+        },
+        {
+          label: isAr ? "نماذج قديمة" : "Outdated templates",
+          value: data.parentConsentAnalytics.outdatedDetectedCount,
+        },
+        {
+          label: isAr ? "إعادة إنشاء النماذج" : "Regenerated templates",
+          value: data.parentConsentAnalytics.regeneratedCount,
+        },
+        {
+          label: isAr ? "معدل توافق النماذج" : "Template compatibility",
+          value: `${data.parentConsentAnalytics.templateCompatibilityRate}%`,
+        },
+      ]
+    : [];
+
+  return (
+    <PageContainer>
+      <PageHeader
+        title={isAr ? "ذكاء جودة الشراكات" : "Partnership quality intelligence"}
+        subtitle={
+          data?.academicYearLabel
+            ? `${isAr ? "العام الدراسي" : "Academic year"}: ${data.academicYearLabel}`
+            : isAr
+              ? "قياس أداء المؤسسات الشريكة"
+              : "Measure partner institution performance"
+        }
+      />
+
+      {loading ? (
+        <div className="flex items-center justify-center gap-2 py-16 text-text-light">
+          <Loader2 className="h-5 w-5 animate-spin" aria-hidden />
+          <span>{isAr ? "جاري التحميل…" : "Loading…"}</span>
+        </div>
+      ) : error && !data ? (
+        <SectionCard>
+          <p className="py-8 text-center text-red-600">{error}</p>
+        </SectionCard>
+      ) : !data ? null : (
+        <>
+          {error ? <p className="mb-3 text-sm text-red-600">{error}</p> : null}
+
+          <SectionCard>
+            <h3 className="mb-3 flex items-center gap-2 text-base font-bold text-foreground">
+              <BarChart3 className="h-4 w-4 text-primary" aria-hidden />
+              {isAr ? "ملخص تنفيذي" : "Executive summary"}
+            </h3>
+            <PartnershipIntelligenceWidget data={data.executiveWidget} isAr={isAr} />
+          </SectionCard>
+
+          <div className="mt-4 grid gap-4 lg:grid-cols-2">
+            <SectionCard>
+              <h3 className="mb-3 flex items-center gap-2 text-base font-bold text-foreground">
+                <Trophy className="h-4 w-4 text-primary" aria-hidden />
+                {isAr ? "أفضل المؤسسات (الجودة)" : "Top institutions (quality)"}
+              </h3>
+              <RankingTable rows={data.rankings.topRated} isAr={isAr} valueKey="qualityScore" />
+            </SectionCard>
+
+            <SectionCard>
+              <h3 className="mb-3 text-base font-bold text-foreground">
+                {isAr ? "الأكثر نشاطاً" : "Most active"}
+              </h3>
+              <RankingTable rows={data.rankings.mostActive} isAr={isAr} valueKey="activityScore" />
+            </SectionCard>
+
+            <SectionCard>
+              <h3 className="mb-3 text-base font-bold text-foreground">
+                {isAr ? "الأعلى قبولاً" : "Highest acceptance"}
+              </h3>
+              <RankingTable rows={data.rankings.highestAcceptance} isAr={isAr} valueKey="acceptanceRatePct" />
+            </SectionCard>
+
+            <SectionCard>
+              <h3 className="mb-3 flex items-center gap-2 text-base font-bold text-foreground">
+                <Star className="h-4 w-4 text-primary" aria-hidden />
+                {isAr ? "الأعلى تقييماً" : "Highest rated"}
+              </h3>
+              <RankingTable rows={data.rankings.highestRated} isAr={isAr} valueKey="avgStudentRating" />
+            </SectionCard>
+
+            <SectionCard>
+              <h3 className="mb-3 text-base font-bold text-foreground">
+                {isAr ? "الأسرع استجابة" : "Fastest response"}
+              </h3>
+              <RankingTable rows={data.rankings.fastestResponse} isAr={isAr} valueKey="averageResponseTimeDays" />
+            </SectionCard>
+
+            <SectionCard>
+              <h3 className="mb-3 flex items-center gap-2 text-base font-bold text-foreground">
+                <AlertTriangle className="h-4 w-4 text-amber-600" aria-hidden />
+                {isAr ? "تنبيهات تلقائية" : "Automatic alerts"}
+              </h3>
+              {data.alerts.length === 0 ? (
+                <p className="text-sm text-text-light">{isAr ? "لا توجد تنبيهات." : "No alerts."}</p>
+              ) : (
+                <ul className="max-h-64 space-y-2 overflow-y-auto text-sm">
+                  {data.alerts.map((alert) => (
+                    <li key={alert.id} className="rounded-lg border border-border/60 px-3 py-2">
+                      <p className="font-bold text-foreground">{isAr ? alert.titleAr : alert.titleEn}</p>
+                      <p className="text-xs text-text-light">{isAr ? alert.detailAr : alert.detailEn}</p>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </SectionCard>
+          </div>
+
+          <SectionCard className="mt-4">
+            <h3 className="mb-3 text-base font-bold text-foreground">
+              {isAr ? "مؤشرات التحسين المدرسي" : "School improvement indicators"}
+            </h3>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              {indicatorCards.map((card) => (
+                <div key={card.label} className="rounded-xl border border-border/70 px-4 py-3">
+                  <p className="text-xs font-bold text-text-light">{card.label}</p>
+                  <p className="mt-1 text-xl font-black text-foreground">{card.value}</p>
+                </div>
+              ))}
+            </div>
+          </SectionCard>
+
+          {parentConsentCards.length > 0 ? (
+            <SectionCard className="mt-4">
+              <h3 className="mb-3 text-base font-bold text-foreground">
+                {isAr ? "موافقات أولياء الأمور" : "Parent consent"}
+              </h3>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                {parentConsentCards.map((card) => (
+                  <div key={card.label} className="rounded-xl border border-border/70 px-4 py-3">
+                    <p className="text-xs font-bold text-text-light">{card.label}</p>
+                    <p className="mt-1 text-xl font-black text-foreground">{card.value}</p>
+                  </div>
+                ))}
+              </div>
+            </SectionCard>
+          ) : null}
+        </>
+      )}
+    </PageContainer>
+  );
+};
+
+export default PartnershipIntelligencePage;

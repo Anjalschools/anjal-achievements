@@ -3,6 +3,7 @@ import { jsonInternalServerError } from "@/lib/api-safe-response";
 import {
   createApplicationRequirement,
   createTrainingAssessment,
+  reviewApplicationRequirement,
   scheduleTrainingInterview,
   submitInstitutionCompletionEvaluation,
   updateTrainingInterview,
@@ -42,11 +43,42 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         required: body.required !== false,
         fileTypes: Array.isArray(body.fileTypes) ? body.fileTypes.map(String) : [],
         dueDate: body.dueDate ? String(body.dueDate) : undefined,
+        requirementType: body.requirementType ? String(body.requirementType) as "general" | "parent_consent" : undefined,
         actor,
         request,
       });
       if (!result.ok) return NextResponse.json({ error: result.error, code: result.code }, { status: 400 });
       return NextResponse.json({ ok: true, id: result.id });
+    }
+
+    if (action === "create_parent_consent") {
+      const result = await createApplicationRequirement({
+        applicationId,
+        organizationId,
+        title: "",
+        requirementType: "parent_consent",
+        actor,
+        request,
+      });
+      if (!result.ok) return NextResponse.json({ error: result.error, code: result.code }, { status: 400 });
+      return NextResponse.json({ ok: true, id: result.id, alreadyExists: "alreadyExists" in result ? result.alreadyExists : false });
+    }
+
+    if (action === "review_requirement") {
+      const decision = String(body.decision || "").trim() as "approve" | "reject" | "request_reupload";
+      if (!["approve", "reject", "request_reupload"].includes(decision)) {
+        return NextResponse.json({ error: "Invalid decision" }, { status: 400 });
+      }
+      const result = await reviewApplicationRequirement({
+        requirementId: String(body.requirementId || ""),
+        organizationId,
+        decision,
+        actor,
+        note: String(body.note || ""),
+        request,
+      });
+      if (!result.ok) return NextResponse.json({ error: result.error, code: result.code }, { status: 400 });
+      return NextResponse.json({ ok: true, status: result.status });
     }
 
     if (action === "schedule_interview") {

@@ -142,6 +142,11 @@ const AppSidebar = () => {
     icon: FileBarChart,
     label: locale === "ar" ? "تدقيق الشراكات" : "Partnership audit",
   };
+  const partnershipsIntelligenceAdminItem = {
+    href: "/admin/partnerships/intelligence",
+    icon: BarChart3,
+    label: locale === "ar" ? "ذكاء جودة الشراكات" : "Partnership intelligence",
+  };
   const letterRequestsAdminItem = {
     href: "/admin/letter-requests",
     icon: ScrollText,
@@ -474,6 +479,7 @@ const AppSidebar = () => {
     { ...partnershipsTrainingAchievementsAdminItem, capability: "partnershipsManagement" },
     { ...partnershipsSettingsAdminItem, capability: "partnershipsManagement" },
     { ...partnershipsAuditAdminItem, capability: "partnershipsManagement" },
+    { ...partnershipsIntelligenceAdminItem, capability: "partnershipsManagement" },
     { ...alumniOnboardingAdminItem, capability: "alumniVerification" },
     { ...alumniVerificationCenterItem, capability: "alumniVerification" },
     { ...alumniStoriesAdminItem, capability: "alumniModeration" },
@@ -718,7 +724,8 @@ const AppSidebar = () => {
           !pathname?.startsWith("/admin/partnerships/final-reports") &&
           !pathname?.startsWith("/admin/partnerships/training-achievements") &&
           !pathname?.startsWith("/admin/partnerships/settings") &&
-          !pathname?.startsWith("/admin/partnerships/audit"))
+          !pathname?.startsWith("/admin/partnerships/audit") &&
+          !pathname?.startsWith("/admin/partnerships/intelligence"))
       );
     }
     if (href === "/summer-training/messages") {
@@ -767,6 +774,12 @@ const AppSidebar = () => {
     }
     if (href === "/admin/partnerships/audit") {
       return pathname === "/admin/partnerships/audit" || pathname?.startsWith("/admin/partnerships/audit/");
+    }
+    if (href === "/admin/partnerships/intelligence") {
+      return (
+        pathname === "/admin/partnerships/intelligence" ||
+        pathname?.startsWith("/admin/partnerships/intelligence/")
+      );
     }
     if (href === "/alumni/community") {
       return pathname === "/alumni/community" || pathname?.startsWith("/alumni/community/");

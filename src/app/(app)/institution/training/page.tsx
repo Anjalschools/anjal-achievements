@@ -18,6 +18,8 @@ import {
   type InstitutionPipelineStage,
   type PredefinedCandidateTag,
 } from "@/lib/partnerships/institution-candidate-pipeline-constants";
+import ParentConsentStatusBadge from "@/components/partnerships/ParentConsentStatusBadge";
+import type { ParentConsentDisplayStatus } from "@/lib/partnerships/parent-consent-constants";
 import type { CandidateScorecard } from "@/lib/partnerships/institution-candidate-pipeline-service";
 import {
   trainingApplicationStatusBadgeClass,
@@ -48,6 +50,7 @@ type ApplicationItem = {
   rejectionReason?: string;
   tags?: string[];
   scorecard: CandidateScorecard | null;
+  parentConsentStatus?: ParentConsentDisplayStatus;
 };
 
 type AnalyticsPayload = {
@@ -407,6 +410,9 @@ const InstitutionTrainingPortalPage = () => {
                         >
                           {trainingApplicationStatusLabel(row.status, isAr)}
                         </span>
+                        {row.parentConsentStatus ? (
+                          <ParentConsentStatusBadge status={row.parentConsentStatus} isAr={isAr} compact />
+                        ) : null}
                         <InstitutionCandidateScorecard scorecard={row.scorecard} isAr={isAr} compact />
                       </div>
                     </div>

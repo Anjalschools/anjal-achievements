@@ -37,6 +37,7 @@ import {
   listInstitutionCandidateTags,
   listInstitutionPrivateNotes,
 } from "@/lib/partnerships/institution-candidate-pipeline-service";
+import { assertParentConsentAllowsFinalAcceptance } from "@/lib/partnerships/parent-consent-service";
 
 export type InstitutionReviewAction = "accept" | "reject" | "interview";
 
@@ -99,6 +100,11 @@ export const executeInstitutionReviewDecision = async (
   }
 
   if (input.action === "accept") {
+    const parentConsentGate = await assertParentConsentAllowsFinalAcceptance(input.applicationId);
+    if (!parentConsentGate.ok) {
+      return { ok: false, error: parentConsentGate.error, code: parentConsentGate.code };
+    }
+
     const quota = await canAcceptIntoOpportunity(String(application.opportunityId));
     if (!quota.ok) {
       return { ok: false, error: "Opportunity seats are full", code: quota.reason || "seats_full" };

@@ -14,6 +14,7 @@ import InstitutionInterviewWorkspace from "@/components/institution/InstitutionI
 import InstitutionPrivateNotesPanel from "@/components/institution/InstitutionPrivateNotesPanel";
 import InstitutionCandidateTagsPanel from "@/components/institution/InstitutionCandidateTagsPanel";
 import type { InstitutionContactAccessView } from "@/components/institution/InstitutionContactAccessCard";
+import InstitutionParentConsentPanel from "@/components/partnerships/InstitutionParentConsentPanel";
 import TrainingApplicationTimeline from "@/components/partnerships/TrainingApplicationTimeline";
 import TrainingApplicationStatusBadge from "@/components/partnerships/TrainingApplicationStatusBadge";
 import { getLocale } from "@/lib/i18n";
@@ -42,7 +43,16 @@ type ApplicationDetail = {
   documentTracker: Array<{ id: string; titleAr: string; titleEn: string; status: string }>;
   tags: Array<{ id: string; tag: string }>;
   privateNotes: Array<{ id: string; category: string; body: string; createdAt: string | null }>;
-  requirements: Array<{ id: string; title: string; status: string; dueDate: string | null }>;
+  requirements: Array<{
+    id: string;
+    requirementType?: string;
+    title: string;
+    description?: string;
+    status: string;
+    dueDate: string | null;
+    submittedAt?: string | null;
+    aiVerification?: import("@/lib/partnerships/parent-consent-verification-constants").ParentConsentAiVerification | null;
+  }>;
   interviews: Array<{
     id: string;
     scheduledAt: string;
@@ -258,6 +268,28 @@ const InstitutionApplicationDetailPage = () => {
                   />
                 ) : null}
               </SectionCard>
+
+              <InstitutionParentConsentPanel
+                applicationId={applicationId}
+                requirements={detail.requirements.map((row) => ({
+                  id: row.id,
+                  requirementType: row.requirementType || "general",
+                  title: row.title,
+                  description: row.description || "",
+                  status: row.status,
+                  submittedAt: row.submittedAt || null,
+                  institutionConsentStatus:
+                    "institutionConsentStatus" in row
+                      ? (row as { institutionConsentStatus?: { status: string; labelAr: string; labelEn: string } | null })
+                          .institutionConsentStatus
+                      : null,
+                }))}
+                isAr={isAr}
+                onUpdated={load}
+                postAction={postAction}
+                saving={saving}
+                viewMode="institution"
+              />
 
               <SectionCard>
                 <h3 className="mb-3 text-base font-bold text-foreground">

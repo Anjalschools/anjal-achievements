@@ -8,6 +8,10 @@ export interface ITrainingAttachment extends Document {
   type: (typeof TRAINING_ATTACHMENT_TYPES)[number];
   fileName: string;
   storageKey: string;
+  mimeType?: string;
+  fileSize?: number;
+  storageProvider?: "r2" | "cloudinary";
+  contentFingerprint?: string;
   uploadedBy: Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
@@ -21,6 +25,10 @@ const TrainingAttachmentSchema = new Schema<ITrainingAttachment>(
     type: { type: String, enum: TRAINING_ATTACHMENT_TYPES, required: true, index: true },
     fileName: { type: String, required: true, trim: true, maxlength: 300 },
     storageKey: { type: String, required: true, trim: true, maxlength: 2000 },
+    mimeType: { type: String, trim: true, maxlength: 120 },
+    fileSize: { type: Number, min: 0 },
+    storageProvider: { type: String, enum: ["r2", "cloudinary"], sparse: true },
+    contentFingerprint: { type: String, trim: true, index: true, sparse: true },
     uploadedBy: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
   },
   { timestamps: true }

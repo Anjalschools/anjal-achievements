@@ -6,6 +6,7 @@ export type UploadedTrainingAttachment = {
   fileName: string;
   storageKey: string;
   mimeType?: string;
+  storageProvider?: "r2" | "cloudinary";
 };
 
 const uploadImage = async (file: File): Promise<UploadedTrainingAttachment> => {
@@ -47,7 +48,12 @@ const uploadAttachment = async (file: File): Promise<UploadedTrainingAttachment>
     fileName,
     storageKey,
     mimeType,
+    storageProvider: "r2",
   };
+};
+
+export const uploadParentConsentEvidenceFile = async (file: File): Promise<UploadedTrainingAttachment> => {
+  return uploadAttachment(file);
 };
 
 export const uploadTrainingReportFile = async (file: File): Promise<UploadedTrainingAttachment> => {

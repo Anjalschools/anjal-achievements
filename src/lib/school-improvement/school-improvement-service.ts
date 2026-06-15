@@ -10,6 +10,7 @@ import { buildInstitutionExpansion } from "@/lib/school-improvement/institution-
 import { buildPredictiveScenarios } from "@/lib/school-improvement/predictive-improvement";
 import { buildStrategicRoadmap } from "@/lib/school-improvement/strategic-roadmap";
 import { buildImprovementTracking } from "@/lib/school-improvement/improvement-tracking";
+import { buildPartnershipIntelligenceDashboard } from "@/lib/partnerships/institution-performance-intelligence-service";
 import type { SchoolImprovementPayload } from "@/lib/school-improvement/school-improvement-types";
 
 export const buildSchoolImprovementIntelligence = async (): Promise<SchoolImprovementPayload> => {
@@ -29,6 +30,8 @@ export const buildSchoolImprovementIntelligence = async (): Promise<SchoolImprov
   const generatedAt = new Date().toISOString();
   const improvementTracking = buildImprovementTracking(actionEngine, generatedAt);
 
+  const partnershipDashboard = await buildPartnershipIntelligenceDashboard();
+
   return {
     generatedAt,
     actionEngine,
@@ -40,6 +43,7 @@ export const buildSchoolImprovementIntelligence = async (): Promise<SchoolImprov
     predictiveScenarios,
     strategicRoadmap,
     improvementTracking,
+    partnershipIndicators: partnershipDashboard.schoolImprovementIndicators,
     summary: {
       totalActions: actionEngine.length,
       highPriority: actionEngine.filter((a) => a.priority === "high").length,
@@ -58,6 +62,7 @@ export const buildSchoolImprovementIntelligence = async (): Promise<SchoolImprov
         "interventions",
         "opportunityMapping",
         "departmentExcellence",
+        "institutionPerformanceIntelligence",
       ],
     },
   };

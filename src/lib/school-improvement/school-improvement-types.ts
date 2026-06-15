@@ -146,6 +146,12 @@ export type SchoolImprovementPayload = {
   predictiveScenarios: PredictiveScenario[];
   strategicRoadmap: RoadmapItem[];
   improvementTracking: ImprovementTrackingRow[];
+  partnershipIndicators: {
+    careerReadiness: number;
+    externalPartnerships: number;
+    professionalExposure: number;
+    studentPlacementSuccess: number;
+  };
   summary: {
     totalActions: number;
     highPriority: number;

@@ -83,6 +83,15 @@ export const timelineActionLabel = (action: string, isAr: boolean): string => {
     candidate_tag_added: { ar: "إضافة وسم للمرشح", en: "Candidate tag added" },
     candidate_note_added: { ar: "ملاحظة خاصة على المرشح", en: "Private candidate note added" },
     candidate_compared: { ar: "مقارنة مرشحين", en: "Candidates compared" },
+    parent_consent_requested: { ar: "طلب موافقة ولي الأمر", en: "Parent consent requested" },
+    parent_consent_template_generated: { ar: "توليد نموذج موافقة ولي الأمر", en: "Parent consent template generated" },
+    parent_consent_downloaded: { ar: "تحميل نموذج موافقة ولي الأمر", en: "Parent consent template downloaded" },
+    parent_consent_template_regenerated: { ar: "إعادة إنشاء نموذج موافقة ولي الأمر", en: "Parent consent template regenerated" },
+    parent_consent_template_outdated_detected: { ar: "اكتشاف نموذج موافقة قديم", en: "Outdated parent consent template detected" },
+    parent_consent_uploaded: { ar: "رفع موافقة ولي الأمر", en: "Parent consent uploaded" },
+    parent_consent_ai_verified: { ar: "التحقق الآلي من موافقة ولي الأمر", en: "Parent consent AI verified" },
+    parent_consent_approved: { ar: "اعتماد موافقة ولي الأمر", en: "Parent consent approved" },
+    parent_consent_rejected: { ar: "رفض موافقة ولي الأمر", en: "Parent consent rejected" },
   };
   const row = map[action];
   return row ? (isAr ? row.ar : row.en) : action;

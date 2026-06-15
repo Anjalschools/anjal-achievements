@@ -7,6 +7,7 @@ import PageContainer from "@/components/layout/PageContainer";
 import PageHeader from "@/components/layout/PageHeader";
 import SectionCard from "@/components/layout/SectionCard";
 import PartnershipContactAccessPanel from "@/components/partnerships/PartnershipContactAccessPanel";
+import SupervisorParentConsentPanel from "@/components/partnerships/SupervisorParentConsentPanel";
 import { GRADE_OPTIONS } from "@/constants/grades";
 import { getLocale } from "@/lib/i18n";
 import {
@@ -503,7 +504,8 @@ const PartnershipApplicationDetailPage = () => {
             </SectionCard>
           </div>
 
-          <div className="mt-4">
+          <div className="mt-4 space-y-4">
+            <SupervisorParentConsentPanel applicationId={id} isAr={isAr} />
             <PartnershipContactAccessPanel applicationId={id} isAr={isAr} />
           </div>
 

@@ -3,6 +3,7 @@ import { ADMIN_MANAGEABLE_ROLES } from "@/lib/admin-users-constants";
 import { ROLE_OPTIONS_FOR_FORM } from "@/lib/admin-users-ui-labels";
 import { getPostLoginDestination } from "@/lib/auth-default-route";
 
+vi.mock("server-only", () => ({}));
 vi.mock("@/lib/mongodb", () => ({ default: vi.fn(async () => undefined) }));
 
 describe("institution experience completion", () => {

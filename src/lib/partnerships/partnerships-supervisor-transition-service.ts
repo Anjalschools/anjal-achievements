@@ -29,6 +29,7 @@ import {
 } from "@/lib/partnerships/partnerships-training-notifications";
 import type { IUser } from "@/models/User";
 import type { IStudentTrainingApplication } from "@/models/StudentTrainingApplication";
+import { assertParentConsentAllowsFinalAcceptance } from "@/lib/partnerships/parent-consent-service";
 
 const notifyInstitutionUsers = async (input: {
   organizationId: mongoose.Types.ObjectId;
@@ -134,6 +135,15 @@ export const executeSupervisorApplicationTransition = async (
   const steps = resolveSupervisorTransitionSteps(initialStatus, input.action);
 
   if (input.action === "accepted") {
+    const parentConsentGate = await assertParentConsentAllowsFinalAcceptance(input.applicationId);
+    if (!parentConsentGate.ok) {
+      return {
+        ok: false,
+        error: parentConsentGate.error,
+        code: parentConsentGate.code,
+      };
+    }
+
     const quota = await canAcceptIntoOpportunity(String(application.opportunityId));
     if (!quota.ok) {
       return {

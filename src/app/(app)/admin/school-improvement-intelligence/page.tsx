@@ -114,6 +114,27 @@ const SchoolImprovementIntelligencePage = () => {
             ))}
           </div>
 
+          {data.partnershipIndicators ? (
+            <SectionCard>
+              <h2 className="mb-3 text-base font-bold">
+                {isAr ? "مؤشرات الشراكات والتدريب" : "Partnership & training indicators"}
+              </h2>
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                {[
+                  { label: isAr ? "الجاهزية المهنية" : "Career readiness", value: `${data.partnershipIndicators.careerReadiness}%` },
+                  { label: isAr ? "الشراكات الخارجية" : "External partnerships", value: `${data.partnershipIndicators.externalPartnerships}%` },
+                  { label: isAr ? "التعرض المهني" : "Professional exposure", value: `${data.partnershipIndicators.professionalExposure}%` },
+                  { label: isAr ? "نجاح التوظيف" : "Placement success", value: `${data.partnershipIndicators.studentPlacementSuccess}%` },
+                ].map((card) => (
+                  <div key={card.label} className="rounded-xl border border-border/70 px-4 py-3">
+                    <p className="text-xs text-text-light">{card.label}</p>
+                    <p className="text-xl font-black">{card.value}</p>
+                  </div>
+                ))}
+              </div>
+            </SectionCard>
+          ) : null}
+
           <SectionCard>
             <h2 className="mb-3 flex items-center gap-2 text-base font-bold">
               <Target className="h-4 w-4" aria-hidden />

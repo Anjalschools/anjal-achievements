@@ -15,6 +15,7 @@ import TrainingAcceptedBanner from "@/components/partnerships/TrainingAcceptedBa
 import TrainingCertificateActions, {
   type TrainingCertificateSummary,
 } from "@/components/partnerships/TrainingCertificateActions";
+import StudentParentConsentPanel from "@/components/partnerships/StudentParentConsentPanel";
 import StudentInstitutionContactCard from "@/components/partnerships/StudentInstitutionContactCard";
 import type { StudentInstitutionContactView } from "@/components/partnerships/StudentInstitutionContactCard";
 import type { StudentTrainingApplicationSummary } from "@/lib/partnerships/partnerships-student-dashboard-context";
@@ -268,6 +269,7 @@ const SummerTrainingDetailPage = () => {
   const showApplyButton = !applySuccess && Boolean(item?.canApply) && !item?.seatsFull;
   const communication = item?.communication;
   const isAccepted = status === "accepted" || status === "completed";
+  const applicationId = application?.id || studentApplication?.applicationId || "";
 
   return (
     <PageContainer>
@@ -496,6 +498,8 @@ const SummerTrainingDetailPage = () => {
               {item.institutionContact ? (
                 <StudentInstitutionContactCard institutionContact={item.institutionContact} isAr={isAr} />
               ) : null}
+
+              {applicationId ? <StudentParentConsentPanel applicationId={applicationId} isAr={isAr} /> : null}
 
               <SectionCard id="apply">
                 <h2 className="mb-3 text-base font-bold text-foreground">

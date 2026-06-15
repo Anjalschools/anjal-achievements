@@ -10,6 +10,7 @@ import type { ExecutiveInsight } from "@/lib/analytics/ai/executive-intelligence
 import { buildInstitutionalSnapshot } from "@/lib/analytics/institutional-snapshot-builder";
 import { buildCareerAnalyticsDashboard } from "@/lib/career/career-analytics-service";
 import { buildPartnershipAnalyticsSummary } from "@/lib/partnerships/institution-analytics-service";
+import { buildPartnershipIntelligenceDashboard } from "@/lib/partnerships/institution-performance-intelligence-service";
 
 export type TalentPipelineRow = {
   studentId: string;
@@ -108,6 +109,7 @@ export type ExecutiveDecisionIntelligencePayload = {
   predictions: PredictiveForecast[];
   careerSummary: Awaited<ReturnType<typeof buildCareerAnalyticsDashboard>>;
   partnershipAnalytics: Awaited<ReturnType<typeof buildPartnershipAnalyticsSummary>>;
+  partnershipIntelligence: Awaited<ReturnType<typeof buildPartnershipIntelligenceDashboard>>;
   governance: {
     readOnly: true;
     explainable: true;
@@ -158,6 +160,7 @@ export const buildExecutiveDecisionIntelligence = async (): Promise<ExecutiveDec
   const userMap = new Map(users.map((u) => [String(u._id), u]));
   const insightBundle = buildExecutiveInsights(snapshot, { maxInsights: 40 });
   const partnershipAnalytics = careerSummary.partnershipAnalytics || (await buildPartnershipAnalyticsSummary());
+  const partnershipIntelligence = await buildPartnershipIntelligenceDashboard();
 
   const toTalentRow = (profile: (typeof profiles)[0], evidence: string): TalentPipelineRow => {
     const user = userMap.get(String(profile.studentId));
@@ -479,6 +482,7 @@ export const buildExecutiveDecisionIntelligence = async (): Promise<ExecutiveDec
     predictions,
     careerSummary,
     partnershipAnalytics,
+    partnershipIntelligence,
     governance: {
       readOnly: true,
       explainable: true,
@@ -489,6 +493,7 @@ export const buildExecutiveDecisionIntelligence = async (): Promise<ExecutiveDec
         "PartnerOrganization",
         "TrainingOpportunity",
         "InstitutionReview (student_feedback)",
+        "InstitutionPerformanceSnapshot",
         "User (students)",
       ],
     },

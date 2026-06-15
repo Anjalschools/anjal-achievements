@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import PageContainer from "@/components/layout/PageContainer";
 import PageHeader from "@/components/layout/PageHeader";
 import SectionCard from "@/components/layout/SectionCard";
+import PartnershipIntelligenceWidget from "@/components/admin/PartnershipIntelligenceWidget";
 import { getLocale } from "@/lib/i18n";
 import { Download, Loader2, Shield } from "lucide-react";
 
@@ -28,6 +29,16 @@ type Dashboard = {
     averages: { universityReadiness: number; careerReadiness: number; trainingHours: number; volunteerHours: number };
   };
   governance: { readOnly: boolean; explainable: boolean; dataSources: string[] };
+  partnershipIntelligence?: {
+    executiveWidget: {
+      partnershipCount: number;
+      activeInstitutions: number;
+      bestInstitutionName: string;
+      weakestInstitutionName: string;
+      traineeCount: number;
+      avgQualityScore: number;
+    };
+  };
 };
 
 const ExecutiveIntelligencePage = () => {
@@ -207,6 +218,18 @@ const ExecutiveIntelligencePage = () => {
                 ))}
               </ul>
             </SectionCard>
+
+            {data.partnershipIntelligence?.executiveWidget ? (
+              <SectionCard>
+                <h2 className="mb-3 text-base font-bold">
+                  {isAr ? "ذكاء الشراكات والمؤسسات" : "Partnership & institution intelligence"}
+                </h2>
+                <PartnershipIntelligenceWidget
+                  data={data.partnershipIntelligence.executiveWidget}
+                  isAr={isAr}
+                />
+              </SectionCard>
+            ) : null}
           </div>
 
           <SectionCard>

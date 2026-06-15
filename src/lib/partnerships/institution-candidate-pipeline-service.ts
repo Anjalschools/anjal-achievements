@@ -19,6 +19,7 @@ import {
   STANDARD_DOCUMENT_LABELS,
   type InstitutionPrivateNoteCategory,
 } from "@/lib/partnerships/institution-candidate-pipeline-constants";
+import { mapRequirementToParentConsentDisplay, PARENT_CONSENT_REQUIREMENT_TYPE } from "@/lib/partnerships/parent-consent-constants";
 import { buildInstitutionStudentProfileSummary } from "@/lib/partnerships/institution-student-profile-service";
 import { assertInstitutionApplicationAccess } from "@/lib/partnerships/institution-scope";
 import { appendTimelineEvent } from "@/lib/partnerships/partnerships-application-workflow";
@@ -59,8 +60,9 @@ const matchDocKey = (title: string): string => {
 const mapRequirementDisplayStatus = (
   status: string
 ): "required" | "uploaded" | "under_review" | "accepted" | "rejected" => {
+  if (status === "accepted" || status === "waived") return "accepted";
+  if (status === "rejected") return "rejected";
   if (status === "submitted") return "under_review";
-  if (status === "waived") return "accepted";
   if (status === "overdue") return "required";
   return "required";
 };
@@ -132,7 +134,9 @@ export const buildCandidateScorecard = async (
   ]);
 
   const reqTotal = requirements.filter((r) => r.required !== false).length || 1;
-  const reqDone = requirements.filter((r) => r.status === "submitted" || r.status === "waived").length;
+  const reqDone = requirements.filter(
+    (r) => r.status === "submitted" || r.status === "waived" || r.status === "accepted"
+  ).length;
   const documentCompleteness = clamp((reqDone / reqTotal) * 100);
 
   const interviewCompleted = interviews.some((i) => i.status === "completed");
@@ -219,12 +223,19 @@ export const buildDocumentTracker = async (
   for (const req of requirements) {
     const key = matchDocKey(req.title);
     if (STANDARD_DOCUMENT_KEYS.includes(key as (typeof STANDARD_DOCUMENT_KEYS)[number])) continue;
+    const isParentConsent = req.requirementType === PARENT_CONSENT_REQUIREMENT_TYPE;
+    const status =
+      isParentConsent && req.status === "submitted"
+        ? "under_review"
+        : req.status === "submitted"
+          ? "uploaded"
+          : mapRequirementDisplayStatus(req.status);
     rows.push({
       id: String(req._id),
-      key: "custom",
-      titleAr: req.title,
-      titleEn: req.title,
-      status: req.status === "submitted" ? "uploaded" : mapRequirementDisplayStatus(req.status),
+      key: isParentConsent ? "parent_consent" : "custom",
+      titleAr: isParentConsent ? "موافقة ولي الأمر" : req.title,
+      titleEn: isParentConsent ? "Parent consent" : req.title,
+      status,
       required: req.required !== false,
       submittedAt: req.submittedAt ? new Date(req.submittedAt).toISOString() : null,
     });
@@ -307,6 +318,14 @@ export const listInstitutionCandidatePipeline = async (organizationId: string) =
     INSTITUTION_PIPELINE_STAGES.map((s) => [s, 0])
   ) as Record<InstitutionPipelineStage, number>;
 
+  const parentConsentRows = await ApplicationRequirement.find({
+    applicationId: { $in: appIds },
+    requirementType: PARENT_CONSENT_REQUIREMENT_TYPE,
+  }).lean();
+  const parentConsentByApp = new Map(
+    parentConsentRows.map((row) => [String(row.applicationId), row])
+  );
+
   const items = await Promise.all(
     applications.map(async (app) => {
       const id = String(app._id);
@@ -319,6 +338,7 @@ export const listInstitutionCandidatePipeline = async (organizationId: string) =
       stageCounts[pipelineStage] += 1;
 
       const scorecard = await buildCandidateScorecard(id, organizationId);
+      const parentConsentRow = parentConsentByApp.get(id) || null;
 
       return {
         id,
@@ -333,6 +353,7 @@ export const listInstitutionCandidatePipeline = async (organizationId: string) =
         rejectionReason: app.rejectionReason || "",
         tags: tagsByApp.get(id) || [],
         scorecard,
+        parentConsentStatus: mapRequirementToParentConsentDisplay(parentConsentRow),
       };
     })
   );

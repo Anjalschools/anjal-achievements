@@ -11,6 +11,24 @@ import TrainingAttachment from "@/models/TrainingAttachment";
 import TrainingInterview from "@/models/TrainingInterview";
 import { logAuditEvent } from "@/lib/audit-log-service";
 import { CANDIDATE_TIMELINE_ACTIONS } from "@/lib/partnerships/institution-candidate-pipeline-constants";
+import type { ApplicationRequirementType } from "@/lib/partnerships/institution-experience-constants";
+import {
+  isParentConsentFileAllowed,
+  notifyParentConsentUploaded,
+  reviewParentConsentRequirement,
+} from "@/lib/partnerships/parent-consent-service";
+import {
+  PARENT_CONSENT_REQUIREMENT_TYPE,
+  PARENT_CONSENT_TIMELINE_ACTIONS,
+} from "@/lib/partnerships/parent-consent-constants";
+import {
+  sanitizeParentConsentAiVerificationForStudent,
+  type ParentConsentGeneratedTemplate,
+} from "@/lib/partnerships/parent-consent-template-constants";
+import {
+  sanitizeParentConsentForInstitution,
+  resolveParentConsentTemplateStaleStatus,
+} from "@/lib/partnerships/parent-consent-template-service";
 import { appendTimelineEvent } from "@/lib/partnerships/partnerships-application-workflow";
 import type { InstitutionFinalRecommendation } from "@/lib/partnerships/institution-experience-constants";
 import {
@@ -111,16 +129,38 @@ export const listApplicationRequirements = async (applicationId: string, organiz
 
   return {
     ok: true as const,
-    items: rows.map((row) => ({
-      id: String(row._id),
-      title: row.title,
-      description: row.description || "",
-      required: row.required !== false,
-      fileTypes: row.fileTypes || [],
-      dueDate: row.dueDate ? new Date(row.dueDate).toISOString() : null,
-      status: row.status,
-      submittedAt: row.submittedAt ? new Date(row.submittedAt).toISOString() : null,
-    })),
+    items: rows.map((row) => {
+      if (row.requirementType === PARENT_CONSENT_REQUIREMENT_TYPE) {
+        const institutionStatus = sanitizeParentConsentForInstitution({
+          requirementType: row.requirementType,
+          status: row.status,
+        });
+        return {
+          id: String(row._id),
+          requirementType: PARENT_CONSENT_REQUIREMENT_TYPE,
+          title: row.title,
+          description: "",
+          required: row.required !== false,
+          fileTypes: [],
+          dueDate: row.dueDate ? new Date(row.dueDate).toISOString() : null,
+          status: row.status,
+          submittedAt: row.submittedAt ? new Date(row.submittedAt).toISOString() : null,
+          institutionConsentStatus: institutionStatus,
+        };
+      }
+      return {
+        id: String(row._id),
+        requirementType: row.requirementType || "general",
+        title: row.title,
+        description: row.description || "",
+        required: row.required !== false,
+        fileTypes: row.fileTypes || [],
+        dueDate: row.dueDate ? new Date(row.dueDate).toISOString() : null,
+        status: row.status,
+        submittedAt: row.submittedAt ? new Date(row.submittedAt).toISOString() : null,
+        aiVerification: row.aiVerification || null,
+      };
+    }),
   };
 };
 
@@ -132,15 +172,27 @@ export const createApplicationRequirement = async (input: {
   required?: boolean;
   fileTypes?: string[];
   dueDate?: string;
+  requirementType?: ApplicationRequirementType;
   actor: { id: string; name: string };
   request?: NextRequest;
 }) => {
   const access = await assertInstitutionApplicationAccess(input.applicationId, input.organizationId);
   if (!access.ok) return { ok: false as const, error: access.error, code: access.code };
 
+  if (input.requirementType === PARENT_CONSENT_REQUIREMENT_TYPE) {
+    const { createParentConsentRequirement } = await import("@/lib/partnerships/parent-consent-service");
+    return createParentConsentRequirement({
+      applicationId: input.applicationId,
+      organizationId: input.organizationId,
+      actor: { ...input.actor, role: "trainingInstitution" },
+      request: input.request,
+    });
+  }
+
   const created = await ApplicationRequirement.create({
     applicationId: input.applicationId,
     organizationId: input.organizationId,
+    requirementType: input.requirementType || "general",
     title: input.title.trim(),
     description: input.description?.trim(),
     required: input.required !== false,
@@ -195,7 +247,13 @@ export const createApplicationRequirement = async (input: {
 export const submitApplicationRequirement = async (input: {
   requirementId: string;
   studentId: string;
-  attachment: { type: string; fileName: string; storageKey: string };
+  attachment: {
+    type: string;
+    fileName: string;
+    storageKey: string;
+    mimeType?: string;
+    storageProvider?: "r2" | "cloudinary";
+  };
   request?: NextRequest;
 }) => {
   await connectDB();
@@ -207,12 +265,20 @@ export const submitApplicationRequirement = async (input: {
     return { ok: false as const, error: "Forbidden", code: "forbidden" };
   }
 
+  if (requirement.requirementType === PARENT_CONSENT_REQUIREMENT_TYPE) {
+    if (!isParentConsentFileAllowed(input.attachment.fileName, input.attachment.type)) {
+      return { ok: false as const, error: "Only PDF, JPG, and PNG files are allowed", code: "invalid_file_type" };
+    }
+  }
+
   const attachment = await TrainingAttachment.create({
     applicationId: requirement.applicationId,
     requirementId: requirement._id,
     type: input.attachment.type,
     fileName: input.attachment.fileName,
     storageKey: input.attachment.storageKey,
+    mimeType: input.attachment.mimeType,
+    storageProvider: input.attachment.storageProvider,
     uploadedBy: input.studentId,
   });
 
@@ -222,17 +288,58 @@ export const submitApplicationRequirement = async (input: {
   requirement.submittedBy = new mongoose.Types.ObjectId(input.studentId);
   await requirement.save();
 
+  if (requirement.requirementType === PARENT_CONSENT_REQUIREMENT_TYPE) {
+    const { verifyParentConsentAfterUpload } = await import(
+      "@/lib/partnerships/parent-consent-verification-service"
+    );
+    await verifyParentConsentAfterUpload({
+      requirementId: String(requirement._id),
+      attachmentId: String(attachment._id),
+      storageKey: input.attachment.storageKey,
+      fileName: input.attachment.fileName,
+      mimeType: input.attachment.mimeType,
+      applicationId: String(requirement.applicationId),
+      studentName: application.studentSnapshot?.fullName || "",
+      actorId: input.studentId,
+    });
+  }
+
   await appendApplicationTimeline(String(requirement.applicationId), {
     action: "institution_requirement_submitted",
     actorId: input.studentId,
     note: requirement.title,
   });
 
-  await appendApplicationTimeline(String(requirement.applicationId), {
-    action: CANDIDATE_TIMELINE_ACTIONS.documentUploaded,
-    actorId: input.studentId,
-    note: requirement.title,
-  });
+  if (requirement.requirementType === PARENT_CONSENT_REQUIREMENT_TYPE) {
+    await appendApplicationTimeline(String(requirement.applicationId), {
+      action: PARENT_CONSENT_TIMELINE_ACTIONS.uploaded,
+      actorId: input.studentId,
+      note: requirement.title,
+    });
+    await notifyParentConsentUploaded({
+      applicationId: String(requirement.applicationId),
+      organizationId: String(requirement.organizationId),
+      studentName: application.studentSnapshot?.fullName || "",
+    });
+    if (application.studentId) {
+      await notifyUser({
+        userId: application.studentId,
+        title: "تم رفع موافقة ولي الأمر",
+        message: "تم استلام مستند موافقة ولي الأمر وهو بانتظار المراجعة.",
+        metadata: {
+          applicationId: String(requirement.applicationId),
+          requirementId: String(requirement._id),
+          kind: PARENT_CONSENT_TIMELINE_ACTIONS.uploaded,
+        },
+      });
+    }
+  } else {
+    await appendApplicationTimeline(String(requirement.applicationId), {
+      action: CANDIDATE_TIMELINE_ACTIONS.documentUploaded,
+      actorId: input.studentId,
+      note: requirement.title,
+    });
+  }
 
   await auditInstitutionAction({
     actionType: "institution_requirement_submitted",
@@ -246,22 +353,47 @@ export const submitApplicationRequirement = async (input: {
   });
 
   const institutionUserIds = await getInstitutionUserIdsForNotifications(String(requirement.organizationId));
-  await Promise.all(
-    institutionUserIds.map((userId) =>
-      notifyUser({
-        userId: new mongoose.Types.ObjectId(userId),
-        title: "رفع مستند — التدريب الصيفي",
-        message: `رفع الطالب مستنداً: ${requirement.title}`,
-        metadata: {
-          applicationId: String(requirement.applicationId),
-          requirementId: String(requirement._id),
-          kind: "institution_requirement_submitted",
-        },
-      })
-    )
-  );
+  if (requirement.requirementType !== PARENT_CONSENT_REQUIREMENT_TYPE) {
+    await Promise.all(
+      institutionUserIds.map((userId) =>
+        notifyUser({
+          userId: new mongoose.Types.ObjectId(userId),
+          title: "رفع مستند — التدريب الصيفي",
+          message: `رفع الطالب مستنداً: ${requirement.title}`,
+          metadata: {
+            applicationId: String(requirement.applicationId),
+            requirementId: String(requirement._id),
+            kind: "institution_requirement_submitted",
+          },
+        })
+      )
+    );
+  }
 
   return { ok: true as const };
+};
+
+export const reviewApplicationRequirement = async (input: {
+  requirementId: string;
+  organizationId: string;
+  decision: "approve" | "reject" | "request_reupload";
+  actor: { id: string; name: string };
+  note?: string;
+  request?: NextRequest;
+}) => {
+  const requirement = await ApplicationRequirement.findById(input.requirementId).lean();
+  if (!requirement) return { ok: false as const, error: "Requirement not found", code: "not_found" };
+
+  const access = await assertInstitutionApplicationAccess(String(requirement.applicationId), input.organizationId);
+  if (!access.ok) return { ok: false as const, error: access.error, code: access.code };
+
+  return reviewParentConsentRequirement({
+    requirementId: input.requirementId,
+    decision: input.decision,
+    actor: { ...input.actor, role: "trainingInstitution" },
+    note: input.note,
+    request: input.request,
+  });
 };
 
 export const listTrainingInterviews = async (applicationId: string, organizationId: string) => {
@@ -700,17 +832,50 @@ export const listStudentApplicationRequirements = async (applicationId: string, 
   }
 
   const rows = await ApplicationRequirement.find({ applicationId }).sort({ createdAt: 1 }).lean();
+  const items = await Promise.all(
+    rows.map(async (row) => {
+      const generatedTemplate = row.generatedTemplate as ParentConsentGeneratedTemplate | undefined;
+      const base = {
+        id: String(row._id),
+        requirementType: row.requirementType || "general",
+        title: row.title,
+        description: row.description || "",
+        required: row.required !== false,
+        fileTypes: row.fileTypes || [],
+        dueDate: row.dueDate ? new Date(row.dueDate).toISOString() : null,
+        status: row.status,
+      };
+      if (row.requirementType === PARENT_CONSENT_REQUIREMENT_TYPE) {
+        const staleStatus = await resolveParentConsentTemplateStaleStatus({
+          applicationId,
+          generatedTemplate: generatedTemplate || null,
+        });
+        return {
+          ...base,
+          generatedTemplate: generatedTemplate
+            ? {
+                attachmentId: generatedTemplate.attachmentId,
+                fileName: generatedTemplate.fileName,
+                generatedAt: generatedTemplate.generatedAt,
+                hasTemplate: Boolean(generatedTemplate.storageKey),
+                templateVersion: generatedTemplate.templateVersion || 1,
+                templateStaleForOpportunity: staleStatus.isStale,
+              }
+            : null,
+          aiVerification: sanitizeParentConsentAiVerificationForStudent(
+            row.aiVerification as Parameters<typeof sanitizeParentConsentAiVerificationForStudent>[0]
+          ),
+        };
+      }
+      return {
+        ...base,
+        aiVerification: row.aiVerification || null,
+      };
+    })
+  );
   return {
     ok: true as const,
-    items: rows.map((row) => ({
-      id: String(row._id),
-      title: row.title,
-      description: row.description || "",
-      required: row.required !== false,
-      fileTypes: row.fileTypes || [],
-      dueDate: row.dueDate ? new Date(row.dueDate).toISOString() : null,
-      status: row.status,
-    })),
+    items,
   };
 };
 
