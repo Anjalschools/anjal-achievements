@@ -36,7 +36,7 @@ import {
   getInstitutionUserIdsForNotifications,
 } from "@/lib/partnerships/institution-organization-resolver";
 import { notifySchoolOnInstitutionEvaluationSubmitted } from "@/lib/partnerships/institution-school-approval-service";
-import { assertInstitutionApplicationAccess } from "@/lib/partnerships/institution-scope";
+import { assertInstitutionApplicationAccess, assertInstitutionApplicationMutable, assertInstitutionApplicationWritable } from "@/lib/partnerships/institution-scope";
 import { validateApplicationTransition } from "@/lib/partnerships/partnerships-state-machine";
 
 const preview = (text: string) => String(text || "").trim().slice(0, 280);
@@ -176,7 +176,7 @@ export const createApplicationRequirement = async (input: {
   actor: { id: string; name: string };
   request?: NextRequest;
 }) => {
-  const access = await assertInstitutionApplicationAccess(input.applicationId, input.organizationId);
+  const access = await assertInstitutionApplicationWritable(input.applicationId, input.organizationId);
   if (!access.ok) return { ok: false as const, error: access.error, code: access.code };
 
   if (input.requirementType === PARENT_CONSENT_REQUIREMENT_TYPE) {
@@ -384,7 +384,7 @@ export const reviewApplicationRequirement = async (input: {
   const requirement = await ApplicationRequirement.findById(input.requirementId).lean();
   if (!requirement) return { ok: false as const, error: "Requirement not found", code: "not_found" };
 
-  const access = await assertInstitutionApplicationAccess(String(requirement.applicationId), input.organizationId);
+  const access = await assertInstitutionApplicationWritable(String(requirement.applicationId), input.organizationId);
   if (!access.ok) return { ok: false as const, error: access.error, code: access.code };
 
   return reviewParentConsentRequirement({
@@ -427,7 +427,7 @@ export const scheduleTrainingInterview = async (input: {
   actor: { id: string; name: string };
   request?: NextRequest;
 }) => {
-  const access = await assertInstitutionApplicationAccess(input.applicationId, input.organizationId);
+  const access = await assertInstitutionApplicationWritable(input.applicationId, input.organizationId);
   if (!access.ok) return { ok: false as const, error: access.error, code: access.code };
 
   const created = await TrainingInterview.create({
@@ -490,6 +490,12 @@ export const updateTrainingInterview = async (input: {
   const interview = await TrainingInterview.findById(input.interviewId);
   if (!interview || String(interview.organizationId) !== String(input.organizationId)) {
     return { ok: false as const, error: "Interview not found", code: "not_found" };
+  }
+
+  const applicationRow = await StudentTrainingApplication.findById(interview.applicationId).select("status").lean();
+  const mutable = assertInstitutionApplicationMutable(String(applicationRow?.status || ""));
+  if (!mutable.ok) {
+    return { ok: false as const, error: mutable.error, code: mutable.code };
   }
 
   const before = {
@@ -577,7 +583,7 @@ export const createTrainingAssessment = async (input: {
   actor: { id: string; name: string };
   request?: NextRequest;
 }) => {
-  const access = await assertInstitutionApplicationAccess(input.applicationId, input.organizationId);
+  const access = await assertInstitutionApplicationWritable(input.applicationId, input.organizationId);
   if (!access.ok) return { ok: false as const, error: access.error, code: access.code };
 
   const created = await TrainingAssessment.create({
@@ -701,7 +707,7 @@ export const submitInstitutionCompletionEvaluation = async (input: {
   actor: { id: string; name: string };
   request?: NextRequest;
 }) => {
-  const access = await assertInstitutionApplicationAccess(input.applicationId, input.organizationId);
+  const access = await assertInstitutionApplicationWritable(input.applicationId, input.organizationId);
   if (!access.ok) return { ok: false as const, error: access.error, code: access.code };
 
   if (access.scope.status !== "accepted") {

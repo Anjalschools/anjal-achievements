@@ -128,6 +128,14 @@ export type SchoolIntelligencePayload = {
   interventions: InterventionRow[];
   opportunityMapping: OpportunityMappingRow[];
   strategicInsights: StrategicSchoolInsight[];
+  trainingOutcomeIndices?: {
+    careerExposureIndex: number;
+    professionalSkillsIndex: number;
+    externalExperienceIndex: number;
+    trainingSuccessIndex: number;
+    recordCount: number;
+    evidence: string;
+  };
   governance: {
     readOnly: true;
     explainable: true;

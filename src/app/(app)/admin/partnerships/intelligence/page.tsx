@@ -70,6 +70,37 @@ type Dashboard = {
     regeneratedCount: number;
     templateCompatibilityRate: number;
   };
+  finalEvaluationAnalytics: {
+    trainingSatisfactionAverage: number;
+    institutionEvaluationAverage: number;
+    trainingHoursTotal: number;
+    trainingCompletionQualityIndex: number;
+    studentRecommendationRate: number;
+    employmentRecommendationRate: number;
+    studentEvaluationCount: number;
+    institutionEvaluationCount: number;
+    approvedCount: number;
+  };
+  trainingOutcomeAnalytics: {
+    avgEmployabilityScore: number;
+    recommendedForEmploymentRate: number;
+    outstandingTraineeCount: number;
+    institutionRecommendationRate: number;
+    outcomeDistribution: Record<string, number>;
+    topPerformingInstitutions: Array<{
+      institutionId: string;
+      institutionName: string;
+      avgEmployabilityScore: number;
+      outcomeCount: number;
+    }>;
+    topPerformingStudents: Array<{
+      studentId: string;
+      studentName: string;
+      avgEmployabilityScore: number;
+      totalHours: number;
+      outcomeCount: number;
+    }>;
+  };
   executiveWidget: {
     partnershipCount: number;
     activeInstitutions: number;
@@ -181,6 +212,38 @@ const PartnershipIntelligencePage = () => {
         {
           label: isAr ? "معدل توافق النماذج" : "Template compatibility",
           value: `${data.parentConsentAnalytics.templateCompatibilityRate}%`,
+        },
+      ]
+    : [];
+
+  const finalEvaluationCards = data?.finalEvaluationAnalytics
+    ? [
+        { label: isAr ? "متوسط رضا التدريب" : "Training satisfaction avg", value: data.finalEvaluationAnalytics.trainingSatisfactionAverage },
+        { label: isAr ? "متوسط تقييم المؤسسة" : "Institution eval avg", value: data.finalEvaluationAnalytics.institutionEvaluationAverage },
+        { label: isAr ? "إجمالي ساعات التدريب" : "Training hours total", value: data.finalEvaluationAnalytics.trainingHoursTotal },
+        { label: isAr ? "مؤشر جودة الإكمال" : "Completion quality index", value: data.finalEvaluationAnalytics.trainingCompletionQualityIndex },
+        { label: isAr ? "نسبة توصية الطلاب" : "Student recommendation rate", value: `${data.finalEvaluationAnalytics.studentRecommendationRate}%` },
+        { label: isAr ? "نسبة توصية التوظيف" : "Employment recommendation rate", value: `${data.finalEvaluationAnalytics.employmentRecommendationRate}%` },
+      ]
+    : [];
+
+  const trainingOutcomeCards = data?.trainingOutcomeAnalytics
+    ? [
+        {
+          label: isAr ? "متوسط الجاهزية للتوظيف" : "Avg employability",
+          value: data.trainingOutcomeAnalytics.avgEmployabilityScore,
+        },
+        {
+          label: isAr ? "نسبة توصية التوظيف" : "Employment recommendation rate",
+          value: `${data.trainingOutcomeAnalytics.recommendedForEmploymentRate}%`,
+        },
+        {
+          label: isAr ? "متدربون متميزون" : "Outstanding trainees",
+          value: data.trainingOutcomeAnalytics.outstandingTraineeCount,
+        },
+        {
+          label: isAr ? "نسبة توصية المؤسسات" : "Institution recommendation rate",
+          value: `${data.trainingOutcomeAnalytics.institutionRecommendationRate}%`,
         },
       ]
     : [];
@@ -304,6 +367,52 @@ const PartnershipIntelligencePage = () => {
                   </div>
                 ))}
               </div>
+            </SectionCard>
+          ) : null}
+
+          {finalEvaluationCards.length > 0 ? (
+            <SectionCard className="mt-4">
+              <h3 className="mb-3 text-base font-bold text-foreground">
+                {isAr ? "التقييم النهائي للتدريب" : "Final training evaluation"}
+              </h3>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {finalEvaluationCards.map((card) => (
+                  <div key={card.label} className="rounded-xl border border-border/70 px-4 py-3">
+                    <p className="text-xs font-bold text-text-light">{card.label}</p>
+                    <p className="mt-1 text-xl font-black text-foreground">{card.value}</p>
+                  </div>
+                ))}
+              </div>
+            </SectionCard>
+          ) : null}
+
+          {trainingOutcomeCards.length > 0 ? (
+            <SectionCard className="mt-4">
+              <h3 className="mb-3 text-base font-bold text-foreground">
+                {isAr ? "نتائج التدريب والجاهزية للتوظيف" : "Training outcomes & employability"}
+              </h3>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                {trainingOutcomeCards.map((card) => (
+                  <div key={card.label} className="rounded-xl border border-border/70 px-4 py-3">
+                    <p className="text-xs font-bold text-text-light">{card.label}</p>
+                    <p className="mt-1 text-xl font-black text-foreground">{card.value}</p>
+                  </div>
+                ))}
+              </div>
+              {data.trainingOutcomeAnalytics.topPerformingInstitutions.length > 0 ? (
+                <div className="mt-4">
+                  <p className="mb-2 text-sm font-bold text-foreground">
+                    {isAr ? "أفضل المؤسسات أداءً" : "Top performing institutions"}
+                  </p>
+                  <ul className="space-y-1 text-sm text-text-light">
+                    {data.trainingOutcomeAnalytics.topPerformingInstitutions.slice(0, 5).map((row) => (
+                      <li key={row.institutionId}>
+                        {row.institutionName} — {row.avgEmployabilityScore} ({row.outcomeCount})
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
             </SectionCard>
           ) : null}
         </>

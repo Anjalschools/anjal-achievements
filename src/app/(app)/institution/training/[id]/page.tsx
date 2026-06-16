@@ -18,6 +18,7 @@ import InstitutionParentConsentPanel from "@/components/partnerships/Institution
 import TrainingApplicationTimeline from "@/components/partnerships/TrainingApplicationTimeline";
 import TrainingApplicationStatusBadge from "@/components/partnerships/TrainingApplicationStatusBadge";
 import { getLocale } from "@/lib/i18n";
+import { INSTITUTION_ADMIN_CANCELLED_MESSAGE } from "@/lib/partnerships/partnerships-admin-cancel-constants";
 import type { InstitutionStudentProfileSummary } from "@/lib/partnerships/institution-student-profile-service";
 import type { CandidateScorecard } from "@/lib/partnerships/institution-candidate-pipeline-service";
 import {
@@ -34,6 +35,9 @@ import {
 type ApplicationDetail = {
   id: string;
   status: string;
+  institutionReadOnly?: boolean;
+  administrativelyCancelled?: boolean;
+  adminCancellationReason?: string | null;
   opportunityTitle: string;
   submittedAt: string | null;
   rejectionReason?: string;
@@ -201,6 +205,20 @@ const InstitutionApplicationDetailPage = () => {
 
           {error ? <p className="mb-4 text-sm text-red-600">{error}</p> : null}
 
+          {detail.institutionReadOnly ? (
+            <SectionCard className="mb-4 border-amber-300 bg-amber-50">
+              <p className="text-sm font-semibold text-amber-950">
+                {isAr ? INSTITUTION_ADMIN_CANCELLED_MESSAGE.ar : INSTITUTION_ADMIN_CANCELLED_MESSAGE.en}
+              </p>
+              {detail.adminCancellationReason ? (
+                <p className="mt-1 text-xs text-amber-900">{detail.adminCancellationReason}</p>
+              ) : null}
+              <p className="mt-2 text-xs text-amber-900">
+                {isAr ? "هذا الطلب للعرض فقط — لا يمكن تنفيذ إجراءات جديدة." : "This application is read-only — no new actions are allowed."}
+              </p>
+            </SectionCard>
+          ) : null}
+
           <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
             <div className="space-y-6">
               <InstitutionStudentProfileCard profile={detail.studentProfile} isAr={isAr} />
@@ -212,7 +230,7 @@ const InstitutionApplicationDetailPage = () => {
                   {isAr ? "لوحة قرار المؤسسة" : "Institution decision workspace"}
                 </h3>
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                  {detail.status === "institution_review" ? (
+                  {detail.status === "institution_review" && !detail.institutionReadOnly ? (
                     <>
                       <button type="button" disabled={saving} onClick={() => void handleDecision("accept")} className="rounded-xl border border-emerald-300 bg-emerald-50 px-3 py-3 text-sm font-bold text-emerald-900">
                         {isAr ? "قبول الطالب" : "Accept student"}
@@ -227,7 +245,7 @@ const InstitutionApplicationDetailPage = () => {
                   ) : null}
                   <button
                     type="button"
-                    disabled={saving || !reqTitle.trim()}
+                    disabled={saving || detail.institutionReadOnly || !reqTitle.trim()}
                     onClick={() => void postAction({ action: "create_requirement", title: reqTitle.trim() }).then(() => setReqTitle(""))}
                     className="rounded-xl border border-border bg-white px-3 py-3 text-sm font-bold"
                   >
@@ -238,7 +256,7 @@ const InstitutionApplicationDetailPage = () => {
                   </Link>
                   <button
                     type="button"
-                    disabled={saving || !assessmentTitle.trim()}
+                    disabled={saving || detail.institutionReadOnly || !assessmentTitle.trim()}
                     onClick={() => void postAction({ action: "create_assessment", type: "upload_task", title: assessmentTitle.trim() }).then(() => setAssessmentTitle(""))}
                     className="rounded-xl border border-border bg-white px-3 py-3 text-sm font-bold"
                   >
@@ -385,7 +403,7 @@ const InstitutionApplicationDetailPage = () => {
                   />
                   <button
                     type="button"
-                    disabled={saving || !assessmentTitle.trim()}
+                    disabled={saving || detail.institutionReadOnly || !assessmentTitle.trim()}
                     onClick={() =>
                       void postAction({
                         action: "create_assessment",

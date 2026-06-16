@@ -38,6 +38,11 @@ import {
   listInstitutionPrivateNotes,
 } from "@/lib/partnerships/institution-candidate-pipeline-service";
 import { assertParentConsentAllowsFinalAcceptance } from "@/lib/partnerships/parent-consent-service";
+import {
+  isAdministrativelyCancelledApplication,
+  resolveAdminCancelReasonLabel,
+} from "@/lib/partnerships/partnerships-admin-cancel-constants";
+import { assertInstitutionApplicationMutable } from "@/lib/partnerships/institution-scope";
 
 export type InstitutionReviewAction = "accept" | "reject" | "interview";
 
@@ -75,6 +80,11 @@ export const executeInstitutionReviewDecision = async (
 
   const application = await StudentTrainingApplication.findById(input.applicationId);
   if (!application) return { ok: false, error: "Application not found", code: "not_found" };
+
+  const cancelledGuard = assertInstitutionApplicationMutable(String(application.status || ""));
+  if (!cancelledGuard.ok) {
+    return { ok: false, error: cancelledGuard.error, code: cancelledGuard.code };
+  }
 
   const opportunity = await TrainingOpportunity.findById(application.opportunityId).lean();
   if (!opportunity || String(opportunity.organizationId) !== String(input.organizationId)) {
@@ -253,6 +263,7 @@ export const listInstitutionApplications = async (organizationId: string) => {
         "rejected",
         "awaiting_school_approval",
         "completed",
+        "administratively_cancelled",
       ],
     },
   })
@@ -265,6 +276,8 @@ export const listInstitutionApplications = async (organizationId: string) => {
     id: String(row._id),
     status: row.status,
     institutionStatus: row.institutionStatus || "institution_pending",
+    administrativelyCancelled: isAdministrativelyCancelledApplication(row.status),
+    institutionReadOnly: isAdministrativelyCancelledApplication(row.status),
     opportunityTitle: oppMap.get(String(row.opportunityId))?.title || "",
     opportunityId: String(row.opportunityId),
     studentName: row.studentSnapshot?.fullName || "",
@@ -331,6 +344,16 @@ export const getInstitutionApplicationDetail = async (
     id: String(application._id),
     status: application.status,
     institutionStatus: application.institutionStatus || "institution_pending",
+    administrativelyCancelled: isAdministrativelyCancelledApplication(application.status),
+    institutionReadOnly: isAdministrativelyCancelledApplication(application.status),
+    adminCancellationReason:
+      isAdministrativelyCancelledApplication(application.status) && application.adminCancellationReasonCode
+        ? resolveAdminCancelReasonLabel(
+            application.adminCancellationReasonCode,
+            application.adminCancellationReasonNote,
+            locale === "ar"
+          )
+        : null,
     opportunityTitle: opportunity.title || "",
     opportunityId: String(application.opportunityId),
     organization: organization

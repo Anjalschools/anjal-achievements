@@ -35,22 +35,45 @@ type MeProfile = {
   };
 };
 
+type AlumniTrainingBridge = {
+  readiness: {
+    trainingCount: number;
+    totalHours: number;
+    employabilityScore: number;
+    employabilityBandAr: string;
+    employabilityBandEn: string;
+    finalOutcomeLabelAr: string;
+    finalOutcomeLabelEn: string;
+  } | null;
+  portfolio: {
+    timeline: Array<{ institutionName: string; trainingHours: number; employabilityScore: number }>;
+  } | null;
+};
+
 const AlumniProfilePage = () => {
   const locale = getLocale();
   const isAr = locale === "ar";
   const [profile, setProfile] = useState<MeProfile | null>(null);
+  const [trainingBridge, setTrainingBridge] = useState<AlumniTrainingBridge | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     (async () => {
       try {
-        const response = await fetch("/api/alumni/profile/me", { cache: "no-store" });
-        if (!response.ok) {
+        const [profileRes, trainingRes] = await Promise.all([
+          fetch("/api/alumni/profile/me", { cache: "no-store" }),
+          fetch("/api/alumni/training-outcomes", { cache: "no-store" }),
+        ]);
+        if (profileRes.ok) {
+          const json = await profileRes.json();
+          setProfile(json.item || null);
+        } else {
           setProfile(null);
-          return;
         }
-        const json = await response.json();
-        setProfile(json.item || null);
+        if (trainingRes.ok) {
+          const json = await trainingRes.json();
+          setTrainingBridge(json.item || null);
+        }
       } finally {
         setLoading(false);
       }
@@ -217,6 +240,43 @@ const AlumniProfilePage = () => {
               ))}
             </div>
           </div>
+
+          {trainingBridge?.readiness && trainingBridge.readiness.trainingCount > 0 ? (
+            <div className="rounded-2xl border border-emerald-100 bg-emerald-50/60 p-5">
+              <p className="text-sm font-black text-slate-900">
+                {isAr ? "سجل التدريب المهني (قراءة فقط)" : "Professional training record (read-only)"}
+              </p>
+              <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <div className="rounded-xl bg-white p-3 text-sm">
+                  <p className="text-xs text-slate-500">{isAr ? "عدد التدريبات" : "Trainings"}</p>
+                  <p className="font-black text-primary">{trainingBridge.readiness.trainingCount}</p>
+                </div>
+                <div className="rounded-xl bg-white p-3 text-sm">
+                  <p className="text-xs text-slate-500">{isAr ? "الساعات" : "Hours"}</p>
+                  <p className="font-black text-primary">{trainingBridge.readiness.totalHours}</p>
+                </div>
+                <div className="rounded-xl bg-white p-3 text-sm">
+                  <p className="text-xs text-slate-500">{isAr ? "الجاهزية للتوظيف" : "Employability"}</p>
+                  <p className="font-black text-primary">{trainingBridge.readiness.employabilityScore}</p>
+                </div>
+                <div className="rounded-xl bg-white p-3 text-sm">
+                  <p className="text-xs text-slate-500">{isAr ? "المستوى النهائي" : "Final outcome"}</p>
+                  <p className="font-black text-primary">
+                    {isAr ? trainingBridge.readiness.finalOutcomeLabelAr : trainingBridge.readiness.finalOutcomeLabelEn}
+                  </p>
+                </div>
+              </div>
+              {trainingBridge.portfolio?.timeline?.length ? (
+                <ul className="mt-3 space-y-1 text-xs text-slate-600">
+                  {trainingBridge.portfolio.timeline.map((row, idx) => (
+                    <li key={`${row.institutionName}-${idx}`}>
+                      {row.institutionName} · {row.trainingHours}h · {row.employabilityScore}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </div>
+          ) : null}
         </div>
       </section>
     </main>

@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import TrainingOpportunity from "@/models/TrainingOpportunity";
 import type { StudentTrainingApplicationStatus } from "@/lib/partnerships/partnerships-constants";
+import { ADMINISTRATIVELY_CANCELLED_STATUS } from "@/lib/partnerships/partnerships-admin-cancel-constants";
 
 export type PartnershipApplicationsListFilters = {
   status?: string;
@@ -16,8 +17,12 @@ export const buildPartnershipApplicationsMongoFilter = async (
 ): Promise<Record<string, unknown>> => {
   const query: Record<string, unknown> = {};
 
-  if (filters.status && filters.status !== "all") {
+  if (filters.status === ADMINISTRATIVELY_CANCELLED_STATUS) {
+    query.status = ADMINISTRATIVELY_CANCELLED_STATUS;
+  } else if (filters.status && filters.status !== "all") {
     query.status = filters.status;
+  } else {
+    query.status = { $ne: ADMINISTRATIVELY_CANCELLED_STATUS };
   }
 
   if (filters.academicYear) {
@@ -91,4 +96,8 @@ export const isPartnershipApplicationStatus = (
     "rejected",
     "withdrawn",
     "completed",
+    "awaiting_final_evaluation_review",
+    "final_evaluation_approved",
+    "final_evaluation_rejected",
+    ADMINISTRATIVELY_CANCELLED_STATUS,
   ].includes(value);

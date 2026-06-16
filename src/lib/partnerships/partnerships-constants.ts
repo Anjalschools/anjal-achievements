@@ -14,6 +14,12 @@ export const STUDENT_TRAINING_APPLICATION_STATUSES = [
   "rejected",
   "withdrawn",
   "completed",
+  /** Post-completion final evaluation review (additive extension). */
+  "awaiting_final_evaluation_review",
+  "final_evaluation_approved",
+  "final_evaluation_rejected",
+  /** Administrative archival — not a training workflow state. */
+  "administratively_cancelled",
 ] as const;
 export type StudentTrainingApplicationStatus = (typeof STUDENT_TRAINING_APPLICATION_STATUSES)[number];
 

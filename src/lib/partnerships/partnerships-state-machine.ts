@@ -8,6 +8,8 @@ const TERMINAL_APPLICATION_STATUSES = new Set<StudentTrainingApplicationStatus>(
   "rejected",
   "withdrawn",
   "completed",
+  "administratively_cancelled",
+  "final_evaluation_approved",
 ]);
 
 /** Strict supervisor-driven transitions only. */
@@ -24,6 +26,10 @@ export const APPLICATION_STATUS_TRANSITIONS: Record<
   rejected: ["under_review"],
   withdrawn: [],
   completed: [],
+  awaiting_final_evaluation_review: [],
+  final_evaluation_approved: [],
+  final_evaluation_rejected: [],
+  administratively_cancelled: [],
 };
 
 export const COMPLETION_STATUS_TRANSITIONS: Record<TrainingCompletionStatus, TrainingCompletionStatus[]> = {

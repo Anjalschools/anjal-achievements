@@ -25,6 +25,8 @@ import {
   type PartnerOrganizationCategory,
 } from "@/lib/partnerships/institution-analytics-constants";
 import { buildParentConsentAnalytics } from "@/lib/partnerships/parent-consent-service";
+import { buildFinalEvaluationAnalytics } from "@/lib/partnerships/training-final-evaluation-analytics";
+import { buildPartnershipTrainingOutcomeExtension } from "@/lib/partnerships/training-outcome-analytics";
 
 const ACCEPTED_STATUSES = new Set(["accepted", "awaiting_school_approval", "completed"]);
 const REJECTED_STATUSES = new Set(["rejected"]);
@@ -121,6 +123,37 @@ export type PartnershipIntelligencePayload = {
     outdatedDetectedCount: number;
     regeneratedCount: number;
     templateCompatibilityRate: number;
+  };
+  finalEvaluationAnalytics: {
+    trainingSatisfactionAverage: number;
+    institutionEvaluationAverage: number;
+    trainingHoursTotal: number;
+    trainingCompletionQualityIndex: number;
+    studentRecommendationRate: number;
+    employmentRecommendationRate: number;
+    studentEvaluationCount: number;
+    institutionEvaluationCount: number;
+    approvedCount: number;
+  };
+  trainingOutcomeAnalytics: {
+    avgEmployabilityScore: number;
+    recommendedForEmploymentRate: number;
+    outstandingTraineeCount: number;
+    institutionRecommendationRate: number;
+    outcomeDistribution: Record<string, number>;
+    topPerformingInstitutions: Array<{
+      institutionId: string;
+      institutionName: string;
+      avgEmployabilityScore: number;
+      outcomeCount: number;
+    }>;
+    topPerformingStudents: Array<{
+      studentId: string;
+      studentName: string;
+      avgEmployabilityScore: number;
+      totalHours: number;
+      outcomeCount: number;
+    }>;
   };
   executiveWidget: {
     partnershipCount: number;
@@ -689,6 +722,8 @@ export const buildPartnershipIntelligenceDashboard = async (): Promise<Partnersh
   const alerts = await buildPartnershipAlerts(rankingRows);
   const schoolImprovementIndicators = await buildSchoolPartnershipIndicators(rankingRows);
   const parentConsentAnalytics = await buildParentConsentAnalytics();
+  const finalEvaluationAnalytics = await buildFinalEvaluationAnalytics(yearFilter.academicYearLabel);
+  const trainingOutcomeAnalytics = await buildPartnershipTrainingOutcomeExtension(yearFilter.academicYearLabel);
 
   return {
     generatedAt: new Date().toISOString(),
@@ -714,6 +749,8 @@ export const buildPartnershipIntelligenceDashboard = async (): Promise<Partnersh
     alerts,
     schoolImprovementIndicators,
     parentConsentAnalytics,
+    finalEvaluationAnalytics,
+    trainingOutcomeAnalytics,
     executiveWidget: {
       partnershipCount: orgs.length,
       activeInstitutions: rankingRows.filter((r) => r.applicantCount > 0).length,

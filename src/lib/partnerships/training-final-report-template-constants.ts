@@ -1,0 +1,34 @@
+export type TrainingFinalReportTemplateContext = {
+  studentName: string;
+  school: string;
+  institutionName: string;
+  opportunityTitle: string;
+  trainingStartDate: string;
+  trainingEndDate: string;
+  trainingHours: string;
+  assignedTasks: string;
+  scores: {
+    attendance: number;
+    punctuality: number;
+    instructionCompliance: number;
+    workEthics: number;
+    responsibility: number;
+    professionalism: number;
+    communication: number;
+    teamwork: number;
+    initiative: number;
+    learningSpeed: number;
+    taskExecution: number;
+    workQuality: number;
+    safetyCompliance: number;
+  };
+  passedTraining: boolean;
+  recommendFutureTraining: boolean;
+  recommendEmployment: boolean;
+  strengths: string;
+  improvementAreas: string;
+  finalRecommendation: string;
+  supervisorName: string;
+  supervisorTitle: string;
+  generatedAt: string;
+};

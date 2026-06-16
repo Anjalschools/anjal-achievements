@@ -2,6 +2,10 @@ import mongoose from "mongoose";
 import connectDB from "@/lib/mongodb";
 import StudentTrainingApplication from "@/models/StudentTrainingApplication";
 import TrainingOpportunity from "@/models/TrainingOpportunity";
+import {
+  INSTITUTION_ADMIN_CANCELLED_MESSAGE,
+  isAdministrativelyCancelledApplication,
+} from "@/lib/partnerships/partnerships-admin-cancel-constants";
 
 export type InstitutionApplicationScope = {
   applicationId: string;
@@ -44,4 +48,34 @@ export const assertInstitutionApplicationAccess = async (
     return { ok: false, error: "Application not found in institution scope", code: "forbidden" };
   }
   return { ok: true, scope };
+};
+
+export const assertInstitutionApplicationMutable = (
+  status: string
+): { ok: true } | { ok: false; error: string; errorEn: string; code: string } => {
+  if (isAdministrativelyCancelledApplication(status)) {
+    return {
+      ok: false,
+      error: INSTITUTION_ADMIN_CANCELLED_MESSAGE.ar,
+      errorEn: INSTITUTION_ADMIN_CANCELLED_MESSAGE.en,
+      code: "administratively_cancelled",
+    };
+  }
+  return { ok: true };
+};
+
+export const assertInstitutionApplicationWritable = async (
+  applicationId: string,
+  organizationId: string
+): Promise<
+  | { ok: true; scope: InstitutionApplicationScope }
+  | { ok: false; error: string; code: string }
+> => {
+  const access = await assertInstitutionApplicationAccess(applicationId, organizationId);
+  if (!access.ok) return access;
+  const mutable = assertInstitutionApplicationMutable(access.scope.status);
+  if (!mutable.ok) {
+    return { ok: false, error: mutable.error, code: mutable.code };
+  }
+  return access;
 };

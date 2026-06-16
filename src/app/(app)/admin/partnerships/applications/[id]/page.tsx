@@ -17,6 +17,9 @@ import {
 import { timelineActionLabel } from "@/lib/partnerships/partnerships-application-workflow";
 import { canTransitionApplicationStatus, canReopenRejectedTrainingApplication } from "@/lib/partnerships/partnerships-state-machine";
 import {
+  ADMIN_TRAINING_CANCEL_REASONS,
+} from "@/lib/partnerships/partnerships-admin-cancel-constants";
+import {
   canSupervisorApproveApplication,
   resolveSupervisorTransitionSteps,
   supervisorApprovalBlockedReason,
@@ -105,6 +108,11 @@ const PartnershipApplicationDetailPage = () => {
   const [reopenOpen, setReopenOpen] = useState(false);
   const [reopenReason, setReopenReason] = useState("");
   const [reopening, setReopening] = useState(false);
+  const [canAdminCancel, setCanAdminCancel] = useState(false);
+  const [cancelOpen, setCancelOpen] = useState(false);
+  const [cancelReasonCode, setCancelReasonCode] = useState<string>(ADMIN_TRAINING_CANCEL_REASONS[0].code);
+  const [cancelReasonNote, setCancelReasonNote] = useState("");
+  const [cancelling, setCancelling] = useState(false);
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -121,6 +129,7 @@ const PartnershipApplicationDetailPage = () => {
       const timelineJson = await timelineRes.json().catch(() => ({}));
       if (!detailRes.ok) throw new Error(typeof detailJson.error === "string" ? detailJson.error : "Failed");
       setItem(detailJson.item || null);
+      setCanAdminCancel(Boolean(detailJson.capabilities?.canAdminCancel));
       setTimeline(Array.isArray(timelineJson.items) ? timelineJson.items : detailJson.item?.timeline || []);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error");
@@ -191,6 +200,37 @@ const PartnershipApplicationDetailPage = () => {
       setError(e instanceof Error ? e.message : "Error");
     } finally {
       setReopening(false);
+    }
+  };
+
+  const handleAdminCancel = async () => {
+    if (!id || !item) return;
+    if (cancelReasonCode === "other" && !cancelReasonNote.trim()) {
+      setError(isAr ? "يرجى توضيح سبب الإلغاء." : "Please provide cancellation details.");
+      return;
+    }
+    setCancelling(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/admin/partnerships/applications/${encodeURIComponent(id)}/cancel`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          reasonCode: cancelReasonCode,
+          reasonNote: cancelReasonNote.trim() || undefined,
+        }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(typeof json.error === "string" ? json.error : "Failed");
+      setCancelOpen(false);
+      setCancelReasonNote("");
+      setItem(json.item || null);
+      setCanAdminCancel(false);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Error");
+    } finally {
+      setCancelling(false);
     }
   };
 
@@ -472,6 +512,19 @@ const PartnershipApplicationDetailPage = () => {
                   </button>
                 </div>
               ) : null}
+              {canAdminCancel ? (
+                <div className="mt-4 border-t border-border/60 pt-4">
+                  <button
+                    type="button"
+                    onClick={() => setCancelOpen(true)}
+                    disabled={cancelling}
+                    className="inline-flex rounded-xl border border-red-300 bg-red-50 px-4 py-2 text-sm font-bold text-red-900 transition hover:bg-red-100 disabled:opacity-60"
+                    aria-label={isAr ? "إلغاء الطلب وإتاحة إعادة التقديم" : "Cancel application and allow reapplication"}
+                  >
+                    {isAr ? "إلغاء الطلب وإتاحة إعادة التقديم" : "Cancel application and allow reapplication"}
+                  </button>
+                </div>
+              ) : null}
             </SectionCard>
 
             <SectionCard>
@@ -556,6 +609,78 @@ const PartnershipApplicationDetailPage = () => {
                     className="flex-1 rounded-xl bg-primary px-4 py-2 text-sm font-bold text-white disabled:opacity-60"
                   >
                     {reopening ? (isAr ? "جاري التنفيذ…" : "Processing…") : isAr ? "تأكيد" : "Confirm"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          {cancelOpen ? (
+            <div
+              className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+              role="dialog"
+              aria-modal="true"
+              aria-label={isAr ? "إلغاء الطلب وإتاحة إعادة التقديم" : "Cancel application and allow reapplication"}
+            >
+              <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-xl">
+                <h3 className="mb-2 text-lg font-bold text-foreground">
+                  {isAr ? "إلغاء الطلب وإتاحة إعادة التقديم" : "Cancel application and allow reapplication"}
+                </h3>
+                <p className="mb-4 whitespace-pre-line text-sm text-text-light">
+                  {isAr
+                    ? "سيتم إلغاء الطلب الحالي وإتاحة الفرصة للطالب للتقديم على فرصة تدريبية جديدة.\n\nلن يتم حذف السجلات التاريخية أو ملفات التدقيق.\n\nهل ترغب بالمتابعة؟"
+                    : "The current application will be cancelled and the student may apply to a new opportunity.\n\nHistorical records and audit files will not be deleted.\n\nDo you want to continue?"}
+                </p>
+                <label className="mb-3 block text-sm">
+                  <span className="mb-1 block font-semibold text-foreground">
+                    {isAr ? "سبب الإلغاء الإداري" : "Administrative cancellation reason"}
+                  </span>
+                  <select
+                    value={cancelReasonCode}
+                    onChange={(e) => setCancelReasonCode(e.target.value)}
+                    className="w-full rounded-xl border border-border px-3 py-2 text-sm"
+                    aria-label={isAr ? "سبب الإلغاء" : "Cancellation reason"}
+                  >
+                    {ADMIN_TRAINING_CANCEL_REASONS.map((row) => (
+                      <option key={row.code} value={row.code}>
+                        {isAr ? row.ar : row.en}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {cancelReasonCode === "other" ? (
+                  <label className="mb-4 block text-sm">
+                    <span className="mb-1 block font-semibold text-foreground">
+                      {isAr ? "تفاصيل السبب" : "Reason details"}
+                    </span>
+                    <textarea
+                      value={cancelReasonNote}
+                      onChange={(e) => setCancelReasonNote(e.target.value)}
+                      rows={3}
+                      className="w-full rounded-xl border border-border px-3 py-2 text-sm"
+                      aria-label={isAr ? "تفاصيل السبب" : "Reason details"}
+                    />
+                  </label>
+                ) : null}
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCancelOpen(false);
+                      setCancelReasonNote("");
+                    }}
+                    disabled={cancelling}
+                    className="flex-1 rounded-xl border border-border px-4 py-2 text-sm font-semibold"
+                  >
+                    {isAr ? "إلغاء" : "Dismiss"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleAdminCancel()}
+                    disabled={cancelling}
+                    className="flex-1 rounded-xl bg-red-700 px-4 py-2 text-sm font-bold text-white disabled:opacity-60"
+                  >
+                    {cancelling ? (isAr ? "جاري التنفيذ…" : "Processing…") : isAr ? "تأكيد" : "Confirm"}
                   </button>
                 </div>
               </div>

@@ -13,6 +13,10 @@ export type StudentTrainingWidgetStatus =
   | "rejected"
   | "withdrawn"
   | "completed"
+  | "awaiting_final_evaluation_review"
+  | "final_evaluation_approved"
+  | "final_evaluation_rejected"
+  | "administratively_cancelled"
   | "unknown";
 
 export const STUDENT_TRAINING_WIDGET_LABEL_DEFAULT = { ar: "غير معروف", en: "Unknown" };
@@ -31,6 +35,10 @@ export const STUDENT_TRAINING_WIDGET_LABELS: Record<
   rejected: { ar: "مرفوض", en: "Rejected" },
   withdrawn: { ar: "منسحب", en: "Withdrawn" },
   completed: { ar: "تم إكمال التدريب", en: "Training completed" },
+  awaiting_final_evaluation_review: { ar: "بانتظار مراجعة التقييم النهائي", en: "Awaiting final evaluation review" },
+  final_evaluation_approved: { ar: "التقييم النهائي معتمد", en: "Final evaluation approved" },
+  final_evaluation_rejected: { ar: "التقييم النهائي مرفوض", en: "Final evaluation rejected" },
+  administratively_cancelled: { ar: "تم إلغاء الطلب من قبل الإدارة", en: "Administratively cancelled" },
   unknown: STUDENT_TRAINING_WIDGET_LABEL_DEFAULT,
 };
 
@@ -104,6 +112,10 @@ export const STUDENT_TRAINING_WIDGET_BADGE: Record<StudentTrainingWidgetStatus, 
   rejected: trainingApplicationStatusBadgeClass("rejected"),
   withdrawn: trainingApplicationStatusBadgeClass("withdrawn"),
   completed: trainingApplicationStatusBadgeClass("completed"),
+  awaiting_final_evaluation_review: trainingApplicationStatusBadgeClass("awaiting_final_evaluation_review"),
+  final_evaluation_approved: trainingApplicationStatusBadgeClass("final_evaluation_approved"),
+  final_evaluation_rejected: trainingApplicationStatusBadgeClass("final_evaluation_rejected"),
+  administratively_cancelled: trainingApplicationStatusBadgeClass("administratively_cancelled"),
   unknown: "bg-gray-100 text-gray-800 ring-gray-200",
 };
 

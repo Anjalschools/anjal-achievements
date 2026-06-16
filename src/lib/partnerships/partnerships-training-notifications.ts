@@ -56,6 +56,16 @@ const statusCopy = (
     submitted: { ar: { title: "", message: "" }, en: { title: "", message: "" } },
     withdrawn: { ar: { title: "", message: "" }, en: { title: "", message: "" } },
     completed: { ar: { title: "", message: "" }, en: { title: "", message: "" } },
+    administratively_cancelled: { ar: { title: "", message: "" }, en: { title: "", message: "" } },
+    awaiting_final_evaluation_review: { ar: { title: "", message: "" }, en: { title: "", message: "" } },
+    final_evaluation_approved: {
+      ar: { title: "اعتماد التقييم النهائي", message: `تم اعتماد تقييمك النهائي لفرصة «${title}».` },
+      en: { title: "Final evaluation approved", message: `Your final evaluation for "${title}" was approved.` },
+    },
+    final_evaluation_rejected: {
+      ar: { title: "تحديث التقييم النهائي", message: `يُطلب تحديث التقييم النهائي لفرصة «${title}».` },
+      en: { title: "Final evaluation update", message: `Your final evaluation for "${title}" needs updates.` },
+    },
   };
   const row = map[status]?.[locale] || map.under_review[locale];
   return row;

@@ -8,6 +8,7 @@ import { actorFromUser } from "@/lib/audit-log-service";
 import { jsonInternalServerError } from "@/lib/api-safe-response";
 import { serializeTrainingApplication } from "@/lib/partnerships/partnerships-application-serialize";
 import { requireStudentApplicant } from "@/lib/partnerships/partnerships-auth";
+import { ADMINISTRATIVELY_CANCELLED_STATUS } from "@/lib/partnerships/partnerships-admin-cancel-constants";
 import {
   loadStudentApplicationForOpportunity,
   updateStudentTrainingApplicationContent,
@@ -25,7 +26,10 @@ const loadOwnedApplication = async (applicationId: string, studentId: mongoose.T
   const application = await StudentTrainingApplication.findOne({
     _id: applicationId,
     studentId,
-    archived: { $ne: true },
+    $or: [
+      { archived: { $ne: true } },
+      { status: ADMINISTRATIVELY_CANCELLED_STATUS },
+    ],
   }).lean();
   if (!application) return null;
 

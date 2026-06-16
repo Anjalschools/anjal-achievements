@@ -31,6 +31,11 @@ export interface IStudentTrainingApplication extends Document {
   timeline?: TrainingApplicationTimelineEvent[];
   archived?: boolean;
   archivedAt?: Date;
+  adminCancelledAt?: Date;
+  adminCancelledBy?: Types.ObjectId;
+  adminCancellationReasonCode?: string;
+  adminCancellationReasonNote?: string;
+  previousStatusBeforeAdminCancel?: string;
   slaReviewDueAt?: Date;
   slaInstitutionDueAt?: Date;
   slaCompletionDueAt?: Date;
@@ -94,6 +99,11 @@ const StudentTrainingApplicationSchema = new Schema<IStudentTrainingApplication>
     timeline: { type: [TimelineEventSchema], default: [] },
     archived: { type: Boolean, default: false, index: true },
     archivedAt: { type: Date },
+    adminCancelledAt: { type: Date, sparse: true },
+    adminCancelledBy: { type: Schema.Types.ObjectId, ref: "User", sparse: true },
+    adminCancellationReasonCode: { type: String, trim: true, maxlength: 80, sparse: true },
+    adminCancellationReasonNote: { type: String, trim: true, maxlength: 4000 },
+    previousStatusBeforeAdminCancel: { type: String, trim: true, maxlength: 40 },
     slaReviewDueAt: { type: Date, index: true },
     slaInstitutionDueAt: { type: Date, index: true },
     slaCompletionDueAt: { type: Date, index: true },
@@ -101,7 +111,14 @@ const StudentTrainingApplicationSchema = new Schema<IStudentTrainingApplication>
   { timestamps: true }
 );
 
-StudentTrainingApplicationSchema.index({ studentId: 1, opportunityId: 1 }, { unique: true });
+StudentTrainingApplicationSchema.index(
+  { studentId: 1, opportunityId: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { status: { $ne: "administratively_cancelled" } },
+    name: "student_opportunity_active_unique",
+  }
+);
 StudentTrainingApplicationSchema.index({ opportunityId: 1, status: 1 });
 StudentTrainingApplicationSchema.index({ studentId: 1, status: 1, academicYear: 1 });
 StudentTrainingApplicationSchema.index({ "studentSnapshot.grade": 1, status: 1 });

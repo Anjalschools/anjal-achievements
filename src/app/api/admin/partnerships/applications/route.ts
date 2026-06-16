@@ -11,6 +11,7 @@ import {
   computePartnershipApplicationsDashboard,
 } from "@/lib/partnerships/partnerships-applications-query";
 import { requirePartnershipsView } from "@/lib/partnerships/partnerships-auth";
+import { canAdminCancelTrainingApplication } from "@/lib/partnerships/partnerships-admin-cancel-constants";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -57,6 +58,12 @@ export async function GET(request: NextRequest) {
       })
     );
 
+    const isSystemAdmin = String(gate.user.role || "").trim() === "admin";
+    const itemsWithCapabilities = items.map((item) => ({
+      ...item,
+      canAdminCancel: isSystemAdmin && canAdminCancelTrainingApplication(item.status),
+    }));
+
     const academicYears = [
       ...new Set(
         await Promise.all(
@@ -72,7 +79,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       ok: true,
-      items,
+      items: itemsWithCapabilities,
       dashboard: computePartnershipApplicationsDashboard(rows),
       filterOptions: {
         organizations: organizations.map((row) => ({ id: String(row._id), name: row.name })),

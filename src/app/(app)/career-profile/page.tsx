@@ -6,6 +6,7 @@ import PageHeader from "@/components/layout/PageHeader";
 import SectionCard from "@/components/layout/SectionCard";
 import { getLocale } from "@/lib/i18n";
 import { Briefcase, Download, Loader2, Plus, Sparkles, Trash2 } from "lucide-react";
+import GraduateReadinessWidget from "@/components/career/GraduateReadinessWidget";
 
 type CareerPayload = {
   profile: { fullName: string; gradeLabelAr: string; gradeLabelEn: string };
@@ -194,6 +195,8 @@ const CareerProfilePage = () => {
               </div>
             ))}
           </div>
+
+          <GraduateReadinessWidget />
 
           <SectionCard>
             <h2 className="mb-3 flex items-center gap-2 text-base font-bold">

@@ -74,6 +74,10 @@ export const timelineActionLabel = (action: string, isAr: boolean): string => {
     institution_school_approval_rejected: { ar: "رفض اعتماد المدرسة", en: "School approval rejected" },
     institution_message_sent: { ar: "رسالة من المؤسسة", en: "Institution message" },
     application_reopened: { ar: "تمت إعادة فتح الطلب", en: "Application reopened" },
+    training_application_administratively_cancelled: {
+      ar: "إلغاء إداري للطلب",
+      en: "Application administratively cancelled",
+    },
     contact_access_granted: { ar: "تمت مشاركة بيانات التواصل", en: "Contact access granted" },
     contact_access_updated: { ar: "تم تحديث مشاركة بيانات التواصل", en: "Contact access updated" },
     contact_access_revoked: { ar: "تم إلغاء مشاركة بيانات التواصل", en: "Contact access revoked" },
@@ -92,6 +96,17 @@ export const timelineActionLabel = (action: string, isAr: boolean): string => {
     parent_consent_ai_verified: { ar: "التحقق الآلي من موافقة ولي الأمر", en: "Parent consent AI verified" },
     parent_consent_approved: { ar: "اعتماد موافقة ولي الأمر", en: "Parent consent approved" },
     parent_consent_rejected: { ar: "رفض موافقة ولي الأمر", en: "Parent consent rejected" },
+    student_final_evaluation_submitted: { ar: "تقييم الطالب النهائي", en: "Student final evaluation submitted" },
+    institution_final_evaluation_submitted: { ar: "تقييم المؤسسة النهائي", en: "Institution final evaluation submitted" },
+    institution_final_report_uploaded: { ar: "رفع تقرير المؤسسة النهائي", en: "Institution final report uploaded" },
+    final_report_ai_verified: { ar: "التحقق الآلي من التقرير النهائي", en: "Final report AI verified" },
+    final_evaluation_review_requested: { ar: "طلب مراجعة التقييم النهائي", en: "Final evaluation review requested" },
+    final_evaluation_approved: { ar: "اعتماد التقييم النهائي", en: "Final evaluation approved" },
+    final_evaluation_rejected: { ar: "رفض التقييم النهائي", en: "Final evaluation rejected" },
+    training_outcome_created: { ar: "إنشاء نتيجة التدريب", en: "Training outcome created" },
+    employability_score_generated: { ar: "توليد درجة الجاهزية للتوظيف", en: "Employability score generated" },
+    training_readiness_calculated: { ar: "حساب جاهزية برنامج التدريب", en: "Training readiness calculated" },
+    institution_recommendation_created: { ar: "توصية مؤسسة بالتوظيف", en: "Institution employment recommendation" },
   };
   const row = map[action];
   return row ? (isAr ? row.ar : row.en) : action;

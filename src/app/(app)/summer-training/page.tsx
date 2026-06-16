@@ -44,17 +44,28 @@ const SummerTrainingListPage = () => {
   const [error, setError] = useState<string | null>(null);
   const [items, setItems] = useState<OpportunityRow[]>([]);
   const [certificates, setCertificates] = useState<TrainingCertificateSummary[]>([]);
+  const [historyItems, setHistoryItems] = useState<
+    Array<{
+      id: string;
+      status: string;
+      opportunityTitle: string;
+      organizationName: string;
+      submittedAt: string | null;
+    }>
+  >([]);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const [oppRes, ctxRes] = await Promise.all([
+      const [oppRes, ctxRes, historyRes] = await Promise.all([
         fetch("/api/partnerships/student-opportunities", { cache: "no-store" }),
         fetch("/api/partnerships/student-training-context", { cache: "no-store" }),
+        fetch("/api/partnerships/applications/history", { cache: "no-store" }),
       ]);
       const json = await oppRes.json().catch(() => ({}));
       const ctxJson = await ctxRes.json().catch(() => ({}));
+      const historyJson = await historyRes.json().catch(() => ({}));
       if (!oppRes.ok) {
         throw new Error(typeof json.error === "string" ? json.error : "Failed");
       }
@@ -62,10 +73,12 @@ const SummerTrainingListPage = () => {
       setCertificates(
         ctxRes.ok && ctxJson.context?.certificates ? ctxJson.context.certificates : []
       );
+      setHistoryItems(historyRes.ok && Array.isArray(historyJson.items) ? historyJson.items : []);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error");
       setItems([]);
       setCertificates([]);
+      setHistoryItems([]);
     } finally {
       setLoading(false);
     }
@@ -227,6 +240,36 @@ const SummerTrainingListPage = () => {
           </ul>
         )}
       </SectionCard>
+
+      {historyItems.length > 0 ? (
+        <SectionCard className="mt-6">
+          <h2 className="mb-3 text-lg font-bold text-foreground">
+            {isAr ? "السجل التاريخي للطلبات" : "Application history"}
+          </h2>
+          <ul className="divide-y divide-border/60">
+            {historyItems.map((row) => (
+              <li key={row.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
+                <div>
+                  <p className="font-semibold text-foreground">{row.opportunityTitle}</p>
+                  <p className="text-xs text-text-light">{row.organizationName}</p>
+                  <p className="text-xs text-text-light">
+                    {isAr ? "تاريخ التقديم:" : "Submitted:"} {formatDate(row.submittedAt)}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <TrainingApplicationStatusBadge status={row.status} isAr={isAr} />
+                  <Link
+                    href={`/summer-training/history/${row.id}`}
+                    className="text-sm font-semibold text-primary hover:underline"
+                  >
+                    {isAr ? "عرض" : "View"}
+                  </Link>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </SectionCard>
+      ) : null}
 
       <SectionCard className="mt-6">
         <div className="flex items-start gap-3">

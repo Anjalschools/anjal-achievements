@@ -12,6 +12,13 @@ const LABELS: Record<StudentTrainingApplicationStatus, { ar: string; en: string 
   rejected: { ar: "مرفوض", en: "Rejected" },
   withdrawn: { ar: "منسحب", en: "Withdrawn" },
   completed: { ar: "مكتمل", en: "Completed" },
+  awaiting_final_evaluation_review: { ar: "بانتظار مراجعة التقييم النهائي", en: "Awaiting final evaluation review" },
+  final_evaluation_approved: { ar: "التقييم النهائي معتمد", en: "Final evaluation approved" },
+  final_evaluation_rejected: { ar: "التقييم النهائي مرفوض", en: "Final evaluation rejected" },
+  administratively_cancelled: {
+    ar: "تم إلغاء الطلب من قبل الإدارة",
+    en: "Administratively cancelled",
+  },
 };
 
 /** Unified status badge colors — single source for all training UI. */
@@ -25,6 +32,10 @@ const BADGE_CLASS: Record<StudentTrainingApplicationStatus, string> = {
   rejected: "bg-red-100 text-red-900 ring-red-200",
   withdrawn: "bg-gray-100 text-gray-800 ring-gray-200",
   completed: "bg-green-800 text-green-50 ring-green-700",
+  awaiting_final_evaluation_review: "bg-amber-100 text-amber-950 ring-amber-200",
+  final_evaluation_approved: "bg-emerald-800 text-emerald-50 ring-emerald-700",
+  final_evaluation_rejected: "bg-red-200 text-red-950 ring-red-300",
+  administratively_cancelled: "bg-slate-200 text-slate-900 ring-slate-300",
 };
 
 const DOT_CLASS: Record<StudentTrainingApplicationStatus, string> = {
@@ -37,6 +48,10 @@ const DOT_CLASS: Record<StudentTrainingApplicationStatus, string> = {
   rejected: "bg-red-500",
   withdrawn: "bg-gray-400",
   completed: "bg-green-800",
+  awaiting_final_evaluation_review: "bg-amber-500",
+  final_evaluation_approved: "bg-emerald-700",
+  final_evaluation_rejected: "bg-red-500",
+  administratively_cancelled: "bg-slate-500",
 };
 
 export const trainingApplicationStatusLabel = (status: string, isAr: boolean): string => {

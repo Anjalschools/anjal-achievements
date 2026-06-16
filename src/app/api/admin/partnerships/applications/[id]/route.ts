@@ -4,6 +4,7 @@ import { jsonInternalServerError } from "@/lib/api-safe-response";
 import { loadPartnershipApplicationDetail } from "@/lib/partnerships/partnerships-application-loader";
 import { isValidSupervisorAction } from "@/lib/partnerships/partnerships-application-workflow";
 import { requirePartnershipsApprove, requirePartnershipsView } from "@/lib/partnerships/partnerships-auth";
+import { canAdminCancelTrainingApplication } from "@/lib/partnerships/partnerships-admin-cancel-constants";
 import { validateApplicationTransition } from "@/lib/partnerships/partnerships-state-machine";
 import {
   canSupervisorApproveApplication,
@@ -33,7 +34,14 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
     if (!item) {
       return NextResponse.json({ error: "Application not found" }, { status: 404 });
     }
-    return NextResponse.json({ ok: true, item });
+    const isSystemAdmin = String(gate.user.role || "").trim() === "admin";
+    return NextResponse.json({
+      ok: true,
+      item,
+      capabilities: {
+        canAdminCancel: isSystemAdmin && canAdminCancelTrainingApplication(item.status),
+      },
+    });
   } catch (error) {
     console.error("[GET /api/admin/partnerships/applications/[id]]", error);
     return jsonInternalServerError(error);

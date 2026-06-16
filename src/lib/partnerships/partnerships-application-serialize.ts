@@ -5,6 +5,7 @@ import type { StudentAchievementSummary } from "@/lib/partnerships/build-student
 import type { PartnershipStudentPortfolioAccess } from "@/lib/partnerships/partnerships-portfolio-access";
 import { applyAcademicYearCreateFields } from "@/lib/academic-years/academic-year-integration";
 import { resolveAcademicYearForLegacyRecord } from "@/lib/academic-years/academic-year-display";
+import { resolveAdminCancelReasonLabel } from "@/lib/partnerships/partnerships-admin-cancel-constants";
 
 type LeanApplication = Pick<
   IStudentTrainingApplication,
@@ -24,6 +25,13 @@ type LeanApplication = Pick<
   | "timeline"
   | "createdAt"
   | "updatedAt"
+  | "archived"
+  | "archivedAt"
+  | "adminCancelledAt"
+  | "adminCancelledBy"
+  | "adminCancellationReasonCode"
+  | "adminCancellationReasonNote"
+  | "previousStatusBeforeAdminCancel"
 > & { _id?: { toString(): string } };
 
 type ApplicationContext = {
@@ -75,5 +83,17 @@ export const serializeTrainingApplication = async (row: LeanApplication, context
   achievementSummary: context?.achievementSummary,
   publicPortfolio: context?.publicPortfolio,
   excellenceScore: context?.achievementSummary?.excellenceScore ?? null,
+  archived: row.archived === true,
+  archivedAt: row.archivedAt ? new Date(row.archivedAt).toISOString() : null,
+  adminCancelledAt: row.adminCancelledAt ? new Date(row.adminCancelledAt).toISOString() : null,
+  adminCancellationReasonCode: row.adminCancellationReasonCode || null,
+  adminCancellationReasonNote: row.adminCancellationReasonNote || null,
+  adminCancellationReasonAr: row.adminCancellationReasonCode
+    ? resolveAdminCancelReasonLabel(row.adminCancellationReasonCode, row.adminCancellationReasonNote, true)
+    : null,
+  adminCancellationReasonEn: row.adminCancellationReasonCode
+    ? resolveAdminCancelReasonLabel(row.adminCancellationReasonCode, row.adminCancellationReasonNote, false)
+    : null,
+  previousStatusBeforeAdminCancel: row.previousStatusBeforeAdminCancel || null,
   };
 };

@@ -10,6 +10,7 @@ import { buildTalentDiscovery } from "@/lib/school-intelligence/talent-discovery
 import { buildInterventions } from "@/lib/school-intelligence/intervention-engine";
 import { buildOpportunityMapping } from "@/lib/school-intelligence/opportunity-mapping";
 import { buildStrategicSchoolInsights } from "@/lib/school-intelligence/strategic-school-insights";
+import { buildTrainingSchoolIntelligenceIndices } from "@/lib/partnerships/training-outcome-school-intelligence";
 import type { SchoolIntelligencePayload } from "@/lib/school-intelligence/school-intelligence-types";
 
 export const buildSchoolIntelligenceNetwork = async (): Promise<SchoolIntelligencePayload> => {
@@ -23,7 +24,10 @@ export const buildSchoolIntelligenceNetwork = async (): Promise<SchoolIntelligen
   const avgSuccessIndex =
     nodes.length > 0 ? Math.round(nodes.reduce((s, n) => s + n.successIndex, 0) / nodes.length) : 0;
 
-  const [opportunityMapping] = await Promise.all([buildOpportunityMapping(nodes)]);
+  const [opportunityMapping, trainingOutcomeIndices] = await Promise.all([
+    buildOpportunityMapping(nodes),
+    buildTrainingSchoolIntelligenceIndices(),
+  ]);
 
   const talentDiscovery = buildTalentDiscovery(nodes);
   const interventions = buildInterventions(nodes);
@@ -47,6 +51,7 @@ export const buildSchoolIntelligenceNetwork = async (): Promise<SchoolIntelligen
     interventions,
     opportunityMapping,
     strategicInsights,
+    trainingOutcomeIndices,
     governance: {
       readOnly: true,
       explainable: true,
@@ -56,6 +61,7 @@ export const buildSchoolIntelligenceNetwork = async (): Promise<SchoolIntelligen
         "Achievement (approved, certificates read-only)",
         "StudentCareerProfile (read-only)",
         "TrainingCompletionRecord (read-only)",
+        "TrainingOutcomeRecord (read-only)",
         "TrainingOpportunity",
         "PartnerOrganization",
         "buildStudentIntelligence",

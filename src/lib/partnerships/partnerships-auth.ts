@@ -86,6 +86,20 @@ const requireAdminOrPartnershipSupervisorGate = async (): Promise<PartnershipsGa
 export const requirePartnershipsReopenApplication = async (): Promise<PartnershipsGate> =>
   requireAdminOrPartnershipSupervisorGate();
 
+/** Administratively cancel training applications — system admin only. */
+export const requireSystemAdminTrainingCancel = async (): Promise<PartnershipsGate> => {
+  const gate = await requireSession();
+  if (!gate.ok) return gate;
+  if (String(gate.user.role || "").trim() !== "admin") {
+    return { ok: false, response: NextResponse.json({ error: "Forbidden" }, { status: 403 }) };
+  }
+  const canManage = await requirePermission(gate.user, PERMISSIONS.partnershipsManage);
+  if (!canManage) {
+    return { ok: false, response: NextResponse.json({ error: "Forbidden" }, { status: 403 }) };
+  }
+  return gate;
+};
+
 /** View / manage student–institution contact sharing — admin or partnership supervisor only. */
 export const requirePartnershipsContactAccessManage = async (): Promise<PartnershipsGate> =>
   requireAdminOrPartnershipSupervisorGate();

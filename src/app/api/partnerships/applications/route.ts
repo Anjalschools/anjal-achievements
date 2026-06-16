@@ -7,6 +7,7 @@ import TrainingOpportunity from "@/models/TrainingOpportunity";
 import { actorFromUser, logAuditEvent } from "@/lib/audit-log-service";
 import { jsonInternalServerError } from "@/lib/api-safe-response";
 import { ACTIVE_TRAINING_APPLICATION_STATUSES } from "@/lib/partnerships/partnerships-constants";
+import { ADMINISTRATIVELY_CANCELLED_STATUS } from "@/lib/partnerships/partnerships-admin-cancel-constants";
 import { serializeTrainingApplication } from "@/lib/partnerships/partnerships-application-serialize";
 import { requireStudentApplicant } from "@/lib/partnerships/partnerships-auth";
 import { evaluateApplicationEligibility } from "@/lib/partnerships/partnerships-eligibility";
@@ -66,7 +67,7 @@ export async function POST(request: NextRequest) {
       studentId: gate.user._id,
       academicYear,
       archived: { $ne: true },
-      status: { $nin: ["withdrawn", "rejected"] },
+      status: { $nin: ["withdrawn", "rejected", ADMINISTRATIVELY_CANCELLED_STATUS] },
     });
     if (yearApplicationCount >= settings.maxOpportunitiesPerStudent) {
       return NextResponse.json(
@@ -138,7 +139,10 @@ export async function POST(request: NextRequest) {
     });
 
     let saved;
-    if (existingForOpportunity) {
+    if (
+      existingForOpportunity &&
+      existingForOpportunity.status !== ADMINISTRATIVELY_CANCELLED_STATUS
+    ) {
       if (ACTIVE_TRAINING_APPLICATION_STATUSES.includes(existingForOpportunity.status as (typeof ACTIVE_TRAINING_APPLICATION_STATUSES)[number])) {
         return NextResponse.json(
           {
@@ -148,6 +152,13 @@ export async function POST(request: NextRequest) {
           { status: 409 }
         );
       }
+      existingForOpportunity.archived = false;
+      existingForOpportunity.archivedAt = undefined;
+      existingForOpportunity.adminCancelledAt = undefined;
+      existingForOpportunity.adminCancelledBy = undefined;
+      existingForOpportunity.adminCancellationReasonCode = undefined;
+      existingForOpportunity.adminCancellationReasonNote = undefined;
+      existingForOpportunity.previousStatusBeforeAdminCancel = undefined;
       existingForOpportunity.status = "submitted";
       existingForOpportunity.academicYear = yearFields.academicYear;
       existingForOpportunity.academicYearId = yearFields.academicYearId;
