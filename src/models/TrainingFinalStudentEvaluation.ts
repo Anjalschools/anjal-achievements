@@ -41,6 +41,8 @@ const AttachmentRefSchema = new Schema(
     storageKey: { type: String, required: true, trim: true, maxlength: 2000 },
     mimeType: { type: String, trim: true, maxlength: 120 },
     storageProvider: { type: String, enum: ["r2", "cloudinary"], sparse: true },
+    label: { type: String, trim: true, maxlength: 40 },
+    caption: { type: String, trim: true, maxlength: 500 },
   },
   { _id: false }
 );

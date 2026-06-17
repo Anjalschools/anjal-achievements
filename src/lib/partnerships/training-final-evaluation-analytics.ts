@@ -1,5 +1,6 @@
 import "server-only";
 import connectDB from "@/lib/mongodb";
+import PartnerOrganization from "@/models/PartnerOrganization";
 import TrainingFinalInstitutionEvaluation from "@/models/TrainingFinalInstitutionEvaluation";
 import TrainingFinalStudentEvaluation from "@/models/TrainingFinalStudentEvaluation";
 
@@ -13,9 +14,23 @@ export type FinalEvaluationAnalytics = {
   trainingCompletionQualityIndex: number;
   studentRecommendationRate: number;
   employmentRecommendationRate: number;
+  institutionRecommendationRate: number;
+  safetyComplianceAverage: number;
+  technicalSkillsAverage: number;
   studentEvaluationCount: number;
   institutionEvaluationCount: number;
   approvedCount: number;
+  topTrainingInstitutions: Array<{
+    institutionId: string;
+    institutionName: string;
+    averageScore: number;
+    evaluationCount: number;
+  }>;
+  mostRecommendedStudents: Array<{
+    studentId: string;
+    averageScore: number;
+    recommendEmployment: boolean;
+  }>;
 };
 
 export const buildFinalEvaluationAnalytics = async (
@@ -52,9 +67,12 @@ export const buildFinalEvaluationAnalytics = async (
     return avg(scores);
   });
 
+  const safetyScores = institutionRows.map((r) => r.safetyComplianceScore).filter((n) => n > 0);
+  const technicalScores = institutionRows.map((r) => r.learningSpeedScore).filter((n) => n > 0);
+
   const trainingHoursTotal = institutionRows.reduce((sum, r) => sum + (r.trainingHours || 0), 0);
-  const passedCount = institutionRows.filter((r) => r.passedTraining).length;
   const employmentRecommend = institutionRows.filter((r) => r.recommendEmployment).length;
+  const futureRecommend = institutionRows.filter((r) => r.recommendFutureTraining).length;
   const approvedCount = institutionRows.filter((r) => r.supervisorReviewStatus === "approved").length;
 
   const institutionEvalAvg = avg(institutionScoreRows);
@@ -67,6 +85,47 @@ export const buildFinalEvaluationAnalytics = async (
       : 0,
   ]);
 
+  const institutionAgg = new Map<string, { total: number; count: number }>();
+  institutionRows.forEach((row, index) => {
+    const id = String(row.institutionId);
+    const score = institutionScoreRows[index] || 0;
+    const prev = institutionAgg.get(id) || { total: 0, count: 0 };
+    institutionAgg.set(id, { total: prev.total + score, count: prev.count + 1 });
+  });
+
+  const orgIds = [...institutionAgg.keys()];
+  const orgs = await PartnerOrganization.find({ _id: { $in: orgIds } }).select("name").lean();
+  const orgMap = new Map(orgs.map((o) => [String(o._id), o.name || ""]));
+
+  const topTrainingInstitutions = [...institutionAgg.entries()]
+    .map(([institutionId, agg]) => ({
+      institutionId,
+      institutionName: orgMap.get(institutionId) || institutionId,
+      averageScore: Math.round((agg.total / Math.max(agg.count, 1)) * 10) / 10,
+      evaluationCount: agg.count,
+    }))
+    .sort((a, b) => b.averageScore - a.averageScore)
+    .slice(0, 5);
+
+  const mostRecommendedStudents = institutionRows
+    .filter((r) => r.recommendEmployment === true || r.recommendFutureTraining === true)
+    .map((r) => {
+      const scores = [
+        r.attendanceScore,
+        r.communicationScore,
+        r.learningSpeedScore,
+        r.taskExecutionScore,
+        r.safetyComplianceScore,
+      ];
+      return {
+        studentId: String(r.studentId),
+        averageScore: avg(scores),
+        recommendEmployment: r.recommendEmployment === true,
+      };
+    })
+    .sort((a, b) => b.averageScore - a.averageScore)
+    .slice(0, 5);
+
   return {
     trainingSatisfactionAverage: satisfactionAvg,
     institutionEvaluationAverage: institutionEvalAvg,
@@ -78,8 +137,16 @@ export const buildFinalEvaluationAnalytics = async (
       institutionRows.length > 0
         ? Math.round((employmentRecommend / institutionRows.length) * 1000) / 10
         : 0,
+    institutionRecommendationRate:
+      institutionRows.length > 0
+        ? Math.round((futureRecommend / institutionRows.length) * 1000) / 10
+        : 0,
+    safetyComplianceAverage: avg(safetyScores),
+    technicalSkillsAverage: avg(technicalScores),
     studentEvaluationCount: studentRows.length,
     institutionEvaluationCount: institutionRows.length,
     approvedCount,
+    topTrainingInstitutions,
+    mostRecommendedStudents,
   };
 };

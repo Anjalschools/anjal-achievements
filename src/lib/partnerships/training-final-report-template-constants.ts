@@ -7,6 +7,22 @@ export type TrainingFinalReportTemplateContext = {
   trainingEndDate: string;
   trainingHours: string;
   assignedTasks: string;
+  studentSection?: {
+    practicalBenefitScore: number;
+    objectivesClarityScore: number;
+    supervisionQualityScore: number;
+    workEnvironmentScore: number;
+    relevanceScore: number;
+    overallSatisfactionScore: number;
+    skillsLearned: string;
+    majorTasksCompleted: string;
+    improvementSuggestions: string;
+    mostValuableExperience: string;
+    recommendToStudents: boolean;
+    videoUrl?: string;
+    imageEvidence?: Array<{ label?: string; caption?: string; fileName: string }>;
+  };
+  institutionSectionComplete?: boolean;
   scores: {
     attendance: number;
     punctuality: number;
@@ -25,10 +41,12 @@ export type TrainingFinalReportTemplateContext = {
   passedTraining: boolean;
   recommendFutureTraining: boolean;
   recommendEmployment: boolean;
+  topAchievements: string;
   strengths: string;
   improvementAreas: string;
   finalRecommendation: string;
   supervisorName: string;
   supervisorTitle: string;
+  supervisorPhone: string;
   generatedAt: string;
 };

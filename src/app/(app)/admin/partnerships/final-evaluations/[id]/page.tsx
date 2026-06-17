@@ -6,6 +6,7 @@ import { useParams } from "next/navigation";
 import PageContainer from "@/components/layout/PageContainer";
 import PageHeader from "@/components/layout/PageHeader";
 import SectionCard from "@/components/layout/SectionCard";
+import FinalEvaluationReviewSummary from "@/components/admin/FinalEvaluationReviewSummary";
 import { getLocale } from "@/lib/i18n";
 import { ArrowLeft, CheckCircle2, Loader2, RotateCcw, XCircle } from "lucide-react";
 
@@ -89,6 +90,15 @@ const AdminFinalEvaluationDetailPage = () => {
         <SectionCard><p className="py-8 text-center text-red-600">{error}</p></SectionCard>
       ) : (
         <div className="space-y-4">
+          {application ? (
+            <FinalEvaluationReviewSummary
+              application={application}
+              studentEvaluation={studentEval}
+              institutionEvaluation={institutionEval}
+              isAr={isAr}
+            />
+          ) : null}
+
           {studentEval ? (
             <SectionCard>
               <h2 className="mb-2 font-bold">{isAr ? "تقييم الطالب" : "Student evaluation"}</h2>

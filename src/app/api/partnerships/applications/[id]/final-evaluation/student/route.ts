@@ -7,6 +7,8 @@ import {
   getStudentFinalEvaluation,
   submitStudentFinalEvaluation,
 } from "@/lib/partnerships/training-final-student-evaluation-service";
+import { resolveFinalEvaluationContext } from "@/lib/partnerships/training-final-evaluation-access";
+import { computeOpportunityRequiredTrainingHours } from "@/lib/partnerships/training-final-evaluation-ui-constants";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -29,7 +31,21 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
 
   try {
     const evaluation = await getStudentFinalEvaluation(applicationId, String(gate.user._id));
-    return NextResponse.json({ ok: true, evaluation });
+    const ctx = await resolveFinalEvaluationContext(applicationId);
+    const context = ctx
+      ? {
+          institutionName: ctx.organization?.name || "",
+          opportunityTitle: ctx.opportunity?.title || "",
+          trainingStartDate: ctx.opportunity?.trainingStart || null,
+          trainingEndDate: ctx.opportunity?.trainingEnd || null,
+          applicationStatus: ctx.application.status,
+          opportunityRequiredHours: computeOpportunityRequiredTrainingHours(
+            ctx.opportunity?.trainingStart,
+            ctx.opportunity?.trainingEnd
+          ),
+        }
+      : null;
+    return NextResponse.json({ ok: true, evaluation, context });
   } catch (error) {
     console.error("[GET final-evaluation/student]", error);
     return jsonInternalServerError(error);

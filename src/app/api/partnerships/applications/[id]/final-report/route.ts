@@ -7,13 +7,14 @@ import TrainingFinalStudentEvaluation from "@/models/TrainingFinalStudentEvaluat
 import { jsonInternalServerError } from "@/lib/api-safe-response";
 import { requireStudentApplicant } from "@/lib/partnerships/partnerships-auth";
 import { canStudentAccessFinalReport } from "@/lib/partnerships/training-final-evaluation-access";
+import { buildApplicationFinalReportPdfBuffer } from "@/lib/partnerships/training-final-report-pdf-service";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 type RouteParams = { params: { id: string } };
 
-export async function GET(_request: NextRequest, { params }: RouteParams) {
+export async function GET(request: NextRequest, { params }: RouteParams) {
   const gate = await requireStudentApplicant();
   if (!gate.ok) return gate.response;
 
@@ -26,6 +27,8 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
   if (!allowed) {
     return NextResponse.json({ error: "Not eligible" }, { status: 403 });
   }
+
+  const exportPdf = request.nextUrl.searchParams.get("export") === "pdf";
 
   try {
     await connectDB();
@@ -40,6 +43,23 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
       TrainingFinalInstitutionEvaluation.findOne({ applicationId }).lean(),
     ]);
 
+    if (exportPdf) {
+      const buffer = await buildApplicationFinalReportPdfBuffer(applicationId);
+      if (!buffer) return NextResponse.json({ error: "Not found" }, { status: 404 });
+      return new NextResponse(new Uint8Array(buffer), {
+        status: 200,
+        headers: {
+          "Content-Type": "application/pdf",
+          "Content-Disposition": `attachment; filename="training-final-report-${applicationId}.pdf"`,
+          "Cache-Control": "no-store",
+        },
+      });
+    }
+
+    const supervisorApproved =
+      institutionEvaluation?.supervisorReviewStatus === "approved" ||
+      application.status === "final_evaluation_approved";
+
     return NextResponse.json({
       ok: true,
       application: {
@@ -47,10 +67,11 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
         status: application.status,
       },
       studentEvaluation,
-      institutionEvaluation,
+      institutionEvaluation: supervisorApproved ? institutionEvaluation : null,
+      institutionEvaluationVisible: supervisorApproved,
       supervisorDecision: institutionEvaluation?.supervisorReviewStatus || "pending",
       supervisorNotes: institutionEvaluation?.supervisorReviewNotes || "",
-      aiVerification: institutionEvaluation?.aiVerification || null,
+      aiVerification: supervisorApproved ? institutionEvaluation?.aiVerification || null : null,
     });
   } catch (error) {
     console.error("[GET final-report]", error);

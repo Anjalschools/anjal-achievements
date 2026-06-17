@@ -44,6 +44,8 @@ const parseAttachments = (value: unknown): FinalEvaluationAttachmentRef[] => {
         storageKey,
         mimeType: r.mimeType ? String(r.mimeType) : undefined,
         storageProvider: r.storageProvider === "cloudinary" ? "cloudinary" : "r2",
+        label: r.label ? String(r.label).trim().slice(0, 40) : undefined,
+        caption: r.caption ? String(r.caption).trim().slice(0, 500) : undefined,
       } as FinalEvaluationAttachmentRef;
     })
     .filter((row): row is FinalEvaluationAttachmentRef => row !== null);
@@ -109,6 +111,11 @@ export const submitStudentFinalEvaluation = async (
     yearFields.academicYearLabel = ctx.application.academicYearLabel || ctx.application.academicYear;
   }
 
+  const imageAttachments = parseAttachments(p.imageAttachments);
+  if (imageAttachments.length > 8) {
+    return { ok: false, error: "Maximum 8 training images allowed", code: "too_many_images" };
+  }
+
   const doc = {
     applicationId: ctx.application._id,
     studentId: input.student._id,
@@ -131,7 +138,7 @@ export const submitStudentFinalEvaluation = async (
     improvementSuggestions: String(p.improvementSuggestions || "").trim().slice(0, 4000) || undefined,
     recommendToStudents: p.recommendToStudents === true,
     overallSatisfactionScore: Number(p.overallSatisfactionScore),
-    imageAttachments: parseAttachments(p.imageAttachments),
+    imageAttachments,
     videoUrls: parseVideoUrls(p.videoUrls),
     documentAttachments: parseAttachments(p.documentAttachments),
     submittedAt: now,

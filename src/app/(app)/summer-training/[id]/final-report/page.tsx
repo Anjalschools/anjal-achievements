@@ -6,8 +6,9 @@ import { useParams } from "next/navigation";
 import PageContainer from "@/components/layout/PageContainer";
 import PageHeader from "@/components/layout/PageHeader";
 import SectionCard from "@/components/layout/SectionCard";
+import StudentInstitutionEvaluationSummary from "@/components/partnerships/StudentInstitutionEvaluationSummary";
 import { getLocale } from "@/lib/i18n";
-import { ArrowLeft, Loader2 } from "lucide-react";
+import { ArrowLeft, Download, Loader2 } from "lucide-react";
 
 const StudentFinalReportPage = () => {
   const params = useParams();
@@ -18,6 +19,7 @@ const StudentFinalReportPage = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<Record<string, unknown> | null>(null);
+  const [applicationId, setApplicationId] = useState("");
 
   const load = useCallback(async () => {
     if (!opportunityId) return;
@@ -35,6 +37,8 @@ const StudentFinalReportPage = () => {
         oppJson.item?.application?.id ||
         "";
       if (!appId) throw new Error(isAr ? "لا يوجد طلب." : "No application.");
+
+      setApplicationId(appId);
 
       const res = await fetch(`/api/partnerships/applications/${encodeURIComponent(appId)}/final-report`, {
         cache: "no-store",
@@ -56,7 +60,10 @@ const StudentFinalReportPage = () => {
 
   const studentEval = data?.studentEvaluation as Record<string, unknown> | null | undefined;
   const institutionEval = data?.institutionEvaluation as Record<string, unknown> | null | undefined;
-  const aiVerification = data?.aiVerification as Record<string, unknown> | null | undefined;
+  const institutionVisible = data?.institutionEvaluationVisible === true;
+  const aiVerification = institutionVisible
+    ? (data?.aiVerification as Record<string, unknown> | null | undefined)
+    : null;
 
   return (
     <PageContainer>
@@ -78,6 +85,17 @@ const StudentFinalReportPage = () => {
         <SectionCard><p className="py-8 text-center text-red-600">{error}</p></SectionCard>
       ) : (
         <div className="space-y-4">
+          {applicationId ? (
+            <a
+              href={`/api/partnerships/applications/${encodeURIComponent(applicationId)}/final-report?export=pdf`}
+              className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-white"
+              download
+            >
+              <Download className="h-4 w-4" aria-hidden />
+              {isAr ? "تحميل التقرير PDF" : "Download PDF report"}
+            </a>
+          ) : null}
+
           <SectionCard>
             <h2 className="mb-2 text-base font-bold">{isAr ? "قرار المشرف" : "Supervisor decision"}</h2>
             <p className="text-sm text-text-light">
@@ -93,11 +111,17 @@ const StudentFinalReportPage = () => {
             </SectionCard>
           ) : null}
 
-          {institutionEval ? (
+          {institutionVisible && institutionEval ? (
             <SectionCard>
-              <h2 className="mb-2 text-base font-bold">{isAr ? "تقييم المؤسسة" : "Institution evaluation"}</h2>
-              <p className="text-sm">{isAr ? "المشرف:" : "Supervisor:"} {String(institutionEval.supervisorName || "")}</p>
-              <p className="text-sm">{isAr ? "اجتاز التدريب:" : "Passed:"} {institutionEval.passedTraining ? (isAr ? "نعم" : "Yes") : (isAr ? "لا" : "No")}</p>
+              <StudentInstitutionEvaluationSummary evaluation={institutionEval} isAr={isAr} />
+            </SectionCard>
+          ) : institutionEval === null && String(data?.supervisorDecision || "") === "pending" ? (
+            <SectionCard>
+              <p className="text-sm text-text-light">
+                {isAr
+                  ? "تقييم المؤسسة سيظهر هنا بعد اعتماد المشرف المدرسي."
+                  : "Institution evaluation will appear here after school supervisor approval."}
+              </p>
             </SectionCard>
           ) : null}
 

@@ -77,9 +77,23 @@ type Dashboard = {
     trainingCompletionQualityIndex: number;
     studentRecommendationRate: number;
     employmentRecommendationRate: number;
+    institutionRecommendationRate: number;
+    safetyComplianceAverage: number;
+    technicalSkillsAverage: number;
     studentEvaluationCount: number;
     institutionEvaluationCount: number;
     approvedCount: number;
+    topTrainingInstitutions: Array<{
+      institutionId: string;
+      institutionName: string;
+      averageScore: number;
+      evaluationCount: number;
+    }>;
+    mostRecommendedStudents: Array<{
+      studentId: string;
+      averageScore: number;
+      recommendEmployment: boolean;
+    }>;
   };
   trainingOutcomeAnalytics: {
     avgEmployabilityScore: number;
@@ -218,12 +232,15 @@ const PartnershipIntelligencePage = () => {
 
   const finalEvaluationCards = data?.finalEvaluationAnalytics
     ? [
-        { label: isAr ? "متوسط رضا التدريب" : "Training satisfaction avg", value: data.finalEvaluationAnalytics.trainingSatisfactionAverage },
-        { label: isAr ? "متوسط تقييم المؤسسة" : "Institution eval avg", value: data.finalEvaluationAnalytics.institutionEvaluationAverage },
-        { label: isAr ? "إجمالي ساعات التدريب" : "Training hours total", value: data.finalEvaluationAnalytics.trainingHoursTotal },
-        { label: isAr ? "مؤشر جودة الإكمال" : "Completion quality index", value: data.finalEvaluationAnalytics.trainingCompletionQualityIndex },
+        { label: isAr ? "متوسط رضا الطلاب" : "Avg student satisfaction", value: data.finalEvaluationAnalytics.trainingSatisfactionAverage },
+        { label: isAr ? "متوسط تقييم المؤسسة" : "Avg institution evaluation", value: data.finalEvaluationAnalytics.institutionEvaluationAverage },
+        { label: isAr ? "متوسط الالتزام بالسلامة" : "Safety compliance avg", value: data.finalEvaluationAnalytics.safetyComplianceAverage },
+        { label: isAr ? "متوسط المهارات التقنية" : "Technical skills avg", value: data.finalEvaluationAnalytics.technicalSkillsAverage },
+        { label: isAr ? "نسبة التوصية" : "Recommendation rate", value: `${data.finalEvaluationAnalytics.institutionRecommendationRate}%` },
         { label: isAr ? "نسبة توصية الطلاب" : "Student recommendation rate", value: `${data.finalEvaluationAnalytics.studentRecommendationRate}%` },
         { label: isAr ? "نسبة توصية التوظيف" : "Employment recommendation rate", value: `${data.finalEvaluationAnalytics.employmentRecommendationRate}%` },
+        { label: isAr ? "إجمالي ساعات التدريب" : "Training hours total", value: data.finalEvaluationAnalytics.trainingHoursTotal },
+        { label: isAr ? "مؤشر جودة الإكمال" : "Completion quality index", value: data.finalEvaluationAnalytics.trainingCompletionQualityIndex },
       ]
     : [];
 
@@ -383,6 +400,35 @@ const PartnershipIntelligencePage = () => {
                   </div>
                 ))}
               </div>
+              {data.finalEvaluationAnalytics.topTrainingInstitutions.length > 0 ? (
+                <div className="mt-4">
+                  <p className="mb-2 text-sm font-bold text-foreground">
+                    {isAr ? "أفضل مؤسسات التدريب" : "Top training institutions"}
+                  </p>
+                  <ul className="space-y-1 text-sm text-text-light">
+                    {data.finalEvaluationAnalytics.topTrainingInstitutions.map((row) => (
+                      <li key={row.institutionId}>
+                        {row.institutionName} — {row.averageScore}/5 ({row.evaluationCount})
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+              {data.finalEvaluationAnalytics.mostRecommendedStudents.length > 0 ? (
+                <div className="mt-4">
+                  <p className="mb-2 text-sm font-bold text-foreground">
+                    {isAr ? "الطلاب الأكثر توصية" : "Most recommended students"}
+                  </p>
+                  <ul className="space-y-1 text-sm text-text-light">
+                    {data.finalEvaluationAnalytics.mostRecommendedStudents.map((row) => (
+                      <li key={row.studentId}>
+                        {row.studentId.slice(-6)} — {row.averageScore}/5
+                        {row.recommendEmployment ? (isAr ? " (توظيف)" : " (employment)") : ""}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
             </SectionCard>
           ) : null}
 

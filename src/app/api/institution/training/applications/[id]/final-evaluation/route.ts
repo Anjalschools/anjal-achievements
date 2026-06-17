@@ -7,6 +7,11 @@ import {
   getInstitutionFinalEvaluation,
   submitInstitutionFinalEvaluation,
 } from "@/lib/partnerships/training-final-institution-evaluation-service";
+import { resolveFinalEvaluationContext } from "@/lib/partnerships/training-final-evaluation-access";
+import {
+  computeOpportunityRequiredTrainingHours,
+  getTrainingHoursMaxAllowed,
+} from "@/lib/partnerships/training-final-evaluation-ui-constants";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -30,7 +35,20 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
     if (!organizationId) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
     const evaluation = await getInstitutionFinalEvaluation(applicationId, organizationId);
-    return NextResponse.json({ ok: true, evaluation });
+    const ctx = await resolveFinalEvaluationContext(applicationId);
+    const requiredHours = ctx
+      ? computeOpportunityRequiredTrainingHours(ctx.opportunity?.trainingStart, ctx.opportunity?.trainingEnd)
+      : 0;
+    return NextResponse.json({
+      ok: true,
+      evaluation,
+      context: requiredHours
+        ? {
+            opportunityRequiredHours: requiredHours,
+            opportunityMaxAllowedHours: getTrainingHoursMaxAllowed(requiredHours),
+          }
+        : null,
+    });
   } catch (error) {
     console.error("[GET institution final-evaluation]", error);
     return jsonInternalServerError(error);

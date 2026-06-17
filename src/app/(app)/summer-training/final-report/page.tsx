@@ -12,7 +12,8 @@ import {
   uploadTrainingReportFile,
   type UploadedTrainingAttachment,
 } from "@/lib/partnerships/training-completion-upload";
-import { FileText, Loader2, Paperclip, Save, Send, Star, Video } from "lucide-react";
+import SurveyRatingControl from "@/components/survey/SurveyRatingControl";
+import { FileText, Loader2, Paperclip, Save, Send, Video } from "lucide-react";
 
 type AttachmentRow = {
   id: string;
@@ -33,11 +34,6 @@ type ReportForm = {
   numberOfTrainees: string;
   assignedTasks: string;
   studentReflection: string;
-  attendanceCommitment: string;
-  professionalEthics: string;
-  safetyCompliance: string;
-  overallRecommendation: string;
-  institutionNotes: string;
   videoUrl: string;
 };
 
@@ -53,48 +49,10 @@ const emptyForm = (): ReportForm => ({
   numberOfTrainees: "",
   assignedTasks: "",
   studentReflection: "",
-  attendanceCommitment: "",
-  professionalEthics: "",
-  safetyCompliance: "",
-  overallRecommendation: "",
-  institutionNotes: "",
   videoUrl: "",
 });
 
 const toInputDate = (value: string | null) => (value ? value.slice(0, 10) : "");
-
-const RatingSelect = ({
-  value,
-  onChange,
-  label,
-  disabled,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  label: string;
-  disabled?: boolean;
-}) => (
-  <label className="block text-sm">
-    <span className="mb-1 flex items-center gap-1 font-bold text-slate-700">
-      <Star className="h-3.5 w-3.5 text-amber-500" aria-hidden />
-      {label}
-    </span>
-    <select
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      disabled={disabled}
-      className="w-full rounded-xl border border-slate-200 px-3 py-2 disabled:bg-slate-50"
-      aria-label={label}
-    >
-      <option value="">—</option>
-      {[1, 2, 3, 4, 5].map((n) => (
-        <option key={n} value={String(n)}>
-          {n}
-        </option>
-      ))}
-    </select>
-  </label>
-);
 
 const SummerTrainingFinalReportPage = () => {
   const locale = getLocale();
@@ -141,13 +99,6 @@ const SummerTrainingFinalReportPage = () => {
         numberOfTrainees: item.numberOfTrainees != null ? String(item.numberOfTrainees) : "",
         assignedTasks: String(item.assignedTasks || ""),
         studentReflection: String(item.studentReflection || ""),
-        attendanceCommitment:
-          item.attendanceCommitment != null ? String(item.attendanceCommitment) : "",
-        professionalEthics: item.professionalEthics != null ? String(item.professionalEthics) : "",
-        safetyCompliance: item.safetyCompliance != null ? String(item.safetyCompliance) : "",
-        overallRecommendation:
-          item.overallRecommendation != null ? String(item.overallRecommendation) : "",
-        institutionNotes: String(item.institutionNotes || ""),
         videoUrl: String(item.videoUrl || ""),
       });
       setAttachments(Array.isArray(item.attachments) ? (item.attachments as AttachmentRow[]) : []);
@@ -176,15 +127,6 @@ const SummerTrainingFinalReportPage = () => {
     numberOfTrainees: form.numberOfTrainees ? Number(form.numberOfTrainees) : undefined,
     assignedTasks: form.assignedTasks,
     studentReflection: form.studentReflection,
-    attendanceCommitment: form.attendanceCommitment
-      ? Number(form.attendanceCommitment)
-      : undefined,
-    professionalEthics: form.professionalEthics ? Number(form.professionalEthics) : undefined,
-    safetyCompliance: form.safetyCompliance ? Number(form.safetyCompliance) : undefined,
-    overallRecommendation: form.overallRecommendation
-      ? Number(form.overallRecommendation)
-      : undefined,
-    institutionNotes: form.institutionNotes,
     videoUrl: form.videoUrl || undefined,
     attachments: pendingUploads,
   });
@@ -290,7 +232,7 @@ const SummerTrainingFinalReportPage = () => {
       <div className="space-y-4">
         <SectionCard>
           <h2 className="mb-4 text-lg font-black text-slate-900">
-            {isAr ? "بيانات التدريب" : "Training details"}
+            {isAr ? "١ — بيانات التدريب" : "1 — Training details"}
           </h2>
           <div className="grid gap-3 sm:grid-cols-2">
             <input
@@ -353,7 +295,21 @@ const SummerTrainingFinalReportPage = () => {
 
         <SectionCard>
           <h2 className="mb-4 text-lg font-black text-slate-900">
-            {isAr ? "المهام والاستفادة" : "Tasks & benefit"}
+            {isAr ? "٢ — تقييمي للتجربة التدريبية" : "2 — My training experience"}
+          </h2>
+          <SurveyRatingControl
+            label={isAr ? "مدى استفادتي من التدريب" : "My training benefit"}
+            value={form.studentBenefitRating ? Number(form.studentBenefitRating) : 3}
+            onChange={(v) => setForm((p) => ({ ...p, studentBenefitRating: String(v) }))}
+            isAr={isAr}
+            labelSet="student"
+            disabled={!editable}
+          />
+        </SectionCard>
+
+        <SectionCard>
+          <h2 className="mb-4 text-lg font-black text-slate-900">
+            {isAr ? "٣ — المهام والاستفادة" : "3 — Tasks & benefit"}
           </h2>
           <div className="grid gap-3 sm:grid-cols-2">
             <input
@@ -364,12 +320,6 @@ const SummerTrainingFinalReportPage = () => {
               disabled={!editable}
               placeholder={isAr ? "عدد المتدربين في المؤسسة" : "Number of trainees"}
               className="rounded-xl border border-slate-200 px-3 py-2 text-sm disabled:bg-slate-50"
-            />
-            <RatingSelect
-              label={isAr ? "مدى استفادتي من التدريب (1-5)" : "My training benefit (1-5)"}
-              value={form.studentBenefitRating}
-              onChange={(v) => setForm((p) => ({ ...p, studentBenefitRating: v }))}
-              disabled={!editable}
             />
           </div>
           <textarea
@@ -391,49 +341,9 @@ const SummerTrainingFinalReportPage = () => {
         </SectionCard>
 
         <SectionCard>
-          <h2 className="mb-4 text-lg font-black text-slate-900">
-            {isAr ? "تقييم المؤسسة للطالب" : "Institution evaluation"}
-          </h2>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <RatingSelect
-              label={isAr ? "الالتزام بالحضور" : "Attendance commitment"}
-              value={form.attendanceCommitment}
-              onChange={(v) => setForm((p) => ({ ...p, attendanceCommitment: v }))}
-              disabled={!editable}
-            />
-            <RatingSelect
-              label={isAr ? "الأخلاق المهنية" : "Professional ethics"}
-              value={form.professionalEthics}
-              onChange={(v) => setForm((p) => ({ ...p, professionalEthics: v }))}
-              disabled={!editable}
-            />
-            <RatingSelect
-              label={isAr ? "السلامة" : "Safety compliance"}
-              value={form.safetyCompliance}
-              onChange={(v) => setForm((p) => ({ ...p, safetyCompliance: v }))}
-              disabled={!editable}
-            />
-            <RatingSelect
-              label={isAr ? "التوصية العامة" : "Overall recommendation"}
-              value={form.overallRecommendation}
-              onChange={(v) => setForm((p) => ({ ...p, overallRecommendation: v }))}
-              disabled={!editable}
-            />
-          </div>
-          <textarea
-            value={form.institutionNotes}
-            onChange={(e) => setForm((p) => ({ ...p, institutionNotes: e.target.value }))}
-            disabled={!editable}
-            rows={3}
-            placeholder={isAr ? "ملاحظات المؤسسة" : "Institution notes"}
-            className="mt-3 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm disabled:bg-slate-50"
-          />
-        </SectionCard>
-
-        <SectionCard>
           <h2 className="mb-4 flex items-center gap-2 text-lg font-black text-slate-900">
             <Paperclip className="h-5 w-5" aria-hidden />
-            {isAr ? "المرفقات" : "Attachments"}
+            {isAr ? "٤ — المرفقات" : "4 — Attachments"}
           </h2>
           {editable ? (
             <label className="mb-3 inline-flex cursor-pointer items-center gap-2 rounded-xl border border-dashed border-slate-300 px-4 py-3 text-sm font-bold text-primary">
@@ -479,7 +389,7 @@ const SummerTrainingFinalReportPage = () => {
         <SectionCard>
           <h2 className="mb-4 flex items-center gap-2 text-lg font-black text-slate-900">
             <Video className="h-5 w-5" aria-hidden />
-            {isAr ? "رابط الفيديو" : "Video link"}
+            {isAr ? "٥ — رابط الفيديو" : "5 — Video link"}
           </h2>
           <input
             value={form.videoUrl}

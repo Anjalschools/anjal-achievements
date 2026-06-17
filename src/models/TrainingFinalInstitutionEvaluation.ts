@@ -33,6 +33,7 @@ export interface ITrainingFinalInstitutionEvaluation extends Document {
   strengths?: string;
   improvementAreas?: string;
   finalRecommendation?: string;
+  recommendationReason?: string;
   supervisorName: string;
   supervisorTitle?: string;
   supervisorPhone?: string;
@@ -85,6 +86,7 @@ const TrainingFinalInstitutionEvaluationSchema = new Schema<ITrainingFinalInstit
     strengths: { type: String, trim: true, maxlength: 6000 },
     improvementAreas: { type: String, trim: true, maxlength: 6000 },
     finalRecommendation: { type: String, trim: true, maxlength: 4000 },
+    recommendationReason: { type: String, trim: true, maxlength: 2000 },
     supervisorName: { type: String, required: true, trim: true, maxlength: 200 },
     supervisorTitle: { type: String, trim: true, maxlength: 200 },
     supervisorPhone: { type: String, trim: true, maxlength: 40 },

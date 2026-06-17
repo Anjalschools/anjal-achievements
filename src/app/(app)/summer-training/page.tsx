@@ -6,6 +6,8 @@ import PageContainer from "@/components/layout/PageContainer";
 import PageHeader from "@/components/layout/PageHeader";
 import SectionCard from "@/components/layout/SectionCard";
 import TrainingApplicationStatusBadge from "@/components/partnerships/TrainingApplicationStatusBadge";
+import ApprovedPlacementBadge, { approvedPlacementCardClass } from "@/components/partnerships/ApprovedPlacementBadge";
+import { isApprovedTrainingPlacement } from "@/lib/partnerships/training-final-evaluation-ui-constants";
 import TrainingCertificateActions, {
   type TrainingCertificateSummary,
 } from "@/components/partnerships/TrainingCertificateActions";
@@ -155,9 +157,27 @@ const SummerTrainingListPage = () => {
           </div>
         ) : (
           <ul className="divide-y divide-border/60" aria-label={isAr ? "قائمة فرص التدريب" : "Training opportunities list"}>
-            {items.map((item) => (
+            {[...items]
+              .sort((a, b) => {
+                const aApproved = isApprovedTrainingPlacement(
+                  a.studentApplication?.status || a.existingApplicationStatus
+                );
+                const bApproved = isApprovedTrainingPlacement(
+                  b.studentApplication?.status || b.existingApplicationStatus
+                );
+                if (aApproved === bApproved) return 0;
+                return aApproved ? -1 : 1;
+              })
+              .map((item) => {
+                const placementStatus = item.studentApplication?.status || item.existingApplicationStatus;
+                const isApprovedPlacement = isApprovedTrainingPlacement(placementStatus);
+                return (
               <li key={item.id} className="py-4">
-                <article className="rounded-xl border border-border/70 bg-white p-4 shadow-sm">
+                <article
+                  className={`rounded-xl border p-4 shadow-sm ${
+                    isApprovedPlacement ? approvedPlacementCardClass : "border-border/70 bg-white"
+                  }`}
+                >
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
@@ -167,11 +187,10 @@ const SummerTrainingListPage = () => {
                         >
                           {item.title}
                         </Link>
-                        {item.studentApplication?.status || item.existingApplicationStatus ? (
+                        {isApprovedPlacement ? <ApprovedPlacementBadge isAr={isAr} /> : null}
+                        {placementStatus ? (
                           <TrainingApplicationStatusBadge
-                            status={String(
-                              item.studentApplication?.status || item.existingApplicationStatus
-                            )}
+                            status={String(placementStatus)}
                             isAr={isAr}
                             size="sm"
                           />
@@ -236,7 +255,8 @@ const SummerTrainingListPage = () => {
                   </div>
                 </article>
               </li>
-            ))}
+                );
+              })}
           </ul>
         )}
       </SectionCard>

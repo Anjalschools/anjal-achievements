@@ -13,6 +13,9 @@ import InstitutionDocumentTracker from "@/components/institution/InstitutionDocu
 import InstitutionInterviewWorkspace from "@/components/institution/InstitutionInterviewWorkspace";
 import InstitutionPrivateNotesPanel from "@/components/institution/InstitutionPrivateNotesPanel";
 import InstitutionCandidateTagsPanel from "@/components/institution/InstitutionCandidateTagsPanel";
+import InstitutionEvaluationCenter from "@/components/institution/InstitutionEvaluationCenter";
+import InstitutionFinalEvaluationPanel from "@/components/institution/InstitutionFinalEvaluationPanel";
+import InstitutionCandidateWorkspace from "@/components/institution/InstitutionCandidateWorkspace";
 import type { InstitutionContactAccessView } from "@/components/institution/InstitutionContactAccessCard";
 import InstitutionParentConsentPanel from "@/components/partnerships/InstitutionParentConsentPanel";
 import TrainingApplicationTimeline from "@/components/partnerships/TrainingApplicationTimeline";
@@ -26,7 +29,6 @@ import {
   ArrowRight,
   CalendarDays,
   CheckCircle2,
-  ClipboardList,
   Loader2,
   MessageSquare,
   XCircle,
@@ -91,19 +93,6 @@ const InstitutionApplicationDetailPage = () => {
   const [reqTitle, setReqTitle] = useState("");
   const [interviewAt, setInterviewAt] = useState("");
   const [assessmentTitle, setAssessmentTitle] = useState("");
-  const [evaluationForm, setEvaluationForm] = useState({
-    commitment: 4,
-    attendance: 4,
-    discipline: 4,
-    communication: 4,
-    teamwork: 4,
-    technicalSkills: 4,
-    professionalSkills: 4,
-    strengths: "",
-    improvementAreas: "",
-    institutionNotes: "",
-    finalRecommendation: "good",
-  });
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -309,194 +298,135 @@ const InstitutionApplicationDetailPage = () => {
                 viewMode="institution"
               />
 
-              <SectionCard>
-                <h3 className="mb-3 text-base font-bold text-foreground">
-                  {isAr ? "متابعة المستندات" : "Document tracker"}
-                </h3>
-                <InstitutionDocumentTracker documents={detail.documentTracker} isAr={isAr} />
-                <div className="mt-3 flex flex-wrap gap-2">
-                  <input
-                    value={reqTitle}
-                    onChange={(e) => setReqTitle(e.target.value)}
-                    placeholder={isAr ? "عنوان مستند إضافي" : "Additional document title"}
-                    className="min-w-[200px] flex-1 rounded-xl border border-border px-3 py-2 text-sm"
-                  />
-                  <button
-                    type="button"
-                    disabled={saving || !reqTitle.trim()}
-                    onClick={() => void postAction({ action: "create_requirement", title: reqTitle.trim() }).then(() => setReqTitle(""))}
-                    className="rounded-xl border border-primary bg-primary/10 px-3 py-2 text-sm font-bold text-primary disabled:opacity-60"
-                  >
-                    {isAr ? "طلب مستند" : "Request document"}
-                  </button>
-                </div>
-              </SectionCard>
-
-              <SectionCard>
-                <h3 className="mb-3 text-base font-bold text-foreground">
-                  {isAr ? "مساحة المقابلة" : "Interview workspace"}
-                </h3>
-                <div className="mb-3 flex flex-wrap gap-2">
-                  <input
-                    type="datetime-local"
-                    value={interviewAt}
-                    onChange={(e) => setInterviewAt(e.target.value)}
-                    className="rounded-xl border border-border px-3 py-2 text-sm"
-                  />
-                  <button
-                    type="button"
-                    disabled={saving || !interviewAt}
-                    onClick={() =>
-                      void postAction({
-                        action: "schedule_interview",
-                        scheduledAt: new Date(interviewAt).toISOString(),
-                      }).then(() => setInterviewAt(""))
-                    }
-                    className="inline-flex items-center gap-2 rounded-xl border border-violet-300 bg-violet-50 px-3 py-2 text-sm font-bold text-violet-900 disabled:opacity-60"
-                  >
-                    <CalendarDays className="h-4 w-4" aria-hidden />
-                    {isAr ? "جدولة مقابلة" : "Schedule interview"}
-                  </button>
-                </div>
-                <InstitutionInterviewWorkspace
-                  applicationId={applicationId}
-                  interviews={detail.interviews}
-                  isAr={isAr}
-                  onUpdated={load}
-                />
-              </SectionCard>
-
-              <SectionCard>
-                <h3 className="mb-3 text-base font-bold text-foreground">
-                  {isAr ? "وسوم المرشح" : "Candidate tags"}
-                </h3>
-                <InstitutionCandidateTagsPanel
-                  applicationId={applicationId}
-                  tags={detail.tags}
-                  isAr={isAr}
-                  onUpdated={load}
-                />
-              </SectionCard>
-
-              <SectionCard>
-                <h3 className="mb-3 text-base font-bold text-foreground">
-                  {isAr ? "ملاحظات خاصة" : "Private notes"}
-                </h3>
-                <InstitutionPrivateNotesPanel
-                  applicationId={applicationId}
-                  notes={detail.privateNotes}
-                  isAr={isAr}
-                  onUpdated={load}
-                />
-              </SectionCard>
-
-              <SectionCard>
-                <h3 className="mb-3 text-base font-bold text-foreground">
-                  {isAr ? "التقييمات" : "Assessments"}
-                </h3>
-                <div className="mb-3 flex flex-wrap gap-2">
-                  <input
-                    value={assessmentTitle}
-                    onChange={(e) => setAssessmentTitle(e.target.value)}
-                    placeholder={isAr ? "عنوان التقييم" : "Assessment title"}
-                    className="min-w-[200px] flex-1 rounded-xl border border-border px-3 py-2 text-sm"
-                  />
-                  <button
-                    type="button"
-                    disabled={saving || detail.institutionReadOnly || !assessmentTitle.trim()}
-                    onClick={() =>
-                      void postAction({
-                        action: "create_assessment",
-                        type: "upload_task",
-                        title: assessmentTitle.trim(),
-                      }).then(() => setAssessmentTitle(""))
-                    }
-                    className="rounded-xl border border-primary bg-primary/10 px-3 py-2 text-sm font-bold text-primary disabled:opacity-60"
-                  >
-                    {isAr ? "إنشاء" : "Create"}
-                  </button>
-                </div>
-                <ul className="space-y-2 text-sm">
-                  {detail.assessments.map((row) => (
-                    <li key={row.id} className="rounded-lg border border-border/60 px-3 py-2">
-                      {row.title} — <span className="text-text-light">{row.status}</span>
-                    </li>
-                  ))}
-                </ul>
-              </SectionCard>
-
-              {detail.status === "accepted" && !detail.evaluation ? (
-                <SectionCard>
-                  <h3 className="mb-3 text-base font-bold text-foreground">
-                    {isAr ? "التقرير النهائي للمؤسسة" : "Institution final training report"}
-                  </h3>
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    {(
-                      [
-                        ["commitment", isAr ? "الالتزام" : "Commitment"],
-                        ["attendance", isAr ? "الحضور" : "Attendance"],
-                        ["discipline", isAr ? "الانضباط" : "Discipline"],
-                        ["communication", isAr ? "التواصل" : "Communication"],
-                        ["teamwork", isAr ? "العمل الجماعي" : "Teamwork"],
-                        ["technicalSkills", isAr ? "المهارات التقنية" : "Technical skills"],
-                        ["professionalSkills", isAr ? "المهارات المهنية" : "Professional skills"],
-                      ] as const
-                    ).map(([key, label]) => (
-                      <label key={key} className="text-xs font-semibold text-text-light">
-                        {label}
-                        <input
-                          type="number"
-                          min={1}
-                          max={5}
-                          value={evaluationForm[key]}
-                          onChange={(e) =>
-                            setEvaluationForm((prev) => ({ ...prev, [key]: Number(e.target.value) || 1 }))
-                          }
-                          className="mt-1 w-full rounded-xl border border-border px-3 py-2 text-sm"
-                        />
-                      </label>
-                    ))}
+              <InstitutionCandidateWorkspace
+                isAr={isAr}
+                documents={
+                  <div className="space-y-3">
+                    <InstitutionDocumentTracker documents={detail.documentTracker} isAr={isAr} />
+                    <div className="flex flex-wrap gap-2">
+                      <input
+                        value={reqTitle}
+                        onChange={(e) => setReqTitle(e.target.value)}
+                        placeholder={isAr ? "عنوان مستند إضافي" : "Additional document title"}
+                        className="min-w-[200px] flex-1 rounded-xl border border-border px-3 py-2 text-sm"
+                      />
+                      <button
+                        type="button"
+                        disabled={saving || detail.institutionReadOnly || !reqTitle.trim()}
+                        onClick={() => void postAction({ action: "create_requirement", title: reqTitle.trim() }).then(() => setReqTitle(""))}
+                        className="rounded-xl border border-primary bg-primary/10 px-3 py-2 text-sm font-bold text-primary disabled:opacity-60"
+                      >
+                        {isAr ? "طلب مستند" : "Request document"}
+                      </button>
+                    </div>
                   </div>
-                  <textarea
-                    value={evaluationForm.strengths}
-                    onChange={(e) => setEvaluationForm((prev) => ({ ...prev, strengths: e.target.value }))}
-                    placeholder={isAr ? "نقاط القوة" : "Strengths"}
-                    className="mt-3 min-h-20 w-full rounded-xl border border-border px-3 py-2 text-sm"
-                  />
-                  <textarea
-                    value={evaluationForm.improvementAreas}
-                    onChange={(e) => setEvaluationForm((prev) => ({ ...prev, improvementAreas: e.target.value }))}
-                    placeholder={isAr ? "فرص التحسين" : "Improvement areas"}
-                    className="mt-3 min-h-20 w-full rounded-xl border border-border px-3 py-2 text-sm"
-                  />
-                  <select
-                    value={evaluationForm.finalRecommendation}
-                    onChange={(e) => setEvaluationForm((prev) => ({ ...prev, finalRecommendation: e.target.value }))}
-                    className="mt-3 w-full rounded-xl border border-border px-3 py-2 text-sm"
+                }
+                interviews={
+                  <div className="space-y-3">
+                    <div className="flex flex-wrap gap-2">
+                      <input
+                        type="datetime-local"
+                        value={interviewAt}
+                        onChange={(e) => setInterviewAt(e.target.value)}
+                        className="rounded-xl border border-border px-3 py-2 text-sm"
+                      />
+                      <button
+                        type="button"
+                        disabled={saving || detail.institutionReadOnly || !interviewAt}
+                        onClick={() =>
+                          void postAction({
+                            action: "schedule_interview",
+                            scheduledAt: new Date(interviewAt).toISOString(),
+                          }).then(() => setInterviewAt(""))
+                        }
+                        className="inline-flex items-center gap-2 rounded-xl border border-violet-300 bg-violet-50 px-3 py-2 text-sm font-bold text-violet-900 disabled:opacity-60"
+                      >
+                        <CalendarDays className="h-4 w-4" aria-hidden />
+                        {isAr ? "جدولة مقابلة" : "Schedule interview"}
+                      </button>
+                    </div>
+                    <InstitutionInterviewWorkspace
+                      applicationId={applicationId}
+                      interviews={detail.interviews}
+                      isAr={isAr}
+                      onUpdated={load}
+                    />
+                  </div>
+                }
+                messagesLink={
+                  <Link
+                    href={`/institution/training/messages?applicationId=${encodeURIComponent(applicationId)}`}
+                    className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-primary bg-primary/10 px-4 py-3 text-sm font-bold text-primary"
                   >
-                    <option value="excellent">{isAr ? "ممتاز" : "Excellent"}</option>
-                    <option value="very_good">{isAr ? "جيد جداً" : "Very good"}</option>
-                    <option value="good">{isAr ? "جيد" : "Good"}</option>
-                    <option value="acceptable">{isAr ? "مقبول" : "Acceptable"}</option>
-                    <option value="not_recommended">{isAr ? "غير موصى به" : "Not recommended"}</option>
-                  </select>
-                  <textarea
-                    value={evaluationForm.institutionNotes}
-                    onChange={(e) => setEvaluationForm((prev) => ({ ...prev, institutionNotes: e.target.value }))}
-                    placeholder={isAr ? "ملاحظات المؤسسة" : "Institution notes"}
-                    className="mt-3 min-h-20 w-full rounded-xl border border-border px-3 py-2 text-sm"
+                    <MessageSquare className="h-4 w-4" aria-hidden />
+                    {isAr ? "فتح المحادثة" : "Open conversation"}
+                  </Link>
+                }
+                tags={
+                  <InstitutionCandidateTagsPanel
+                    applicationId={applicationId}
+                    tags={detail.tags}
+                    isAr={isAr}
+                    onUpdated={load}
                   />
-                  <button
-                    type="button"
-                    disabled={saving}
-                    onClick={() => void postAction({ action: "submit_evaluation", ...evaluationForm })}
-                    className="mt-3 inline-flex items-center gap-2 rounded-xl border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm font-bold text-emerald-900 disabled:opacity-60"
-                  >
-                    <ClipboardList className="h-4 w-4" aria-hidden />
-                    {isAr ? "إرسال التقرير للمدرسة" : "Submit report to school"}
-                  </button>
-                </SectionCard>
-              ) : null}
+                }
+                notes={
+                  <InstitutionPrivateNotesPanel
+                    applicationId={applicationId}
+                    notes={detail.privateNotes}
+                    isAr={isAr}
+                    onUpdated={load}
+                  />
+                }
+                evaluation={
+                  <InstitutionEvaluationCenter
+                    applicationId={applicationId}
+                    applicationStatus={detail.status}
+                    assessments={detail.assessments}
+                    isAr={isAr}
+                    readOnly={detail.institutionReadOnly}
+                    assessmentTitle={assessmentTitle}
+                    onAssessmentTitleChange={setAssessmentTitle}
+                    saving={saving}
+                    onCreateAssessment={(title) =>
+                      void postAction({ action: "create_assessment", type: "upload_task", title }).then(() =>
+                        setAssessmentTitle("")
+                      )
+                    }
+                    onUpdated={load}
+                  />
+                }
+                finalReport={
+                  ["accepted", "awaiting_school_approval", "completed", "awaiting_final_evaluation_review", "final_evaluation_approved", "final_evaluation_rejected"].includes(
+                    detail.status
+                  ) ? (
+                    <div className="space-y-3">
+                      <div>
+                        <h3 className="text-base font-bold text-foreground">
+                          {isAr ? "التقرير النهائي للتدريب" : "Final training report"}
+                        </h3>
+                        <p className="text-xs text-text-light">
+                          {isAr
+                            ? "تقييم المؤسسة النهائي للطالب — منفصل عن التقييمات الدورية."
+                            : "Institution final trainee assessment — separate from periodic evaluations."}
+                        </p>
+                      </div>
+                      <InstitutionFinalEvaluationPanel
+                        applicationId={applicationId}
+                        isAr={isAr}
+                        readOnly={detail.institutionReadOnly}
+                        onSubmitted={load}
+                      />
+                    </div>
+                  ) : (
+                    <p className="text-sm text-text-light">
+                      {isAr
+                        ? "يُفعّل التقرير النهائي بعد قبول الطالب."
+                        : "Final report unlocks after the student is accepted."}
+                    </p>
+                  )
+                }
+              />
             </div>
 
             <div className="space-y-6">

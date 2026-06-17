@@ -131,9 +131,23 @@ export type PartnershipIntelligencePayload = {
     trainingCompletionQualityIndex: number;
     studentRecommendationRate: number;
     employmentRecommendationRate: number;
+    institutionRecommendationRate: number;
+    safetyComplianceAverage: number;
+    technicalSkillsAverage: number;
     studentEvaluationCount: number;
     institutionEvaluationCount: number;
     approvedCount: number;
+    topTrainingInstitutions: Array<{
+      institutionId: string;
+      institutionName: string;
+      averageScore: number;
+      evaluationCount: number;
+    }>;
+    mostRecommendedStudents: Array<{
+      studentId: string;
+      averageScore: number;
+      recommendEmployment: boolean;
+    }>;
   };
   trainingOutcomeAnalytics: {
     avgEmployabilityScore: number;

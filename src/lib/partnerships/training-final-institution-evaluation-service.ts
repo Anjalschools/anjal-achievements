@@ -18,7 +18,7 @@ import {
   type FinalEvaluationMode,
 } from "@/lib/partnerships/training-final-evaluation-constants";
 import { generateTrainingFinalReportPdfBuffer } from "@/lib/partnerships/training-final-report-pdf-generator";
-import type { TrainingFinalReportTemplateContext } from "@/lib/partnerships/training-final-report-template-constants";
+import { buildFinalReportTemplateContext } from "@/lib/partnerships/training-final-report-context-builder";
 import { runTrainingFinalReportAiReview } from "@/lib/partnerships/training-final-report-ai-review-service";
 import { appendTimelineEvent } from "@/lib/partnerships/partnerships-application-workflow";
 import { maybeRequestFinalEvaluationReview } from "@/lib/partnerships/training-final-evaluation-supervisor-service";
@@ -29,15 +29,6 @@ const INSTITUTION_ELIGIBLE_STATUSES = new Set([
   "completed",
   "final_evaluation_rejected",
 ]);
-
-const formatDate = (value?: Date | string | null) => {
-  if (!value) return "—";
-  try {
-    return new Date(value).toLocaleDateString("ar-SA");
-  } catch {
-    return "—";
-  }
-};
 
 export type SubmitInstitutionFinalEvaluationInput = {
   applicationId: string;
@@ -87,44 +78,19 @@ export const generateInstitutionFinalReportTemplate = async (
   }
 
   const p = draft || {};
-  const templateContext: TrainingFinalReportTemplateContext = {
+  const studentEvaluation = await TrainingFinalStudentEvaluation.findOne({ applicationId }).lean();
+
+  const templateContext = buildFinalReportTemplateContext({
     studentName: ctx.application.studentSnapshot?.fullName || "",
     school: ctx.application.studentSnapshot?.school || "—",
     institutionName: ctx.organization?.name || "",
     opportunityTitle: ctx.opportunity?.title || "",
-    trainingStartDate: formatDate(
-      p.trainingStartDate ? String(p.trainingStartDate) : ctx.opportunity?.trainingStart
-    ),
-    trainingEndDate: formatDate(
-      p.trainingEndDate ? String(p.trainingEndDate) : ctx.opportunity?.trainingEnd
-    ),
-    trainingHours: String(p.trainingHours || "—"),
-    assignedTasks: String(p.assignedTasks || ""),
-    scores: {
-      attendance: Number(p.attendanceScore || 3),
-      punctuality: Number(p.punctualityScore || 3),
-      instructionCompliance: Number(p.instructionComplianceScore || 3),
-      workEthics: Number(p.workEthicsScore || 3),
-      responsibility: Number(p.responsibilityScore || 3),
-      professionalism: Number(p.professionalismScore || 3),
-      communication: Number(p.communicationScore || 3),
-      teamwork: Number(p.teamworkScore || 3),
-      initiative: Number(p.initiativeScore || 3),
-      learningSpeed: Number(p.learningSpeedScore || 3),
-      taskExecution: Number(p.taskExecutionScore || 3),
-      workQuality: Number(p.workQualityScore || 3),
-      safetyCompliance: Number(p.safetyComplianceScore || 3),
-    },
-    passedTraining: p.passedTraining === true,
-    recommendFutureTraining: p.recommendFutureTraining === true,
-    recommendEmployment: p.recommendEmployment === true,
-    strengths: String(p.strengths || ""),
-    improvementAreas: String(p.improvementAreas || ""),
-    finalRecommendation: String(p.finalRecommendation || ""),
-    supervisorName: String(p.supervisorName || ""),
-    supervisorTitle: String(p.supervisorTitle || ""),
-    generatedAt: new Date().toLocaleDateString("ar-SA"),
-  };
+    trainingStartDate: ctx.opportunity?.trainingStart,
+    trainingEndDate: ctx.opportunity?.trainingEnd,
+    studentEvaluation: studentEvaluation as Record<string, unknown> | null,
+    institutionEvaluation: p,
+    draft: p,
+  });
 
   const buffer = await generateTrainingFinalReportPdfBuffer(templateContext);
   const uploaded = await uploadEvidenceBufferToR2({
@@ -159,6 +125,15 @@ export const submitInstitutionFinalEvaluation = async (
   if (!validateScores(p)) return { ok: false, error: "Invalid scores", code: "invalid_scores" };
   if (!String(p.supervisorName || "").trim()) {
     return { ok: false, error: "Supervisor name is required", code: "supervisor_required" };
+  }
+
+  const notRecommended = p.passedTraining === false;
+  const stronglyRecommended = p.recommendEmployment === true;
+  if (
+    (notRecommended || stronglyRecommended) &&
+    !String(p.recommendationReason || "").trim()
+  ) {
+    return { ok: false, error: "Recommendation reason is required", code: "recommendation_reason_required" };
   }
 
   if (input.evaluationMode === "uploaded_document" && !String(p.reportFileKey || "").trim()) {
@@ -225,6 +200,7 @@ export const submitInstitutionFinalEvaluation = async (
     strengths: String(p.strengths || "").trim().slice(0, 6000) || undefined,
     improvementAreas: String(p.improvementAreas || "").trim().slice(0, 6000) || undefined,
     finalRecommendation: String(p.finalRecommendation || "").trim().slice(0, 4000) || undefined,
+    recommendationReason: String(p.recommendationReason || "").trim().slice(0, 2000) || undefined,
     supervisorName: String(p.supervisorName).trim(),
     supervisorTitle: String(p.supervisorTitle || "").trim() || undefined,
     supervisorPhone: String(p.supervisorPhone || "").trim() || undefined,

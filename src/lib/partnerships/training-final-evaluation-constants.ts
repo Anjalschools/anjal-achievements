@@ -78,6 +78,8 @@ export type FinalEvaluationAttachmentRef = {
   storageKey: string;
   mimeType?: string;
   storageProvider?: "r2" | "cloudinary";
+  label?: string;
+  caption?: string;
 };
 
 export type FinalEvaluationAiVerification = {

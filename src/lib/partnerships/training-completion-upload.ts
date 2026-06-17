@@ -62,6 +62,10 @@ export const uploadTrainingReportFile = async (file: File): Promise<UploadedTrai
   return uploadAttachment(file);
 };
 
+/** Training final evaluation evidence — reuses achievement image upload pipeline. */
+export const uploadTrainingEvidenceImage = async (file: File): Promise<UploadedTrainingAttachment> =>
+  uploadImage(file);
+
 export const attachmentDisplayUrl = (storageKey: string): string => {
   const key = String(storageKey || "").trim();
   if (!key) return "";

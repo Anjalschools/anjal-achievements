@@ -57,6 +57,8 @@ export const INSTITUTION_PRIVATE_NOTE_CATEGORIES = [
   "strengths",
   "weaknesses",
   "recommendation",
+  "professional_observations",
+  "communication_notes",
   "general",
 ] as const;
 
@@ -69,9 +71,11 @@ export const PRIVATE_NOTE_CATEGORY_LABELS: Record<
   evaluation: { ar: "ملاحظات تقييم", en: "Evaluation notes" },
   interview: { ar: "ملاحظات المقابلة", en: "Interview notes" },
   strengths: { ar: "نقاط القوة", en: "Strengths" },
-  weaknesses: { ar: "نقاط الضعف", en: "Weaknesses" },
+  weaknesses: { ar: "مجالات التحسين", en: "Areas for improvement" },
   recommendation: { ar: "التوصيات", en: "Recommendations" },
-  general: { ar: "عام", en: "General" },
+  professional_observations: { ar: "ملاحظات مهنية", en: "Professional observations" },
+  communication_notes: { ar: "ملاحظات التواصل", en: "Communication notes" },
+  general: { ar: "مخصص / عام", en: "Custom / general" },
 };
 
 export const CANDIDATE_TIMELINE_ACTIONS = {
