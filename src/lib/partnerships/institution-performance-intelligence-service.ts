@@ -14,6 +14,7 @@ import PartnershipThread from "@/models/PartnershipThread";
 import StudentTrainingApplication from "@/models/StudentTrainingApplication";
 import TrainingInterview from "@/models/TrainingInterview";
 import TrainingOpportunity from "@/models/TrainingOpportunity";
+import { profileMongoFind, profileMongoOperation } from "@/lib/school-improvement/intelligence-mongo-profiler";
 import {
   DEFAULT_NO_RESPONSE_ALERT_DAYS,
   PARTNERSHIP_ALERT_LABELS,
@@ -713,7 +714,11 @@ export const buildPartnershipIntelligenceDashboard = async (): Promise<Partnersh
     academicYearLabel: currentYear?.label || currentYear?.name,
   };
 
-  const orgs = await PartnerOrganization.find({ active: { $ne: false } }).select("name category averageRating").lean();
+  const orgs = await profileMongoFind(PartnerOrganization, {
+    operation: "find_active_orgs",
+    fn: () => PartnerOrganization.find({ active: { $ne: false } }).select("name category averageRating").lean(),
+    countDocuments: (rows) => rows.length,
+  });
 
   const rankingRows: InstitutionRankingRow[] = [];
   for (const org of orgs) {
@@ -733,11 +738,36 @@ export const buildPartnershipIntelligenceDashboard = async (): Promise<Partnersh
       ? round1(rankingRows.reduce((s, r) => s + r.qualityScore, 0) / rankingRows.length)
       : 0;
 
-  const alerts = await buildPartnershipAlerts(rankingRows);
-  const schoolImprovementIndicators = await buildSchoolPartnershipIndicators(rankingRows);
-  const parentConsentAnalytics = await buildParentConsentAnalytics();
-  const finalEvaluationAnalytics = await buildFinalEvaluationAnalytics(yearFilter.academicYearLabel);
-  const trainingOutcomeAnalytics = await buildPartnershipTrainingOutcomeExtension(yearFilter.academicYearLabel);
+  const alerts = await profileMongoOperation({
+    collection: "PartnershipMixed",
+    operation: "buildPartnershipAlerts",
+    fn: () => buildPartnershipAlerts(rankingRows),
+    countDocuments: (rows) => rows.length,
+  });
+  const schoolImprovementIndicators = await profileMongoOperation({
+    collection: "PartnershipMixed",
+    operation: "buildSchoolPartnershipIndicators",
+    fn: () => buildSchoolPartnershipIndicators(rankingRows),
+    countDocuments: () => 4,
+  });
+  const parentConsentAnalytics = await profileMongoOperation({
+    collection: "StudentTrainingApplication",
+    operation: "buildParentConsentAnalytics",
+    fn: () => buildParentConsentAnalytics(),
+    countDocuments: (value) => Object.keys(value || {}).length,
+  });
+  const finalEvaluationAnalytics = await profileMongoOperation({
+    collection: "StudentTrainingApplication",
+    operation: "buildFinalEvaluationAnalytics",
+    fn: () => buildFinalEvaluationAnalytics(yearFilter.academicYearLabel),
+    countDocuments: (value) => Object.keys(value || {}).length,
+  });
+  const trainingOutcomeAnalytics = await profileMongoOperation({
+    collection: "TrainingCompletionRecord",
+    operation: "buildPartnershipTrainingOutcomeExtension",
+    fn: () => buildPartnershipTrainingOutcomeExtension(yearFilter.academicYearLabel),
+    countDocuments: (value) => Object.keys(value || {}).length,
+  });
 
   return {
     generatedAt: new Date().toISOString(),

@@ -4,6 +4,7 @@
  */
 export async function register() {
   if (process.env.NEXT_RUNTIME !== "nodejs") return;
+  console.log("[BUILD VERSION]", process.env.RENDER_GIT_COMMIT || "local");
   const { runEnvCheckOnce } = await import("@/lib/env-check");
   runEnvCheckOnce();
 }

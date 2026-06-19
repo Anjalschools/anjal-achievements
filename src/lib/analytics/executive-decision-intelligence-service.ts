@@ -11,6 +11,7 @@ import { buildInstitutionalSnapshot } from "@/lib/analytics/institutional-snapsh
 import { buildCareerAnalyticsDashboard } from "@/lib/career/career-analytics-service";
 import { buildPartnershipAnalyticsSummary } from "@/lib/partnerships/institution-analytics-service";
 import { buildPartnershipIntelligenceDashboard } from "@/lib/partnerships/institution-performance-intelligence-service";
+import { profileMongoFind, profileMongoOperation } from "@/lib/school-improvement/intelligence-mongo-profiler";
 
 export type TalentPipelineRow = {
   studentId: string;
@@ -139,28 +140,61 @@ const linearPredict = (series: Array<{ year: number; value: number }>): Predicti
 export const buildExecutiveDecisionIntelligence = async (): Promise<ExecutiveDecisionIntelligencePayload> => {
   await connectDB();
   const [snapshot, careerSummary, profiles, users, trainingRecords, opportunities] = await Promise.all([
-    buildInstitutionalSnapshot(),
-    buildCareerAnalyticsDashboard(),
-    StudentCareerProfile.find({})
-      .select(
-        "studentId universityReadinessScore careerReadinessScore trainingHours volunteerHours achievementsScore scoresComputedAt"
-      )
-      .limit(3000)
-      .lean(),
-    User.find({ role: "student" }).select("_id fullNameAr fullName fullNameEn grade section").limit(5000).lean(),
-    TrainingCompletionRecord.find({})
-      .select(
-        "organizationId organizationName studentId status volunteerHours studentBenefitRating overallRecommendation attendanceCommitment professionalEthics"
-      )
-      .limit(5000)
-      .lean(),
-    TrainingOpportunity.find({ active: { $ne: false } }).select("targetGrades seats").lean(),
+    profileMongoOperation({
+      collection: "Achievement",
+      operation: "buildInstitutionalSnapshot",
+      fn: () => buildInstitutionalSnapshot(),
+      countDocuments: (value) => value.activityBreakdown.length,
+    }),
+    profileMongoOperation({
+      collection: "StudentCareerProfile",
+      operation: "buildCareerAnalyticsDashboard",
+      fn: () => buildCareerAnalyticsDashboard(),
+      countDocuments: () => 1,
+    }),
+    profileMongoFind(StudentCareerProfile, {
+      operation: "find_profiles",
+      fn: () =>
+        StudentCareerProfile.find({})
+          .select(
+            "studentId universityReadinessScore careerReadinessScore trainingHours volunteerHours achievementsScore scoresComputedAt"
+          )
+          .limit(3000)
+          .lean(),
+      countDocuments: (rows) => rows.length,
+    }),
+    profileMongoFind(User, {
+      operation: "find_students",
+      fn: () => User.find({ role: "student" }).select("_id fullNameAr fullName fullNameEn grade section").limit(5000).lean(),
+      countDocuments: (rows) => rows.length,
+    }),
+    profileMongoFind(TrainingCompletionRecord, {
+      operation: "find_training_records",
+      fn: () =>
+        TrainingCompletionRecord.find({})
+          .select(
+            "organizationId organizationName studentId status volunteerHours studentBenefitRating overallRecommendation attendanceCommitment professionalEthics"
+          )
+          .limit(5000)
+          .lean(),
+      countDocuments: (rows) => rows.length,
+    }),
+    profileMongoFind(TrainingOpportunity, {
+      operation: "find_active_opportunities",
+      fn: () => TrainingOpportunity.find({ active: { $ne: false } }).select("targetGrades seats").lean(),
+      countDocuments: (rows) => rows.length,
+    }),
   ]);
 
   const userMap = new Map(users.map((u) => [String(u._id), u]));
   const insightBundle = buildExecutiveInsights(snapshot, { maxInsights: 40 });
   const partnershipAnalytics = careerSummary.partnershipAnalytics || (await buildPartnershipAnalyticsSummary());
-  const partnershipIntelligence = await buildPartnershipIntelligenceDashboard();
+  const partnershipIntelligence = await profileMongoOperation({
+    collection: "PartnerOrganization",
+    operation: "buildPartnershipIntelligenceDashboard",
+    fn: () => buildPartnershipIntelligenceDashboard(),
+    countDocuments: (value) => value.rankings.topRated.length,
+  });
 
   const toTalentRow = (profile: (typeof profiles)[0], evidence: string): TalentPipelineRow => {
     const user = userMap.get(String(profile.studentId));

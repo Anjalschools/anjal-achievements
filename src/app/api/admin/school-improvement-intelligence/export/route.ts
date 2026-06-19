@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { jsonInternalServerError } from "@/lib/api-safe-response";
 import { requireSession } from "@/lib/auth-guard";
 import { roleHasCapability } from "@/lib/app-role-scope-matrix";
 import { buildSchoolImprovementIntelligence } from "@/lib/school-improvement/school-improvement-service";
+import { createEmptyImprovementPayload } from "@/lib/school-improvement/school-improvement-defaults";
 import { buildSchoolImprovementReportHtml } from "@/lib/school-improvement/school-improvement-export";
 import type { SchoolImprovementReportKind } from "@/lib/school-improvement/school-improvement-types";
 import { runHardenedRoute } from "@/lib/resilience/hardened-route";
@@ -32,10 +32,10 @@ export async function GET(request: NextRequest) {
         const format = String(searchParams.get("format") || "html").trim().toLowerCase();
 
         if (!REPORT_KINDS.has(report)) {
-          return NextResponse.json({ error: "Invalid report kind" }, { status: 400 });
+          return NextResponse.json({ success: false, error: "Invalid report kind" }, { status: 400 });
         }
 
-        const improvement = await buildSchoolImprovementIntelligence();
+        const { payload: improvement } = await buildSchoolImprovementIntelligence();
 
         if (format === "html" || format === "pdf") {
           const html = buildSchoolImprovementReportHtml(improvement, report, locale);
@@ -48,10 +48,20 @@ export async function GET(request: NextRequest) {
           });
         }
 
-        return NextResponse.json({ ok: true, improvement, report });
+        return NextResponse.json({ success: true, data: improvement, improvement, report, ok: true });
       } catch (error) {
         console.error("[GET /api/admin/school-improvement-intelligence/export]", error);
-        return jsonInternalServerError(error);
+        const empty = createEmptyImprovementPayload();
+        if (String(request.nextUrl.searchParams.get("format") || "html") !== "json") {
+          const html = buildSchoolImprovementReportHtml(empty, "board", "ar");
+          return new NextResponse(html, {
+            headers: {
+              "Content-Type": "text/html; charset=utf-8",
+              "Content-Disposition": 'attachment; filename="school-improvement-fallback.html"',
+            },
+          });
+        }
+        return NextResponse.json({ success: true, data: empty, improvement: empty, ok: true });
       }
     },
   });

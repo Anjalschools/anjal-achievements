@@ -13,6 +13,8 @@ const SchoolIntelligencePage = () => {
   const isAr = locale === "ar";
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [status, setStatus] = useState<"success" | "degraded" | "unavailable">("success");
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [data, setData] = useState<SchoolIntelligencePayload | null>(null);
 
   const load = useCallback(async () => {
@@ -21,14 +23,60 @@ const SchoolIntelligencePage = () => {
     try {
       const res = await fetch("/api/admin/school-intelligence", { cache: "no-store" });
       const json = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(typeof json.error === "string" ? json.error : "Failed");
+
+      if (res.status === 401 || res.status === 403) {
+        throw new Error(typeof json.error === "string" ? json.error : "Forbidden");
+      }
+
+      const responseStatus =
+        json.status === "degraded" || json.status === "unavailable" ? json.status : "success";
+      const friendlyMessage =
+        locale === "ar"
+          ? json.messageAr || json.diagnostics?.messageAr || null
+          : json.messageEn || json.diagnostics?.messageEn || null;
+
       setData(json.intelligence || null);
+      setStatus(responseStatus);
+      setStatusMessage(friendlyMessage);
+      setError(null);
+
+      if (json.diagnostics?.runtimeVersion || json.diagnostics?.buildTimestamp) {
+        console.log(
+          "[SchoolIntelligence Runtime]",
+          json.diagnostics.runtimeVersion,
+          json.diagnostics.buildTimestamp
+        );
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error");
       setData(null);
+      setStatus("unavailable");
+      setStatusMessage(
+        isAr ? "تعذر تحميل شبكة الذكاء المدرسي حالياً" : "School intelligence network is unavailable right now"
+      );
     } finally {
       setLoading(false);
     }
+  }, [isAr, locale]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const shouldClearCaches =
+      process.env.NODE_ENV === "development" ||
+      new URLSearchParams(window.location.search).get("runtimeVerify") === "1";
+    if (!shouldClearCaches) return;
+
+    void (async () => {
+      if ("serviceWorker" in navigator) {
+        const registrations = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(registrations.map((registration) => registration.unregister()));
+      }
+      if ("caches" in window) {
+        const keys = await caches.keys();
+        await Promise.all(keys.map((key) => caches.delete(key)));
+      }
+      console.log("[SchoolIntelligence Runtime] service worker unregistered and caches cleared");
+    })();
   }, []);
 
   useEffect(() => {
@@ -84,6 +132,18 @@ const SchoolIntelligencePage = () => {
       </div>
 
       {error ? <p className="mb-4 text-sm text-red-600">{error}</p> : null}
+
+      {status === "degraded" && statusMessage ? (
+        <div className="mb-4 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-950">
+          <p className="font-semibold">{statusMessage}</p>
+        </div>
+      ) : null}
+
+      {status === "unavailable" && statusMessage && !loading ? (
+        <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+          <p className="font-semibold">{statusMessage}</p>
+        </div>
+      ) : null}
 
       {loading ? (
         <div className="flex items-center gap-2 py-12 text-text-light">

@@ -796,6 +796,11 @@ AchievementSchema.index({ status: 1, achievementYear: 1, achievementType: 1, res
 AchievementSchema.index({ status: 1, achievementType: 1, createdAt: -1 });
 AchievementSchema.index({ achievementType: 1, status: 1, createdAt: -1 });
 
+AchievementSchema.index({ status: 1, achievementLevel: 1, resultType: 1, createdAt: -1 });
+AchievementSchema.index({ status: 1, userId: 1, resultType: 1, achievementYear: -1 });
+AchievementSchema.index({ status: 1, academicYear: 1, createdAt: -1 }, { sparse: true });
+AchievementSchema.index({ status: 1, organization: 1, activityYear: -1 }, { sparse: true });
+
 const Achievement: Model<IAchievement> =
   mongoose.models.Achievement ||
   mongoose.model<IAchievement>("Achievement", AchievementSchema);

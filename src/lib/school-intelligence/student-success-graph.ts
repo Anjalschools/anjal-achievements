@@ -4,7 +4,12 @@ import Achievement from "@/models/Achievement";
 import User from "@/models/User";
 import StudentCareerProfile from "@/models/StudentCareerProfile";
 import TrainingCompletionRecord from "@/models/TrainingCompletionRecord";
-import { buildStudentIntelligence } from "@/lib/student-intelligence-analytics";
+import { buildStudentIntelligenceResilient } from "@/lib/student-intelligence-analytics";
+import { profileMongoAggregate, profileMongoFind } from "@/lib/school-improvement/intelligence-mongo-profiler";
+import {
+  logSchoolIntelligenceBoot,
+  SCHOOL_INTELLIGENCE_QUERY_TIMEOUT_MS,
+} from "@/lib/school-intelligence/school-intelligence-boot";
 import { getStageByGrade } from "@/lib/report-stage-mapping";
 import {
   buildStudentSubScores,
@@ -17,6 +22,16 @@ import type {
   SchoolTrack,
   StudentSuccessGraphNode,
 } from "@/lib/school-intelligence/school-intelligence-types";
+
+logSchoolIntelligenceBoot();
+
+const logStep = (step: string, started: number, extra?: Record<string, unknown>) => {
+  console.info("[SchoolIntelligence]", {
+    step,
+    durationMs: Date.now() - started,
+    ...extra,
+  });
+};
 
 const toTrack = (section: string | undefined): SchoolTrack => {
   if (section === "arabic") return "arabic";
@@ -44,36 +59,93 @@ const inferMomentum = (medalRatioPct: number, distinctActivityCount: number): St
   return "low";
 };
 
-export const buildStudentSuccessGraph = async (): Promise<StudentSuccessGraphNode[]> => {
-  await connectDB();
+export type StudentSuccessGraphBuildMeta = {
+  intelDegraded: boolean;
+  intelSnapshotFallback: boolean;
+};
 
-  const [intel, users, profiles, certCounts, trainingByStudent] = await Promise.all([
-    buildStudentIntelligence({}, { lite: false }),
-    User.find({ role: "student" })
-      .select("_id fullNameAr fullName fullNameEn grade section isMawhibaStudent profilePhoto")
-      .limit(5000)
-      .lean(),
-    StudentCareerProfile.find({})
-      .select(
-        "studentId achievementsScore skillsScore careerReadinessScore universityReadinessScore trainingHours volunteerHours extractedSkills manualSkills"
-      )
-      .limit(5000)
-      .lean(),
-    Achievement.aggregate<{ _id: unknown; count: number }>([
-      { $match: { certificateIssued: true, userId: { $exists: true, $ne: null } } },
-      { $group: { _id: "$userId", count: { $sum: 1 } } },
-    ]),
-    TrainingCompletionRecord.aggregate<{ _id: unknown; hours: number; count: number }>([
-      { $match: { status: "approved", studentId: { $exists: true, $ne: null } } },
-      {
-        $group: {
-          _id: "$studentId",
-          hours: { $sum: { $ifNull: ["$volunteerHours", 0] } },
-          count: { $sum: 1 },
-        },
-      },
-    ]),
+export const buildStudentSuccessGraph = async (): Promise<{
+  nodes: StudentSuccessGraphNode[];
+  meta: StudentSuccessGraphBuildMeta;
+}> => {
+  await connectDB();
+  const graphStarted = Date.now();
+  console.info("[SchoolIntelligence] buildStudentSuccessGraph start");
+
+  const intelStarted = Date.now();
+  console.time("load-achievements");
+  const intelResult = await buildStudentIntelligenceResilient({ status: "approved" }, { schoolGraph: true });
+  console.timeEnd("load-achievements");
+  const intel = intelResult.payload;
+  logStep("buildStudentIntelligence", intelStarted, {
+    weighted: intel.byWeightedScore.length,
+    participation: intel.byParticipation.length,
+    degraded: intelResult.degraded,
+    snapshotFallback: intelResult.snapshotFallback,
+  });
+
+  const schoolQueryOpts = {
+    timeoutMs: SCHOOL_INTELLIGENCE_QUERY_TIMEOUT_MS,
+    snapshotOnFailure: true,
+  };
+
+  const parallelStarted = Date.now();
+  const [users, profiles, certCounts, trainingByStudent] = await Promise.all([
+    profileMongoFind(User, {
+      operation: "find_students",
+      fn: () =>
+        User.find({ role: "student" })
+          .select("_id fullNameAr fullName fullNameEn grade section isMawhibaStudent profilePhoto")
+          .limit(5000)
+          .lean(),
+      countDocuments: (rows) => rows.length,
+      ...schoolQueryOpts,
+    }),
+    profileMongoFind(StudentCareerProfile, {
+      operation: "find_profiles",
+      fn: () =>
+        StudentCareerProfile.find({ studentId: { $exists: true, $ne: null } })
+          .select(
+            "studentId achievementsScore skillsScore careerReadinessScore universityReadinessScore trainingHours volunteerHours extractedSkills manualSkills"
+          )
+          .limit(5000)
+          .lean(),
+      countDocuments: (rows) => rows.length,
+      ...schoolQueryOpts,
+    }),
+    profileMongoAggregate(Achievement, {
+      pipelineName: "student_success_certificates_by_user",
+      fn: () =>
+        Achievement.aggregate<{ _id: unknown; count: number }>([
+          { $match: { status: "approved", certificateIssued: true, userId: { $exists: true, $ne: null } } },
+          { $group: { _id: "$userId", count: { $sum: 1 } } },
+        ]),
+      countDocuments: (rows) => rows.length,
+      ...schoolQueryOpts,
+    }),
+    profileMongoAggregate(TrainingCompletionRecord, {
+      pipelineName: "student_success_training_by_student",
+      fn: () =>
+        TrainingCompletionRecord.aggregate<{ _id: unknown; hours: number; count: number }>([
+          { $match: { status: "approved", studentId: { $exists: true, $ne: null } } },
+          {
+            $group: {
+              _id: "$studentId",
+              hours: { $sum: { $ifNull: ["$volunteerHours", 0] } },
+              count: { $sum: 1 },
+            },
+          },
+        ]),
+      countDocuments: (rows) => rows.length,
+      ...schoolQueryOpts,
+    }),
   ]);
+  logStep("parallel-support-queries", parallelStarted, {
+    users: users.length,
+    profiles: profiles.length,
+    certificates: certCounts.length,
+    trainingGroups: trainingByStudent.length,
+  });
 
   const intelMap = new Map(intel.byWeightedScore.map((r) => [r.participantId, r]));
   const growthMap = new Map(intel.byFastestGrowth.map((r) => [r.participantId, r]));
@@ -81,6 +153,7 @@ export const buildStudentSuccessGraph = async (): Promise<StudentSuccessGraphNod
   const certMap = new Map(certCounts.map((c) => [String(c._id), c.count]));
   const trainingMap = new Map(trainingByStudent.map((t) => [String(t._id), t]));
 
+  const nodesStarted = Date.now();
   const nodes: StudentSuccessGraphNode[] = [];
 
   for (const user of users) {
@@ -158,5 +231,14 @@ export const buildStudentSuccessGraph = async (): Promise<StudentSuccessGraphNod
     });
   }
 
-  return nodes.sort((a, b) => b.successIndex - a.successIndex);
+  logStep("compose-nodes", nodesStarted, { nodes: nodes.length });
+  logStep("buildStudentSuccessGraph", graphStarted, { nodes: nodes.length });
+
+  return {
+    nodes: nodes.sort((a, b) => b.successIndex - a.successIndex),
+    meta: {
+      intelDegraded: intelResult.degraded,
+      intelSnapshotFallback: intelResult.snapshotFallback,
+    },
+  };
 };

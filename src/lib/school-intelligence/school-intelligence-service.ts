@@ -14,7 +14,7 @@ import { buildTrainingSchoolIntelligenceIndices } from "@/lib/partnerships/train
 import type { SchoolIntelligencePayload } from "@/lib/school-intelligence/school-intelligence-types";
 
 export const buildSchoolIntelligenceNetwork = async (): Promise<SchoolIntelligencePayload> => {
-  const nodes = await buildStudentSuccessGraph();
+  const { nodes } = await buildStudentSuccessGraph();
   const longitudinalGrowth = await buildLongitudinalGrowth(nodes);
   const yearOverYearGrowthPct = computeYearOverYearGrowthPct(longitudinalGrowth);
 

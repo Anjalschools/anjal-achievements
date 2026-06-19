@@ -9,6 +9,17 @@ import {
   buildWeightedStudentRankings,
   sortIntelRowsByWeightedScore,
 } from "@/lib/analytics/achievement-ranking-engine";
+import { profileMongoAggregate } from "@/lib/school-improvement/intelligence-mongo-profiler";
+import {
+  loadIntelligenceSnapshot,
+  saveIntelligenceSnapshot,
+} from "@/lib/school-improvement/intelligence-snapshot-store";
+import { IntelligenceQueryTimeoutError } from "@/lib/school-improvement/intelligence-self-healing";
+import {
+  logSchoolIntelligenceBoot,
+  SCHOOL_INTELLIGENCE_AGG_TIMEOUT_MS,
+} from "@/lib/school-intelligence/school-intelligence-boot";
+import { createEmptyStudentIntelligencePayload } from "@/lib/school-intelligence/school-intelligence-diagnostics-types";
 
 const stageLabel = (key: string, loc: "ar" | "en"): string => {
   if (key === "primary") return loc === "ar" ? "ابتدائي" : "Primary";
@@ -132,16 +143,64 @@ const toRow = (r: AggRow, distinctActivityCount = 0): StudentIntelRow => {
 export type StudentIntelligenceBuildOptions = {
   /** Skips expensive diversity/growth facets for dashboard highlights (same response shape). */
   lite?: boolean;
+  /** School intelligence graph — approved-only default, skips diversity/growth, tuned limits. */
+  schoolGraph?: boolean;
 };
+
+export type StudentIntelligenceBuildResult = {
+  payload: StudentIntelligencePayload;
+  degraded: boolean;
+  snapshotFallback: boolean;
+};
+
+const hasExplicitStatusFilter = (filters: ParticipationAnalyticsFilters): boolean => {
+  const status = String(filters.status || "").trim();
+  if (status && status !== "all") return true;
+  return Boolean(filters.statuses && filters.statuses.length > 0);
+};
+
+const resolveIntelligenceFilters = (
+  filters: ParticipationAnalyticsFilters,
+  opts?: StudentIntelligenceBuildOptions
+): ParticipationAnalyticsFilters => {
+  if (!opts?.schoolGraph && !opts?.lite) return filters;
+  if (hasExplicitStatusFilter(filters)) return filters;
+  return { ...filters, status: "approved" };
+};
+
+const STUDENT_INTEL_FACET_SNAPSHOT_KEY = "student_intelligence_facet";
+const STUDENT_INTEL_SCHOOL_GRAPH_SNAPSHOT_KEY = "student_intelligence_school_graph";
 
 export const buildStudentIntelligence = async (
   filters: ParticipationAnalyticsFilters,
   opts?: StudentIntelligenceBuildOptions
 ): Promise<StudentIntelligencePayload> => {
+  const result = await buildStudentIntelligenceResilient(filters, opts);
+  return result.payload;
+};
+
+export const buildStudentIntelligenceResilient = async (
+  filters: ParticipationAnalyticsFilters,
+  opts?: StudentIntelligenceBuildOptions
+): Promise<StudentIntelligenceBuildResult> => {
+  if (opts?.schoolGraph) logSchoolIntelligenceBoot();
   await connectDB();
   const intelT0 = Date.now();
   const lite = opts?.lite === true;
-  const shaped = buildShapedStages(filters);
+  const schoolGraph = opts?.schoolGraph === true;
+  const resolvedFilters = resolveIntelligenceFilters(filters, opts);
+
+  console.info("[AchievementIntelligence] build start", { lite, schoolGraph });
+  console.time("load-achievements");
+  console.time("aggregate-achievements");
+
+  const shapedStarted = Date.now();
+  const shaped = buildShapedStages(resolvedFilters);
+  console.info("[AchievementIntelligence] shaped-stages", { durationMs: Date.now() - shapedStarted, stages: shaped.length });
+
+  const rankingPoolLimit = schoolGraph ? 2500 : lite ? 600 : 5000;
+  const listLimit = lite ? 8 : 20;
+  const includeGrowthFacets = !lite && !schoolGraph;
 
   const facetBody: Record<string, mongoose.PipelineStage[]> = {
     rankingPool: [
@@ -155,7 +214,7 @@ export const buildStudentIntelligence = async (
           _id: 1,
         },
       },
-      { $limit: lite ? 600 : 5000 },
+      { $limit: rankingPoolLimit },
     ],
     byParticipation: [
       {
@@ -187,7 +246,7 @@ export const buildStudentIntelligence = async (
         },
       },
       { $sort: { recordCount: -1 } },
-      { $limit: lite ? 8 : 20 },
+      { $limit: listLimit },
     ],
     byMedals: [
       {
@@ -219,11 +278,10 @@ export const buildStudentIntelligence = async (
         },
       },
       { $sort: { medalCount: -1, recordCount: -1 } },
-      { $limit: lite ? 8 : 20 },
+      { $limit: listLimit },
     ],
-    ...(lite
-      ? {}
-      : {
+    ...(includeGrowthFacets
+      ? {
     byFastestGrowth: [
       {
         $group: {
@@ -268,10 +326,10 @@ export const buildStudentIntelligence = async (
       { $sort: { growthIndex: -1, recordCount: -1 } },
       { $limit: 20 },
     ],
-      }),
-    ...(lite
-      ? {}
-      : {
+      }
+      : {}),
+    ...(includeGrowthFacets
+      ? {
     byDiversity: [
       {
         $group: {
@@ -314,19 +372,43 @@ export const buildStudentIntelligence = async (
       { $sort: { divN: -1, recordCount: -1 } },
       { $limit: 20 },
     ],
-      }),
+      }
+      : {}),
   };
 
-  const [res] = await Achievement.aggregate(
-    [
-      ...shaped,
-      { $facet: facetBody },
-    ] as mongoose.PipelineStage[],
-    { allowDiskUse: true, maxTimeMS: lite ? 22_000 : 45_000 }
-  );
+  const pipeline = [
+    ...shaped,
+    {
+      $project: {
+        participantId: 1,
+        userId: 1,
+        resultType: 1,
+        medalType: 1,
+        rank: 1,
+        achievementLevel: 1,
+        organization: 1,
+        effStage: 1,
+        effSection: 1,
+        effMawhiba: 1,
+        effYear: 1,
+        analyticsCategory: 1,
+        achievementType: 1,
+        activityRaw: 1,
+        u: 1,
+        studentSnapshot: 1,
+        _id: 1,
+      },
+    },
+    { $facet: facetBody },
+  ] as mongoose.PipelineStage[];
 
-  const part = ((res?.byParticipation || []) as AggRow[]).map((r) => toRow(r, 0));
-  const medals = ((res?.byMedals || []) as AggRow[]).map((r) => toRow(r, 0));
+  type FacetResult = {
+    rankingPool?: RankLean[];
+    byParticipation?: AggRow[];
+    byMedals?: AggRow[];
+    byFastestGrowth?: GrowthAggRow[];
+    byDiversity?: Array<AggRow & { divN?: number; distinctActivities?: unknown[] }>;
+  };
 
   type RankLean = {
     participantId?: unknown;
@@ -336,6 +418,97 @@ export const buildStudentIntelligence = async (
     achievementLevel?: string;
     _id?: unknown;
   };
+
+  let facetDoc: FacetResult | undefined;
+  const aggregateTimeoutMs = schoolGraph
+    ? SCHOOL_INTELLIGENCE_AGG_TIMEOUT_MS
+    : lite
+      ? 22_000
+      : 45_000;
+
+  let snapshotFallback = false;
+  let degraded = false;
+
+  try {
+    const aggregateRunner = () =>
+      Achievement.aggregate(pipeline, {
+        allowDiskUse: true,
+        maxTimeMS: aggregateTimeoutMs,
+      });
+
+    if (schoolGraph) {
+      const rows = await aggregateRunner();
+      facetDoc = (Array.isArray(rows) ? rows[0] : undefined) as FacetResult | undefined;
+    } else {
+      const [profiled] = await profileMongoAggregate(Achievement, {
+        pipelineName: "student_intelligence_facet",
+        fn: aggregateRunner,
+        countDocuments: (rows) => (Array.isArray(rows) ? rows.length : 0),
+      });
+      facetDoc = profiled as FacetResult | undefined;
+    }
+
+    console.timeEnd("aggregate-achievements");
+    console.timeEnd("load-achievements");
+    console.info("[AchievementIntelligence] aggregate complete", {
+      durationMs: Date.now() - intelT0,
+      rankingPool: facetDoc?.rankingPool?.length ?? 0,
+      participation: facetDoc?.byParticipation?.length ?? 0,
+    });
+
+    await saveIntelligenceSnapshot({
+      key: STUDENT_INTEL_FACET_SNAPSHOT_KEY,
+      domain: "achievement_intelligence",
+      kind: "query",
+      payload: facetDoc,
+    });
+  } catch (error) {
+    console.timeEnd("aggregate-achievements");
+    console.timeEnd("load-achievements");
+    const message = error instanceof Error ? error.message : String(error);
+    const isTimeout = error instanceof IntelligenceQueryTimeoutError;
+    console.error("[AchievementIntelligence] aggregate failed", {
+      message,
+      isTimeout,
+      durationMs: Date.now() - intelT0,
+    });
+
+    const cached = await loadIntelligenceSnapshot<FacetResult>(STUDENT_INTEL_FACET_SNAPSHOT_KEY, "query");
+    if (cached) {
+      console.warn("[MongoProfile] query timeout — serving cached student intelligence snapshot", {
+        snapshotKey: STUDENT_INTEL_FACET_SNAPSHOT_KEY,
+        timeoutSource: message,
+        durationMs: Date.now() - intelT0,
+      });
+      facetDoc = cached;
+      snapshotFallback = true;
+      degraded = true;
+    } else if (schoolGraph) {
+      const schoolCached = await loadIntelligenceSnapshot<StudentIntelligencePayload>(
+        STUDENT_INTEL_SCHOOL_GRAPH_SNAPSHOT_KEY,
+        "query"
+      );
+      if (schoolCached) {
+        console.warn("[AchievementIntelligence] serving cached school graph intelligence payload", {
+          snapshotKey: STUDENT_INTEL_SCHOOL_GRAPH_SNAPSHOT_KEY,
+        });
+        return { payload: schoolCached, degraded: true, snapshotFallback: true };
+      }
+      console.warn("[AchievementIntelligence] aggregate failed — returning empty intelligence payload", { message });
+      return {
+        payload: createEmptyStudentIntelligencePayload(),
+        degraded: true,
+        snapshotFallback: false,
+      };
+    } else {
+      throw error;
+    }
+  }
+
+  console.time("post-process-intelligence");
+  const res = facetDoc;
+  const part = ((res?.byParticipation || []) as AggRow[]).map((r) => toRow(r, 0));
+  const medals = ((res?.byMedals || []) as AggRow[]).map((r) => toRow(r, 0));
   const rankPool = ((res?.rankingPool || []) as RankLean[]).map((doc) => ({
     participantId: String(doc.participantId ?? ""),
     achievementId: String(doc._id ?? ""),
@@ -348,9 +521,9 @@ export const buildStudentIntelligence = async (
   const scoreById = new Map(weightedScores.map((w) => [w.participantId, w.weightedScore]));
   const metaRows = [...part, ...medals];
   const byWeightedScore = sortIntelRowsByWeightedScore(metaRows, scoreById).slice(0, lite ? 8 : 20);
-  const divRaw = lite
-    ? []
-    : ((res?.byDiversity || []) as Array<AggRow & { divN?: number; distinctActivities?: unknown[] }>);
+  const divRaw = includeGrowthFacets
+    ? ((res?.byDiversity || []) as Array<AggRow & { divN?: number; distinctActivities?: unknown[] }>)
+    : [];
   const byDiversity = divRaw.map((r) =>
     toRow(r, Array.isArray(r.distinctActivities) ? r.distinctActivities.length : Number(r.divN ?? 0))
   );
@@ -363,10 +536,9 @@ export const buildStudentIntelligence = async (
     )
     .slice(0, 20);
 
-  const growRaw = lite ? [] : ((res?.byFastestGrowth || []) as GrowthAggRow[]);
-  const byFastestGrowth = lite
-    ? []
-    : enrichGrowthRows(
+  const growRaw = includeGrowthFacets ? ((res?.byFastestGrowth || []) as GrowthAggRow[]) : [];
+  const byFastestGrowth = includeGrowthFacets
+    ? enrichGrowthRows(
     growRaw.map((x) => ({
       _id: String(x._id ?? ""),
       recordCount: Number(x.recordCount || 0),
@@ -375,7 +547,8 @@ export const buildStudentIntelligence = async (
       yearSpan: Number(x.yearSpan || 0),
     })),
     [...part, ...medals, ...byDiversity]
-  );
+  )
+    : [];
 
   const dupParticipation = part.length - new Set(part.map((r) => r.participantId)).size;
   const dupMedals = medals.length - new Set(medals.map((r) => r.participantId)).size;
@@ -388,17 +561,36 @@ export const buildStudentIntelligence = async (
     growthSanityFails,
     durationMs: Date.now() - intelT0,
   });
+  console.timeEnd("post-process-intelligence");
+  console.info("[AchievementIntelligence] build complete", { durationMs: Date.now() - intelT0 });
 
-  return {
+  const payload: StudentIntelligencePayload = {
     ok: true,
     generatedAt: new Date().toISOString(),
-    filters: filters as unknown as Record<string, unknown>,
+    filters: resolvedFilters as unknown as Record<string, unknown>,
     byWeightedScore: byWeightedScore.length > 0 ? byWeightedScore : part.slice(0, 20),
     byParticipation: part,
     byMedals: medals,
     bySuccessRate: bySuccess,
     byActivityDiversity: byDiversity,
     byFastestGrowth,
+  };
+
+  if (schoolGraph) {
+    await saveIntelligenceSnapshot({
+      key: STUDENT_INTEL_SCHOOL_GRAPH_SNAPSHOT_KEY,
+      domain: "achievement_intelligence",
+      kind: "query",
+      payload,
+    }).catch((saveError) => {
+      console.warn("[AchievementIntelligence] failed to save school graph snapshot", saveError);
+    });
+  }
+
+  return {
+    payload,
+    degraded,
+    snapshotFallback,
   };
 };
 
@@ -454,40 +646,45 @@ export const buildStudentProfileInsight = async (
     },
   };
 
-  const [doc] = await Achievement.aggregate([
-    ...shaped,
-    matchPid,
-    {
-      $facet: {
-        timeline: [
-          {
-            $project: {
-              d: { $ifNull: ["$date", "$createdAt"] },
-              effYear: 1,
-              resultType: { $ifNull: ["$resultType", ""] },
-              achievementType: { $ifNull: ["$achievementType", ""] },
-              nameAr: {
-                $ifNull: [
-                  "$nameAr",
-                  { $ifNull: ["$achievementName", { $ifNull: ["$customAchievementName", ""] }] },
-                ],
+  const [doc] = await profileMongoAggregate(Achievement, {
+    pipelineName: "student_intelligence_profile_facet",
+    fn: () =>
+      Achievement.aggregate([
+        ...shaped,
+        matchPid,
+        {
+          $facet: {
+            timeline: [
+              {
+                $project: {
+                  d: { $ifNull: ["$date", "$createdAt"] },
+                  effYear: 1,
+                  resultType: { $ifNull: ["$resultType", ""] },
+                  achievementType: { $ifNull: ["$achievementType", ""] },
+                  nameAr: {
+                    $ifNull: [
+                      "$nameAr",
+                      { $ifNull: ["$achievementName", { $ifNull: ["$customAchievementName", ""] }] },
+                    ],
+                  },
+                  nameEn: {
+                    $ifNull: [
+                      "$nameEn",
+                      { $ifNull: ["$achievementName", { $ifNull: ["$customAchievementName", ""] }] },
+                    ],
+                  },
+                },
               },
-              nameEn: {
-                $ifNull: [
-                  "$nameEn",
-                  { $ifNull: ["$achievementName", { $ifNull: ["$customAchievementName", ""] }] },
-                ],
-              },
-            },
+              { $sort: { d: -1 } },
+              { $limit: 100 },
+            ],
+            byYear: [{ $group: { _id: "$effYear", count: { $sum: 1 } } }, { $sort: { _id: 1 } }],
+            byResult: [{ $group: { _id: "$resultType", count: { $sum: 1 } } }, { $sort: { count: -1 } }],
           },
-          { $sort: { d: -1 } },
-          { $limit: 100 },
-        ],
-        byYear: [{ $group: { _id: "$effYear", count: { $sum: 1 } } }, { $sort: { _id: 1 } }],
-        byResult: [{ $group: { _id: "$resultType", count: { $sum: 1 } } }, { $sort: { count: -1 } }],
-      },
-    },
-  ] as mongoose.PipelineStage[]).allowDiskUse(true);
+        },
+      ] as mongoose.PipelineStage[]).allowDiskUse(true),
+    countDocuments: (rows) => (Array.isArray(rows) ? rows.length : 0),
+  });
 
   if (!doc) {
     return {

@@ -379,6 +379,7 @@ export const ADMIN_ROUTE_REQUIRED_CAPABILITY: Array<{
   { prefix: "/admin/executive-intelligence", capability: "advancedAnalytics" },
   { prefix: "/admin/school-intelligence", capability: "advancedAnalytics" },
   { prefix: "/admin/school-improvement-intelligence", capability: "advancedAnalytics" },
+  { prefix: "/admin/intelligence-health", capability: "platformSettings" },
   { prefix: "/admin/system-health", capability: "platformSettings" },
   { prefix: "/admin/achievements/add", capability: "adminAddAchievement" },
   { prefix: "/admin/reports", capability: "reports" },

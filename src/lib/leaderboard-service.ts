@@ -6,6 +6,7 @@ import {
   LEADERBOARD_ACHIEVEMENT_TIERS,
   type LeaderboardAchievementTier,
 } from "@/lib/leaderboard-achievement-tiers";
+import { profileMongoAggregate } from "@/lib/school-improvement/intelligence-mongo-profiler";
 
 export { LEADERBOARD_ACHIEVEMENT_TIERS, type LeaderboardAchievementTier } from "@/lib/leaderboard-achievement-tiers";
 
@@ -379,7 +380,13 @@ export const getLeaderboardPage = async (filters: LeaderboardFilters): Promise<L
     });
   }
 
-  const raw = (await Achievement.aggregate(pipeline))[0] as {
+  const raw = (
+    await profileMongoAggregate(Achievement, {
+      pipelineName: "leaderboard_page_facet",
+      fn: () => Achievement.aggregate(pipeline),
+      countDocuments: (rows) => (Array.isArray(rows) ? rows.length : 0),
+    })
+  )[0] as {
     summary?: Array<{
       rankedStudentCount: number;
       sumTotalPoints: number;
@@ -479,7 +486,11 @@ const runFullRankedList = async (
     }
   );
 
-  const rows = (await Achievement.aggregate(pipeline)) as AggregatedRow[];
+  const rows = (await profileMongoAggregate(Achievement, {
+    pipelineName: "leaderboard_admin_rows",
+    fn: () => Achievement.aggregate(pipeline) as Promise<AggregatedRow[]>,
+    countDocuments: (result) => result.length,
+  })) as AggregatedRow[];
   return toLeaderboardItems(rows, 0);
 };
 

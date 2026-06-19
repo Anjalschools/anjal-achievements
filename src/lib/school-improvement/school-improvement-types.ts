@@ -165,6 +165,19 @@ export type SchoolImprovementPayload = {
     noAutoExecution: true;
     dataSources: string[];
   };
+  sectionHealth?: Record<string, import("@/lib/school-improvement/intelligence-section-utils").IntelligenceSectionHealth>;
+};
+
+export type { SchoolImprovementFullDiagnostics } from "@/lib/school-improvement/intelligence-diagnostics-types";
+
+export type SchoolImprovementApiResponse = {
+  success: boolean;
+  data?: SchoolImprovementPayload;
+  error?: string;
+  /** @deprecated use data — kept for backward compatibility */
+  improvement?: SchoolImprovementPayload;
+  ok?: boolean;
+  diagnostics?: import("@/lib/school-improvement/intelligence-diagnostics-types").SchoolImprovementFullDiagnostics;
 };
 
 export type SchoolImprovementReportKind = "board" | "leadership" | "school_planning";
