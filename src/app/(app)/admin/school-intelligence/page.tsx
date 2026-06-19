@@ -1,43 +1,106 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import PageContainer from "@/components/layout/PageContainer";
 import PageHeader from "@/components/layout/PageHeader";
-import SectionCard from "@/components/layout/SectionCard";
+import SchoolIntelligenceAdminActions from "@/components/school-intelligence/SchoolIntelligenceAdminActions";
+import SchoolIntelligenceDiagnosticsSummary from "@/components/school-intelligence/SchoolIntelligenceDiagnosticsSummary";
+import SchoolIntelligenceEmptyState from "@/components/school-intelligence/SchoolIntelligenceEmptyState";
+import SchoolIntelligenceSectionCard from "@/components/school-intelligence/SchoolIntelligenceSectionCard";
+import SchoolIntelligenceSnapshotIndicator from "@/components/school-intelligence/SchoolIntelligenceSnapshotIndicator";
+import SchoolIntelligenceStatusBanner from "@/components/school-intelligence/SchoolIntelligenceStatusBanner";
 import { getLocale } from "@/lib/i18n";
-import { Download, GraduationCap, Loader2, Shield } from "lucide-react";
+import type {
+  SchoolIntelligenceApiResponse,
+  SchoolIntelligenceBuildStatus,
+  SchoolIntelligencePageDiagnostics,
+} from "@/lib/school-intelligence/school-intelligence-page-types";
+import {
+  buildSectionStatusMap,
+  countSectionsByStatus,
+  deriveDisplayScoresFromDiagnostics,
+  parseSchoolIntelligenceResponse,
+  resolveDataSource,
+  resolveLastSuccessfulUpdate,
+  resolveSnapshotTimestamp,
+} from "@/lib/school-intelligence/school-intelligence-page-utils";
 import type { SchoolIntelligencePayload } from "@/lib/school-intelligence/school-intelligence-types";
+import { Download, GraduationCap, Loader2, Shield } from "lucide-react";
+
+const EXPORT_TOOLTIP_AR = "التقارير غير متاحة لعدم توفر بيانات الذكاء المدرسي";
+const EXPORT_TOOLTIP_EN = "Reports unavailable because school intelligence data is not available";
+
+const formatTimestamp = (value: string | null, isAr: boolean) => {
+  if (!value) return isAr ? "—" : "—";
+  try {
+    return new Date(value).toLocaleString(isAr ? "ar-SA" : "en-US");
+  } catch {
+    return value;
+  }
+};
 
 const SchoolIntelligencePage = () => {
   const locale = getLocale();
   const isAr = locale === "ar";
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [status, setStatus] = useState<"success" | "degraded" | "unavailable">("success");
-  const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [status, setStatus] = useState<SchoolIntelligenceBuildStatus>("success");
+  const [diagnostics, setDiagnostics] = useState<SchoolIntelligencePageDiagnostics | undefined>();
+  const [snapshotUsed, setSnapshotUsed] = useState(false);
   const [data, setData] = useState<SchoolIntelligencePayload | null>(null);
+  const [isSystemAdmin, setIsSystemAdmin] = useState(false);
+
+  const sectionStatusMap = useMemo(
+    () => buildSectionStatusMap(data, status, snapshotUsed),
+    [data, status, snapshotUsed]
+  );
+  const sectionCounts = useMemo(() => countSectionsByStatus(sectionStatusMap), [sectionStatusMap]);
+  const displayScores = useMemo(
+    () => deriveDisplayScoresFromDiagnostics(diagnostics),
+    [diagnostics]
+  );
+  const lastUpdate = useMemo(
+    () => resolveLastSuccessfulUpdate(diagnostics, data, snapshotUsed),
+    [diagnostics, data, snapshotUsed]
+  );
+  const snapshotTimestamp = useMemo(
+    () => resolveSnapshotTimestamp(diagnostics, data),
+    [diagnostics, data]
+  );
+  const dataSource = useMemo(
+    () => resolveDataSource(status, snapshotUsed, isAr),
+    [status, snapshotUsed, isAr]
+  );
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const res = await fetch("/api/user/profile", { cache: "no-store" });
+        if (!res.ok) return;
+        const json = await res.json();
+        setIsSystemAdmin(String(json.role || "").trim() === "admin");
+      } catch {
+        setIsSystemAdmin(false);
+      }
+    })();
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       const res = await fetch("/api/admin/school-intelligence", { cache: "no-store" });
-      const json = await res.json().catch(() => ({}));
+      const json = (await res.json().catch(() => ({}))) as SchoolIntelligenceApiResponse;
 
       if (res.status === 401 || res.status === 403) {
-        throw new Error(typeof json.error === "string" ? json.error : "Forbidden");
+        throw new Error(typeof json.messageAr === "string" ? json.messageAr : "Forbidden");
       }
 
-      const responseStatus =
-        json.status === "degraded" || json.status === "unavailable" ? json.status : "success";
-      const friendlyMessage =
-        locale === "ar"
-          ? json.messageAr || json.diagnostics?.messageAr || null
-          : json.messageEn || json.diagnostics?.messageEn || null;
-
-      setData(json.intelligence || null);
-      setStatus(responseStatus);
-      setStatusMessage(friendlyMessage);
+      const parsed = parseSchoolIntelligenceResponse(json);
+      setData(parsed.intelligence);
+      setStatus(parsed.status);
+      setDiagnostics(parsed.diagnostics);
+      setSnapshotUsed(parsed.snapshotUsed);
       setError(null);
 
       if (json.diagnostics?.runtimeVersion || json.diagnostics?.buildTimestamp) {
@@ -51,39 +114,19 @@ const SchoolIntelligencePage = () => {
       setError(e instanceof Error ? e.message : "Error");
       setData(null);
       setStatus("unavailable");
-      setStatusMessage(
-        isAr ? "تعذر تحميل شبكة الذكاء المدرسي حالياً" : "School intelligence network is unavailable right now"
-      );
+      setSnapshotUsed(false);
+      setDiagnostics(undefined);
     } finally {
       setLoading(false);
     }
-  }, [isAr, locale]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const shouldClearCaches =
-      process.env.NODE_ENV === "development" ||
-      new URLSearchParams(window.location.search).get("runtimeVerify") === "1";
-    if (!shouldClearCaches) return;
-
-    void (async () => {
-      if ("serviceWorker" in navigator) {
-        const registrations = await navigator.serviceWorker.getRegistrations();
-        await Promise.all(registrations.map((registration) => registration.unregister()));
-      }
-      if ("caches" in window) {
-        const keys = await caches.keys();
-        await Promise.all(keys.map((key) => caches.delete(key)));
-      }
-      console.log("[SchoolIntelligence Runtime] service worker unregistered and caches cleared");
-    })();
   }, []);
 
   useEffect(() => {
-    load();
+    void load();
   }, [load]);
 
   const handleExport = (report: string) => {
+    if (status === "unavailable") return;
     const params = new URLSearchParams({
       format: "html",
       report,
@@ -91,6 +134,13 @@ const SchoolIntelligencePage = () => {
     });
     window.open(`/api/admin/school-intelligence/export?${params.toString()}`, "_blank");
   };
+
+  const exportsDisabled = status === "unavailable";
+  const exportTooltip = isAr ? EXPORT_TOOLTIP_AR : EXPORT_TOOLTIP_EN;
+
+  const hasSummaryData =
+    Boolean(data) &&
+    (data!.schoolExcellence.excellenceIndex > 0 || data!.studentSuccessGraph.totalNodes > 0);
 
   return (
     <PageContainer>
@@ -113,7 +163,10 @@ const SchoolIntelligencePage = () => {
             key={kind}
             type="button"
             onClick={() => handleExport(kind)}
-            className="inline-flex items-center gap-1 rounded-xl border border-border px-3 py-1.5 text-xs font-semibold"
+            disabled={exportsDisabled}
+            title={exportsDisabled ? exportTooltip : undefined}
+            aria-disabled={exportsDisabled}
+            className="inline-flex items-center gap-1 rounded-xl border border-border px-3 py-1.5 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-45"
           >
             <Download className="h-3 w-3" aria-hidden />
             {kind === "school"
@@ -133,15 +186,40 @@ const SchoolIntelligencePage = () => {
 
       {error ? <p className="mb-4 text-sm text-red-600">{error}</p> : null}
 
-      {status === "degraded" && statusMessage ? (
-        <div className="mb-4 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-950">
-          <p className="font-semibold">{statusMessage}</p>
-        </div>
+      {!loading ? (
+        <>
+          <SchoolIntelligenceStatusBanner
+            isAr={isAr}
+            status={status}
+            lastUpdate={lastUpdate}
+            dataSource={dataSource}
+          />
+          <SchoolIntelligenceSnapshotIndicator
+            isAr={isAr}
+            snapshotUsed={snapshotUsed}
+            snapshotTimestamp={snapshotTimestamp}
+          />
+          <p className="mb-4 text-xs text-text-light">
+            {isAr ? "آخر تحديث ناجح:" : "Last successful update:"}{" "}
+            <span className="font-semibold text-text">{formatTimestamp(lastUpdate, isAr)}</span>
+          </p>
+        </>
       ) : null}
 
-      {status === "unavailable" && statusMessage && !loading ? (
-        <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
-          <p className="font-semibold">{statusMessage}</p>
+      {isSystemAdmin && !loading ? (
+        <SchoolIntelligenceAdminActions isAr={isAr} onRetry={load} onRefresh={load} />
+      ) : null}
+
+      {!loading ? (
+        <div className="mb-4">
+          <SchoolIntelligenceDiagnosticsSummary
+            isAr={isAr}
+            diagnostics={diagnostics}
+            healthScore={displayScores.healthScore}
+            resilienceScore={displayScores.resilienceScore}
+            availableSections={sectionCounts.available + sectionCounts.snapshot}
+            unavailableSections={sectionCounts.unavailable}
+          />
         </div>
       ) : null}
 
@@ -151,31 +229,58 @@ const SchoolIntelligencePage = () => {
           <span>{isAr ? "جاري بناء شبكة الذكاء…" : "Building intelligence network…"}</span>
         </div>
       ) : !data ? (
-        <p className="py-12 text-center text-text-light">{isAr ? "لا بيانات." : "No data."}</p>
+        <SchoolIntelligenceEmptyState
+          isAr={isAr}
+          title={isAr ? "تعذر تحميل شبكة الذكاء المدرسي" : "School intelligence could not be loaded"}
+          description={
+            isAr
+              ? "يرجى إعادة المحاولة أو التحقق من حالة النظام أعلاه"
+              : "Please retry or review the system status above"
+          }
+        />
       ) : (
         <div className="space-y-4">
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <div className="rounded-2xl border border-border/70 p-4">
-              <p className="text-xs text-text-light">{isAr ? "تميز المدرسة" : "School excellence"}</p>
-              <p className="text-3xl font-black text-emerald-700">{data.schoolExcellence.excellenceIndex}</p>
-            </div>
-            {[
-              { label: isAr ? "مؤشر نجاح الطلاب" : "Avg student success", value: data.studentSuccessGraph.avgSuccessIndex },
-              { label: isAr ? "معدل المشاركة" : "Participation rate", value: `${data.schoolExcellence.participationRatePct}%` },
-              { label: isAr ? "تدخلات" : "Interventions", value: data.interventions.length },
-            ].map((card) => (
-              <div key={card.label} className="rounded-2xl border border-border/70 p-4">
-                <p className="text-xs text-text-light">{card.label}</p>
-                <p className="text-2xl font-black">{card.value}</p>
+          <SchoolIntelligenceSectionCard
+            isAr={isAr}
+            title={isAr ? "ملخص المؤشرات" : "Indicator summary"}
+            sectionStatus={sectionStatusMap.summary}
+            hasData={hasSummaryData}
+          >
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              <div className="rounded-2xl border border-border/70 p-4">
+                <p className="text-xs text-text-light">{isAr ? "تميز المدرسة" : "School excellence"}</p>
+                <p className="text-3xl font-black text-emerald-700">{data.schoolExcellence.excellenceIndex}</p>
               </div>
-            ))}
-          </div>
+              {[
+                {
+                  label: isAr ? "مؤشر نجاح الطلاب" : "Avg student success",
+                  value: data.studentSuccessGraph.avgSuccessIndex,
+                },
+                {
+                  label: isAr ? "معدل المشاركة" : "Participation rate",
+                  value: `${data.schoolExcellence.participationRatePct}%`,
+                },
+                { label: isAr ? "تدخلات" : "Interventions", value: data.interventions.length },
+              ].map((card) => (
+                <div key={card.label} className="rounded-2xl border border-border/70 p-4">
+                  <p className="text-xs text-text-light">{card.label}</p>
+                  <p className="text-2xl font-black">{card.value}</p>
+                </div>
+              ))}
+            </div>
+          </SchoolIntelligenceSectionCard>
 
-          <SectionCard>
-            <h2 className="mb-3 flex items-center gap-2 text-base font-bold">
-              <GraduationCap className="h-4 w-4" aria-hidden />
-              {isAr ? "رؤى استراتيجية" : "Strategic insights"}
-            </h2>
+          <SchoolIntelligenceSectionCard
+            isAr={isAr}
+            title={
+              <span className="flex items-center gap-2">
+                <GraduationCap className="h-4 w-4" aria-hidden />
+                {isAr ? "رؤى استراتيجية" : "Strategic insights"}
+              </span>
+            }
+            sectionStatus={sectionStatusMap.strategic_insights}
+            hasData={data.strategicInsights.length > 0}
+          >
             <ul className="space-y-2 text-sm">
               {data.strategicInsights.map((ins) => (
                 <li key={ins.id} className="rounded-xl bg-muted/50 px-3 py-2">
@@ -184,11 +289,15 @@ const SchoolIntelligencePage = () => {
                 </li>
               ))}
             </ul>
-          </SectionCard>
+          </SchoolIntelligenceSectionCard>
 
           <div className="grid gap-4 lg:grid-cols-2">
-            <SectionCard>
-              <h2 className="mb-3 text-base font-bold">{isAr ? "نجاح الطلاب (SSI)" : "Student success (SSI)"}</h2>
+            <SchoolIntelligenceSectionCard
+              isAr={isAr}
+              title={isAr ? "نجاح الطلاب (SSI)" : "Student success (SSI)"}
+              sectionStatus={sectionStatusMap.student_success}
+              hasData={data.studentSuccessGraph.topStudents.length > 0}
+            >
               <div className="overflow-x-auto">
                 <table className="min-w-full text-xs">
                   <thead>
@@ -209,10 +318,14 @@ const SchoolIntelligencePage = () => {
                   </tbody>
                 </table>
               </div>
-            </SectionCard>
+            </SchoolIntelligenceSectionCard>
 
-            <SectionCard>
-              <h2 className="mb-3 text-base font-bold">{isAr ? "تميز الأقسام والمسارات" : "Department excellence"}</h2>
+            <SchoolIntelligenceSectionCard
+              isAr={isAr}
+              title={isAr ? "تميز الأقسام والمسارات" : "Department excellence"}
+              sectionStatus={sectionStatusMap.department_excellence}
+              hasData={data.departmentExcellence.length > 0}
+            >
               <ul className="divide-y divide-border/60 text-sm">
                 {data.departmentExcellence.map((row) => (
                   <li key={row.key} className="flex justify-between py-2">
@@ -221,12 +334,16 @@ const SchoolIntelligencePage = () => {
                   </li>
                 ))}
               </ul>
-            </SectionCard>
+            </SchoolIntelligenceSectionCard>
           </div>
 
           <div className="grid gap-4 lg:grid-cols-2">
-            <SectionCard>
-              <h2 className="mb-3 text-base font-bold">{isAr ? "اكتشاف المواهب" : "Talent discovery"}</h2>
+            <SchoolIntelligenceSectionCard
+              isAr={isAr}
+              title={isAr ? "اكتشاف المواهب" : "Talent discovery"}
+              sectionStatus={sectionStatusMap.talent_discovery}
+              hasData={data.talentDiscovery.length > 0}
+            >
               <ul className="divide-y divide-border/60 text-sm">
                 {data.talentDiscovery.slice(0, 10).map((row) => (
                   <li key={`${row.studentId}-${row.talentType}`} className="py-2">
@@ -235,10 +352,14 @@ const SchoolIntelligencePage = () => {
                   </li>
                 ))}
               </ul>
-            </SectionCard>
+            </SchoolIntelligenceSectionCard>
 
-            <SectionCard>
-              <h2 className="mb-3 text-base font-bold">{isAr ? "محرك التدخل" : "Intervention engine"}</h2>
+            <SchoolIntelligenceSectionCard
+              isAr={isAr}
+              title={isAr ? "محرك التدخل" : "Intervention engine"}
+              sectionStatus={sectionStatusMap.interventions}
+              hasData={data.interventions.length > 0}
+            >
               <ul className="divide-y divide-border/60 text-sm">
                 {data.interventions.slice(0, 10).map((row) => (
                   <li key={`${row.studentId}-${row.interventionType}`} className="py-2">
@@ -247,12 +368,16 @@ const SchoolIntelligencePage = () => {
                   </li>
                 ))}
               </ul>
-            </SectionCard>
+            </SchoolIntelligenceSectionCard>
           </div>
 
           <div className="grid gap-4 lg:grid-cols-2">
-            <SectionCard>
-              <h2 className="mb-3 text-base font-bold">{isAr ? "خريطة الفرص" : "Opportunity mapping"}</h2>
+            <SchoolIntelligenceSectionCard
+              isAr={isAr}
+              title={isAr ? "خريطة الفرص" : "Opportunity mapping"}
+              sectionStatus={sectionStatusMap.opportunity_mapping}
+              hasData={data.opportunityMapping.length > 0}
+            >
               <ul className="divide-y divide-border/60 text-sm">
                 {data.opportunityMapping.slice(0, 10).map((row) => (
                   <li key={row.key} className="flex justify-between gap-2 py-2">
@@ -261,10 +386,14 @@ const SchoolIntelligencePage = () => {
                   </li>
                 ))}
               </ul>
-            </SectionCard>
+            </SchoolIntelligenceSectionCard>
 
-            <SectionCard>
-              <h2 className="mb-3 text-base font-bold">{isAr ? "النمو الطولي" : "Growth tracking"}</h2>
+            <SchoolIntelligenceSectionCard
+              isAr={isAr}
+              title={isAr ? "النمو الطولي" : "Growth tracking"}
+              sectionStatus={sectionStatusMap.longitudinal_growth}
+              hasData={data.longitudinalGrowth.length > 0}
+            >
               <div className="overflow-x-auto">
                 <table className="min-w-full text-xs">
                   <thead>
@@ -285,7 +414,7 @@ const SchoolIntelligencePage = () => {
                   </tbody>
                 </table>
               </div>
-            </SectionCard>
+            </SchoolIntelligenceSectionCard>
           </div>
         </div>
       )}
