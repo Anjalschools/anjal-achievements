@@ -32,7 +32,7 @@ const SchoolIntelligenceAdminActions = ({
   const setFeedback = (key: string, patch: Partial<AdminActionFeedback>) => {
     setFeedbacks((prev) => ({
       ...prev,
-      [key]: { key, state: "idle", ...prev[key], ...patch },
+      [key]: { ...(prev[key] ?? { state: "idle" as const }), ...patch },
     }));
   };
 

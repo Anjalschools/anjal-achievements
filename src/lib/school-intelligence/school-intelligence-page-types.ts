@@ -19,7 +19,6 @@ export type SchoolIntelligencePageDiagnostics = {
 export type SectionEmptyKind = "no_data" | "failure" | "snapshot";
 
 export type AdminActionFeedback = {
-  key: string;
   state: "idle" | "loading" | "success" | "failure";
   durationMs?: number;
   messageAr?: string;
