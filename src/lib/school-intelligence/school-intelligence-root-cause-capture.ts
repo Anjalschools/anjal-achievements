@@ -31,6 +31,14 @@ export type SchoolIntelligenceMongoFailureContext = {
   lastFiveValues?: string[];
   totalSerializedBytes?: number;
   fieldBytes?: Record<string, number>;
+  filterBytes?: number;
+  projectionBytes?: number;
+  optionsBytes?: number;
+  populateBytes?: number;
+  pipelineBytes?: number;
+  offendingComponent?: import("@/lib/school-intelligence/school-intelligence-bson-serialization-trace").SchoolIntelligenceBsonComponent;
+  serializationBreakdown?: import("@/lib/school-intelligence/school-intelligence-bson-serialization-trace").SchoolIntelligenceSerializationBreakdown;
+  preSerializeSnapshot?: import("@/lib/school-intelligence/school-intelligence-bson-serialization-trace").SchoolIntelligencePreSerializeSnapshot;
 };
 
 export class SchoolIntelligenceMongoFailureError extends Error {
@@ -162,6 +170,14 @@ export type SchoolIntelligenceFirstFailureRecord = {
   lastFiveValues?: string[];
   totalSerializedBytes?: number;
   fieldBytes?: Record<string, number>;
+  filterBytes?: number;
+  projectionBytes?: number;
+  optionsBytes?: number;
+  populateBytes?: number;
+  pipelineBytes?: number;
+  offendingComponent?: import("@/lib/school-intelligence/school-intelligence-bson-serialization-trace").SchoolIntelligenceBsonComponent;
+  serializationBreakdown?: import("@/lib/school-intelligence/school-intelligence-bson-serialization-trace").SchoolIntelligenceSerializationBreakdown;
+  preSerializeSnapshot?: import("@/lib/school-intelligence/school-intelligence-bson-serialization-trace").SchoolIntelligencePreSerializeSnapshot;
   failureClassification: SchoolIntelligenceFailureClassification;
 };
 
@@ -206,6 +222,14 @@ export const buildFirstFailureRecord = (input: {
     lastFiveValues: mongo?.lastFiveValues,
     totalSerializedBytes: mongo?.totalSerializedBytes,
     fieldBytes: mongo?.fieldBytes,
+    filterBytes: mongo?.filterBytes,
+    projectionBytes: mongo?.projectionBytes,
+    optionsBytes: mongo?.optionsBytes,
+    populateBytes: mongo?.populateBytes,
+    pipelineBytes: mongo?.pipelineBytes ?? mongo?.pipelineSizeBytes ?? mongo?.serializationBreakdown?.pipeline,
+    offendingComponent: mongo?.offendingComponent,
+    serializationBreakdown: mongo?.serializationBreakdown,
+    preSerializeSnapshot: mongo?.preSerializeSnapshot,
     failureClassification: classifySchoolIntelligenceFailure({
       error: input.error,
       errorName,
@@ -235,4 +259,22 @@ export const mergeQuerySourceIntoMongoContext = (
   lastFiveValues: trace.lastFiveValues,
   totalSerializedBytes: trace.totalSerializedBytes,
   fieldBytes: trace.fieldBytes,
+});
+
+export const mergeSerializationTraceIntoMongoContext = (
+  context: SchoolIntelligenceMongoFailureContext,
+  trace: import("@/lib/school-intelligence/school-intelligence-bson-serialization-trace").SchoolIntelligenceBsonSerializationTrace
+): SchoolIntelligenceMongoFailureContext => ({
+  ...context,
+  filterBytes: trace.filterBytes,
+  projectionBytes: trace.projectionBytes,
+  optionsBytes: trace.optionsBytes,
+  populateBytes: trace.populateBytes,
+  pipelineSizeBytes: trace.pipelineBytes,
+  pipelineBytes: trace.pipelineBytes,
+  serializedBytes: context.serializedBytes ?? trace.serializationBreakdown.total,
+  totalSerializedBytes: context.totalSerializedBytes ?? trace.serializationBreakdown.total,
+  offendingComponent: trace.offendingComponent,
+  serializationBreakdown: trace.serializationBreakdown,
+  preSerializeSnapshot: trace.preSerializeSnapshot,
 });

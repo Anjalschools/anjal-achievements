@@ -2,6 +2,7 @@ import type { StudentIntelligencePayload } from "@/lib/student-intelligence-anal
 import type { SchoolIntelligencePayload } from "@/lib/school-intelligence/school-intelligence-types";
 import type { SchoolIntelligenceQuerySourceEntry } from "@/lib/school-intelligence/school-intelligence-query-source-trace";
 import type { SchoolIntelligenceChunkRecoveryDiagnostics } from "@/lib/school-intelligence/school-intelligence-bson-safety";
+import type { SchoolIntelligenceBsonSerializationTrace } from "@/lib/school-intelligence/school-intelligence-bson-serialization-trace";
 
 export type SchoolIntelligenceBuildStatus = "success" | "degraded" | "unavailable";
 
@@ -42,11 +43,20 @@ export type SchoolIntelligenceFirstFailureDiagnostics = {
   lastFiveValues?: string[];
   totalSerializedBytes?: number;
   fieldBytes?: Record<string, number>;
+  filterBytes?: number;
+  projectionBytes?: number;
+  optionsBytes?: number;
+  populateBytes?: number;
+  pipelineBytes?: number;
+  offendingComponent?: import("@/lib/school-intelligence/school-intelligence-bson-serialization-trace").SchoolIntelligenceBsonComponent;
+  serializationBreakdown?: import("@/lib/school-intelligence/school-intelligence-bson-serialization-trace").SchoolIntelligenceSerializationBreakdown;
+  preSerializeSnapshot?: import("@/lib/school-intelligence/school-intelligence-bson-serialization-trace").SchoolIntelligencePreSerializeSnapshot;
 };
 
 export type SchoolIntelligenceQuerySourceMapEntry = SchoolIntelligenceQuerySourceEntry;
 
 export type { SchoolIntelligenceChunkRecoveryDiagnostics } from "@/lib/school-intelligence/school-intelligence-bson-safety";
+export type { SchoolIntelligenceBsonSerializationTrace } from "@/lib/school-intelligence/school-intelligence-bson-serialization-trace";
 
 export type SchoolIntelligenceSnapshotSaveDiagnostics = {
   attempted: boolean;
@@ -72,6 +82,7 @@ export type SchoolIntelligenceDiagnostics = {
   snapshotSave?: SchoolIntelligenceSnapshotSaveDiagnostics;
   querySourceMap?: SchoolIntelligenceQuerySourceMapEntry[];
   chunkRecovery?: SchoolIntelligenceChunkRecoveryDiagnostics[];
+  bsonSerializationTraces?: SchoolIntelligenceBsonSerializationTrace[];
 };
 
 export type SchoolIntelligenceBuildResult = {

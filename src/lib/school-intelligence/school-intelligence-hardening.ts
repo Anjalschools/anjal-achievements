@@ -44,6 +44,7 @@ const attachBuildTrace = (
     snapshotSave: trace.snapshotSave,
     querySourceMap: trace.querySourceMap,
     chunkRecovery: trace.chunkRecovery,
+    bsonSerializationTraces: trace.bsonSerializationTraces,
   };
 };
 
@@ -218,4 +219,5 @@ export const sanitizeSchoolIntelligenceDiagnostics = (
     snapshotSave: diagnostics.snapshotSave,
     querySourceMap: diagnostics.querySourceMap,
     chunkRecovery: diagnostics.chunkRecovery,
+    bsonSerializationTraces: diagnostics.bsonSerializationTraces,
   });

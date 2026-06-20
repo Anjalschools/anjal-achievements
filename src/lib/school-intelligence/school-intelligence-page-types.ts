@@ -1,5 +1,6 @@
 import type { SchoolIntelligencePayload } from "@/lib/school-intelligence/school-intelligence-types";
 import type {
+  SchoolIntelligenceBsonSerializationTrace,
   SchoolIntelligenceChunkRecoveryDiagnostics,
   SchoolIntelligenceFirstFailureDiagnostics,
   SchoolIntelligenceQuerySourceMapEntry,
@@ -31,6 +32,7 @@ export type SchoolIntelligencePageDiagnostics = {
   };
   querySourceMap?: SchoolIntelligenceQuerySourceMapEntry[];
   chunkRecovery?: SchoolIntelligenceChunkRecoveryDiagnostics[];
+  bsonSerializationTraces?: SchoolIntelligenceBsonSerializationTrace[];
 };
 
 export type SectionEmptyKind = "no_data" | "failure" | "snapshot";

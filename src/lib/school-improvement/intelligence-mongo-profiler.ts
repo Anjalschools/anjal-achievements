@@ -14,7 +14,7 @@ import {
   IntelligenceQueryTimeoutError,
   runWithQueryTimeout,
 } from "@/lib/school-improvement/intelligence-self-healing";
-import { createSchoolIntelligenceMongoFailureError, extractMongoFailureContext, mergeQuerySourceIntoMongoContext } from "@/lib/school-intelligence/school-intelligence-root-cause-capture";
+import { createSchoolIntelligenceMongoFailureError, extractMongoFailureContext, mergeQuerySourceIntoMongoContext, mergeSerializationTraceIntoMongoContext } from "@/lib/school-intelligence/school-intelligence-root-cause-capture";
 import {
   assertBsonSafeMongoQuery,
   BSON_IN_BATCH_COUNT,
@@ -26,10 +26,16 @@ import {
   shouldAutoChunkFilter,
 } from "@/lib/school-intelligence/school-intelligence-bson-safety";
 import {
+  buildBsonSerializationTrace,
+  type SchoolIntelligenceBsonSerializationTrace,
+} from "@/lib/school-intelligence/school-intelligence-bson-serialization-trace";
+import {
   buildQuerySourceTrace,
   type SchoolIntelligenceQuerySourceEntry,
 } from "@/lib/school-intelligence/school-intelligence-query-source-trace";
 import {
+  getSchoolIntelligenceBuildTrace,
+  recordSchoolIntelligenceBsonSerializationTrace,
   recordSchoolIntelligenceChunkRecovery,
   recordSchoolIntelligenceQuerySource,
 } from "@/lib/school-intelligence/school-intelligence-section-tracer";
@@ -70,12 +76,41 @@ const mergeArrayResults = <T>(parts: T[]): T => {
 const enrichMongoFailure = (
   error: unknown,
   trace: SchoolIntelligenceQuerySourceEntry | undefined,
-  context: Parameters<typeof createSchoolIntelligenceMongoFailureError>[1]
+  context: Parameters<typeof createSchoolIntelligenceMongoFailureError>[1],
+  serializationTrace?: SchoolIntelligenceBsonSerializationTrace
 ) => {
   const existing = extractMongoFailureContext(error);
   const base = { ...context, ...existing };
-  const merged = trace ? mergeQuerySourceIntoMongoContext(base, trace) : base;
+  const withSource = trace ? mergeQuerySourceIntoMongoContext(base, trace) : base;
+  const merged = serializationTrace
+    ? mergeSerializationTraceIntoMongoContext(withSource, serializationTrace)
+    : withSource;
   return createSchoolIntelligenceMongoFailureError(error, merged);
+};
+
+const captureBsonSerializationTrace = (input: {
+  queryName: string;
+  collection: string;
+  filter?: unknown;
+  projection?: string | Record<string, unknown>;
+  pipeline?: unknown[];
+  options?: unknown;
+  populate?: unknown;
+}): SchoolIntelligenceBsonSerializationTrace => {
+  const trace = buildBsonSerializationTrace(input);
+  recordSchoolIntelligenceBsonSerializationTrace(trace);
+  console.info("[MongoProfile] BSON serialization trace", {
+    queryName: trace.queryName,
+    collection: trace.collection,
+    filterBytes: trace.filterBytes,
+    projectionBytes: trace.projectionBytes,
+    optionsBytes: trace.optionsBytes,
+    populateBytes: trace.populateBytes,
+    pipelineBytes: trace.pipelineBytes,
+    serializationBreakdown: trace.serializationBreakdown,
+    offendingComponent: trace.offendingComponent,
+  });
+  return trace;
 };
 
 const runGuardedMongoQuery = async <T>(input: {
@@ -90,10 +125,13 @@ const runGuardedMongoQuery = async <T>(input: {
   createFilterFn?: (filter: Record<string, unknown>) => () => Promise<T>;
   sourceVariableName?: string;
   sourceFunction?: string;
+  options?: unknown;
+  populate?: unknown;
   pagedFind?: {
     batchSize: number;
     maxDocuments?: number;
     runPage: (skip: number, limit: number) => Promise<T>;
+    buildPageOptions?: (skip: number, limit: number) => Record<string, unknown>;
   };
 }): Promise<T> => {
   const queryName = input.pipelineName || input.operation;
@@ -102,6 +140,15 @@ const runGuardedMongoQuery = async <T>(input: {
       ? sanitizeMongoFilter(input.filter as Record<string, unknown>)
       : input.filter;
   let querySourceTrace: SchoolIntelligenceQuerySourceEntry | undefined;
+  let lastSerializationTrace = captureBsonSerializationTrace({
+    queryName,
+    collection: input.collection,
+    filter: sanitizedFilter,
+    projection: input.projection,
+    pipeline: input.pipeline,
+    options: input.options,
+    populate: input.populate,
+  });
 
   if (input.sourceVariableName && input.sourceFunction) {
     querySourceTrace = buildQuerySourceTrace({
@@ -138,6 +185,18 @@ const runGuardedMongoQuery = async <T>(input: {
     while (merged.length < (maxDocuments ?? Number.MAX_SAFE_INTEGER)) {
       const remaining = maxDocuments != null ? maxDocuments - merged.length : batchSize;
       const pageLimit = Math.min(batchSize, remaining);
+      lastSerializationTrace = captureBsonSerializationTrace({
+        queryName: `${queryName}.page.${chunkCount + 1}`,
+        collection: input.collection,
+        filter: sanitizedFilter,
+        projection: input.projection,
+        pipeline: input.pipeline,
+        options: {
+          ...(input.options && typeof input.options === "object" ? input.options : {}),
+          ...(input.pagedFind.buildPageOptions?.(skip, pageLimit) ?? { skip, limit: pageLimit }),
+        },
+        populate: input.populate,
+      });
       const batch = await runWithQueryTimeout(
         () => runPage(skip, pageLimit),
         input.timeoutMs,
@@ -178,13 +237,22 @@ const runGuardedMongoQuery = async <T>(input: {
     if (canAutoChunk && filterRecord && input.createFilterFn && resolvedChunks && resolvedChunks.chunks.length > 1) {
       const chunkStarted = Date.now();
       const results = await Promise.allSettled(
-        resolvedChunks.chunks.map((chunk) =>
-          runWithQueryTimeout(
+        resolvedChunks.chunks.map((chunk, chunkIndex) => {
+          lastSerializationTrace = captureBsonSerializationTrace({
+            queryName: `${queryName}.chunk.${chunkIndex + 1}`,
+            collection: input.collection,
+            filter: chunk,
+            projection: input.projection,
+            pipeline: input.pipeline,
+            options: input.options,
+            populate: input.populate,
+          });
+          return runWithQueryTimeout(
             input.createFilterFn!(chunk),
             input.timeoutMs,
             `${input.collection}.${queryName}.chunk`
-          )
-        )
+          );
+        })
       );
       const fulfilled: T[] = [];
       const rejected: PromiseRejectedResult[] = [];
@@ -232,14 +300,19 @@ const runGuardedMongoQuery = async <T>(input: {
       });
     } catch (error) {
       if (querySourceTrace) {
-        throw enrichMongoFailure(error, querySourceTrace, {
-          mongoCollection: input.collection,
-          mongoOperation: input.operation,
-          queryName: input.pipelineName,
-          timeoutMs: input.timeoutMs,
-          durationMs: 0,
-          documentsReturned: 0,
-        });
+        throw enrichMongoFailure(
+          error,
+          querySourceTrace,
+          {
+            mongoCollection: input.collection,
+            mongoOperation: input.operation,
+            queryName: input.pipelineName,
+            timeoutMs: input.timeoutMs,
+            durationMs: 0,
+            documentsReturned: 0,
+          },
+          lastSerializationTrace
+        );
       }
       throw error;
     }
@@ -281,10 +354,13 @@ export const profileMongoOperation = async <T>(input: {
   createFilterFn?: (filter: Record<string, unknown>) => () => Promise<T>;
   sourceVariableName?: string;
   sourceFunction?: string;
+  options?: unknown;
+  populate?: unknown;
   pagedFind?: {
     batchSize: number;
     maxDocuments?: number;
     runPage: (skip: number, limit: number) => Promise<T>;
+    buildPageOptions?: (skip: number, limit: number) => Record<string, unknown>;
   };
 }): Promise<T> => {
   const started = Date.now();
@@ -305,6 +381,8 @@ export const profileMongoOperation = async <T>(input: {
       createFilterFn: input.createFilterFn,
       sourceVariableName: input.sourceVariableName,
       sourceFunction: input.sourceFunction,
+      options: input.options,
+      populate: input.populate,
       pagedFind: input.pagedFind,
     });
     const durationMs = Date.now() - started;
@@ -387,30 +465,37 @@ export const profileMongoOperation = async <T>(input: {
       durationMs,
       message,
     });
-    throw enrichMongoFailure(error, undefined, {
-      mongoCollection: input.collection,
-      mongoOperation: input.operation,
-      queryName: input.pipelineName,
-      timeoutMs,
-      durationMs,
-      documentsReturned: 0,
-      querySizeBytes: existingMongo?.querySizeBytes,
-      pipelineSizeBytes: existingMongo?.pipelineSizeBytes,
-      arrayLength: existingMongo?.arrayLength,
-      serializedBytes: existingMongo?.serializedBytes,
-      limitBytes: existingMongo?.limitBytes,
-      offendingFilterPath: existingMongo?.offendingFilterPath,
-      filterKeys: existingMongo?.filterKeys,
-      projectionKeys: existingMongo?.projectionKeys,
-      sourceVariableName: existingMongo?.sourceVariableName,
-      sourceFunction: existingMongo?.sourceFunction,
-      uniqueValues: existingMongo?.uniqueValues,
-      duplicateValues: existingMongo?.duplicateValues,
-      firstFiveValues: existingMongo?.firstFiveValues,
-      lastFiveValues: existingMongo?.lastFiveValues,
-      totalSerializedBytes: existingMongo?.totalSerializedBytes,
-      fieldBytes: existingMongo?.fieldBytes,
-    });
+    const latestSerializationTrace =
+      getSchoolIntelligenceBuildTrace().bsonSerializationTraces?.at(-1);
+    throw enrichMongoFailure(
+      error,
+      undefined,
+      {
+        mongoCollection: input.collection,
+        mongoOperation: input.operation,
+        queryName: input.pipelineName,
+        timeoutMs,
+        durationMs,
+        documentsReturned: 0,
+        querySizeBytes: existingMongo?.querySizeBytes,
+        pipelineSizeBytes: existingMongo?.pipelineSizeBytes,
+        arrayLength: existingMongo?.arrayLength,
+        serializedBytes: existingMongo?.serializedBytes,
+        limitBytes: existingMongo?.limitBytes,
+        offendingFilterPath: existingMongo?.offendingFilterPath,
+        filterKeys: existingMongo?.filterKeys,
+        projectionKeys: existingMongo?.projectionKeys,
+        sourceVariableName: existingMongo?.sourceVariableName,
+        sourceFunction: existingMongo?.sourceFunction,
+        uniqueValues: existingMongo?.uniqueValues,
+        duplicateValues: existingMongo?.duplicateValues,
+        firstFiveValues: existingMongo?.firstFiveValues,
+        lastFiveValues: existingMongo?.lastFiveValues,
+        totalSerializedBytes: existingMongo?.totalSerializedBytes,
+        fieldBytes: existingMongo?.fieldBytes,
+      },
+      latestSerializationTrace
+    );
   }
 };
 
@@ -427,10 +512,13 @@ export const profileMongoFind = async <T>(
     createFilterFn?: (filter: Record<string, unknown>) => () => Promise<T>;
     sourceVariableName?: string;
     sourceFunction?: string;
+    options?: unknown;
+    populate?: unknown;
     pagedFind?: {
       batchSize: number;
       maxDocuments?: number;
       runPage: (skip: number, limit: number) => Promise<T>;
+      buildPageOptions?: (skip: number, limit: number) => Record<string, unknown>;
     };
   }
 ): Promise<T> =>
@@ -446,6 +534,8 @@ export const profileMongoFind = async <T>(
     createFilterFn: input.createFilterFn,
     sourceVariableName: input.sourceVariableName,
     sourceFunction: input.sourceFunction,
+    options: input.options,
+    populate: input.populate,
     pagedFind: input.pagedFind,
   });
 
@@ -460,6 +550,8 @@ export const profileMongoAggregate = async <T>(
     pipeline?: unknown[];
     sourceVariableName?: string;
     sourceFunction?: string;
+    options?: unknown;
+    populate?: unknown;
   }
 ): Promise<T> =>
   profileMongoOperation({
@@ -473,6 +565,8 @@ export const profileMongoAggregate = async <T>(
     pipeline: input.pipeline,
     sourceVariableName: input.sourceVariableName,
     sourceFunction: input.sourceFunction,
+    options: input.options,
+    populate: input.populate,
   });
 
 export const profileMongoCount = async (

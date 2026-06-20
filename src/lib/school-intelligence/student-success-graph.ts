@@ -124,9 +124,11 @@ export const buildStudentSuccessGraph = async (): Promise<{
       projection: STUDENT_FIND_PROJECTION,
       sourceVariableName: "STUDENT_FIND_FILTER",
       sourceFunction: "buildStudentSuccessGraph",
+      options: { lean: true },
       pagedFind: {
         batchSize: STUDENT_FIND_BATCH_SIZE,
         maxDocuments: STUDENT_FIND_MAX_DOCUMENTS,
+        buildPageOptions: (skip, limit) => ({ skip, limit, lean: true }),
         runPage: (skip, limit) =>
           User.find(STUDENT_FIND_FILTER)
             .select(STUDENT_FIND_PROJECTION)
@@ -153,9 +155,11 @@ export const buildStudentSuccessGraph = async (): Promise<{
       projection: PROFILE_FIND_PROJECTION,
       sourceVariableName: "PROFILE_FIND_FILTER",
       sourceFunction: "buildStudentSuccessGraph",
+      options: { lean: true },
       pagedFind: {
         batchSize: PROFILE_FIND_BATCH_SIZE,
         maxDocuments: PROFILE_FIND_MAX_DOCUMENTS,
+        buildPageOptions: (skip, limit) => ({ skip, limit, lean: true }),
         runPage: (skip, limit) =>
           StudentCareerProfile.find(PROFILE_FIND_FILTER)
             .select(PROFILE_FIND_PROJECTION)

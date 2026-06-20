@@ -4,6 +4,7 @@ import {
   formatFieldBytesSummary,
   pickPrimaryQuerySourceEntry,
 } from "@/lib/school-intelligence/school-intelligence-query-source-trace";
+import { pickLatestSerializationTrace } from "@/lib/school-intelligence/school-intelligence-bson-serialization-trace";
 import { AlertOctagon, Clock, Database, ServerCrash } from "lucide-react";
 
 type SchoolIntelligenceFirstFailurePanelProps = {
@@ -58,7 +59,27 @@ const SchoolIntelligenceFirstFailurePanel = ({
         }
       : undefined);
 
-  if (!firstFailure && !snapshotSave?.attempted && !payloadSource) return null;
+  const serializationTrace =
+    pickLatestSerializationTrace(
+      diagnostics?.bsonSerializationTraces,
+      firstFailure?.queryName || firstFailure?.mongoOperation
+    ) ??
+    (firstFailure?.serializationBreakdown
+      ? {
+          queryName: firstFailure.queryName || firstFailure.mongoOperation || "unknown",
+          collection: firstFailure.mongoCollection || "unknown",
+          filterBytes: firstFailure.filterBytes ?? firstFailure.serializationBreakdown.filter,
+          projectionBytes: firstFailure.projectionBytes ?? firstFailure.serializationBreakdown.projection,
+          optionsBytes: firstFailure.optionsBytes ?? firstFailure.serializationBreakdown.options,
+          populateBytes: firstFailure.populateBytes ?? firstFailure.serializationBreakdown.populate,
+          pipelineBytes: firstFailure.pipelineBytes ?? firstFailure.serializationBreakdown.pipeline,
+          serializationBreakdown: firstFailure.serializationBreakdown,
+          offendingComponent: firstFailure.offendingComponent,
+          preSerializeSnapshot: firstFailure.preSerializeSnapshot ?? {},
+        }
+      : undefined);
+
+  if (!firstFailure && !snapshotSave?.attempted && !payloadSource && !serializationTrace) return null;
 
   const queryLabel =
     firstFailure?.queryName ||
@@ -202,6 +223,68 @@ const SchoolIntelligenceFirstFailurePanel = ({
         </div>
       ) : null}
 
+      {serializationTrace ? (
+        <div className="mb-3 rounded-xl border border-violet-200 bg-violet-50/40 px-3 py-3">
+          <h3 className="mb-2 text-sm font-bold text-violet-950">
+            {isAr ? "تتبع تسلسل BSON" : "BSON serialization trace"}
+          </h3>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <RootCauseField
+              label={isAr ? "المكوّن المتسبب" : "Offending component"}
+              value={serializationTrace.offendingComponent || firstFailure?.offendingComponent || (isAr ? "—" : "—")}
+            />
+            <RootCauseField
+              label={isAr ? "الحجم الكلي" : "Total size"}
+              value={`${serializationTrace.serializationBreakdown.total} B`}
+            />
+            <RootCauseField
+              label={isAr ? "حجم الفلتر" : "Filter size"}
+              value={`${serializationTrace.filterBytes} B`}
+            />
+            <RootCauseField
+              label={isAr ? "حجم الإسقاط" : "Projection size"}
+              value={`${serializationTrace.projectionBytes} B`}
+            />
+            <RootCauseField
+              label={isAr ? "حجم الخيارات" : "Options size"}
+              value={`${serializationTrace.optionsBytes} B`}
+            />
+            <RootCauseField
+              label={isAr ? "حجم Populate" : "Populate size"}
+              value={`${serializationTrace.populateBytes} B`}
+            />
+            <RootCauseField
+              label={isAr ? "حجم Pipeline" : "Pipeline size"}
+              value={`${serializationTrace.pipelineBytes} B`}
+            />
+          </div>
+          {serializationTrace.preSerializeSnapshot.filter ||
+          serializationTrace.preSerializeSnapshot.projection ||
+          serializationTrace.preSerializeSnapshot.options ? (
+            <div className="mt-2 space-y-2">
+              {serializationTrace.preSerializeSnapshot.filter ? (
+                <PreviewBlock
+                  label={isAr ? "معاينة الفلتر" : "Filter preview"}
+                  value={serializationTrace.preSerializeSnapshot.filter}
+                />
+              ) : null}
+              {serializationTrace.preSerializeSnapshot.projection ? (
+                <PreviewBlock
+                  label={isAr ? "معاينة الإسقاط" : "Projection preview"}
+                  value={serializationTrace.preSerializeSnapshot.projection}
+                />
+              ) : null}
+              {serializationTrace.preSerializeSnapshot.options ? (
+                <PreviewBlock
+                  label={isAr ? "معاينة الخيارات" : "Options preview"}
+                  value={serializationTrace.preSerializeSnapshot.options}
+                />
+              ) : null}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
       {payloadSource ? (
         <div className="mb-3 rounded-xl border border-red-200 bg-white px-3 py-3">
           <h3 className="mb-2 text-sm font-bold text-red-950">
@@ -340,3 +423,12 @@ const RootCauseField = ({
 );
 
 export default SchoolIntelligenceFirstFailurePanel;
+
+const PreviewBlock = ({ label, value }: { label: string; value: string }) => (
+  <div className="rounded-lg border border-border/70 bg-white px-3 py-2">
+    <p className="text-xs text-text-light">{label}</p>
+    <pre className="mt-1 max-h-24 overflow-auto whitespace-pre-wrap break-all text-[11px] text-text-light">
+      {value}
+    </pre>
+  </div>
+);

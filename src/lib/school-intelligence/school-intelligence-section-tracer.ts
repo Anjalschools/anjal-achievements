@@ -5,6 +5,7 @@ import {
 } from "@/lib/school-intelligence/school-intelligence-root-cause-capture";
 import type { SchoolIntelligenceQuerySourceEntry } from "@/lib/school-intelligence/school-intelligence-query-source-trace";
 import type { SchoolIntelligenceChunkRecoveryDiagnostics } from "@/lib/school-intelligence/school-intelligence-bson-safety";
+import type { SchoolIntelligenceBsonSerializationTrace } from "@/lib/school-intelligence/school-intelligence-bson-serialization-trace";
 
 export type SchoolIntelligenceFirstFailure = SchoolIntelligenceFirstFailureRecord;
 
@@ -21,13 +22,19 @@ type SchoolIntelligenceBuildTraceStore = {
   snapshotSave?: SchoolIntelligenceSnapshotSaveTrace;
   querySourceMap?: SchoolIntelligenceQuerySourceEntry[];
   chunkRecovery?: SchoolIntelligenceChunkRecoveryDiagnostics[];
+  bsonSerializationTraces?: SchoolIntelligenceBsonSerializationTrace[];
 };
 
 const storage = new AsyncLocalStorage<SchoolIntelligenceBuildTraceStore>();
 
 export const runWithSchoolIntelligenceBuildTrace = async <T>(fn: () => Promise<T>): Promise<T> =>
   storage.run(
-    { snapshotSave: { attempted: false, succeeded: false }, querySourceMap: [], chunkRecovery: [] },
+    {
+      snapshotSave: { attempted: false, succeeded: false },
+      querySourceMap: [],
+      chunkRecovery: [],
+      bsonSerializationTraces: [],
+    },
     fn
   );
 
@@ -54,6 +61,15 @@ export const recordSchoolIntelligenceChunkRecovery = (
   if (!store) return;
   if (!store.chunkRecovery) store.chunkRecovery = [];
   store.chunkRecovery.push(entry);
+};
+
+export const recordSchoolIntelligenceBsonSerializationTrace = (
+  entry: SchoolIntelligenceBsonSerializationTrace
+) => {
+  const store = storage.getStore();
+  if (!store) return;
+  if (!store.bsonSerializationTraces) store.bsonSerializationTraces = [];
+  store.bsonSerializationTraces.push(entry);
 };
 
 const logSectionFailed = (
