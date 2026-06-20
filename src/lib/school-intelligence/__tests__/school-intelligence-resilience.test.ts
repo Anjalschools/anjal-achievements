@@ -40,15 +40,16 @@ describe("school intelligence execution chain audit", () => {
     expect(boot).toContain('SCHOOL_INTELLIGENCE_RUNTIME_VERSION = "10.3.3.D"');
     expect(route).toContain("[SchoolIntelligence Route Active]");
     expect(route).toContain("runtimeVersion");
-    expect(page).toContain("[SchoolIntelligence Runtime]");
+    expect(page).toContain("parseSchoolIntelligenceResponse");
   });
 
-  it("frontend shows Arabic degraded message instead of raw timeout", async () => {
+  it("frontend uses transparency layer instead of raw timeout errors", async () => {
     const fs = await import("node:fs/promises");
     const page = await fs.readFile("src/app/(app)/admin/school-intelligence/page.tsx", "utf8");
-    expect(page).toContain('json.status === "degraded"');
-    expect(page).toContain("statusMessage");
-    expect(page).not.toContain("!res.ok");
+    expect(page).toContain("resolveTransparentPageState");
+    expect(page).toContain("SchoolIntelligenceRootCausePanel");
+    expect(page).toContain("parseSchoolIntelligenceResponse");
+    expect(page).not.toContain('if (!res.ok) throw');
   });
 
   it("8000ms timeout label only originates from intelligence mongo profiler", async () => {

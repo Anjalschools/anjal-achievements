@@ -4,10 +4,15 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import PageContainer from "@/components/layout/PageContainer";
 import PageHeader from "@/components/layout/PageHeader";
 import SchoolIntelligenceAdminActions from "@/components/school-intelligence/SchoolIntelligenceAdminActions";
+import SchoolIntelligenceDiagnosticExpander from "@/components/school-intelligence/SchoolIntelligenceDiagnosticExpander";
 import SchoolIntelligenceDiagnosticsSummary from "@/components/school-intelligence/SchoolIntelligenceDiagnosticsSummary";
 import SchoolIntelligenceEmptyState from "@/components/school-intelligence/SchoolIntelligenceEmptyState";
+import SchoolIntelligenceHealthBreakdown from "@/components/school-intelligence/SchoolIntelligenceHealthBreakdown";
+import SchoolIntelligenceRecoveryHistory from "@/components/school-intelligence/SchoolIntelligenceRecoveryHistory";
+import SchoolIntelligenceRootCausePanel from "@/components/school-intelligence/SchoolIntelligenceRootCausePanel";
 import SchoolIntelligenceSectionCard from "@/components/school-intelligence/SchoolIntelligenceSectionCard";
-import SchoolIntelligenceSnapshotIndicator from "@/components/school-intelligence/SchoolIntelligenceSnapshotIndicator";
+import SchoolIntelligenceSectionHealthTable from "@/components/school-intelligence/SchoolIntelligenceSectionHealthTable";
+import SchoolIntelligenceSnapshotVisibility from "@/components/school-intelligence/SchoolIntelligenceSnapshotVisibility";
 import SchoolIntelligenceStatusBanner from "@/components/school-intelligence/SchoolIntelligenceStatusBanner";
 import { getLocale } from "@/lib/i18n";
 import type {
@@ -16,15 +21,17 @@ import type {
   SchoolIntelligencePageDiagnostics,
 } from "@/lib/school-intelligence/school-intelligence-page-types";
 import {
-  buildSectionStatusMap,
-  countSectionsByStatus,
   deriveDisplayScoresFromDiagnostics,
   parseSchoolIntelligenceResponse,
   resolveDataSource,
   resolveLastSuccessfulUpdate,
-  resolveSnapshotTimestamp,
 } from "@/lib/school-intelligence/school-intelligence-page-utils";
 import type { SchoolIntelligencePayload } from "@/lib/school-intelligence/school-intelligence-types";
+import {
+  mergeRecoveryHistoryWithMonitoring,
+  resolveTransparentPageState,
+  type MonitoringRecoveryPayload,
+} from "@/lib/school-intelligence/school-intelligence-transparency-utils";
 import { Download, GraduationCap, Loader2, Shield } from "lucide-react";
 
 const EXPORT_TOOLTIP_AR = "التقارير غير متاحة لعدم توفر بيانات الذكاء المدرسي";
@@ -44,29 +51,43 @@ const SchoolIntelligencePage = () => {
   const isAr = locale === "ar";
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [status, setStatus] = useState<SchoolIntelligenceBuildStatus>("success");
+  const [apiStatus, setApiStatus] = useState<SchoolIntelligenceBuildStatus>("success");
   const [diagnostics, setDiagnostics] = useState<SchoolIntelligencePageDiagnostics | undefined>();
   const [snapshotUsed, setSnapshotUsed] = useState(false);
   const [data, setData] = useState<SchoolIntelligencePayload | null>(null);
   const [isSystemAdmin, setIsSystemAdmin] = useState(false);
+  const [monitoringRecovery, setMonitoringRecovery] = useState<MonitoringRecoveryPayload | null>(null);
 
-  const sectionStatusMap = useMemo(
-    () => buildSectionStatusMap(data, status, snapshotUsed),
-    [data, status, snapshotUsed]
+  const transparency = useMemo(
+    () => resolveTransparentPageState(apiStatus, data, diagnostics, snapshotUsed),
+    [apiStatus, data, diagnostics, snapshotUsed]
   );
-  const sectionCounts = useMemo(() => countSectionsByStatus(sectionStatusMap), [sectionStatusMap]);
+
+  const {
+    status,
+    sectionStatusMap,
+    sectionCounts,
+    healthBreakdown,
+    rootCause,
+    snapshotVisibility,
+    recoveryHistory: diagnosticsRecovery,
+  } = transparency;
+
   const displayScores = useMemo(
     () => deriveDisplayScoresFromDiagnostics(diagnostics),
     [diagnostics]
   );
+
+  const recoveryHistory = useMemo(
+    () => mergeRecoveryHistoryWithMonitoring(diagnosticsRecovery, monitoringRecovery),
+    [diagnosticsRecovery, monitoringRecovery]
+  );
+
   const lastUpdate = useMemo(
     () => resolveLastSuccessfulUpdate(diagnostics, data, snapshotUsed),
     [diagnostics, data, snapshotUsed]
   );
-  const snapshotTimestamp = useMemo(
-    () => resolveSnapshotTimestamp(diagnostics, data),
-    [diagnostics, data]
-  );
+
   const dataSource = useMemo(
     () => resolveDataSource(status, snapshotUsed, isAr),
     [status, snapshotUsed, isAr]
@@ -85,6 +106,21 @@ const SchoolIntelligencePage = () => {
     })();
   }, []);
 
+  const loadMonitoringRecovery = useCallback(async (admin: boolean) => {
+    if (!admin) return;
+    try {
+      const res = await fetch("/api/admin/intelligence-health", { cache: "no-store" });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) return;
+      setMonitoringRecovery({
+        recoveries: json.monitoring?.recoveries,
+        summary: json.monitoring?.summary,
+      });
+    } catch {
+      setMonitoringRecovery(null);
+    }
+  }, []);
+
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -98,22 +134,14 @@ const SchoolIntelligencePage = () => {
 
       const parsed = parseSchoolIntelligenceResponse(json);
       setData(parsed.intelligence);
-      setStatus(parsed.status);
+      setApiStatus(parsed.status);
       setDiagnostics(parsed.diagnostics);
       setSnapshotUsed(parsed.snapshotUsed);
       setError(null);
-
-      if (json.diagnostics?.runtimeVersion || json.diagnostics?.buildTimestamp) {
-        console.log(
-          "[SchoolIntelligence Runtime]",
-          json.diagnostics.runtimeVersion,
-          json.diagnostics.buildTimestamp
-        );
-      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error");
       setData(null);
-      setStatus("unavailable");
+      setApiStatus("unavailable");
       setSnapshotUsed(false);
       setDiagnostics(undefined);
     } finally {
@@ -124,6 +152,10 @@ const SchoolIntelligencePage = () => {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    void loadMonitoringRecovery(isSystemAdmin);
+  }, [isSystemAdmin, loadMonitoringRecovery, apiStatus]);
 
   const handleExport = (report: string) => {
     if (status === "unavailable") return;
@@ -141,6 +173,8 @@ const SchoolIntelligencePage = () => {
   const hasSummaryData =
     Boolean(data) &&
     (data!.schoolExcellence.excellenceIndex > 0 || data!.studentSuccessGraph.totalNodes > 0);
+
+  const showTransparencyPanels = !loading && Boolean(diagnostics || data);
 
   return (
     <PageContainer>
@@ -194,11 +228,6 @@ const SchoolIntelligencePage = () => {
             lastUpdate={lastUpdate}
             dataSource={dataSource}
           />
-          <SchoolIntelligenceSnapshotIndicator
-            isAr={isAr}
-            snapshotUsed={snapshotUsed}
-            snapshotTimestamp={snapshotTimestamp}
-          />
           <p className="mb-4 text-xs text-text-light">
             {isAr ? "آخر تحديث ناجح:" : "Last successful update:"}{" "}
             <span className="font-semibold text-text">{formatTimestamp(lastUpdate, isAr)}</span>
@@ -206,8 +235,26 @@ const SchoolIntelligencePage = () => {
         </>
       ) : null}
 
+      {showTransparencyPanels ? (
+        <>
+          <SchoolIntelligenceRootCausePanel isAr={isAr} rootCause={rootCause} />
+          <SchoolIntelligenceSectionHealthTable isAr={isAr} sectionStatusMap={sectionStatusMap} />
+          <SchoolIntelligenceSnapshotVisibility isAr={isAr} snapshot={snapshotVisibility} />
+          <SchoolIntelligenceHealthBreakdown isAr={isAr} breakdown={healthBreakdown} />
+          <SchoolIntelligenceRecoveryHistory isAr={isAr} recovery={recoveryHistory} />
+        </>
+      ) : null}
+
       {isSystemAdmin && !loading ? (
         <SchoolIntelligenceAdminActions isAr={isAr} onRetry={load} onRefresh={load} />
+      ) : null}
+
+      {isSystemAdmin && showTransparencyPanels ? (
+        <SchoolIntelligenceDiagnosticExpander
+          isAr={isAr}
+          sectionStatusMap={sectionStatusMap}
+          diagnostics={diagnostics}
+        />
       ) : null}
 
       {!loading ? (
@@ -215,7 +262,7 @@ const SchoolIntelligencePage = () => {
           <SchoolIntelligenceDiagnosticsSummary
             isAr={isAr}
             diagnostics={diagnostics}
-            healthScore={displayScores.healthScore}
+            healthScore={healthBreakdown.total}
             resilienceScore={displayScores.resilienceScore}
             availableSections={sectionCounts.available + sectionCounts.snapshot}
             unavailableSections={sectionCounts.unavailable}
@@ -229,21 +276,15 @@ const SchoolIntelligencePage = () => {
           <span>{isAr ? "جاري بناء شبكة الذكاء…" : "Building intelligence network…"}</span>
         </div>
       ) : !data ? (
-        <SchoolIntelligenceEmptyState
-          isAr={isAr}
-          title={isAr ? "تعذر تحميل شبكة الذكاء المدرسي" : "School intelligence could not be loaded"}
-          description={
-            isAr
-              ? "يرجى إعادة المحاولة أو التحقق من حالة النظام أعلاه"
-              : "Please retry or review the system status above"
-          }
-        />
+        <SchoolIntelligenceEmptyState isAr={isAr} kind="failure" />
       ) : (
         <div className="space-y-4">
           <SchoolIntelligenceSectionCard
             isAr={isAr}
             title={isAr ? "ملخص المؤشرات" : "Indicator summary"}
             sectionStatus={sectionStatusMap.summary}
+            globalStatus={status}
+            diagnostics={diagnostics}
             hasData={hasSummaryData}
           >
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -279,6 +320,8 @@ const SchoolIntelligencePage = () => {
               </span>
             }
             sectionStatus={sectionStatusMap.strategic_insights}
+            globalStatus={status}
+            diagnostics={diagnostics}
             hasData={data.strategicInsights.length > 0}
           >
             <ul className="space-y-2 text-sm">
@@ -296,6 +339,8 @@ const SchoolIntelligencePage = () => {
               isAr={isAr}
               title={isAr ? "نجاح الطلاب (SSI)" : "Student success (SSI)"}
               sectionStatus={sectionStatusMap.student_success}
+              globalStatus={status}
+              diagnostics={diagnostics}
               hasData={data.studentSuccessGraph.topStudents.length > 0}
             >
               <div className="overflow-x-auto">
@@ -324,6 +369,8 @@ const SchoolIntelligencePage = () => {
               isAr={isAr}
               title={isAr ? "تميز الأقسام والمسارات" : "Department excellence"}
               sectionStatus={sectionStatusMap.department_excellence}
+              globalStatus={status}
+              diagnostics={diagnostics}
               hasData={data.departmentExcellence.length > 0}
             >
               <ul className="divide-y divide-border/60 text-sm">
@@ -342,6 +389,8 @@ const SchoolIntelligencePage = () => {
               isAr={isAr}
               title={isAr ? "اكتشاف المواهب" : "Talent discovery"}
               sectionStatus={sectionStatusMap.talent_discovery}
+              globalStatus={status}
+              diagnostics={diagnostics}
               hasData={data.talentDiscovery.length > 0}
             >
               <ul className="divide-y divide-border/60 text-sm">
@@ -358,6 +407,8 @@ const SchoolIntelligencePage = () => {
               isAr={isAr}
               title={isAr ? "محرك التدخل" : "Intervention engine"}
               sectionStatus={sectionStatusMap.interventions}
+              globalStatus={status}
+              diagnostics={diagnostics}
               hasData={data.interventions.length > 0}
             >
               <ul className="divide-y divide-border/60 text-sm">
@@ -376,6 +427,8 @@ const SchoolIntelligencePage = () => {
               isAr={isAr}
               title={isAr ? "خريطة الفرص" : "Opportunity mapping"}
               sectionStatus={sectionStatusMap.opportunity_mapping}
+              globalStatus={status}
+              diagnostics={diagnostics}
               hasData={data.opportunityMapping.length > 0}
             >
               <ul className="divide-y divide-border/60 text-sm">
@@ -392,6 +445,8 @@ const SchoolIntelligencePage = () => {
               isAr={isAr}
               title={isAr ? "النمو الطولي" : "Growth tracking"}
               sectionStatus={sectionStatusMap.longitudinal_growth}
+              globalStatus={status}
+              diagnostics={diagnostics}
               hasData={data.longitudinalGrowth.length > 0}
             >
               <div className="overflow-x-auto">

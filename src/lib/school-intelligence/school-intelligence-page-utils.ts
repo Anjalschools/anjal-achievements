@@ -104,12 +104,11 @@ const sectionHasData = (key: SchoolIntelligenceSectionKey, data: SchoolIntellige
 export const resolveSectionStatus = (
   key: SchoolIntelligenceSectionKey,
   data: SchoolIntelligencePayload | null,
-  globalStatus: SchoolIntelligenceBuildStatus,
+  _globalStatus: SchoolIntelligenceBuildStatus,
   snapshotUsed: boolean
 ): SchoolIntelligenceSectionStatus => {
   if (!data || !sectionHasData(key, data)) return "unavailable";
-  if (globalStatus === "degraded" && snapshotUsed) return "snapshot";
-  if (globalStatus === "unavailable") return "unavailable";
+  if (snapshotUsed) return "snapshot";
   return "available";
 };
 

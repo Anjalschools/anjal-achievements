@@ -12,7 +12,18 @@ export type SchoolIntelligencePageDiagnostics = {
   messageEn?: string;
   runtimeVersion?: string;
   buildTimestamp?: string;
+  timeoutSource?: string;
   steps?: Array<{ step: string; durationMs: number; detail?: string }>;
+};
+
+export type SectionEmptyKind = "no_data" | "failure" | "snapshot";
+
+export type AdminActionFeedback = {
+  key: string;
+  state: "idle" | "loading" | "success" | "failure";
+  durationMs?: number;
+  messageAr?: string;
+  messageEn?: string;
 };
 
 export type SchoolIntelligenceApiResponse = {
