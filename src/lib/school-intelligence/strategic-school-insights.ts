@@ -4,6 +4,7 @@ import type {
   StrategicSchoolInsight,
   StudentSuccessGraphNode,
 } from "@/lib/school-intelligence/school-intelligence-types";
+import { traceSchoolIntelligenceSectionSync } from "@/lib/school-intelligence/school-intelligence-section-tracer";
 
 let insightCounter = 0;
 const nextId = () => `school-insight-${++insightCounter}`;
@@ -12,7 +13,8 @@ export const buildStrategicSchoolInsights = (input: {
   nodes: StudentSuccessGraphNode[];
   departmentExcellence: DepartmentExcellenceRow[];
   schoolExcellence: SchoolExcellenceSummary;
-}): StrategicSchoolInsight[] => {
+}): StrategicSchoolInsight[] =>
+  traceSchoolIntelligenceSectionSync("buildStrategicInsights", "strategic_insights", () => {
   insightCounter = 0;
   const insights: StrategicSchoolInsight[] = [];
   const { nodes, departmentExcellence, schoolExcellence } = input;
@@ -132,4 +134,4 @@ export const buildStrategicSchoolInsights = (input: {
   }
 
   return insights.slice(0, 12);
-};
+});

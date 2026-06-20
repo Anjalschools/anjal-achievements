@@ -7,6 +7,11 @@ import IntelligenceSectionSnapshot, {
 
 const snapshotKey = (kind: IntelligenceSnapshotKind, key: string) => `${kind}:${key}`;
 
+const isSchoolIntelligenceSnapshotKey = (logicalKey: string) =>
+  logicalKey === "school_intelligence_payload" ||
+  logicalKey === "student_intelligence_facet" ||
+  logicalKey === "student_intelligence_school_graph";
+
 export const saveIntelligenceSnapshot = async (input: {
   key: string;
   domain: IntelligenceServiceDomain;
@@ -14,10 +19,19 @@ export const saveIntelligenceSnapshot = async (input: {
   payload: unknown;
 }) => {
   await connectDB();
+  const resolvedKey = snapshotKey(input.kind, input.key);
+  if (isSchoolIntelligenceSnapshotKey(input.key)) {
+    console.info("[SchoolIntelligence Snapshot Save]", {
+      logicalKey: input.key,
+      resolvedKey,
+      kind: input.kind,
+      domain: input.domain,
+    });
+  }
   await IntelligenceSectionSnapshot.findOneAndUpdate(
-    { key: snapshotKey(input.kind, input.key) },
+    { key: resolvedKey },
     {
-      key: snapshotKey(input.kind, input.key),
+      key: resolvedKey,
       domain: input.domain,
       kind: input.kind,
       payload: input.payload,
@@ -32,10 +46,31 @@ export const loadIntelligenceSnapshot = async <T>(
   kind: IntelligenceSnapshotKind
 ): Promise<T | null> => {
   await connectDB();
-  const row = await IntelligenceSectionSnapshot.findOne({ key: snapshotKey(kind, key) })
+  const resolvedKey = snapshotKey(kind, key);
+  if (isSchoolIntelligenceSnapshotKey(key)) {
+    console.info("[SchoolIntelligence Snapshot Load]", {
+      logicalKey: key,
+      resolvedKey,
+      kind,
+    });
+  }
+  const row = await IntelligenceSectionSnapshot.findOne({ key: resolvedKey })
     .select("payload capturedAt")
     .lean();
-  if (!row?.payload) return null;
+  if (!row?.payload) {
+    if (isSchoolIntelligenceSnapshotKey(key)) {
+      console.warn("[SchoolIntelligence Snapshot Miss]", { logicalKey: key, resolvedKey, kind });
+    }
+    return null;
+  }
+  if (isSchoolIntelligenceSnapshotKey(key)) {
+    console.info("[SchoolIntelligence Snapshot Hit]", {
+      logicalKey: key,
+      resolvedKey,
+      kind,
+      capturedAt: row.capturedAt,
+    });
+  }
   return row.payload as T;
 };
 

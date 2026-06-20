@@ -9,7 +9,6 @@ import {
   buildSectionStatusMap,
   countSectionsByStatus,
   countSlowSignals,
-  SNAPSHOT_USED_KEY,
 } from "@/lib/school-intelligence/school-intelligence-page-utils";
 
 export type SectionEmptyKind = "no_data" | "failure" | "snapshot";
@@ -54,6 +53,23 @@ export type SnapshotVisibility = {
 export type MonitoringRecoveryPayload = {
   recoveries?: Array<{ resolvedAt: string; downtimeMs: number; messageAr?: string; messageEn?: string }>;
   summary?: { recoveryCount?: number; recoveryRatePct?: number; autoHealedIncidents?: number };
+};
+
+/** Single source of truth — never infer from intelligence.generatedAt. */
+export const resolveSnapshotAvailable = (diagnostics?: SchoolIntelligencePageDiagnostics): boolean =>
+  diagnostics?.snapshotFallback === true ||
+  diagnostics?.snapshotUsed === true ||
+  diagnostics?.snapshotMetadata?.exists === true;
+
+export const resolveSnapshotInUse = (diagnostics?: SchoolIntelligencePageDiagnostics): boolean =>
+  diagnostics?.snapshotFallback === true || diagnostics?.snapshotUsed === true;
+
+export const resolveSnapshotTimestampFromDiagnostics = (
+  diagnostics?: SchoolIntelligencePageDiagnostics,
+  intelligence?: SchoolIntelligencePayload | null
+): string | null => {
+  if (!resolveSnapshotInUse(diagnostics)) return null;
+  return diagnostics?.snapshotMetadata?.capturedAt ?? intelligence?.generatedAt ?? null;
 };
 
 export const SECTION_LABELS: Record<SchoolIntelligenceSectionKey, { ar: string; en: string }> = {
@@ -105,6 +121,12 @@ const parseErrorCategory = (
   diagnostics?: SchoolIntelligencePageDiagnostics,
   snapshotAvailable?: boolean
 ): string => {
+  if (diagnostics?.firstFailure?.failureClassification) {
+    return diagnostics.firstFailure.failureClassification;
+  }
+  if (diagnostics?.firstFailure?.errorName) {
+    return diagnostics.firstFailure.errorName;
+  }
   const warnings = diagnostics?.warnings ?? [];
   if (warnings.some((w) => w.includes("aggregation") || w.includes("timeout") || w.includes("exceeded"))) {
     return "Aggregation Timeout";
@@ -122,17 +144,15 @@ const parseErrorCategory = (
   return diagnostics?.status === "degraded" ? "Partial Degradation" : "Unknown";
 };
 
-export const buildRootCauseSummary = (
-  diagnostics?: SchoolIntelligencePageDiagnostics,
-  snapshotUsed = false
-): RootCauseSummary => {
+export const buildRootCauseSummary = (diagnostics?: SchoolIntelligencePageDiagnostics): RootCauseSummary => {
+  const snapshotAvailable = resolveSnapshotAvailable(diagnostics);
   const snapshotStep = diagnostics?.steps?.find((s) => s.step === "snapshot_fallback");
-  const snapshotAvailable = snapshotUsed || snapshotStep?.detail === "snapshot_loaded";
+  const firstFailure = diagnostics?.firstFailure;
 
   return {
-    failingService: parseFailingService(diagnostics),
+    failingService: firstFailure?.service || parseFailingService(diagnostics),
     errorCategory: parseErrorCategory(diagnostics, snapshotAvailable),
-    firstFailureTime: diagnostics?.generatedAt ?? diagnostics?.buildTimestamp ?? null,
+    firstFailureTime: firstFailure?.timestamp ?? diagnostics?.generatedAt ?? diagnostics?.buildTimestamp ?? null,
     lastRetryTime: diagnostics?.buildTimestamp ?? (snapshotStep ? diagnostics?.generatedAt ?? null : null),
     snapshotAvailable,
   };
@@ -177,20 +197,19 @@ export const formatSnapshotAge = (timestamp: string | null, isAr: boolean): { ar
 
 export const buildSnapshotVisibility = (
   diagnostics?: SchoolIntelligencePageDiagnostics,
-  intelligence?: SchoolIntelligencePayload | null,
-  snapshotUsed = false
+  intelligence?: SchoolIntelligencePayload | null
 ): SnapshotVisibility => {
-  const timestamp = intelligence?.generatedAt || diagnostics?.generatedAt || diagnostics?.buildTimestamp || null;
-  const snapshotStep = diagnostics?.steps?.some((s) => s.step === "snapshot_fallback");
-  const available = snapshotUsed || Boolean(snapshotStep) || Boolean(timestamp);
+  const available = resolveSnapshotAvailable(diagnostics);
+  const inUse = resolveSnapshotInUse(diagnostics);
+  const timestamp = resolveSnapshotTimestampFromDiagnostics(diagnostics, intelligence);
   const age = formatSnapshotAge(timestamp, true);
 
   return {
     available,
-    inUse: snapshotUsed,
+    inUse,
     timestamp,
-    ageLabelAr: age.ar,
-    ageLabelEn: age.en,
+    ageLabelAr: available ? age.ar : "—",
+    ageLabelEn: available ? age.en : "—",
   };
 };
 
@@ -200,9 +219,7 @@ export const buildHealthScoreBreakdown = (
 ): HealthScoreBreakdown => {
   const counts = sectionCounts ?? { available: 0, snapshot: 0, unavailable: 0 };
   const slowCount = countSlowSignals(diagnostics);
-  const snapshotUsed = SNAPSHOT_USED_KEY(diagnostics);
-  const snapshotStep = diagnostics?.steps?.find((s) => s.step === "snapshot_fallback");
-  const snapshotAvailable = snapshotUsed || snapshotStep?.detail === "snapshot_loaded";
+  const snapshotAvailable = resolveSnapshotAvailable(diagnostics);
   const serviceWarnings = (diagnostics?.warnings ?? []).filter(
     (w) => !w.includes("slow") && !w.includes("aggregation") && !w.includes("timeout")
   ).length;
@@ -233,12 +250,12 @@ export const buildHealthScoreBreakdown = (
 };
 
 export const buildRecoveryHistoryFromDiagnostics = (
-  diagnostics?: SchoolIntelligencePageDiagnostics,
-  snapshotUsed = false
+  diagnostics?: SchoolIntelligencePageDiagnostics
 ): RecoveryHistoryView => {
   const snapshotStep = diagnostics?.steps?.find((s) => s.step === "snapshot_fallback");
+  const snapshotInUse = resolveSnapshotInUse(diagnostics);
   const retrySignals = (diagnostics?.warnings?.length ?? 0) + (diagnostics?.steps?.length ?? 0);
-  const recoverySucceeded = snapshotUsed || diagnostics?.status === "success";
+  const recoverySucceeded = snapshotInUse || diagnostics?.status === "success";
 
   return {
     lastAttemptAt: diagnostics?.buildTimestamp ?? diagnostics?.generatedAt ?? null,
@@ -301,25 +318,28 @@ export const resolveTransparentPageState = (
   apiStatus: SchoolIntelligenceBuildStatus,
   data: SchoolIntelligencePayload | null,
   diagnostics?: SchoolIntelligencePageDiagnostics,
-  snapshotUsed = false
+  snapshotInUse = false
 ) => {
-  const provisionalMap = buildSectionStatusMap(data, apiStatus, snapshotUsed);
+  const snapshotAvailable = resolveSnapshotAvailable(diagnostics);
+  const provisionalMap = buildSectionStatusMap(data, apiStatus, snapshotInUse);
   const provisionalCounts = countSectionsByStatus(provisionalMap);
   const availableSections = provisionalCounts.available + provisionalCounts.snapshot;
   const hasDiagnostics = Boolean(diagnostics);
   const status = reclassifySystemStatus(apiStatus, availableSections, hasDiagnostics);
-  const sectionStatusMap = buildSectionStatusMap(data, status, snapshotUsed);
+  const sectionStatusMap = buildSectionStatusMap(data, status, snapshotInUse);
   const sectionCounts = countSectionsByStatus(sectionStatusMap);
   const healthBreakdown = buildHealthScoreBreakdown(diagnostics, sectionCounts);
-  const rootCause = buildRootCauseSummary(diagnostics, snapshotUsed);
-  const snapshotVisibility = buildSnapshotVisibility(diagnostics, data, snapshotUsed);
-  const recoveryHistory = buildRecoveryHistoryFromDiagnostics(diagnostics, snapshotUsed);
+  const rootCause = buildRootCauseSummary(diagnostics);
+  const snapshotVisibility = buildSnapshotVisibility(diagnostics, data);
+  const recoveryHistory = buildRecoveryHistoryFromDiagnostics(diagnostics);
 
   return {
     status,
     sectionStatusMap,
     sectionCounts,
     availableSections,
+    snapshotAvailable,
+    snapshotInUse,
     healthBreakdown,
     rootCause,
     snapshotVisibility,

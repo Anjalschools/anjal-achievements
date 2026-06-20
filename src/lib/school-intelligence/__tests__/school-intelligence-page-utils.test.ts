@@ -60,13 +60,22 @@ describe("school-intelligence-page-utils", () => {
     expect(resolveDataSource("degraded", true, true)).toContain("Snapshot");
   });
 
-  it("prefers snapshot payload timestamp for last update", () => {
+  it("prefers snapshot payload timestamp only when snapshot is in use", () => {
     const ts = resolveLastSuccessfulUpdate(
       { buildTimestamp: "2026-06-18T10:00:00.000Z" },
       { generatedAt: "2026-06-17T08:00:00.000Z" } as SchoolIntelligencePayload,
       true
     );
     expect(ts).toBe("2026-06-17T08:00:00.000Z");
+  });
+
+  it("ignores intelligence generatedAt when snapshot is not in use", () => {
+    const ts = resolveLastSuccessfulUpdate(
+      { buildTimestamp: "2026-06-18T10:00:00.000Z" },
+      { generatedAt: "2026-06-17T08:00:00.000Z" } as SchoolIntelligencePayload,
+      false
+    );
+    expect(ts).toBe("2026-06-18T10:00:00.000Z");
   });
 
   it("derives display scores from diagnostics payload", () => {

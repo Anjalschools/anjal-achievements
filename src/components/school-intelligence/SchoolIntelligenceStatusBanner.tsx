@@ -13,6 +13,8 @@ type SchoolIntelligenceStatusBannerProps = {
   status: SchoolIntelligenceBuildStatus;
   lastUpdate: string | null;
   dataSource: string;
+  snapshotAvailable: boolean;
+  snapshotInUse: boolean;
 };
 
 const formatTimestamp = (value: string | null, isAr: boolean) => {
@@ -29,6 +31,8 @@ const SchoolIntelligenceStatusBanner = ({
   status,
   lastUpdate,
   dataSource,
+  snapshotAvailable,
+  snapshotInUse,
 }: SchoolIntelligenceStatusBannerProps) => (
   <div className={`mb-4 rounded-xl border px-4 py-3 ${bannerTone[status]}`}>
     <p className="text-sm font-bold">{isAr ? "حالة النظام" : "System status"}</p>
@@ -44,17 +48,21 @@ const SchoolIntelligenceStatusBanner = ({
       </span>
       <span className="inline-flex items-center gap-1">
         <Activity className="h-3.5 w-3.5" aria-hidden />
-        {status === "success"
+        {snapshotInUse
           ? isAr
-            ? "اتصال مباشر"
-            : "Live connection"
-          : status === "degraded"
+            ? "استعادة من نسخة"
+            : "Recovered from snapshot"
+          : snapshotAvailable
             ? isAr
-              ? "استعادة من نسخة"
-              : "Recovered from snapshot"
-            : isAr
-              ? "البيانات غير متاحة"
-              : "Data unavailable"}
+              ? "نسخة محفوظة متاحة"
+              : "Snapshot available"
+            : status === "success"
+              ? isAr
+                ? "اتصال مباشر"
+                : "Live connection"
+              : isAr
+                ? "البيانات غير متاحة"
+                : "Data unavailable"}
       </span>
     </div>
   </div>

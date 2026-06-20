@@ -14,6 +14,7 @@ import {
   IntelligenceQueryTimeoutError,
   runWithQueryTimeout,
 } from "@/lib/school-improvement/intelligence-self-healing";
+import { createSchoolIntelligenceMongoFailureError } from "@/lib/school-intelligence/school-intelligence-root-cause-capture";
 
 const SLOW_QUERY_MS = 3000;
 const QUERY_TIMEOUT_MS = Number(process.env.INTELLIGENCE_QUERY_TIMEOUT_MS || 8000);
@@ -139,7 +140,14 @@ export const profileMongoOperation = async <T>(input: {
       durationMs,
       message,
     });
-    throw error;
+    throw createSchoolIntelligenceMongoFailureError(error, {
+      mongoCollection: input.collection,
+      mongoOperation: input.operation,
+      queryName: input.pipelineName,
+      timeoutMs,
+      durationMs,
+      documentsReturned: 0,
+    });
   }
 };
 

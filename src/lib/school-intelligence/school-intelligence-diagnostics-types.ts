@@ -10,6 +10,30 @@ export type SchoolIntelligenceStepTiming = {
   detail?: string;
 };
 
+export type SchoolIntelligenceFirstFailureDiagnostics = {
+  section: string;
+  service: string;
+  errorName: string;
+  errorMessage: string;
+  stack?: string;
+  timestamp: string;
+  durationMs: number;
+  mongoCollection?: string;
+  mongoOperation?: string;
+  queryName?: string;
+  timeoutMs?: number;
+  documentsReturned?: number;
+  failureClassification?: string;
+};
+
+export type SchoolIntelligenceSnapshotSaveDiagnostics = {
+  attempted: boolean;
+  succeeded: boolean;
+  errorName?: string;
+  errorMessage?: string;
+  timestamp?: string;
+};
+
 export type SchoolIntelligenceDiagnostics = {
   generatedAt: string;
   status: SchoolIntelligenceBuildStatus;
@@ -22,6 +46,8 @@ export type SchoolIntelligenceDiagnostics = {
   timeoutSource?: string;
   runtimeVersion?: string;
   buildTimestamp?: string;
+  firstFailure?: SchoolIntelligenceFirstFailureDiagnostics;
+  snapshotSave?: SchoolIntelligenceSnapshotSaveDiagnostics;
 };
 
 export type SchoolIntelligenceBuildResult = {

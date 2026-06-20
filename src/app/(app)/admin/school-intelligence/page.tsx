@@ -7,6 +7,7 @@ import SchoolIntelligenceAdminActions from "@/components/school-intelligence/Sch
 import SchoolIntelligenceDiagnosticExpander from "@/components/school-intelligence/SchoolIntelligenceDiagnosticExpander";
 import SchoolIntelligenceDiagnosticsSummary from "@/components/school-intelligence/SchoolIntelligenceDiagnosticsSummary";
 import SchoolIntelligenceEmptyState from "@/components/school-intelligence/SchoolIntelligenceEmptyState";
+import SchoolIntelligenceFirstFailurePanel from "@/components/school-intelligence/SchoolIntelligenceFirstFailurePanel";
 import SchoolIntelligenceHealthBreakdown from "@/components/school-intelligence/SchoolIntelligenceHealthBreakdown";
 import SchoolIntelligenceRecoveryHistory from "@/components/school-intelligence/SchoolIntelligenceRecoveryHistory";
 import SchoolIntelligenceRootCausePanel from "@/components/school-intelligence/SchoolIntelligenceRootCausePanel";
@@ -29,6 +30,7 @@ import {
 import type { SchoolIntelligencePayload } from "@/lib/school-intelligence/school-intelligence-types";
 import {
   mergeRecoveryHistoryWithMonitoring,
+  resolveSnapshotInUse,
   resolveTransparentPageState,
   type MonitoringRecoveryPayload,
 } from "@/lib/school-intelligence/school-intelligence-transparency-utils";
@@ -53,14 +55,15 @@ const SchoolIntelligencePage = () => {
   const [error, setError] = useState<string | null>(null);
   const [apiStatus, setApiStatus] = useState<SchoolIntelligenceBuildStatus>("success");
   const [diagnostics, setDiagnostics] = useState<SchoolIntelligencePageDiagnostics | undefined>();
-  const [snapshotUsed, setSnapshotUsed] = useState(false);
   const [data, setData] = useState<SchoolIntelligencePayload | null>(null);
   const [isSystemAdmin, setIsSystemAdmin] = useState(false);
   const [monitoringRecovery, setMonitoringRecovery] = useState<MonitoringRecoveryPayload | null>(null);
 
+  const snapshotInUse = useMemo(() => resolveSnapshotInUse(diagnostics), [diagnostics]);
+
   const transparency = useMemo(
-    () => resolveTransparentPageState(apiStatus, data, diagnostics, snapshotUsed),
-    [apiStatus, data, diagnostics, snapshotUsed]
+    () => resolveTransparentPageState(apiStatus, data, diagnostics, snapshotInUse),
+    [apiStatus, data, diagnostics, snapshotInUse]
   );
 
   const {
@@ -70,6 +73,7 @@ const SchoolIntelligencePage = () => {
     healthBreakdown,
     rootCause,
     snapshotVisibility,
+    snapshotAvailable,
     recoveryHistory: diagnosticsRecovery,
   } = transparency;
 
@@ -84,13 +88,13 @@ const SchoolIntelligencePage = () => {
   );
 
   const lastUpdate = useMemo(
-    () => resolveLastSuccessfulUpdate(diagnostics, data, snapshotUsed),
-    [diagnostics, data, snapshotUsed]
+    () => resolveLastSuccessfulUpdate(diagnostics, data, snapshotInUse),
+    [diagnostics, data, snapshotInUse]
   );
 
   const dataSource = useMemo(
-    () => resolveDataSource(status, snapshotUsed, isAr),
-    [status, snapshotUsed, isAr]
+    () => resolveDataSource(status, snapshotInUse, isAr),
+    [status, snapshotInUse, isAr]
   );
 
   useEffect(() => {
@@ -136,13 +140,11 @@ const SchoolIntelligencePage = () => {
       setData(parsed.intelligence);
       setApiStatus(parsed.status);
       setDiagnostics(parsed.diagnostics);
-      setSnapshotUsed(parsed.snapshotUsed);
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error");
       setData(null);
       setApiStatus("unavailable");
-      setSnapshotUsed(false);
       setDiagnostics(undefined);
     } finally {
       setLoading(false);
@@ -227,6 +229,8 @@ const SchoolIntelligencePage = () => {
             status={status}
             lastUpdate={lastUpdate}
             dataSource={dataSource}
+            snapshotAvailable={snapshotAvailable}
+            snapshotInUse={snapshotInUse}
           />
           <p className="mb-4 text-xs text-text-light">
             {isAr ? "آخر تحديث ناجح:" : "Last successful update:"}{" "}
@@ -237,6 +241,7 @@ const SchoolIntelligencePage = () => {
 
       {showTransparencyPanels ? (
         <>
+          <SchoolIntelligenceFirstFailurePanel isAr={isAr} diagnostics={diagnostics} />
           <SchoolIntelligenceRootCausePanel isAr={isAr} rootCause={rootCause} />
           <SchoolIntelligenceSectionHealthTable isAr={isAr} sectionStatusMap={sectionStatusMap} />
           <SchoolIntelligenceSnapshotVisibility isAr={isAr} snapshot={snapshotVisibility} />

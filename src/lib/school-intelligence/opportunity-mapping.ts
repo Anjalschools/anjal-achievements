@@ -3,6 +3,7 @@ import connectDB from "@/lib/mongodb";
 import TrainingOpportunity from "@/models/TrainingOpportunity";
 import PartnerOrganization from "@/models/PartnerOrganization";
 import { buildInstitutionalSnapshot } from "@/lib/analytics/institutional-snapshot-builder";
+import { traceSchoolIntelligenceSection } from "@/lib/school-intelligence/school-intelligence-section-tracer";
 import type {
   OpportunityMappingRow,
   StudentSuccessGraphNode,
@@ -12,10 +13,15 @@ const clamp = (n: number) => Math.min(100, Math.max(0, Math.round(n)));
 
 export const buildOpportunityMapping = async (
   nodes: StudentSuccessGraphNode[]
-): Promise<OpportunityMappingRow[]> => {
+): Promise<OpportunityMappingRow[]> =>
+  traceSchoolIntelligenceSection("buildOpportunityMapping", "opportunity_mapping", async () => {
   await connectDB();
   const [snapshot, opportunities, orgs] = await Promise.all([
-    buildInstitutionalSnapshot(),
+    traceSchoolIntelligenceSection(
+      "buildInstitutionalSnapshot",
+      "institutional_snapshot",
+      () => buildInstitutionalSnapshot()
+    ),
     TrainingOpportunity.find({ active: { $ne: false } }).select("targetGrades organizationId title").lean(),
     PartnerOrganization.find({ active: { $ne: false } }).select("name sector").lean(),
   ]);
@@ -105,4 +111,4 @@ export const buildOpportunityMapping = async (
   }
 
   return rows.sort((a, b) => b.gapPct - a.gapPct).slice(0, 25);
-};
+});

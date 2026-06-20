@@ -2,9 +2,11 @@ import { describe, expect, it } from "vitest";
 import {
   buildHealthScoreBreakdown,
   buildRootCauseSummary,
+  buildSnapshotVisibility,
   formatSnapshotAge,
   reclassifySystemStatus,
   resolveSectionEmptyKind,
+  resolveSnapshotAvailable,
   resolveTransparentPageState,
 } from "@/lib/school-intelligence/school-intelligence-transparency-utils";
 import type { SchoolIntelligencePayload } from "@/lib/school-intelligence/school-intelligence-types";
@@ -54,18 +56,53 @@ describe("school-intelligence-transparency-utils", () => {
   });
 
   it("builds root cause from diagnostics warnings", () => {
-    const root = buildRootCauseSummary(
-      {
-        status: "degraded",
-        warnings: ["aggregation_slow_or_timeout"],
-        timeoutSource: "achievement_intelligence",
-        generatedAt: "2026-06-18T10:00:00.000Z",
-        steps: [{ step: "snapshot_fallback", durationMs: 1200, detail: "snapshot_loaded" }],
-      },
-      true
-    );
+    const root = buildRootCauseSummary({
+      status: "degraded",
+      snapshotFallback: true,
+      warnings: ["aggregation_slow_or_timeout"],
+      timeoutSource: "achievement_intelligence",
+      generatedAt: "2026-06-18T10:00:00.000Z",
+      steps: [{ step: "snapshot_fallback", durationMs: 1200, detail: "snapshot_loaded" }],
+    });
     expect(root.errorCategory).toBe("Aggregation Timeout");
     expect(root.snapshotAvailable).toBe(true);
+  });
+
+  it("does not treat empty fallback generatedAt as snapshot available", () => {
+    const emptyPayload = {
+      generatedAt: "2026-06-18T10:00:00.000Z",
+      schoolExcellence: { excellenceIndex: 0, participationRatePct: 0 },
+      studentSuccessGraph: { totalNodes: 0, avgSuccessIndex: 0, topStudents: [] },
+      strategicInsights: [],
+      departmentExcellence: [],
+      talentDiscovery: [],
+      interventions: [],
+      opportunityMapping: [],
+      longitudinalGrowth: [],
+    } as unknown as SchoolIntelligencePayload;
+
+    expect(
+      resolveSnapshotAvailable({
+        status: "unavailable",
+        snapshotFallback: false,
+        generatedAt: "2026-06-18T10:00:00.000Z",
+      })
+    ).toBe(false);
+
+    const visibility = buildSnapshotVisibility(
+      { status: "unavailable", snapshotFallback: false, generatedAt: "2026-06-18T10:00:00.000Z" },
+      emptyPayload
+    );
+    expect(visibility.available).toBe(false);
+    expect(visibility.timestamp).toBeNull();
+
+    const root = buildRootCauseSummary({
+      status: "unavailable",
+      snapshotFallback: false,
+      generatedAt: "2026-06-18T10:00:00.000Z",
+    });
+    expect(root.snapshotAvailable).toBe(false);
+    expect(root.errorCategory).toBe("Snapshot Missing");
   });
 
   it("uses distinct empty kinds for failure vs no data", () => {

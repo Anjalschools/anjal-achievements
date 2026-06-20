@@ -16,6 +16,11 @@ import {
   SCHOOL_INTEL_PAYLOAD_SNAPSHOT_KEY,
   SCHOOL_INTELLIGENCE_RUNTIME_VERSION,
 } from "@/lib/school-intelligence/school-intelligence-boot";
+import {
+  getSchoolIntelligenceBuildTrace,
+  runWithSchoolIntelligenceBuildTrace,
+  traceSchoolIntelligenceSnapshotSave,
+} from "@/lib/school-intelligence/school-intelligence-section-tracer";
 
 logSchoolIntelligenceBoot();
 
@@ -28,6 +33,17 @@ const withRuntimeMarkers = (
   runtimeVersion: SCHOOL_INTELLIGENCE_RUNTIME_VERSION,
   buildTimestamp: new Date().toISOString(),
 });
+
+const attachBuildTrace = (
+  diagnostics: SchoolIntelligenceDiagnostics
+): SchoolIntelligenceDiagnostics => {
+  const trace = getSchoolIntelligenceBuildTrace();
+  return {
+    ...diagnostics,
+    firstFailure: trace.firstFailure,
+    snapshotSave: trace.snapshotSave,
+  };
+};
 
 const sanitizeClientWarnings = (warnings: string[]): string[] =>
   warnings.map((warning) =>
@@ -58,95 +74,115 @@ const logStep = (
   return row;
 };
 
-export const buildSchoolIntelligenceNetworkResilient = async (): Promise<SchoolIntelligenceBuildResult> => {
-  const buildStarted = Date.now();
-  const steps: SchoolIntelligenceStepTiming[] = [];
-  const warnings: string[] = [];
+export const buildSchoolIntelligenceNetworkResilient = async (): Promise<SchoolIntelligenceBuildResult> =>
+  runWithSchoolIntelligenceBuildTrace(async () => {
+    const buildStarted = Date.now();
+    const steps: SchoolIntelligenceStepTiming[] = [];
+    const warnings: string[] = [];
 
-  console.info("[SchoolIntelligence] build start");
-
-  try {
-    const networkStarted = Date.now();
-    const intelligence = await buildSchoolIntelligenceNetwork();
-    steps.push(
-      logStep("SchoolIntelligence", "buildSchoolIntelligenceNetwork", networkStarted, {
-        documentsReturned: intelligence.studentSuccessGraph.totalNodes,
-      })
-    );
+    console.info("[SchoolIntelligence] build start");
 
     try {
-      await saveIntelligenceSnapshot({
-        key: SNAPSHOT_KEY,
-        domain: "school_improvement",
-        kind: "full_payload",
-        payload: intelligence,
-      });
-    } catch (saveError) {
-      const message = saveError instanceof Error ? saveError.message : String(saveError);
-      warnings.push(`snapshot_save_failed:${message}`);
-      console.warn("[SchoolIntelligence] snapshot save failed", message);
-    }
+      const networkStarted = Date.now();
+      const intelligence = await buildSchoolIntelligenceNetwork();
+      steps.push(
+        logStep("SchoolIntelligence", "buildSchoolIntelligenceNetwork", networkStarted, {
+          documentsReturned: intelligence.studentSuccessGraph.totalNodes,
+        })
+      );
 
-    return {
-      intelligence,
-      diagnostics: withRuntimeMarkers({
-        generatedAt: new Date().toISOString(),
-        status: "success",
-        totalDurationMs: Date.now() - buildStarted,
-        steps,
-        warnings: sanitizeClientWarnings(warnings),
-        snapshotFallback: false,
-      }),
-    };
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    warnings.push(message);
-    console.error("[SchoolIntelligence] build failed", message);
+      try {
+        await traceSchoolIntelligenceSnapshotSave(SNAPSHOT_KEY, () =>
+          saveIntelligenceSnapshot({
+            key: SNAPSHOT_KEY,
+            domain: "school_improvement",
+            kind: "full_payload",
+            payload: intelligence,
+          })
+        );
+      } catch (saveError) {
+        const message = saveError instanceof Error ? saveError.message : String(saveError);
+        warnings.push(`snapshot_save_failed:${message}`);
+        console.warn("[SchoolIntelligence] snapshot save failed", message);
+      }
 
-    let cached: SchoolIntelligencePayload | null = null;
-    try {
-      cached = await loadIntelligenceSnapshot<SchoolIntelligencePayload>(SNAPSHOT_KEY, "full_payload");
-    } catch (loadError) {
-      console.warn("[SchoolIntelligence] snapshot load failed", loadError);
-    }
-
-    if (cached) {
-      steps.push({
-        step: "snapshot_fallback",
-        durationMs: Date.now() - buildStarted,
-        detail: "snapshot_loaded",
-      });
       return {
-        intelligence: cached,
-        diagnostics: withRuntimeMarkers({
-          generatedAt: new Date().toISOString(),
-          status: "degraded",
-          totalDurationMs: Date.now() - buildStarted,
-          steps,
-          warnings: sanitizeClientWarnings(warnings),
-          snapshotFallback: true,
-          messageAr: "تم عرض آخر نسخة ناجحة من البيانات",
-          messageEn: "Showing last successful snapshot",
-          timeoutSource: message.includes("exceeded") ? "achievement_intelligence" : undefined,
-        }),
+        intelligence,
+        diagnostics: attachBuildTrace(
+          withRuntimeMarkers({
+            generatedAt: new Date().toISOString(),
+            status: "success",
+            totalDurationMs: Date.now() - buildStarted,
+            steps,
+            warnings: sanitizeClientWarnings(warnings),
+            snapshotFallback: false,
+          })
+        ),
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      warnings.push(message);
+      console.error("[SchoolIntelligence] build failed", message);
+
+      let cached: SchoolIntelligencePayload | null = null;
+      try {
+        cached = await loadIntelligenceSnapshot<SchoolIntelligencePayload>(SNAPSHOT_KEY, "full_payload");
+      } catch (loadError) {
+        console.warn("[SchoolIntelligence] snapshot load failed", loadError);
+      }
+
+      if (cached) {
+        console.info("[SchoolIntelligence Snapshot Hit]", {
+          phase: "build_fallback",
+          logicalKey: SNAPSHOT_KEY,
+          generatedAt: cached.generatedAt,
+        });
+        steps.push({
+          step: "snapshot_fallback",
+          durationMs: Date.now() - buildStarted,
+          detail: "snapshot_loaded",
+        });
+        return {
+          intelligence: cached,
+          diagnostics: attachBuildTrace(
+            withRuntimeMarkers({
+              generatedAt: new Date().toISOString(),
+              status: "degraded",
+              totalDurationMs: Date.now() - buildStarted,
+              steps,
+              warnings: sanitizeClientWarnings(warnings),
+              snapshotFallback: true,
+              messageAr: "تم عرض آخر نسخة ناجحة من البيانات",
+              messageEn: "Showing last successful snapshot",
+              timeoutSource: message.includes("exceeded") ? "achievement_intelligence" : undefined,
+            })
+          ),
+        };
+      }
+
+      console.warn("[SchoolIntelligence Snapshot Miss]", {
+        phase: "build_fallback",
+        logicalKey: SNAPSHOT_KEY,
+        buildError: message,
+      });
+
+      return {
+        intelligence: createEmptySchoolIntelligencePayload(),
+        diagnostics: attachBuildTrace(
+          withRuntimeMarkers({
+            generatedAt: new Date().toISOString(),
+            status: "unavailable",
+            totalDurationMs: Date.now() - buildStarted,
+            steps,
+            warnings: sanitizeClientWarnings(warnings),
+            snapshotFallback: false,
+            messageAr: "تعذر تحميل شبكة الذكاء المدرسي حالياً",
+            messageEn: "School intelligence network is unavailable right now",
+          })
+        ),
       };
     }
-
-    return {
-      intelligence: createEmptySchoolIntelligencePayload(),
-      diagnostics: withRuntimeMarkers({
-        generatedAt: new Date().toISOString(),
-        status: "unavailable",
-        totalDurationMs: Date.now() - buildStarted,
-        steps,
-        warnings: sanitizeClientWarnings(warnings),
-        snapshotFallback: false,
-        messageAr: "تعذر تحميل شبكة الذكاء المدرسي حالياً",
-        messageEn: "School intelligence network is unavailable right now",
-      }),
-    };
-  }
-};
+  });
 
 export const buildSchoolIntelligenceApiPayload = async () => {
   const result = await buildSchoolIntelligenceNetworkResilient();
@@ -176,4 +212,6 @@ export const sanitizeSchoolIntelligenceDiagnostics = (
       ...step,
       detail: step.detail?.includes("exceeded") ? "slow_or_timeout" : step.detail,
     })),
+    firstFailure: diagnostics.firstFailure,
+    snapshotSave: diagnostics.snapshotSave,
   });

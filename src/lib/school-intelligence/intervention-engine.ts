@@ -1,6 +1,8 @@
 import type { InterventionRow, StudentSuccessGraphNode } from "@/lib/school-intelligence/school-intelligence-types";
+import { traceSchoolIntelligenceSectionSync } from "@/lib/school-intelligence/school-intelligence-section-tracer";
 
-export const buildInterventions = (nodes: StudentSuccessGraphNode[]): InterventionRow[] => {
+export const buildInterventions = (nodes: StudentSuccessGraphNode[]): InterventionRow[] =>
+  traceSchoolIntelligenceSectionSync("buildInterventionEngine", "intervention_engine", () => {
   const rows: InterventionRow[] = [];
 
   for (const node of nodes) {
@@ -61,4 +63,4 @@ export const buildInterventions = (nodes: StudentSuccessGraphNode[]): Interventi
       return sev[b.severity] - sev[a.severity];
     })
     .slice(0, 50);
-};
+});

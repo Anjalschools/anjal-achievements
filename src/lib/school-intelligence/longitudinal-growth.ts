@@ -1,13 +1,19 @@
 import "server-only";
 import { buildInstitutionalSnapshot } from "@/lib/analytics/institutional-snapshot-builder";
+import { traceSchoolIntelligenceSection } from "@/lib/school-intelligence/school-intelligence-section-tracer";
 import type { LongitudinalGrowthPoint, StudentSuccessGraphNode } from "@/lib/school-intelligence/school-intelligence-types";
 
 const clamp = (n: number) => Math.round(n * 10) / 10;
 
 export const buildLongitudinalGrowth = async (
   nodes: StudentSuccessGraphNode[]
-): Promise<LongitudinalGrowthPoint[]> => {
-  const snapshot = await buildInstitutionalSnapshot();
+): Promise<LongitudinalGrowthPoint[]> =>
+  traceSchoolIntelligenceSection("buildLongitudinalGrowth", "longitudinal_growth", async () => {
+  const snapshot = await traceSchoolIntelligenceSection(
+    "buildInstitutionalSnapshot",
+    "institutional_snapshot",
+    () => buildInstitutionalSnapshot()
+  );
   const avgSuccessIndex =
     nodes.length > 0 ? nodes.reduce((s, n) => s + n.successIndex, 0) / nodes.length : 0;
 
@@ -38,7 +44,7 @@ export const buildLongitudinalGrowth = async (
   }
 
   return points;
-};
+});
 
 export const computeYearOverYearGrowthPct = (points: LongitudinalGrowthPoint[]): number => {
   if (points.length < 2) return 0;

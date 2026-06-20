@@ -16,6 +16,7 @@ import {
   computeStudentSuccessIndex,
   formatSubScoreEvidence,
 } from "@/lib/school-intelligence/student-success-index";
+import { traceSchoolIntelligenceSection } from "@/lib/school-intelligence/school-intelligence-section-tracer";
 import type {
   SchoolDepartment,
   SchoolStage,
@@ -67,7 +68,8 @@ export type StudentSuccessGraphBuildMeta = {
 export const buildStudentSuccessGraph = async (): Promise<{
   nodes: StudentSuccessGraphNode[];
   meta: StudentSuccessGraphBuildMeta;
-}> => {
+}> =>
+  traceSchoolIntelligenceSection("buildStudentSuccessGraph", "student_success_graph", async () => {
   await connectDB();
   const graphStarted = Date.now();
   console.info("[SchoolIntelligence] buildStudentSuccessGraph start");
@@ -241,4 +243,4 @@ export const buildStudentSuccessGraph = async (): Promise<{
       intelSnapshotFallback: intelResult.snapshotFallback,
     },
   };
-};
+});

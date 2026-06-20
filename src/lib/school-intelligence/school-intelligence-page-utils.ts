@@ -12,10 +12,10 @@ export const SNAPSHOT_USED_KEY = (diagnostics?: SchoolIntelligencePageDiagnostic
 
 export const resolveDataSource = (
   status: SchoolIntelligenceBuildStatus,
-  snapshotUsed: boolean,
+  snapshotInUse: boolean,
   isAr: boolean
 ): string => {
-  if (snapshotUsed) {
+  if (snapshotInUse) {
     return isAr ? "نسخة محفوظة (Snapshot)" : "Snapshot";
   }
   if (status === "success") {
@@ -58,24 +58,31 @@ export const deriveDisplayScoresFromDiagnostics = (
 export const resolveLastSuccessfulUpdate = (
   diagnostics?: SchoolIntelligencePageDiagnostics,
   intelligence?: SchoolIntelligencePayload | null,
-  snapshotUsed = false
+  snapshotInUse = false
 ): string | null => {
-  if (snapshotUsed && intelligence?.generatedAt) {
-    return intelligence.generatedAt;
+  if (snapshotInUse) {
+    return (
+      diagnostics?.snapshotMetadata?.capturedAt ||
+      intelligence?.generatedAt ||
+      diagnostics?.buildTimestamp ||
+      diagnostics?.generatedAt ||
+      null
+    );
   }
-  return (
-    diagnostics?.buildTimestamp ||
-    diagnostics?.generatedAt ||
-    intelligence?.generatedAt ||
-    null
-  );
+  return diagnostics?.buildTimestamp || diagnostics?.generatedAt || null;
 };
 
 export const resolveSnapshotTimestamp = (
   diagnostics?: SchoolIntelligencePageDiagnostics,
-  intelligence?: SchoolIntelligencePayload | null
+  intelligence?: SchoolIntelligencePayload | null,
+  snapshotInUse = false
 ): string | null => {
-  return intelligence?.generatedAt || diagnostics?.generatedAt || diagnostics?.buildTimestamp || null;
+  if (!snapshotInUse) return null;
+  return (
+    diagnostics?.snapshotMetadata?.capturedAt ||
+    intelligence?.generatedAt ||
+    null
+  );
 };
 
 const sectionHasData = (key: SchoolIntelligenceSectionKey, data: SchoolIntelligencePayload): boolean => {
