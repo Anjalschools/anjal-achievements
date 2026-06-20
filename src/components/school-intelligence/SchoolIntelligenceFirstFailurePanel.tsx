@@ -89,6 +89,43 @@ const SchoolIntelligenceFirstFailurePanel = ({
               value={String(firstFailure.documentsReturned)}
             />
           ) : null}
+          {firstFailure.querySizeBytes != null ? (
+            <RootCauseField
+              label={isAr ? "حجم الاستعلام (بايت)" : "Query size (bytes)"}
+              value={String(firstFailure.querySizeBytes)}
+            />
+          ) : null}
+          {firstFailure.pipelineSizeBytes != null ? (
+            <RootCauseField
+              label={isAr ? "حجم خط الأنابيب (بايت)" : "Pipeline size (bytes)"}
+              value={String(firstFailure.pipelineSizeBytes)}
+            />
+          ) : null}
+          {firstFailure.arrayLength != null ? (
+            <RootCauseField
+              label={isAr ? "عدد عناصر المصفوفة" : "Array length"}
+              value={String(firstFailure.arrayLength)}
+            />
+          ) : null}
+          {firstFailure.serializedBytes != null ? (
+            <RootCauseField
+              label={isAr ? "الحجم المُسلسل (بايت)" : "Serialized size (bytes)"}
+              value={String(firstFailure.serializedBytes)}
+            />
+          ) : null}
+          {firstFailure.limitBytes != null ? (
+            <RootCauseField
+              label={isAr ? "حد الأمان (بايت)" : "Safety limit (bytes)"}
+              value={String(firstFailure.limitBytes)}
+            />
+          ) : null}
+          {firstFailure.offendingFilterPath ? (
+            <RootCauseField
+              label={isAr ? "الفلتر المتسبب" : "Offending filter"}
+              value={firstFailure.offendingFilterPath}
+              className="sm:col-span-2"
+            />
+          ) : null}
           <RootCauseField
             label={isAr ? "وقت الفشل" : "Failure time"}
             value={formatTimestamp(firstFailure.timestamp, isAr)}

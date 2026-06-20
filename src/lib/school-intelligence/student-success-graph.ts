@@ -60,6 +60,27 @@ const inferMomentum = (medalRatioPct: number, distinctActivityCount: number): St
   return "low";
 };
 
+const STUDENT_FIND_FILTER = { role: "student" as const };
+const STUDENT_FIND_PROJECTION =
+  "_id fullNameAr fullName fullNameEn grade section isMawhibaStudent profilePhoto";
+const PROFILE_FIND_FILTER = { studentId: { $exists: true, $ne: null } };
+const PROFILE_FIND_PROJECTION =
+  "studentId achievementsScore skillsScore careerReadinessScore universityReadinessScore trainingHours volunteerHours extractedSkills manualSkills";
+const CERTIFICATE_AGGREGATE_PIPELINE = [
+  { $match: { status: "approved", certificateIssued: true, userId: { $exists: true, $ne: null } } },
+  { $group: { _id: "$userId", count: { $sum: 1 } } },
+];
+const TRAINING_AGGREGATE_PIPELINE = [
+  { $match: { status: "approved", studentId: { $exists: true, $ne: null } } },
+  {
+    $group: {
+      _id: "$studentId",
+      hours: { $sum: { $ifNull: ["$volunteerHours", 0] } },
+      count: { $sum: 1 },
+    },
+  },
+];
+
 export type StudentSuccessGraphBuildMeta = {
   intelDegraded: boolean;
   intelSnapshotFallback: boolean;
@@ -95,9 +116,16 @@ export const buildStudentSuccessGraph = async (): Promise<{
   const [users, profiles, certCounts, trainingByStudent] = await Promise.all([
     profileMongoFind(User, {
       operation: "find_students",
+      filter: STUDENT_FIND_FILTER,
+      projection: STUDENT_FIND_PROJECTION,
       fn: () =>
-        User.find({ role: "student" })
-          .select("_id fullNameAr fullName fullNameEn grade section isMawhibaStudent profilePhoto")
+        User.find(STUDENT_FIND_FILTER)
+          .select(STUDENT_FIND_PROJECTION)
+          .limit(5000)
+          .lean(),
+      createFilterFn: (filter) => () =>
+        User.find(filter)
+          .select(STUDENT_FIND_PROJECTION)
           .limit(5000)
           .lean(),
       countDocuments: (rows) => rows.length,
@@ -105,11 +133,16 @@ export const buildStudentSuccessGraph = async (): Promise<{
     }),
     profileMongoFind(StudentCareerProfile, {
       operation: "find_profiles",
+      filter: PROFILE_FIND_FILTER,
+      projection: PROFILE_FIND_PROJECTION,
       fn: () =>
-        StudentCareerProfile.find({ studentId: { $exists: true, $ne: null } })
-          .select(
-            "studentId achievementsScore skillsScore careerReadinessScore universityReadinessScore trainingHours volunteerHours extractedSkills manualSkills"
-          )
+        StudentCareerProfile.find(PROFILE_FIND_FILTER)
+          .select(PROFILE_FIND_PROJECTION)
+          .limit(5000)
+          .lean(),
+      createFilterFn: (filter) => () =>
+        StudentCareerProfile.find(filter)
+          .select(PROFILE_FIND_PROJECTION)
           .limit(5000)
           .lean(),
       countDocuments: (rows) => rows.length,
@@ -117,27 +150,19 @@ export const buildStudentSuccessGraph = async (): Promise<{
     }),
     profileMongoAggregate(Achievement, {
       pipelineName: "student_success_certificates_by_user",
+      pipeline: CERTIFICATE_AGGREGATE_PIPELINE,
       fn: () =>
-        Achievement.aggregate<{ _id: unknown; count: number }>([
-          { $match: { status: "approved", certificateIssued: true, userId: { $exists: true, $ne: null } } },
-          { $group: { _id: "$userId", count: { $sum: 1 } } },
-        ]),
+        Achievement.aggregate<{ _id: unknown; count: number }>(CERTIFICATE_AGGREGATE_PIPELINE),
       countDocuments: (rows) => rows.length,
       ...schoolQueryOpts,
     }),
     profileMongoAggregate(TrainingCompletionRecord, {
       pipelineName: "student_success_training_by_student",
+      pipeline: TRAINING_AGGREGATE_PIPELINE,
       fn: () =>
-        TrainingCompletionRecord.aggregate<{ _id: unknown; hours: number; count: number }>([
-          { $match: { status: "approved", studentId: { $exists: true, $ne: null } } },
-          {
-            $group: {
-              _id: "$studentId",
-              hours: { $sum: { $ifNull: ["$volunteerHours", 0] } },
-              count: { $sum: 1 },
-            },
-          },
-        ]),
+        TrainingCompletionRecord.aggregate<{ _id: unknown; hours: number; count: number }>(
+          TRAINING_AGGREGATE_PIPELINE
+        ),
       countDocuments: (rows) => rows.length,
       ...schoolQueryOpts,
     }),

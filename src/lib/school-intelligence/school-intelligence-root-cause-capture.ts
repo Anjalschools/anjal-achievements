@@ -5,6 +5,7 @@ export type SchoolIntelligenceFailureClassification =
   | "Undefined Reference"
   | "Import Failure"
   | "Environment Failure"
+  | "Query Payload Too Large"
   | "Unknown Failure";
 
 export type SchoolIntelligenceMongoFailureContext = {
@@ -14,6 +15,12 @@ export type SchoolIntelligenceMongoFailureContext = {
   timeoutMs: number;
   durationMs: number;
   documentsReturned?: number;
+  querySizeBytes?: number;
+  pipelineSizeBytes?: number;
+  arrayLength?: number;
+  serializedBytes?: number;
+  limitBytes?: number;
+  offendingFilterPath?: string;
 };
 
 export class SchoolIntelligenceMongoFailureError extends Error {
@@ -53,6 +60,15 @@ export const classifySchoolIntelligenceFailure = (input: {
 }): SchoolIntelligenceFailureClassification => {
   const errorName = input.errorName ?? (input.error instanceof Error ? input.error.name : "");
   const message = `${input.errorMessage ?? ""} ${input.error instanceof Error ? input.error.message : ""}`.toLowerCase();
+
+  if (
+    message.includes("query_payload_too_large") ||
+    errorName === "RangeError" ||
+    message.includes("err_out_of_range") ||
+    message.includes("offset") && message.includes("out of range")
+  ) {
+    return "Query Payload Too Large";
+  }
 
   if (
     errorName.includes("IntelligenceQueryTimeout") ||
@@ -120,6 +136,12 @@ export type SchoolIntelligenceFirstFailureRecord = {
   queryName?: string;
   timeoutMs?: number;
   documentsReturned?: number;
+  querySizeBytes?: number;
+  pipelineSizeBytes?: number;
+  arrayLength?: number;
+  serializedBytes?: number;
+  limitBytes?: number;
+  offendingFilterPath?: string;
   failureClassification: SchoolIntelligenceFailureClassification;
 };
 
@@ -148,6 +170,12 @@ export const buildFirstFailureRecord = (input: {
     queryName: mongo?.queryName,
     timeoutMs: mongo?.timeoutMs,
     documentsReturned: mongo?.documentsReturned,
+    querySizeBytes: mongo?.querySizeBytes,
+    pipelineSizeBytes: mongo?.pipelineSizeBytes,
+    arrayLength: mongo?.arrayLength,
+    serializedBytes: mongo?.serializedBytes,
+    limitBytes: mongo?.limitBytes,
+    offendingFilterPath: mongo?.offendingFilterPath,
     failureClassification: classifySchoolIntelligenceFailure({
       error: input.error,
       errorName,

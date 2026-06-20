@@ -24,6 +24,12 @@ export type SchoolIntelligenceFirstFailureDiagnostics = {
   timeoutMs?: number;
   documentsReturned?: number;
   failureClassification?: string;
+  querySizeBytes?: number;
+  pipelineSizeBytes?: number;
+  arrayLength?: number;
+  serializedBytes?: number;
+  limitBytes?: number;
+  offendingFilterPath?: string;
 };
 
 export type SchoolIntelligenceSnapshotSaveDiagnostics = {

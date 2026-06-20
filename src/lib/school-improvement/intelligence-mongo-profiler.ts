@@ -14,7 +14,15 @@ import {
   IntelligenceQueryTimeoutError,
   runWithQueryTimeout,
 } from "@/lib/school-improvement/intelligence-self-healing";
-import { createSchoolIntelligenceMongoFailureError } from "@/lib/school-intelligence/school-intelligence-root-cause-capture";
+import { createSchoolIntelligenceMongoFailureError, extractMongoFailureContext } from "@/lib/school-intelligence/school-intelligence-root-cause-capture";
+import {
+  assertBsonSafeMongoQuery,
+  BSON_IN_ARRAY_CHUNK_BYTES,
+  findLargeArrayFilters,
+  logLargeArrayFilter,
+  logMongoQueryInstrumentation,
+  splitFilterByInArraySize,
+} from "@/lib/school-intelligence/school-intelligence-bson-safety";
 
 const SLOW_QUERY_MS = 3000;
 const QUERY_TIMEOUT_MS = Number(process.env.INTELLIGENCE_QUERY_TIMEOUT_MS || 8000);
@@ -41,6 +49,82 @@ export const parseAggregationStageIndex = (error: unknown): number | undefined =
 const querySnapshotKey = (collection: string, operation: string, pipelineName?: string) =>
   `${collection}:${pipelineName || operation}`;
 
+const mergeArrayResults = <T>(parts: T[]): T => {
+  if (parts.length === 0) return [] as T;
+  if (Array.isArray(parts[0])) {
+    return parts.flatMap((part) => part as unknown[]) as T;
+  }
+  return parts[parts.length - 1];
+};
+
+const runGuardedMongoQuery = async <T>(input: {
+  collection: string;
+  operation: string;
+  pipelineName?: string;
+  filter?: unknown;
+  projection?: string | Record<string, unknown>;
+  pipeline?: unknown[];
+  timeoutMs: number;
+  fn: () => Promise<T>;
+  createFilterFn?: (filter: Record<string, unknown>) => () => Promise<T>;
+}): Promise<T> => {
+  if (input.filter !== undefined || input.pipeline !== undefined) {
+    const instrumentation = assertBsonSafeMongoQuery({
+      collection: input.collection,
+      operation: input.operation,
+      pipelineName: input.pipelineName,
+      filter: input.filter,
+      projection: input.projection,
+      pipeline: input.pipeline,
+      timeoutMs: input.timeoutMs,
+    });
+    logMongoQueryInstrumentation({
+      collection: input.collection,
+      operation: input.operation,
+      pipelineName: input.pipelineName,
+      timeoutMs: input.timeoutMs,
+      filter: input.filter,
+      projection: input.projection,
+      pipeline: input.pipeline,
+      ...instrumentation,
+    });
+
+    for (const entry of findLargeArrayFilters(input.filter)) {
+      logLargeArrayFilter(entry);
+    }
+
+    if (
+      input.filter &&
+      input.createFilterFn &&
+      typeof input.filter === "object" &&
+      !Array.isArray(input.filter)
+    ) {
+      const chunks = splitFilterByInArraySize(
+        input.filter as Record<string, unknown>,
+        BSON_IN_ARRAY_CHUNK_BYTES
+      );
+      if (chunks.length > 1) {
+        const parts = await Promise.all(
+          chunks.map((chunk) =>
+            runWithQueryTimeout(
+              input.createFilterFn!(chunk),
+              input.timeoutMs,
+              `${input.collection}.${input.pipelineName || input.operation}`
+            )
+          )
+        );
+        return mergeArrayResults(parts);
+      }
+    }
+  }
+
+  return runWithQueryTimeout(
+    input.fn,
+    input.timeoutMs,
+    `${input.collection}.${input.pipelineName || input.operation}`
+  );
+};
+
 export const profileMongoOperation = async <T>(input: {
   collection: string;
   operation: string;
@@ -50,6 +134,10 @@ export const profileMongoOperation = async <T>(input: {
   timeoutMs?: number;
   /** When true, return cached snapshot on any failure (not only timeout). */
   snapshotOnFailure?: boolean;
+  filter?: unknown;
+  projection?: string | Record<string, unknown>;
+  pipeline?: unknown[];
+  createFilterFn?: (filter: Record<string, unknown>) => () => Promise<T>;
 }): Promise<T> => {
   const started = Date.now();
   const domain = resolveQueryDomain(input.collection);
@@ -57,11 +145,17 @@ export const profileMongoOperation = async <T>(input: {
   const timeoutMs = input.timeoutMs ?? QUERY_TIMEOUT_MS;
 
   try {
-    const result = await runWithQueryTimeout(
-      input.fn,
+    const result = await runGuardedMongoQuery({
+      collection: input.collection,
+      operation: input.operation,
+      pipelineName: input.pipelineName,
+      filter: input.filter,
+      projection: input.projection,
+      pipeline: input.pipeline,
       timeoutMs,
-      `${input.collection}.${input.pipelineName || input.operation}`
-    );
+      fn: input.fn,
+      createFilterFn: input.createFilterFn,
+    });
     const durationMs = Date.now() - started;
     const documentsReturned = input.countDocuments?.(result) ?? estimateDocumentsReturned(result);
     const slow = durationMs > SLOW_QUERY_MS;
@@ -93,6 +187,8 @@ export const profileMongoOperation = async <T>(input: {
     const durationMs = Date.now() - started;
     const message = error instanceof Error ? error.message : String(error);
     const isTimeout = error instanceof IntelligenceQueryTimeoutError;
+    const existingMongo = extractMongoFailureContext(error);
+    const isPayloadTooLarge = message === "query_payload_too_large";
 
     if (input.pipelineName || input.operation.includes("aggregate")) {
       recordAggregationFailure({
@@ -104,7 +200,7 @@ export const profileMongoOperation = async <T>(input: {
     }
 
     const cached = await loadIntelligenceSnapshot<T>(snapshotKey, "query");
-    if (cached != null && (isTimeout || input.snapshotOnFailure)) {
+    if (cached != null && !isPayloadTooLarge && (isTimeout || input.snapshotOnFailure)) {
       recordMongoQuery({
         collection: input.collection,
         operation: input.operation,
@@ -147,6 +243,12 @@ export const profileMongoOperation = async <T>(input: {
       timeoutMs,
       durationMs,
       documentsReturned: 0,
+      querySizeBytes: existingMongo?.querySizeBytes,
+      pipelineSizeBytes: existingMongo?.pipelineSizeBytes,
+      arrayLength: existingMongo?.arrayLength,
+      serializedBytes: existingMongo?.serializedBytes,
+      limitBytes: existingMongo?.limitBytes,
+      offendingFilterPath: existingMongo?.offendingFilterPath,
     });
   }
 };
@@ -159,6 +261,9 @@ export const profileMongoFind = async <T>(
     countDocuments?: (result: T) => number;
     timeoutMs?: number;
     snapshotOnFailure?: boolean;
+    filter?: unknown;
+    projection?: string | Record<string, unknown>;
+    createFilterFn?: (filter: Record<string, unknown>) => () => Promise<T>;
   }
 ): Promise<T> =>
   profileMongoOperation({
@@ -168,6 +273,9 @@ export const profileMongoFind = async <T>(
     countDocuments: input.countDocuments,
     timeoutMs: input.timeoutMs,
     snapshotOnFailure: input.snapshotOnFailure,
+    filter: input.filter,
+    projection: input.projection,
+    createFilterFn: input.createFilterFn,
   });
 
 export const profileMongoAggregate = async <T>(
@@ -178,6 +286,7 @@ export const profileMongoAggregate = async <T>(
     countDocuments?: (result: T) => number;
     timeoutMs?: number;
     snapshotOnFailure?: boolean;
+    pipeline?: unknown[];
   }
 ): Promise<T> =>
   profileMongoOperation({
@@ -188,6 +297,7 @@ export const profileMongoAggregate = async <T>(
     countDocuments: input.countDocuments,
     timeoutMs: input.timeoutMs,
     snapshotOnFailure: input.snapshotOnFailure,
+    pipeline: input.pipeline,
   });
 
 export const profileMongoCount = async (
