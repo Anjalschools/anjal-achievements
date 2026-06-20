@@ -3,6 +3,8 @@ import {
   buildFirstFailureRecord,
   type SchoolIntelligenceFirstFailureRecord,
 } from "@/lib/school-intelligence/school-intelligence-root-cause-capture";
+import type { SchoolIntelligenceQuerySourceEntry } from "@/lib/school-intelligence/school-intelligence-query-source-trace";
+import type { SchoolIntelligenceChunkRecoveryDiagnostics } from "@/lib/school-intelligence/school-intelligence-bson-safety";
 
 export type SchoolIntelligenceFirstFailure = SchoolIntelligenceFirstFailureRecord;
 
@@ -17,12 +19,17 @@ export type SchoolIntelligenceSnapshotSaveTrace = {
 type SchoolIntelligenceBuildTraceStore = {
   firstFailure?: SchoolIntelligenceFirstFailure;
   snapshotSave?: SchoolIntelligenceSnapshotSaveTrace;
+  querySourceMap?: SchoolIntelligenceQuerySourceEntry[];
+  chunkRecovery?: SchoolIntelligenceChunkRecoveryDiagnostics[];
 };
 
 const storage = new AsyncLocalStorage<SchoolIntelligenceBuildTraceStore>();
 
 export const runWithSchoolIntelligenceBuildTrace = async <T>(fn: () => Promise<T>): Promise<T> =>
-  storage.run({ snapshotSave: { attempted: false, succeeded: false } }, fn);
+  storage.run(
+    { snapshotSave: { attempted: false, succeeded: false }, querySourceMap: [], chunkRecovery: [] },
+    fn
+  );
 
 export const getSchoolIntelligenceBuildTrace = (): SchoolIntelligenceBuildTraceStore =>
   storage.getStore() ?? {};
@@ -31,6 +38,22 @@ export const recordSchoolIntelligenceFirstFailure = (failure: SchoolIntelligence
   const store = storage.getStore();
   if (!store || store.firstFailure) return;
   store.firstFailure = failure;
+};
+
+export const recordSchoolIntelligenceQuerySource = (entry: SchoolIntelligenceQuerySourceEntry) => {
+  const store = storage.getStore();
+  if (!store) return;
+  if (!store.querySourceMap) store.querySourceMap = [];
+  store.querySourceMap.push(entry);
+};
+
+export const recordSchoolIntelligenceChunkRecovery = (
+  entry: SchoolIntelligenceChunkRecoveryDiagnostics
+) => {
+  const store = storage.getStore();
+  if (!store) return;
+  if (!store.chunkRecovery) store.chunkRecovery = [];
+  store.chunkRecovery.push(entry);
 };
 
 const logSectionFailed = (

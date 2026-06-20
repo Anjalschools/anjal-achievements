@@ -1,11 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
   assertBsonSafeMongoQuery,
+  BSON_IN_BATCH_COUNT,
   buildMongoQueryInstrumentation,
   countIdsInFilter,
   findForbiddenFilterObjects,
   measureSerializedBytes,
+  resolveFilterChunks,
+  sanitizeMongoFilter,
   splitFilterByInArraySize,
+  splitFilterByInCount,
 } from "@/lib/school-intelligence/school-intelligence-bson-safety";
 import {
   buildFirstFailureRecord,
@@ -60,6 +64,38 @@ describe("school-intelligence-bson-safety", () => {
         0
       )
     ).toBe(ids.length);
+  });
+
+  it("splits _id.$in into 5000-id batches", () => {
+    const ids = Array.from({ length: 12_000 }, (_, index) => `student-${index}`);
+    const filter = { _id: { $in: ids } };
+    const chunks = splitFilterByInCount(filter, BSON_IN_BATCH_COUNT);
+    expect(chunks).toHaveLength(3);
+    expect((chunks[0]._id as { $in: string[] }).$in).toHaveLength(5000);
+    expect((chunks[2]._id as { $in: string[] }).$in).toHaveLength(2000);
+  });
+
+  it("sanitizes document-shaped $in values to primitive ids", () => {
+    const sanitized = sanitizeMongoFilter({
+      userId: { $in: [{ _id: "abc123" }, { _id: "def456" }] },
+    });
+    expect((sanitized.userId as { $in: unknown[] }).$in).toEqual(["abc123", "def456"]);
+  });
+
+  it("auto-resolves chunk mode for oversized source filters", () => {
+    const ids = Array.from({ length: BSON_IN_BATCH_COUNT + 1 }, (_, index) => `id-${index}`);
+    const resolved = resolveFilterChunks({ studentId: { $in: ids } });
+    expect(resolved.chunkedRecoveryUsed).toBe(true);
+    expect(resolved.chunks.length).toBe(2);
+    expect(resolved.chunkSize).toBe(BSON_IN_BATCH_COUNT);
+  });
+
+  it("rejects forbidden payload objects inside $in arrays", () => {
+    expect(() =>
+      sanitizeMongoFilter({
+        _id: { $in: [{ diagnostics: { payload: "x" }, _id: "1" }] },
+      })
+    ).toThrow("query_payload_too_large");
   });
 
   it("surfaces BSON diagnostics on first failure record", () => {

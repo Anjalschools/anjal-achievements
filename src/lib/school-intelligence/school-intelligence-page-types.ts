@@ -1,4 +1,9 @@
 import type { SchoolIntelligencePayload } from "@/lib/school-intelligence/school-intelligence-types";
+import type {
+  SchoolIntelligenceChunkRecoveryDiagnostics,
+  SchoolIntelligenceFirstFailureDiagnostics,
+  SchoolIntelligenceQuerySourceMapEntry,
+} from "@/lib/school-intelligence/school-intelligence-diagnostics-types";
 
 export type SchoolIntelligenceBuildStatus = "success" | "degraded" | "unavailable";
 
@@ -16,27 +21,7 @@ export type SchoolIntelligencePageDiagnostics = {
   buildTimestamp?: string;
   timeoutSource?: string;
   steps?: Array<{ step: string; durationMs: number; detail?: string }>;
-  firstFailure?: {
-    section: string;
-    service: string;
-    errorName: string;
-    errorMessage: string;
-    stack?: string;
-    timestamp: string;
-    durationMs: number;
-    mongoCollection?: string;
-    mongoOperation?: string;
-    queryName?: string;
-    timeoutMs?: number;
-    documentsReturned?: number;
-    failureClassification?: string;
-    querySizeBytes?: number;
-    pipelineSizeBytes?: number;
-    arrayLength?: number;
-    serializedBytes?: number;
-    limitBytes?: number;
-    offendingFilterPath?: string;
-  };
+  firstFailure?: SchoolIntelligenceFirstFailureDiagnostics;
   snapshotSave?: {
     attempted: boolean;
     succeeded: boolean;
@@ -44,6 +29,8 @@ export type SchoolIntelligencePageDiagnostics = {
     errorMessage?: string;
     timestamp?: string;
   };
+  querySourceMap?: SchoolIntelligenceQuerySourceMapEntry[];
+  chunkRecovery?: SchoolIntelligenceChunkRecoveryDiagnostics[];
 };
 
 export type SectionEmptyKind = "no_data" | "failure" | "snapshot";

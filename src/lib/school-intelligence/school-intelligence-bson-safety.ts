@@ -6,6 +6,19 @@ export const BSON_QUERY_SAFE_LIMIT_BYTES = Number(
 export const BSON_IN_ARRAY_CHUNK_BYTES = Number(
   process.env.SCHOOL_INTEL_BSON_IN_CHUNK_BYTES || 4_000_000
 );
+export const BSON_IN_BATCH_COUNT = Number(
+  process.env.SCHOOL_INTEL_BSON_IN_BATCH_COUNT || 5000
+);
+export const BSON_CHUNK_IN_FIELD_NAMES = ["_id", "studentId", "userId"] as const;
+
+export type SchoolIntelligenceChunkRecoveryDiagnostics = {
+  queryName: string;
+  collection: string;
+  chunkCount: number;
+  chunkSize: number;
+  chunkExecutionMs: number;
+  chunkedRecoveryUsed: boolean;
+};
 
 const FORBIDDEN_FILTER_KEYS = new Set([
   "diagnostics",
@@ -49,6 +62,9 @@ export const measureSerializedBytes = (value: unknown): number => {
     return Number.MAX_SAFE_INTEGER;
   }
 };
+
+export const normalizeFilterPath = (path: string): string =>
+  path.replace(/^filter\./, "").replace(/^\$match\./, "$match.");
 
 export const extractProjectionFields = (
   projection: string | Record<string, unknown> | undefined
@@ -166,6 +182,128 @@ export const findForbiddenFilterObjects = (filter: unknown): string[] => {
   return violations;
 };
 
+export const sanitizeInArrayValue = (value: unknown): unknown => {
+  if (value == null || isAllowedFilterPrimitive(value)) return value;
+  if (typeof value !== "object") return value;
+  const record = value as Record<string, unknown>;
+  for (const key of Object.keys(record)) {
+    if (FORBIDDEN_FILTER_KEYS.has(key)) {
+      throw createSchoolIntelligenceMongoFailureError(new Error("query_payload_too_large"), {
+        mongoCollection: "unknown",
+        mongoOperation: "sanitize",
+        timeoutMs: 0,
+        durationMs: 0,
+        documentsReturned: 0,
+        offendingFilterPath: `$in.${key}`,
+      });
+    }
+  }
+  if ("_id" in record) return sanitizeInArrayValue(record._id);
+  if (isObjectIdLike(value)) return value;
+  throw createSchoolIntelligenceMongoFailureError(new Error("query_payload_too_large"), {
+    mongoCollection: "unknown",
+    mongoOperation: "sanitize",
+    timeoutMs: 0,
+    durationMs: 0,
+    documentsReturned: 0,
+    offendingFilterPath: "$in[object]",
+  });
+};
+
+export const sanitizeMongoFilter = <T extends Record<string, unknown>>(filter: T): T => {
+  const cloned = structuredClone(filter) as T;
+  walkFilter(cloned, "filter", (_path, key, node) => {
+    if (key !== "$in" || !Array.isArray(node)) return;
+    const parent = node as unknown[];
+    for (let index = 0; index < parent.length; index += 1) {
+      parent[index] = sanitizeInArrayValue(parent[index]);
+    }
+  });
+  return cloned;
+};
+
+type ChunkableInTarget = {
+  parentPath: string[];
+  values: unknown[];
+  normalizedPath: string;
+};
+
+const resolveChunkableInTarget = (filter: Record<string, unknown>): ChunkableInTarget | null => {
+  let target: ChunkableInTarget | null = null;
+  walkFilter(filter, "filter", (path, key, node) => {
+    if (key !== "$in" || !Array.isArray(node)) return;
+    const parentKey = path.split(".").pop();
+    if (!parentKey || !BSON_CHUNK_IN_FIELD_NAMES.includes(parentKey as (typeof BSON_CHUNK_IN_FIELD_NAMES)[number])) {
+      return;
+    }
+    const normalizedPath = normalizeFilterPath(`${path}.${key}`);
+    if (!target || node.length > target.values.length) {
+      target = {
+        parentPath: path.replace(/^filter\./, "").split("."),
+        values: node,
+        normalizedPath,
+      };
+    }
+  });
+  return target;
+};
+
+const applyInChunk = (
+  filter: Record<string, unknown>,
+  target: ChunkableInTarget,
+  chunk: unknown[]
+): Record<string, unknown> => {
+  const cloned = structuredClone(filter) as Record<string, unknown>;
+  let cursor: Record<string, unknown> = cloned;
+  for (const part of target.parentPath.slice(0, -1)) {
+    cursor = cursor[part] as Record<string, unknown>;
+  }
+  const leafKey = target.parentPath[target.parentPath.length - 1];
+  cursor[leafKey] = { $in: chunk };
+  return cloned;
+};
+
+export const splitFilterByInCount = (
+  filter: Record<string, unknown>,
+  batchSize: number = BSON_IN_BATCH_COUNT
+): Record<string, unknown>[] => {
+  const target = resolveChunkableInTarget(filter);
+  if (!target || target.values.length <= batchSize) return [filter];
+
+  const chunks: unknown[][] = [];
+  for (let index = 0; index < target.values.length; index += batchSize) {
+    chunks.push(target.values.slice(index, index + batchSize));
+  }
+  if (chunks.length <= 1) return [filter];
+  return chunks.map((chunk) => applyInChunk(filter, target!, chunk));
+};
+
+export const resolveFilterChunks = (
+  filter: Record<string, unknown>
+): { chunks: Record<string, unknown>[]; chunkSize: number; chunkedRecoveryUsed: boolean } => {
+  const countChunks = splitFilterByInCount(filter, BSON_IN_BATCH_COUNT);
+  const byteChunks = splitFilterByInArraySize(filter, BSON_IN_ARRAY_CHUNK_BYTES);
+  const chunks = countChunks.length >= byteChunks.length ? countChunks : byteChunks;
+  if (chunks.length <= 1) {
+    return { chunks: [filter], chunkSize: 0, chunkedRecoveryUsed: false };
+  }
+  const chunkSize =
+    countChunks.length >= byteChunks.length
+      ? BSON_IN_BATCH_COUNT
+      : Math.max(1, Math.ceil((resolveChunkableInTarget(filter)?.values.length ?? 0) / chunks.length));
+  return { chunks, chunkSize, chunkedRecoveryUsed: true };
+};
+
+export const shouldAutoChunkFilter = (filter: Record<string, unknown>): boolean => {
+  const instrumentation = buildMongoQueryInstrumentation({ filter });
+  if (instrumentation.querySizeBytes > BSON_QUERY_SAFE_LIMIT_BYTES) return true;
+  if ((instrumentation.arrayLength ?? 0) > BSON_IN_BATCH_COUNT) return true;
+  return findLargeArrayFilters(filter).some(
+    (entry) =>
+      entry.serializedBytes > BSON_IN_ARRAY_CHUNK_BYTES || entry.arrayLength > BSON_IN_BATCH_COUNT
+  );
+};
+
 export const buildMongoQueryInstrumentation = (input: {
   filter?: unknown;
   projection?: string | Record<string, unknown>;
@@ -239,8 +377,11 @@ export const splitFilterByInArraySize = (
   });
 };
 
-export const assertBsonSafeMongoQuery = (input: MongoQueryGuardInput): MongoQueryInstrumentation => {
+export const assertBsonSafeMongoQuery = (input: MongoQueryGuardInput & {
+  offendingFilterPath?: string;
+}): MongoQueryInstrumentation => {
   const instrumentation = buildMongoQueryInstrumentation(input);
+  const resolvedOffendingPath = input.offendingFilterPath ?? instrumentation.offendingFilterPath;
 
   const forbiddenPaths = findForbiddenFilterObjects(input.filter);
   if (forbiddenPaths.length > 0) {
@@ -256,7 +397,7 @@ export const assertBsonSafeMongoQuery = (input: MongoQueryGuardInput): MongoQuer
       arrayLength: instrumentation.arrayLength,
       serializedBytes: instrumentation.serializedBytes,
       limitBytes: BSON_QUERY_SAFE_LIMIT_BYTES,
-      offendingFilterPath: forbiddenPaths[0],
+      offendingFilterPath: forbiddenPaths[0] ?? resolvedOffendingPath,
     });
   }
 
@@ -274,11 +415,14 @@ export const assertBsonSafeMongoQuery = (input: MongoQueryGuardInput): MongoQuer
       arrayLength: instrumentation.arrayLength,
       serializedBytes: payloadBytes,
       limitBytes: BSON_QUERY_SAFE_LIMIT_BYTES,
-      offendingFilterPath: instrumentation.offendingFilterPath,
+      offendingFilterPath: resolvedOffendingPath,
     });
   }
 
-  return instrumentation;
+  return {
+    ...instrumentation,
+    offendingFilterPath: resolvedOffendingPath,
+  };
 };
 
 export const logMongoQueryInstrumentation = (

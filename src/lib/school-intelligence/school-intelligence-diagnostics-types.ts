@@ -1,5 +1,7 @@
 import type { StudentIntelligencePayload } from "@/lib/student-intelligence-analytics";
 import type { SchoolIntelligencePayload } from "@/lib/school-intelligence/school-intelligence-types";
+import type { SchoolIntelligenceQuerySourceEntry } from "@/lib/school-intelligence/school-intelligence-query-source-trace";
+import type { SchoolIntelligenceChunkRecoveryDiagnostics } from "@/lib/school-intelligence/school-intelligence-bson-safety";
 
 export type SchoolIntelligenceBuildStatus = "success" | "degraded" | "unavailable";
 
@@ -30,7 +32,21 @@ export type SchoolIntelligenceFirstFailureDiagnostics = {
   serializedBytes?: number;
   limitBytes?: number;
   offendingFilterPath?: string;
+  filterKeys?: string[];
+  projectionKeys?: string[];
+  sourceVariableName?: string;
+  sourceFunction?: string;
+  uniqueValues?: number;
+  duplicateValues?: number;
+  firstFiveValues?: string[];
+  lastFiveValues?: string[];
+  totalSerializedBytes?: number;
+  fieldBytes?: Record<string, number>;
 };
+
+export type SchoolIntelligenceQuerySourceMapEntry = SchoolIntelligenceQuerySourceEntry;
+
+export type { SchoolIntelligenceChunkRecoveryDiagnostics } from "@/lib/school-intelligence/school-intelligence-bson-safety";
 
 export type SchoolIntelligenceSnapshotSaveDiagnostics = {
   attempted: boolean;
@@ -54,6 +70,8 @@ export type SchoolIntelligenceDiagnostics = {
   buildTimestamp?: string;
   firstFailure?: SchoolIntelligenceFirstFailureDiagnostics;
   snapshotSave?: SchoolIntelligenceSnapshotSaveDiagnostics;
+  querySourceMap?: SchoolIntelligenceQuerySourceMapEntry[];
+  chunkRecovery?: SchoolIntelligenceChunkRecoveryDiagnostics[];
 };
 
 export type SchoolIntelligenceBuildResult = {

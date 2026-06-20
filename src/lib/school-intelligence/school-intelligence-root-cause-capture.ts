@@ -21,6 +21,16 @@ export type SchoolIntelligenceMongoFailureContext = {
   serializedBytes?: number;
   limitBytes?: number;
   offendingFilterPath?: string;
+  filterKeys?: string[];
+  projectionKeys?: string[];
+  sourceVariableName?: string;
+  sourceFunction?: string;
+  uniqueValues?: number;
+  duplicateValues?: number;
+  firstFiveValues?: string[];
+  lastFiveValues?: string[];
+  totalSerializedBytes?: number;
+  fieldBytes?: Record<string, number>;
 };
 
 export class SchoolIntelligenceMongoFailureError extends Error {
@@ -142,6 +152,16 @@ export type SchoolIntelligenceFirstFailureRecord = {
   serializedBytes?: number;
   limitBytes?: number;
   offendingFilterPath?: string;
+  filterKeys?: string[];
+  projectionKeys?: string[];
+  sourceVariableName?: string;
+  sourceFunction?: string;
+  uniqueValues?: number;
+  duplicateValues?: number;
+  firstFiveValues?: string[];
+  lastFiveValues?: string[];
+  totalSerializedBytes?: number;
+  fieldBytes?: Record<string, number>;
   failureClassification: SchoolIntelligenceFailureClassification;
 };
 
@@ -176,6 +196,16 @@ export const buildFirstFailureRecord = (input: {
     serializedBytes: mongo?.serializedBytes,
     limitBytes: mongo?.limitBytes,
     offendingFilterPath: mongo?.offendingFilterPath,
+    filterKeys: mongo?.filterKeys,
+    projectionKeys: mongo?.projectionKeys,
+    sourceVariableName: mongo?.sourceVariableName,
+    sourceFunction: mongo?.sourceFunction,
+    uniqueValues: mongo?.uniqueValues,
+    duplicateValues: mongo?.duplicateValues,
+    firstFiveValues: mongo?.firstFiveValues,
+    lastFiveValues: mongo?.lastFiveValues,
+    totalSerializedBytes: mongo?.totalSerializedBytes,
+    fieldBytes: mongo?.fieldBytes,
     failureClassification: classifySchoolIntelligenceFailure({
       error: input.error,
       errorName,
@@ -185,3 +215,24 @@ export const buildFirstFailureRecord = (input: {
     }),
   };
 };
+
+export const mergeQuerySourceIntoMongoContext = (
+  context: SchoolIntelligenceMongoFailureContext,
+  trace: import("@/lib/school-intelligence/school-intelligence-query-source-trace").SchoolIntelligenceQuerySourceEntry
+): SchoolIntelligenceMongoFailureContext => ({
+  ...context,
+  querySizeBytes: context.querySizeBytes ?? trace.totalSerializedBytes,
+  arrayLength: context.arrayLength ?? trace.arrayLength,
+  serializedBytes: context.serializedBytes ?? trace.serializedBytes,
+  offendingFilterPath: context.offendingFilterPath ?? trace.offendingFilterPath,
+  filterKeys: trace.filterKeys,
+  projectionKeys: trace.projectionKeys,
+  sourceVariableName: trace.sourceVariableName,
+  sourceFunction: trace.sourceFunction,
+  uniqueValues: trace.uniqueValues,
+  duplicateValues: trace.duplicateValues,
+  firstFiveValues: trace.firstFiveValues,
+  lastFiveValues: trace.lastFiveValues,
+  totalSerializedBytes: trace.totalSerializedBytes,
+  fieldBytes: trace.fieldBytes,
+});

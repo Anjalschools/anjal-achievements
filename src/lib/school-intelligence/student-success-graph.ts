@@ -80,6 +80,10 @@ const TRAINING_AGGREGATE_PIPELINE = [
     },
   },
 ];
+const STUDENT_FIND_BATCH_SIZE = 500;
+const STUDENT_FIND_MAX_DOCUMENTS = 5000;
+const PROFILE_FIND_BATCH_SIZE = 500;
+const PROFILE_FIND_MAX_DOCUMENTS = 5000;
 
 export type StudentSuccessGraphBuildMeta = {
   intelDegraded: boolean;
@@ -118,15 +122,27 @@ export const buildStudentSuccessGraph = async (): Promise<{
       operation: "find_students",
       filter: STUDENT_FIND_FILTER,
       projection: STUDENT_FIND_PROJECTION,
+      sourceVariableName: "STUDENT_FIND_FILTER",
+      sourceFunction: "buildStudentSuccessGraph",
+      pagedFind: {
+        batchSize: STUDENT_FIND_BATCH_SIZE,
+        maxDocuments: STUDENT_FIND_MAX_DOCUMENTS,
+        runPage: (skip, limit) =>
+          User.find(STUDENT_FIND_FILTER)
+            .select(STUDENT_FIND_PROJECTION)
+            .skip(skip)
+            .limit(limit)
+            .lean(),
+      },
       fn: () =>
         User.find(STUDENT_FIND_FILTER)
           .select(STUDENT_FIND_PROJECTION)
-          .limit(5000)
+          .limit(STUDENT_FIND_MAX_DOCUMENTS)
           .lean(),
       createFilterFn: (filter) => () =>
         User.find(filter)
           .select(STUDENT_FIND_PROJECTION)
-          .limit(5000)
+          .limit(STUDENT_FIND_MAX_DOCUMENTS)
           .lean(),
       countDocuments: (rows) => rows.length,
       ...schoolQueryOpts,
@@ -135,15 +151,27 @@ export const buildStudentSuccessGraph = async (): Promise<{
       operation: "find_profiles",
       filter: PROFILE_FIND_FILTER,
       projection: PROFILE_FIND_PROJECTION,
+      sourceVariableName: "PROFILE_FIND_FILTER",
+      sourceFunction: "buildStudentSuccessGraph",
+      pagedFind: {
+        batchSize: PROFILE_FIND_BATCH_SIZE,
+        maxDocuments: PROFILE_FIND_MAX_DOCUMENTS,
+        runPage: (skip, limit) =>
+          StudentCareerProfile.find(PROFILE_FIND_FILTER)
+            .select(PROFILE_FIND_PROJECTION)
+            .skip(skip)
+            .limit(limit)
+            .lean(),
+      },
       fn: () =>
         StudentCareerProfile.find(PROFILE_FIND_FILTER)
           .select(PROFILE_FIND_PROJECTION)
-          .limit(5000)
+          .limit(PROFILE_FIND_MAX_DOCUMENTS)
           .lean(),
       createFilterFn: (filter) => () =>
         StudentCareerProfile.find(filter)
           .select(PROFILE_FIND_PROJECTION)
-          .limit(5000)
+          .limit(PROFILE_FIND_MAX_DOCUMENTS)
           .lean(),
       countDocuments: (rows) => rows.length,
       ...schoolQueryOpts,
@@ -151,6 +179,8 @@ export const buildStudentSuccessGraph = async (): Promise<{
     profileMongoAggregate(Achievement, {
       pipelineName: "student_success_certificates_by_user",
       pipeline: CERTIFICATE_AGGREGATE_PIPELINE,
+      sourceVariableName: "CERTIFICATE_AGGREGATE_PIPELINE",
+      sourceFunction: "buildStudentSuccessGraph",
       fn: () =>
         Achievement.aggregate<{ _id: unknown; count: number }>(CERTIFICATE_AGGREGATE_PIPELINE),
       countDocuments: (rows) => rows.length,
@@ -159,6 +189,8 @@ export const buildStudentSuccessGraph = async (): Promise<{
     profileMongoAggregate(TrainingCompletionRecord, {
       pipelineName: "student_success_training_by_student",
       pipeline: TRAINING_AGGREGATE_PIPELINE,
+      sourceVariableName: "TRAINING_AGGREGATE_PIPELINE",
+      sourceFunction: "buildStudentSuccessGraph",
       fn: () =>
         TrainingCompletionRecord.aggregate<{ _id: unknown; hours: number; count: number }>(
           TRAINING_AGGREGATE_PIPELINE

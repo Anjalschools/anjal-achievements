@@ -42,6 +42,8 @@ const attachBuildTrace = (
     ...diagnostics,
     firstFailure: trace.firstFailure,
     snapshotSave: trace.snapshotSave,
+    querySourceMap: trace.querySourceMap,
+    chunkRecovery: trace.chunkRecovery,
   };
 };
 
@@ -214,4 +216,6 @@ export const sanitizeSchoolIntelligenceDiagnostics = (
     })),
     firstFailure: diagnostics.firstFailure,
     snapshotSave: diagnostics.snapshotSave,
+    querySourceMap: diagnostics.querySourceMap,
+    chunkRecovery: diagnostics.chunkRecovery,
   });
