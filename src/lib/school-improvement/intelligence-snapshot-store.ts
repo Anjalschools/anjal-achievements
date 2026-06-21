@@ -5,9 +5,9 @@ import IntelligenceSectionSnapshot, {
   type IntelligenceSnapshotKind,
 } from "@/models/IntelligenceSectionSnapshot";
 import {
-  guardSnapshotPayloadBeforeSave,
   resolveSnapshotSaveTarget,
 } from "@/lib/school-intelligence/school-intelligence-snapshot-payload-trace";
+import { guardSnapshotPayloadBeforeSave } from "@/lib/school-intelligence/school-intelligence-snapshot-payload-guard";
 import { SCHOOL_INTEL_PAYLOAD_SNAPSHOT_KEY } from "@/lib/school-intelligence/school-intelligence-boot";
 
 const snapshotKey = (kind: IntelligenceSnapshotKind, key: string) => `${kind}:${key}`;

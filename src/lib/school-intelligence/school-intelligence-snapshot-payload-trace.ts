@@ -1,5 +1,4 @@
 import { measureSerializedBytes } from "@/lib/school-intelligence/school-intelligence-bson-safety";
-import { recordSchoolIntelligenceSnapshotPayloadTrace } from "@/lib/school-intelligence/school-intelligence-section-tracer";
 
 export const SNAPSHOT_PAYLOAD_WARN_BYTES = Number(
   process.env.SCHOOL_INTEL_SNAPSHOT_WARN_BYTES || 8_000_000
@@ -114,40 +113,6 @@ export const analyzeSnapshotPayload = (
 };
 
 export const resolveSnapshotSaveTarget = (kind: string, key: string) => `${kind}:${key}`;
-
-export const guardSnapshotPayloadBeforeSave = (
-  payload: unknown,
-  saveTarget: string
-): SchoolIntelligenceSnapshotPayloadTrace => {
-  const trace = analyzeSnapshotPayload(payload, saveTarget);
-  recordSchoolIntelligenceSnapshotPayloadTrace(trace);
-
-  console.info("[SnapshotPayloadTrace]", {
-    saveTarget: trace.saveTarget,
-    payloadBytes: trace.payloadBytes,
-    jsonBytes: trace.jsonBytes,
-    topLevelKeys: trace.topLevelKeys,
-    largestTopLevelField: trace.largestTopLevelField,
-    largestFieldBytes: trace.largestFieldBytes,
-    fieldSizes: trace.fieldSizes,
-  });
-
-  if (trace.payloadBytes > SNAPSHOT_PAYLOAD_WARN_BYTES) {
-    console.warn("[SnapshotPayloadTrace] payload exceeds warning threshold", {
-      saveTarget: trace.saveTarget,
-      payloadBytes: trace.payloadBytes,
-      warnBytes: SNAPSHOT_PAYLOAD_WARN_BYTES,
-      largestTopLevelField: trace.largestTopLevelField,
-      largestFieldBytes: trace.largestFieldBytes,
-    });
-  }
-
-  if (trace.payloadBytes > SNAPSHOT_PAYLOAD_LIMIT_BYTES) {
-    throw new SchoolIntelligenceSnapshotPayloadTooLargeError(trace);
-  }
-
-  return trace;
-};
 
 export const formatSnapshotFieldSizesSummary = (
   fieldSizes: SchoolIntelligenceSnapshotFieldSizes

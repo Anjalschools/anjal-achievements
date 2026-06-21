@@ -1,12 +1,15 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+vi.mock("server-only", () => ({}));
+
 import {
   analyzeSnapshotPayload,
   buildSnapshotFieldSizes,
-  guardSnapshotPayloadBeforeSave,
   SchoolIntelligenceSnapshotPayloadTooLargeError,
   SNAPSHOT_PAYLOAD_LIMIT_BYTES,
   SNAPSHOT_PAYLOAD_WARN_BYTES,
 } from "@/lib/school-intelligence/school-intelligence-snapshot-payload-trace";
+import { guardSnapshotPayloadBeforeSave } from "@/lib/school-intelligence/school-intelligence-snapshot-payload-guard";
 import { classifySchoolIntelligenceFailure } from "@/lib/school-intelligence/school-intelligence-root-cause-capture";
 
 describe("school-intelligence-snapshot-payload-trace", () => {
