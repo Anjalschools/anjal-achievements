@@ -10,15 +10,18 @@ import SchoolYear from "@/models/SchoolYear";
 import StudentTrainingApplication from "@/models/StudentTrainingApplication";
 import TrainingOpportunity from "@/models/TrainingOpportunity";
 import User from "@/models/User";
+import { getGradeLabel } from "@/constants/grades";
 import { gradeToStage } from "@/lib/partnerships/partnerships-eligibility";
 
 const PAGE_WIDTH = 842;
 const PAGE_HEIGHT = 595;
 const MARGIN_X = 40;
 const CONTENT_WIDTH = PAGE_WIDTH - MARGIN_X * 2;
-const ROW_HEIGHT = 22;
+const BASE_ROW_HEIGHT = 22;
+const LINE_HEIGHT = 11;
 const HEADER_BAND = 92;
 const FOOTER_Y = PAGE_HEIGHT - 28;
+const DEFAULT_SCHOOL_NAME_AR = "مدارس الأنجال الأهلية";
 
 export type ApprovedStudentReportRow = {
   index: number;
@@ -26,6 +29,7 @@ export type ApprovedStudentReportRow = {
   grade: string;
   stage: string;
   school: string;
+  pathway: string;
   studentPhone: string;
   parentPhone: string;
   email: string;
@@ -43,6 +47,13 @@ const STAGE_LABELS: Record<string, string> = {
   elementary: "ابتدائي",
   middle: "متوسط",
   high: "ثانوي",
+};
+
+const pathwayLabel = (value: string | undefined): string => {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (normalized === "arabic" || normalized.includes("عربي")) return "عربي";
+  if (normalized === "international" || normalized.includes("دولي")) return "دولي";
+  return value ? String(value) : "—";
 };
 
 let fontsRegistered = false;
@@ -130,7 +141,7 @@ export const loadApprovedStudentsReportContext = async (input: {
 
   const studentIds = applications.map((row) => row.studentId);
   const users = await User.find({ _id: { $in: studentIds } })
-    .select("phone guardianPhone email")
+    .select("phone guardianPhone email section")
     .lean();
   const userMap = new Map(users.map((row) => [String(row._id), row]));
 
@@ -138,12 +149,15 @@ export const loadApprovedStudentsReportContext = async (input: {
     const student = userMap.get(String(app.studentId));
     const snapshot = app.studentSnapshot;
     const stageKey = String(snapshot?.stage || gradeToStage(String(snapshot?.grade || "")));
+    const grade = getGradeLabel(snapshot?.grade, "ar");
+    const sectionSource = String(student?.section || snapshot?.schoolType || "").trim();
     return {
       index: index + 1,
       studentName: String(snapshot?.fullName || ""),
-      grade: String(snapshot?.grade || ""),
+      grade,
       stage: STAGE_LABELS[stageKey] || stageKey,
-      school: String(snapshot?.school || snapshot?.schoolType || "—"),
+      school: DEFAULT_SCHOOL_NAME_AR,
+      pathway: pathwayLabel(sectionSource),
       studentPhone: String(student?.phone || "—"),
       parentPhone: String(student?.guardianPhone || "—"),
       email: String(student?.email || "—"),
@@ -178,8 +192,78 @@ const drawTitle = (ctx: SKRSContext2D, context: ApprovedStudentsReportContext, y
   return y + 58;
 };
 
-const columnWidths = [28, 120, 48, 52, 92, 78, 78, 130];
-const columnLabels = ["م", "الطالب", "الصف", "المرحلة", "المدرسة", "جوال الطالب", "جوال ولي الأمر", "البريد الإلكتروني"];
+const columnWidths = [24, 96, 56, 44, 92, 36, 68, 68, 178];
+const columnLabels = [
+  "م",
+  "الطالب",
+  "الصف",
+  "المرحلة",
+  "المدرسة",
+  "المسار",
+  "جوال الطالب",
+  "جوال ولي الأمر",
+  "البريد الإلكتروني",
+];
+
+const wrapCellLines = (ctx: SKRSContext2D, text: string, maxWidth: number, font: string): string[] => {
+  ctx.font = font;
+  const source = String(text || "").trim() || "—";
+  const words = source.split(/\s+/).filter(Boolean);
+  const lines: string[] = [];
+  let current = "";
+
+  const pushCurrent = () => {
+    if (current) lines.push(current);
+    current = "";
+  };
+
+  const pushLongToken = (token: string) => {
+    let chunk = "";
+    for (const ch of token) {
+      const trial = `${chunk}${ch}`;
+      if (ctx.measureText(trial).width <= maxWidth) chunk = trial;
+      else {
+        if (chunk) lines.push(chunk);
+        chunk = ch;
+      }
+    }
+    current = chunk;
+  };
+
+  for (const word of words.length ? words : [source]) {
+    const trial = current ? `${current} ${word}` : word;
+    if (ctx.measureText(trial).width <= maxWidth) {
+      current = trial;
+      continue;
+    }
+    if (current) pushCurrent();
+    if (ctx.measureText(word).width <= maxWidth) current = word;
+    else pushLongToken(word);
+  }
+  if (current) pushCurrent();
+  return lines.length ? lines : ["—"];
+};
+
+const drawWrappedCell = (
+  ctx: SKRSContext2D,
+  text: string,
+  x: number,
+  width: number,
+  startY: number,
+  font: string
+): number => {
+  const lines = wrapCellLines(ctx, text, width - 6, font);
+  ctx.font = font;
+  ctx.fillStyle = "#111827";
+  ctx.textAlign = "center";
+  ctx.direction = "rtl";
+  let y = startY;
+  for (const line of lines) {
+    ctx.fillText(line, x + width / 2, y);
+    y += LINE_HEIGHT;
+  }
+  return lines.length;
+};
 
 const drawTableHeader = (ctx: SKRSContext2D, y: number) => {
   ctx.fillStyle = "#e2e8f0";
@@ -197,38 +281,77 @@ const drawTableHeader = (ctx: SKRSContext2D, y: number) => {
   return y + 12;
 };
 
-const truncate = (value: string, max: number) => {
-  const text = String(value || "").trim();
-  if (text.length <= max) return text;
-  return `${text.slice(0, max - 1)}…`;
-};
-
-const drawTableRow = (ctx: SKRSContext2D, row: ApprovedStudentReportRow, y: number) => {
-  ctx.font = "9px Cairo";
-  ctx.fillStyle = "#111827";
-  ctx.textAlign = "center";
-  ctx.direction = "rtl";
+const measureRowHeight = (ctx: SKRSContext2D, row: ApprovedStudentReportRow): number => {
   const values = [
     String(row.index),
-    truncate(row.studentName, 28),
-    truncate(row.grade, 8),
-    truncate(row.stage, 10),
-    truncate(row.school, 18),
-    truncate(row.studentPhone, 14),
-    truncate(row.parentPhone, 14),
-    truncate(row.email, 24),
+    row.studentName,
+    row.grade,
+    row.stage,
+    row.school,
+    row.pathway,
+    row.studentPhone,
+    row.parentPhone,
+    row.email,
   ];
+  const fonts = ["9px Cairo", "9px Cairo", "9px Cairo", "9px Cairo", "9px Cairo", "9px Cairo", "9px Cairo", "9px Cairo", "8px Cairo"];
+  let maxLines = 1;
+  values.forEach((value, index) => {
+    const lines = wrapCellLines(ctx, value, columnWidths[index] - 6, fonts[index]).length;
+    maxLines = Math.max(maxLines, lines);
+  });
+  return Math.max(BASE_ROW_HEIGHT, maxLines * LINE_HEIGHT + 8);
+};
+
+const drawTableRow = (ctx: SKRSContext2D, row: ApprovedStudentReportRow, y: number): number => {
+  const values = [
+    String(row.index),
+    row.studentName,
+    row.grade,
+    row.stage,
+    row.school,
+    row.pathway,
+    row.studentPhone,
+    row.parentPhone,
+    row.email,
+  ];
+  const fonts = [
+    "9px Cairo",
+    "9px Cairo",
+    "9px Cairo",
+    "9px Cairo",
+    "9px Cairo",
+    "9px Cairo",
+    "9px Cairo",
+    "9px Cairo",
+    "8px Cairo",
+  ];
+
   let x = PAGE_WIDTH - MARGIN_X;
+  let maxLines = 1;
+  const cellLines: number[] = [];
+
   values.forEach((value, index) => {
     const width = columnWidths[index];
     x -= width;
-    ctx.fillText(value, x + width / 2, y);
+    const lines = wrapCellLines(ctx, value, width - 6, fonts[index]).length;
+    cellLines.push(lines);
+    maxLines = Math.max(maxLines, lines);
   });
+
+  x = PAGE_WIDTH - MARGIN_X;
+  values.forEach((value, index) => {
+    const width = columnWidths[index];
+    x -= width;
+    drawWrappedCell(ctx, value, x, width, y, fonts[index]);
+  });
+
+  const rowHeight = Math.max(BASE_ROW_HEIGHT, maxLines * LINE_HEIGHT + 8);
   ctx.strokeStyle = "#e5e7eb";
   ctx.beginPath();
-  ctx.moveTo(MARGIN_X, y + 6);
-  ctx.lineTo(PAGE_WIDTH - MARGIN_X, y + 6);
+  ctx.moveTo(MARGIN_X, y + rowHeight - 6);
+  ctx.lineTo(PAGE_WIDTH - MARGIN_X, y + rowHeight - 6);
   ctx.stroke();
+  return rowHeight;
 };
 
 const drawFooter = (ctx: SKRSContext2D, context: ApprovedStudentsReportContext) => {
@@ -265,16 +388,21 @@ export const generateApprovedStudentsPdfBuffer = async (
   };
 
   let ctx = await startPage();
-  const maxRowsPerPage = Math.floor((FOOTER_Y - y - 16) / ROW_HEIGHT);
+  let remainingHeight = FOOTER_Y - y - 16;
 
   while (rowCursor < context.rows.length) {
-    if (rowCursor > 0 && rowCursor % maxRowsPerPage === 0) {
+    const row = context.rows[rowCursor];
+    const rowHeight = measureRowHeight(ctx, row);
+    if (rowHeight > remainingHeight && rowCursor > 0) {
       drawFooter(ctx, context);
       pdf.endPage();
       ctx = await startPage();
+      y = drawTableHeader(ctx, HEADER_BAND + 82);
+      remainingHeight = FOOTER_Y - y - 16;
     }
-    drawTableRow(ctx, context.rows[rowCursor], y);
-    y += ROW_HEIGHT;
+    drawTableRow(ctx, row, y);
+    y += rowHeight;
+    remainingHeight -= rowHeight;
     rowCursor += 1;
   }
 

@@ -1,8 +1,8 @@
 let bootLogged = false;
 
-export const SCHOOL_INTELLIGENCE_RUNTIME_VERSION = "10.3.3.D.13";
+export const SCHOOL_INTELLIGENCE_RUNTIME_VERSION = "10.3.3.D.14";
 
-export const SCHOOL_INTELLIGENCE_TEST_SUITE_COUNT = 72;
+export const SCHOOL_INTELLIGENCE_TEST_SUITE_COUNT = 79;
 
 export const SCHOOL_INTEL_FACET_SNAPSHOT_KEY = "student_intelligence_facet";
 export const SCHOOL_INTEL_SCHOOL_GRAPH_SNAPSHOT_KEY = "student_intelligence_school_graph";

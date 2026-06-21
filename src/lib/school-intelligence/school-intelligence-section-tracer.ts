@@ -8,6 +8,8 @@ import type { SchoolIntelligenceQuerySourceEntry } from "@/lib/school-intelligen
 import type { SchoolIntelligenceChunkRecoveryDiagnostics } from "@/lib/school-intelligence/school-intelligence-bson-safety";
 import type { SchoolIntelligenceBsonSerializationTrace } from "@/lib/school-intelligence/school-intelligence-bson-serialization-trace";
 import type { TalentDiscoveryDiagnostics } from "@/lib/school-intelligence/talent-discovery";
+import type { GrowthTrendSummaryDiagnostics } from "@/lib/school-intelligence/growth-trends-intelligence";
+import type { OpportunityDataQualityDiagnostics } from "@/lib/school-intelligence/opportunity-mapping";
 import type { SchoolIntelligenceSnapshotPayloadTrace } from "@/lib/school-intelligence/school-intelligence-snapshot-payload-trace";
 import type { SchoolIntelligenceSnapshotPolicyDiagnostics } from "@/lib/school-intelligence/school-intelligence-query-snapshot-policy";
 
@@ -30,6 +32,8 @@ type SchoolIntelligenceBuildTraceStore = {
   snapshotPayloadTrace?: SchoolIntelligenceSnapshotPayloadTrace;
   snapshotPolicy?: SchoolIntelligenceSnapshotPolicyDiagnostics[];
   talentDiscovery?: TalentDiscoveryDiagnostics;
+  opportunityDataQuality?: OpportunityDataQualityDiagnostics;
+  growthTrendSummary?: GrowthTrendSummaryDiagnostics;
 };
 
 const storage = new AsyncLocalStorage<SchoolIntelligenceBuildTraceStore>();
@@ -101,6 +105,20 @@ export const recordSchoolIntelligenceTalentDiscovery = (entry: TalentDiscoveryDi
   const store = storage.getStore();
   if (!store) return;
   store.talentDiscovery = entry;
+};
+
+export const recordSchoolIntelligenceOpportunityDataQuality = (
+  entry: OpportunityDataQualityDiagnostics
+) => {
+  const store = storage.getStore();
+  if (!store) return;
+  store.opportunityDataQuality = entry;
+};
+
+export const recordSchoolIntelligenceGrowthTrendSummary = (entry: GrowthTrendSummaryDiagnostics) => {
+  const store = storage.getStore();
+  if (!store) return;
+  store.growthTrendSummary = entry;
 };
 
 const logSectionFailed = (

@@ -2,6 +2,7 @@
 
 import SectionCard from "@/components/layout/SectionCard";
 import type { SchoolIntelligenceExecutiveSummary } from "@/lib/school-intelligence/school-intelligence-diagnostics-types";
+import { formatSchoolIntelligenceConfidence } from "@/lib/school-intelligence/school-intelligence-confidence";
 
 type SchoolIntelligenceExecutiveSummaryPanelProps = {
   isAr: boolean;
@@ -21,7 +22,12 @@ const renderList = (
       ) : (
         items.map((item, index) => (
           <li key={`${title}-${index}`} className="rounded-lg bg-muted/40 px-3 py-2 text-text">
-            {isAr ? item.ar : item.en}
+            <p>{isAr ? item.ar : item.en}</p>
+            {item.confidence != null ? (
+              <p className="mt-1 text-[11px] font-semibold text-slate-500">
+                {formatSchoolIntelligenceConfidence(item.confidence, isAr).label}
+              </p>
+            ) : null}
           </li>
         ))
       )}
@@ -51,6 +57,10 @@ const SchoolIntelligenceExecutiveSummaryPanel = ({
         {renderList(isAr ? "المخاطر" : "Risks", summary.risks, isAr)}
         {renderList(isAr ? "الفرص" : "Opportunities", summary.opportunities, isAr)}
         {renderList(isAr ? "التوصيات" : "Recommendations", summary.recommendations, isAr)}
+      </div>
+
+      <div className="mt-4">
+        {renderList(isAr ? "الاتجاهات الرئيسية" : "Key trends", summary.growthTrends, isAr)}
       </div>
     </SectionCard>
   );

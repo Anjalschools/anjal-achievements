@@ -126,8 +126,9 @@ export const sendPartnershipMessage = async (input: {
     senderId: input.senderId,
     senderRole: input.senderRole,
     body,
+    messageType: templateKey ? "system" : "user",
     templateKey,
-    metadata: templateKey ? { templateKey } : undefined,
+    metadata: templateKey ? { templateKey, automated: true } : undefined,
   });
 
   await recordPartnershipMessageSent({
@@ -424,6 +425,8 @@ export const listPartnershipThreadMessages = async (input: {
         role: input.role,
         senderId: String(row.senderId),
         userId: input.userId,
+        messageType: row.messageType,
+        metadata: row.metadata,
       })
     ),
   };

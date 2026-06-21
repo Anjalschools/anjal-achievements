@@ -16,6 +16,7 @@ import {
   computeStudentSuccessIndex,
   formatSubScoreEvidence,
 } from "@/lib/school-intelligence/student-success-index";
+import { attachStudentPercentileRanks } from "@/lib/school-intelligence/ssi-percentile";
 import { traceSchoolIntelligenceSection } from "@/lib/school-intelligence/school-intelligence-section-tracer";
 import type {
   SchoolDepartment,
@@ -297,8 +298,10 @@ export const buildStudentSuccessGraph = async (): Promise<{
   logStep("compose-nodes", nodesStarted, { nodes: nodes.length });
   logStep("buildStudentSuccessGraph", graphStarted, { nodes: nodes.length });
 
+  const rankedNodes = attachStudentPercentileRanks(nodes).sort((a, b) => b.successIndex - a.successIndex);
+
   return {
-    nodes: nodes.sort((a, b) => b.successIndex - a.successIndex),
+    nodes: rankedNodes,
     meta: {
       intelDegraded: intelResult.degraded,
       intelSnapshotFallback: intelResult.snapshotFallback,

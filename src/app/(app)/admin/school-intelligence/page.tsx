@@ -32,6 +32,7 @@ import {
   resolveLastSuccessfulUpdate,
 } from "@/lib/school-intelligence/school-intelligence-page-utils";
 import { TALENT_DISCOVERY_NO_DATA_MESSAGE } from "@/lib/school-intelligence/school-intelligence-glossary";
+import { formatSchoolIntelligenceConfidence } from "@/lib/school-intelligence/school-intelligence-confidence";
 import {
   interpretHealthScore,
   interpretIntelligenceScore,
@@ -411,8 +412,16 @@ const SchoolIntelligencePage = () => {
             <ul className="space-y-2 text-sm">
               {data.strategicInsights.map((ins) => (
                 <li key={ins.id} className="rounded-xl bg-muted/50 px-3 py-2">
-                  <p className="font-semibold">{isAr ? ins.titleAr : ins.titleEn}</p>
-                  <p className="text-text-light">{isAr ? ins.bodyAr : ins.bodyEn}</p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="font-semibold">{isAr ? ins.titleAr : ins.titleEn}</p>
+                    <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-bold uppercase">
+                      {ins.category}
+                    </span>
+                    <span className="text-[10px] font-semibold text-slate-500">
+                      {formatSchoolIntelligenceConfidence(ins.confidence, isAr).label}
+                    </span>
+                  </div>
+                  <p className="text-text-light">{isAr ? ins.descriptionAr : ins.descriptionEn}</p>
                 </li>
               ))}
             </ul>
@@ -439,6 +448,7 @@ const SchoolIntelligencePage = () => {
                       <th className="px-2 py-2 text-start">{isAr ? "الطالب" : "Student"}</th>
                       <th className="px-2 py-2">{isAr ? "الصف" : "Grade"}</th>
                       <th className="px-2 py-2">SSI</th>
+                      <th className="px-2 py-2">{isAr ? "الترتيب" : "Rank"}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -447,6 +457,13 @@ const SchoolIntelligencePage = () => {
                         <td className="px-2 py-2">{row.fullNameAr || row.fullNameEn}</td>
                         <td className="px-2 py-2 text-center">{row.grade}</td>
                         <td className="px-2 py-2 text-center font-bold">{row.successIndex}</td>
+                        <td className="px-2 py-2 text-center text-[11px] font-semibold text-emerald-700">
+                          {row.studentPercentile
+                            ? isAr
+                              ? row.studentPercentile.bandLabelAr
+                              : row.studentPercentile.bandLabelEn
+                            : "—"}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -501,6 +518,11 @@ const SchoolIntelligencePage = () => {
                   <li key={`${row.studentId}-${row.talentType}`} className="py-2">
                     <p className="font-semibold">{row.fullName}</p>
                     <p className="text-text-light">{isAr ? row.detailAr : row.detailEn}</p>
+                    {row.confidence != null ? (
+                      <p className="mt-1 text-[11px] font-semibold text-slate-500">
+                        {formatSchoolIntelligenceConfidence(row.confidence, isAr).label}
+                      </p>
+                    ) : null}
                   </li>
                 ))}
               </ul>
@@ -547,7 +569,14 @@ const SchoolIntelligencePage = () => {
               <ul className="divide-y divide-border/60 text-sm">
                 {data.opportunityMapping.slice(0, 10).map((row) => (
                   <li key={row.key} className="flex justify-between gap-2 py-2">
-                    <span>{isAr ? row.labelAr : row.labelEn}</span>
+                    <div>
+                      <span>{isAr ? row.labelAr : row.labelEn}</span>
+                      {row.confidence != null ? (
+                        <p className="text-[11px] font-semibold text-slate-500">
+                          {formatSchoolIntelligenceConfidence(row.confidence, isAr).label}
+                        </p>
+                      ) : null}
+                    </div>
                     <span className="font-bold text-amber-700">{row.gapPct}%</span>
                   </li>
                 ))}
@@ -589,6 +618,30 @@ const SchoolIntelligencePage = () => {
               </div>
             </SchoolIntelligenceSectionCard>
           </div>
+
+          <SchoolIntelligenceSectionCard
+            isAr={isAr}
+            title={isAr ? "الاتجاهات الرئيسية" : "Key growth trends"}
+            sectionStatus={sectionStatusMap.longitudinal_growth}
+            globalStatus={status}
+            diagnostics={diagnostics}
+            hasData={data.growthTrends.highlights.length > 0}
+          >
+            <p className="mb-3 text-sm text-text-light">
+              {isAr ? data.growthTrends.summaryAr : data.growthTrends.summaryEn}
+            </p>
+            <ul className="space-y-2 text-sm">
+              {data.growthTrends.highlights.map((item) => (
+                <li key={item.id} className="rounded-xl bg-muted/40 px-3 py-2">
+                  <p className="font-semibold">{isAr ? item.titleAr : item.titleEn}</p>
+                  <p className="text-text-light">{isAr ? item.bodyAr : item.bodyEn}</p>
+                  <p className="mt-1 text-[11px] font-semibold text-slate-500">
+                    {formatSchoolIntelligenceConfidence(item.confidence, isAr).label}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          </SchoolIntelligenceSectionCard>
         </div>
       )}
     </PageContainer>

@@ -96,6 +96,7 @@ const setupInstitutionReviewHandoff = async (input: {
     threadId: thread._id,
     senderId: input.supervisorId,
     senderRole: "supervisor",
+    messageType: "system",
     body,
     metadata: { kind: "institution_handoff", automated: true },
   });

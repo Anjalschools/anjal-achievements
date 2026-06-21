@@ -1,4 +1,9 @@
 import type { StudentSuccessGraphNode, TalentDiscoveryRow } from "@/lib/school-intelligence/school-intelligence-types";
+import {
+  resolveTalentDiscoveryThresholds,
+  TALENT_DISCOVERY_DEFAULTS,
+} from "@/lib/school-intelligence/talent-discovery-config";
+import { confidenceFromEvidenceCount } from "@/lib/school-intelligence/school-intelligence-confidence";
 
 export type TalentDiscoveryDiagnosticsStatus = "success" | "no_data";
 
@@ -17,16 +22,22 @@ export type TalentDiscoveryDiagnostics = {
   };
   missingFields: string[];
   reasons: string[];
+  thresholdMode?: "fixed" | "percentile";
+  candidatePool?: number;
+  excludedBySSI?: number;
+  excludedByGrowth?: number;
+  excludedByParticipation?: number;
 };
 
+/** @deprecated Use TALENT_DISCOVERY_DEFAULTS via talent-discovery-config */
 export const TALENT_DISCOVERY_THRESHOLDS = {
-  rapidGrowthGrowthIndex: 1.2,
-  underutilizedSuccessIndex: 55,
+  rapidGrowthGrowthIndex: TALENT_DISCOVERY_DEFAULTS.minimumGrowthIndex,
+  underutilizedSuccessIndex: TALENT_DISCOVERY_DEFAULTS.minimumSSI,
   underutilizedMaxActivities: 2,
-  underutilizedUniversityReadiness: 50,
-  programCandidateSuccessIndex: 70,
-  programCandidateUniversityReadiness: 65,
-  programCandidateTrainingHours: 10,
+  underutilizedUniversityReadiness: TALENT_DISCOVERY_DEFAULTS.minimumReadiness,
+  programCandidateSuccessIndex: 30,
+  programCandidateUniversityReadiness: TALENT_DISCOVERY_DEFAULTS.minimumReadiness,
+  programCandidateTrainingHours: 8,
 } as const;
 
 const collectMissingFields = (nodes: StudentSuccessGraphNode[]): string[] => {
@@ -72,6 +83,9 @@ const buildNoDataReasons = (input: {
   return reasons;
 };
 
+const talentConfidence = (node: StudentSuccessGraphNode, evidenceCount: number) =>
+  confidenceFromEvidenceCount(evidenceCount, node.participationCount, 68 + Math.min(20, node.successIndex / 5));
+
 export const buildTalentDiscoveryWithDiagnostics = (
   nodes: StudentSuccessGraphNode[]
 ): { rows: TalentDiscoveryRow[]; diagnostics: TalentDiscoveryDiagnostics } => {
@@ -80,11 +94,36 @@ export const buildTalentDiscoveryWithDiagnostics = (
   let rapidGrowthMatches = 0;
   let underutilizedMatches = 0;
   let programCandidateMatches = 0;
+  let excludedBySSI = 0;
+  let excludedByGrowth = 0;
+  let excludedByParticipation = 0;
+
+  const thresholds = resolveTalentDiscoveryThresholds(
+    {
+      successIndexes: nodes.map((node) => node.successIndex),
+      growthIndexes: nodes.map((node) => node.growthIndex ?? 0),
+      participationCounts: nodes.map((node) => node.participationCount),
+      readinessScores: nodes.map((node) => node.subScores.universityReadiness),
+    },
+    TALENT_DISCOVERY_DEFAULTS
+  );
+
+  for (const node of nodes) {
+    if (node.participationCount < thresholds.minimumParticipationCount) {
+      excludedByParticipation += 1;
+    }
+    if (node.successIndex < thresholds.underutilizedSuccessIndex) {
+      excludedBySSI += 1;
+    }
+    if ((node.growthIndex ?? 0) < thresholds.rapidGrowthGrowthIndex && node.recentTrend !== "accelerating") {
+      excludedByGrowth += 1;
+    }
+  }
 
   for (const node of nodes) {
     if (
       node.recentTrend === "accelerating" ||
-      (node.growthIndex != null && node.growthIndex >= TALENT_DISCOVERY_THRESHOLDS.rapidGrowthGrowthIndex)
+      (node.growthIndex != null && node.growthIndex >= thresholds.rapidGrowthGrowthIndex)
     ) {
       rapidGrowthMatches += 1;
       rows.push({
@@ -92,8 +131,9 @@ export const buildTalentDiscoveryWithDiagnostics = (
         fullName: node.fullNameAr || node.fullNameEn,
         talentType: "rapid_growth",
         successIndex: node.successIndex,
-        detailAr: `نمو سريع — مؤشر النجاح ${node.successIndex}/100`,
-        detailEn: `Rapid growth — success index ${node.successIndex}/100`,
+        detailAr: `نمو سريع — مؤشر النجاح ${node.successIndex}/100${node.studentPercentile ? ` (${node.studentPercentile.bandLabelAr})` : ""}`,
+        detailEn: `Rapid growth — success index ${node.successIndex}/100${node.studentPercentile ? ` (${node.studentPercentile.bandLabelEn})` : ""}`,
+        confidence: talentConfidence(node, 3),
         evidence: [
           { label: "growthIndex", value: node.growthIndex ?? 0 },
           { label: "trend", value: node.recentTrend },
@@ -105,9 +145,10 @@ export const buildTalentDiscoveryWithDiagnostics = (
 
   const highPotential = nodes.filter(
     (node) =>
-      node.successIndex >= TALENT_DISCOVERY_THRESHOLDS.underutilizedSuccessIndex &&
-      node.distinctActivityCount <= TALENT_DISCOVERY_THRESHOLDS.underutilizedMaxActivities &&
-      node.subScores.universityReadiness >= TALENT_DISCOVERY_THRESHOLDS.underutilizedUniversityReadiness &&
+      node.successIndex >= thresholds.underutilizedSuccessIndex &&
+      node.distinctActivityCount <= thresholds.underutilizedMaxActivities &&
+      node.subScores.universityReadiness >= thresholds.underutilizedUniversityReadiness &&
+      node.participationCount >= thresholds.minimumParticipationCount &&
       node.recordCount >= 1
   );
   underutilizedMatches = highPotential.length;
@@ -120,6 +161,7 @@ export const buildTalentDiscoveryWithDiagnostics = (
       successIndex: node.successIndex,
       detailAr: `موهبة غير مستغلة — جاهزية عالية مع مشاركات محدودة (${node.distinctActivityCount} نشاط)`,
       detailEn: `Underutilized talent — high readiness with limited activities (${node.distinctActivityCount})`,
+      confidence: talentConfidence(node, 3),
       evidence: [
         { label: "distinctActivities", value: node.distinctActivityCount },
         { label: "universityReadiness", value: node.subScores.universityReadiness },
@@ -130,10 +172,11 @@ export const buildTalentDiscoveryWithDiagnostics = (
 
   const programCandidates = nodes.filter(
     (node) =>
-      node.successIndex >= TALENT_DISCOVERY_THRESHOLDS.programCandidateSuccessIndex &&
+      node.successIndex >= thresholds.programCandidateSuccessIndex &&
+      node.participationCount >= thresholds.minimumParticipationCount &&
       (node.isMawhiba ||
-        node.subScores.universityReadiness >= TALENT_DISCOVERY_THRESHOLDS.programCandidateUniversityReadiness) &&
-      node.trainingHours >= TALENT_DISCOVERY_THRESHOLDS.programCandidateTrainingHours
+        node.subScores.universityReadiness >= thresholds.programCandidateUniversityReadiness) &&
+      node.trainingHours >= thresholds.programCandidateTrainingHours
   );
   programCandidateMatches = programCandidates.length;
 
@@ -145,6 +188,7 @@ export const buildTalentDiscoveryWithDiagnostics = (
       successIndex: node.successIndex,
       detailAr: `مرشح للبرامج النوعية — مؤشر ${node.successIndex}/100`,
       detailEn: `Special program candidate — index ${node.successIndex}/100`,
+      confidence: talentConfidence(node, 4),
       evidence: [
         { label: "trainingHours", value: node.trainingHours },
         { label: "universityReadiness", value: node.subScores.universityReadiness },
@@ -182,9 +226,22 @@ export const buildTalentDiscoveryWithDiagnostics = (
       status: filteredCount > 0 ? "success" : "no_data",
       candidateCount: nodes.length,
       filteredCount,
-      threshold: { ...TALENT_DISCOVERY_THRESHOLDS },
+      threshold: {
+        rapidGrowthGrowthIndex: thresholds.rapidGrowthGrowthIndex,
+        underutilizedSuccessIndex: thresholds.underutilizedSuccessIndex,
+        underutilizedMaxActivities: thresholds.underutilizedMaxActivities,
+        underutilizedUniversityReadiness: thresholds.underutilizedUniversityReadiness,
+        programCandidateSuccessIndex: thresholds.programCandidateSuccessIndex,
+        programCandidateUniversityReadiness: thresholds.programCandidateUniversityReadiness,
+        programCandidateTrainingHours: thresholds.programCandidateTrainingHours,
+      },
       missingFields,
       reasons,
+      thresholdMode: thresholds.mode,
+      candidatePool: nodes.length,
+      excludedBySSI,
+      excludedByGrowth,
+      excludedByParticipation,
     },
   };
 };

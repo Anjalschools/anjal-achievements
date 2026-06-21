@@ -75,6 +75,8 @@ const attachBuildTrace = (
     snapshotPayloadTrace: trace.snapshotPayloadTrace,
     snapshotPolicy: trace.snapshotPolicy,
     talentDiscovery: trace.talentDiscovery,
+    opportunityDataQuality: trace.opportunityDataQuality,
+    growthTrendSummary: trace.growthTrendSummary,
     finalReadiness,
     executiveSummary: intelligence
       ? buildSchoolIntelligenceExecutiveSummary({ intelligence, readiness: finalReadiness })

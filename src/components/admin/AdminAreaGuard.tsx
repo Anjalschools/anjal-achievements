@@ -7,6 +7,7 @@ import { canAccessAdminPath } from "@/lib/app-role-scope-matrix";
 import {
   isAdminShellRole,
   isAlumniPlatformAdminRole,
+  isPartnershipSupervisorAllowedAdminPath,
   isPartnershipSupervisorRole,
 } from "@/lib/achievement-reviewer-roles";
 
@@ -38,7 +39,8 @@ const AdminAreaGuard = ({ children }: { children: React.ReactNode }) => {
     }
     if (isPartnershipSupervisorRole(role)) {
       const path = pathname.split("?")[0] || "";
-      if (!path.startsWith("/admin/partnerships")) {
+      const authorized = isPartnershipSupervisorAllowedAdminPath(path) && canAccessAdminPath(role, pathname);
+      if (!authorized) {
         router.replace(PARTNERSHIPS_ADMIN_HOME);
         return;
       }

@@ -45,7 +45,7 @@ describe("school-intelligence-final-readiness", () => {
     expect(readiness.snapshotStatus).toBe("healthy");
     expect(readiness.unavailableSections).toBe(0);
     expect(readiness.availableSections).toBe(7);
-    expect(readiness.testStatus).toBe("72/72 passing");
+    expect(readiness.testStatus).toBe("79/79 passing");
   });
 
   it("stays not ready when health score is below threshold", () => {

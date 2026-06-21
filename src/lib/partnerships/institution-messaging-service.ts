@@ -252,6 +252,8 @@ export const listInstitutionThreadMessages = async (
           role: "trainingInstitution",
           senderId: String(row.senderId),
           userId: userObjectId,
+          messageType: row.messageType,
+          metadata: row.metadata,
         })
       ),
     };
@@ -288,6 +290,8 @@ export const listInstitutionThreadMessages = async (
         role: "trainingInstitution",
         senderId: String(row.senderId),
         userId: userObjectId,
+        messageType: row.messageType,
+        metadata: row.metadata,
       })
     ),
   };

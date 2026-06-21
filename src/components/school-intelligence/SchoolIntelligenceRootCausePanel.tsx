@@ -1,6 +1,8 @@
+"use client";
+
 import SectionCard from "@/components/layout/SectionCard";
 import type { RootCauseSummary } from "@/lib/school-intelligence/school-intelligence-transparency-utils";
-import { AlertCircle, Clock, Database, RefreshCw, ServerCrash } from "lucide-react";
+import { AlertCircle, CheckCircle2, Clock, Database, RefreshCw, ServerCrash } from "lucide-react";
 
 type SchoolIntelligenceRootCausePanelProps = {
   isAr: boolean;
@@ -17,6 +19,26 @@ const formatTimestamp = (value: string | null, isAr: boolean) => {
 };
 
 const SchoolIntelligenceRootCausePanel = ({ isAr, rootCause }: SchoolIntelligenceRootCausePanelProps) => {
+  if (rootCause.isHealthy) {
+    return (
+      <SectionCard className="mb-4 border-emerald-200 bg-emerald-50/40">
+        <div className="flex items-start gap-3">
+          <CheckCircle2 className="mt-0.5 h-5 w-5 text-emerald-600" aria-hidden />
+          <div>
+            <h2 className="text-base font-bold text-emerald-900">
+              {isAr ? rootCause.rootCauseTitleAr ?? "لا توجد مشكلة نشطة" : rootCause.rootCauseTitleEn ?? "No active issue"}
+            </h2>
+            <p className="mt-1 text-sm text-emerald-800">
+              {isAr
+                ? "جميع أقسام الذكاء المدرسي متاحة ولا توجد أعطال نشطة."
+                : "All school intelligence sections are available with no active failures."}
+            </p>
+          </div>
+        </div>
+      </SectionCard>
+    );
+  }
+
   const rows = [
     {
       icon: ServerCrash,

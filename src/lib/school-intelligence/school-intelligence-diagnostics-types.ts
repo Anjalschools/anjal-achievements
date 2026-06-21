@@ -109,6 +109,8 @@ export type SchoolIntelligenceDiagnostics = {
   snapshotPayloadTrace?: SchoolIntelligenceSnapshotPayloadTrace;
   snapshotPolicy?: SchoolIntelligenceSnapshotPolicyDiagnostics[];
   talentDiscovery?: TalentDiscoveryDiagnostics;
+  opportunityDataQuality?: import("@/lib/school-intelligence/opportunity-mapping").OpportunityDataQualityDiagnostics;
+  growthTrendSummary?: import("@/lib/school-intelligence/growth-trends-intelligence").GrowthTrendSummaryDiagnostics;
   finalReadiness?: SchoolIntelligenceFinalReadinessDiagnostics;
   executiveSummary?: SchoolIntelligenceExecutiveSummary;
   sectionReports?: Partial<Record<SchoolIntelligenceSectionKey, SchoolIntelligenceSectionReport>>;
@@ -144,6 +146,14 @@ export const createEmptySchoolIntelligencePayload = (): SchoolIntelligencePayloa
   interventions: [],
   opportunityMapping: [],
   strategicInsights: [],
+  growthTrends: {
+    highlights: [],
+    participationTrajectory: "stable",
+    forecastSignalAr: "",
+    forecastSignalEn: "",
+    summaryAr: "",
+    summaryEn: "",
+  },
   governance: {
     readOnly: true,
     explainable: true,

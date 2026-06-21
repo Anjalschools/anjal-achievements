@@ -7,8 +7,10 @@ import {
   canEditPartnershipMessage,
   canRestorePartnershipMessage,
   DELETED_MESSAGE_PLACEHOLDER_AR,
+  isPartnershipSystemMessage,
   PARTNERSHIP_MESSAGE_DELETE_UNDO_MS,
 } from "@/lib/partnerships/partnership-message-mutation-service";
+import { isPartnershipSupervisorAllowedAdminPath } from "@/lib/achievement-reviewer-roles";
 
 describe("partnership message mutation permissions", () => {
   const userId = "507f1f77bcf86cd799439011";
@@ -45,6 +47,28 @@ describe("partnership message mutation permissions", () => {
   it("uses Arabic deleted placeholder constant", () => {
     expect(DELETED_MESSAGE_PLACEHOLDER_AR).toBe("تم حذف هذه الرسالة");
   });
+
+  it("blocks edit/delete/restore on system messages", () => {
+    const userId = "507f1f77bcf86cd799439011";
+    const systemRow = { messageType: "system" as const, metadata: { automated: true } };
+    expect(canEditPartnershipMessage({ role: "admin", senderId: userId, userId, ...systemRow })).toBe(
+      false
+    );
+    expect(canDeletePartnershipMessage({ role: "admin", senderId: userId, userId, ...systemRow })).toBe(
+      false
+    );
+    expect(isPartnershipSystemMessage({ messageType: "system" })).toBe(true);
+    expect(isPartnershipSystemMessage({ metadata: { kind: "institution_handoff" } })).toBe(true);
+  });
+});
+
+describe("partnership supervisor admin navigation", () => {
+  it("allows academic years and partnerships admin paths", () => {
+    expect(isPartnershipSupervisorAllowedAdminPath("/admin/partnerships")).toBe(true);
+    expect(isPartnershipSupervisorAllowedAdminPath("/admin/partnerships/applications")).toBe(true);
+    expect(isPartnershipSupervisorAllowedAdminPath("/admin/academic-years")).toBe(true);
+    expect(isPartnershipSupervisorAllowedAdminPath("/admin/dashboard")).toBe(false);
+  });
 });
 
 describe("Phase T.1 infrastructure", () => {
@@ -68,6 +92,9 @@ describe("Phase T.1 infrastructure", () => {
     const src = await readSrc("src/lib/partnerships/approved-students-pdf-service.ts");
     expect(src).toContain("report-header.png");
     expect(src).toContain("كشف الطلاب المعتمدين للتدريب الصيفي");
+    expect(src).toContain("getGradeLabel");
+    expect(src).toContain("المسار");
+    expect(src).toContain("wrapCellLines");
     expect(await readSrc("src/app/api/training/reports/approved-students/route.ts")).toContain(
       "buildApprovedStudentsPdf"
     );
@@ -77,6 +104,9 @@ describe("Phase T.1 infrastructure", () => {
     expect(await readSrc("src/lib/academic-years/academic-year-service.ts")).toContain("archiveAcademicYear");
     expect(await readSrc("src/lib/academic-years/academic-year-service.ts")).toContain("summarizeAcademicYears");
     expect(await readSrc("src/app/api/admin/academic-years/[id]/route.ts")).toContain('action === "archive"');
+    const pageSrc = await readSrc("src/app/(app)/admin/academic-years/page.tsx");
+    expect(pageSrc).toContain("window.confirm");
+    expect(pageSrc).toContain("renderStatusBadges");
   });
 
   it("records partnership message audit trail", async () => {

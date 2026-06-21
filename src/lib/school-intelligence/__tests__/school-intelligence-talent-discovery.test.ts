@@ -53,7 +53,7 @@ describe("talent-discovery", () => {
 
   it("returns success diagnostics for rapid growth candidates", () => {
     const result = buildTalentDiscoveryWithDiagnostics([
-      baseNode({ studentId: "rapid", growthIndex: 1.4, recentTrend: "accelerating", successIndex: 72 }),
+      baseNode({ studentId: "rapid", growthIndex: 1.4, recentTrend: "accelerating", successIndex: 72, distinctActivityCount: 4 }),
     ]);
 
     expect(result.rows.length).toBeGreaterThan(0);

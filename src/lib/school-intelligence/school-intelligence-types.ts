@@ -1,3 +1,5 @@
+import type { StudentPercentileRank } from "@/lib/school-intelligence/ssi-percentile";
+
 export type SchoolStage = "primary" | "middle" | "secondary" | "unknown";
 export type SchoolTrack = "arabic" | "international" | "unknown";
 export type SchoolDepartment = "mawhiba" | "general";
@@ -37,6 +39,7 @@ export type StudentSuccessGraphNode = {
   momentum: "high" | "medium" | "low";
   subScores: StudentSuccessSubScores;
   successIndex: number;
+  studentPercentile?: StudentPercentileRank;
   evidence: string;
 };
 
@@ -78,6 +81,7 @@ export type TalentDiscoveryRow = {
   successIndex: number;
   detailAr: string;
   detailEn: string;
+  confidence?: number;
   evidence: Array<{ label: string; value: string | number }>;
 };
 
@@ -99,9 +103,12 @@ export type OpportunityMappingRow = {
   opportunityCount: number;
   participantCount: number;
   gapPct: number;
+  confidence?: number;
   recommendationAr: string;
   recommendationEn: string;
 };
+
+export type StrategicInsightCategory = "success" | "warning" | "opportunity" | "trend";
 
 export type StrategicSchoolInsight = {
   id: string;
@@ -109,9 +116,33 @@ export type StrategicSchoolInsight = {
   titleEn: string;
   bodyAr: string;
   bodyEn: string;
+  descriptionAr: string;
+  descriptionEn: string;
   severity: "high" | "medium" | "low" | "info";
   insightType: string;
+  category: StrategicInsightCategory;
+  confidence: number;
   evidence: Array<{ label: string; value: string | number }>;
+};
+
+export type GrowthTrendHighlight = {
+  id: string;
+  titleAr: string;
+  titleEn: string;
+  bodyAr: string;
+  bodyEn: string;
+  metricKey: string;
+  changePct?: number;
+  confidence: number;
+};
+
+export type GrowthTrendsIntelligence = {
+  highlights: GrowthTrendHighlight[];
+  participationTrajectory: "rising" | "stable" | "declining";
+  forecastSignalAr: string;
+  forecastSignalEn: string;
+  summaryAr: string;
+  summaryEn: string;
 };
 
 export type SchoolIntelligencePayload = {
@@ -128,6 +159,7 @@ export type SchoolIntelligencePayload = {
   interventions: InterventionRow[];
   opportunityMapping: OpportunityMappingRow[];
   strategicInsights: StrategicSchoolInsight[];
+  growthTrends: GrowthTrendsIntelligence;
   trainingOutcomeIndices?: {
     careerExposureIndex: number;
     professionalSkillsIndex: number;

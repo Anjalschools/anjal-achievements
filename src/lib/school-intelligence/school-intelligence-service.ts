@@ -6,8 +6,13 @@ import {
   buildLongitudinalGrowth,
   computeYearOverYearGrowthPct,
 } from "@/lib/school-intelligence/longitudinal-growth";
+import { buildGrowthTrendsIntelligence } from "@/lib/school-intelligence/growth-trends-intelligence";
 import { buildTalentDiscoveryWithDiagnostics } from "@/lib/school-intelligence/talent-discovery";
-import { recordSchoolIntelligenceTalentDiscovery } from "@/lib/school-intelligence/school-intelligence-section-tracer";
+import {
+  recordSchoolIntelligenceGrowthTrendSummary,
+  recordSchoolIntelligenceOpportunityDataQuality,
+  recordSchoolIntelligenceTalentDiscovery,
+} from "@/lib/school-intelligence/school-intelligence-section-tracer";
 import { buildInterventions } from "@/lib/school-intelligence/intervention-engine";
 import { buildOpportunityMapping } from "@/lib/school-intelligence/opportunity-mapping";
 import { buildStrategicSchoolInsights } from "@/lib/school-intelligence/strategic-school-insights";
@@ -25,21 +30,34 @@ export const buildSchoolIntelligenceNetwork = async (): Promise<SchoolIntelligen
   const avgSuccessIndex =
     nodes.length > 0 ? Math.round(nodes.reduce((s, n) => s + n.successIndex, 0) / nodes.length) : 0;
 
-  const [opportunityMapping, trainingOutcomeIndices] = await Promise.all([
+  const [opportunityResult, trainingOutcomeIndices] = await Promise.all([
     buildOpportunityMapping(nodes),
     buildTrainingSchoolIntelligenceIndices(),
   ]);
+  recordSchoolIntelligenceOpportunityDataQuality(opportunityResult.dataQuality);
 
   const { rows: talentDiscovery, diagnostics: talentDiscoveryDiagnostics } =
     buildTalentDiscoveryWithDiagnostics(nodes);
   recordSchoolIntelligenceTalentDiscovery(talentDiscoveryDiagnostics);
   console.info("[SchoolIntelligence] talent discovery", talentDiscoveryDiagnostics);
+
   const interventions = buildInterventions(nodes);
   const strategicInsights = buildStrategicSchoolInsights({
     nodes,
     departmentExcellence,
     schoolExcellence,
+    longitudinalGrowth,
+    opportunityMapping: opportunityResult.rows,
+    talentDiscovery,
   });
+
+  const { trends: growthTrends, diagnostics: growthTrendSummary } = buildGrowthTrendsIntelligence({
+    longitudinalGrowth,
+    departmentExcellence,
+    opportunityMapping: opportunityResult.rows,
+    nodes,
+  });
+  recordSchoolIntelligenceGrowthTrendSummary(growthTrendSummary);
 
   return {
     generatedAt: new Date().toISOString(),
@@ -51,9 +69,10 @@ export const buildSchoolIntelligenceNetwork = async (): Promise<SchoolIntelligen
     departmentExcellence,
     schoolExcellence,
     longitudinalGrowth,
+    growthTrends,
     talentDiscovery,
     interventions,
-    opportunityMapping,
+    opportunityMapping: opportunityResult.rows,
     strategicInsights,
     trainingOutcomeIndices,
     governance: {

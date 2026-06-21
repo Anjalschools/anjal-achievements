@@ -1,12 +1,14 @@
 "use client";
 
-import { useState } from "react";
-import { Loader2, Pencil, RotateCcw, Trash2 } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Loader2, MoreVertical } from "lucide-react";
 
 export type PartnershipMessageBubbleRow = {
   id: string;
   senderRole: string;
   body: string;
+  messageType?: "user" | "system";
+  isSystem?: boolean;
   templateKey?: string | null;
   createdAt: string | null;
   editedAt?: string | null;
@@ -39,6 +41,17 @@ const PartnershipMessageBubble = ({
   const [draft, setDraft] = useState(message.body);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!menuRef.current?.contains(event.target as Node)) setMenuOpen(false);
+    };
+    document.addEventListener("mousedown", handlePointerDown);
+    return () => document.removeEventListener("mousedown", handlePointerDown);
+  }, [menuOpen]);
 
   const formatTime = (value: string | null | undefined) => {
     if (!value) return "";
@@ -57,6 +70,7 @@ const PartnershipMessageBubble = ({
     if (!body) return;
     setBusy(true);
     setError(null);
+    setMenuOpen(false);
     try {
       const res = await fetch(`${apiBase}/${encodeURIComponent(message.id)}`, {
         method: "PATCH",
@@ -78,6 +92,7 @@ const PartnershipMessageBubble = ({
     if (!window.confirm(isAr ? "حذف هذه الرسالة؟" : "Delete this message?")) return;
     setBusy(true);
     setError(null);
+    setMenuOpen(false);
     try {
       const res = await fetch(`${apiBase}/${encodeURIComponent(message.id)}`, { method: "DELETE" });
       const json = await res.json().catch(() => ({}));
@@ -93,6 +108,7 @@ const PartnershipMessageBubble = ({
   const handleRestore = async () => {
     setBusy(true);
     setError(null);
+    setMenuOpen(false);
     try {
       const res = await fetch(`${apiBase}/${encodeURIComponent(message.id)}/restore`, {
         method: "POST",
@@ -108,9 +124,16 @@ const PartnershipMessageBubble = ({
   };
 
   const isMineBubble = align === "end" || message.isMine;
+  const showActions =
+    !message.isSystem &&
+    !editing &&
+    (message.canEdit || message.canDelete || message.canRestore);
 
   return (
-    <div className={`flex flex-col gap-1 ${isMineBubble ? "items-end" : "items-start"}`}>
+    <div
+      className={`group flex flex-col gap-1 ${isMineBubble ? "items-end" : "items-start"}`}
+      tabIndex={showActions ? 0 : undefined}
+    >
       <div
         className={`max-w-[85%] rounded-2xl px-4 py-2 text-sm ${bubbleClassName} ${
           message.isDeleted ? "italic text-slate-500" : ""
@@ -157,47 +180,65 @@ const PartnershipMessageBubble = ({
         {message.isEdited ? (
           <span className="text-slate-400">{isAr ? "(تم التعديل)" : "(edited)"}</span>
         ) : null}
-        {!editing && message.canEdit ? (
-          <button
-            type="button"
-            onClick={() => {
-              setDraft(message.body);
-              setEditing(true);
-            }}
-            disabled={busy}
-            className="inline-flex items-center gap-0.5 font-bold text-primary hover:underline disabled:opacity-60"
-            aria-label={isAr ? "تعديل" : "Edit"}
-            title={isAr ? "تعديل" : "Edit"}
-          >
-            <Pencil className="h-3 w-3" aria-hidden />
-            {isAr ? "تعديل" : "Edit"}
-          </button>
-        ) : null}
-        {!editing && message.canDelete ? (
-          <button
-            type="button"
-            onClick={() => void handleDelete()}
-            disabled={busy}
-            className="inline-flex items-center gap-0.5 font-bold text-red-600 hover:underline disabled:opacity-60"
-            aria-label={isAr ? "حذف" : "Delete"}
-            title={isAr ? "حذف" : "Delete"}
-          >
-            <Trash2 className="h-3 w-3" aria-hidden />
-            {isAr ? "حذف" : "Delete"}
-          </button>
-        ) : null}
-        {message.canRestore ? (
-          <button
-            type="button"
-            onClick={() => void handleRestore()}
-            disabled={busy}
-            className="inline-flex items-center gap-0.5 font-bold text-emerald-700 hover:underline disabled:opacity-60"
-            aria-label={isAr ? "تراجع عن الحذف" : "Undo delete"}
-            title={isAr ? "تراجع عن الحذف" : "Undo delete"}
-          >
-            <RotateCcw className="h-3 w-3" aria-hidden />
-            {isAr ? "تراجع" : "Undo"}
-          </button>
+
+        {showActions ? (
+          <div ref={menuRef} className="relative">
+            <button
+              type="button"
+              onClick={() => setMenuOpen((open) => !open)}
+              disabled={busy}
+              className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-slate-500 opacity-0 transition hover:bg-slate-100 hover:text-slate-800 focus-visible:opacity-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-primary group-hover:opacity-100 group-focus-within:opacity-100 aria-expanded:opacity-100"
+              aria-label={isAr ? "إجراءات الرسالة" : "Message actions"}
+              aria-haspopup="menu"
+              aria-expanded={menuOpen}
+              title={isAr ? "إجراءات" : "Actions"}
+            >
+              <MoreVertical className="h-4 w-4" aria-hidden />
+            </button>
+            {menuOpen ? (
+              <div
+                role="menu"
+                className={`absolute z-20 min-w-[9rem] rounded-xl border border-slate-200 bg-white py-1 shadow-lg ${
+                  isMineBubble ? "left-0" : "right-0"
+                }`}
+              >
+                {message.canEdit ? (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setDraft(message.body);
+                      setEditing(true);
+                      setMenuOpen(false);
+                    }}
+                    className="block w-full px-3 py-2 text-start text-xs font-bold text-slate-800 hover:bg-slate-50"
+                  >
+                    {isAr ? "تعديل" : "Edit"}
+                  </button>
+                ) : null}
+                {message.canDelete ? (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => void handleDelete()}
+                    className="block w-full px-3 py-2 text-start text-xs font-bold text-red-600 hover:bg-red-50"
+                  >
+                    {isAr ? "حذف" : "Delete"}
+                  </button>
+                ) : null}
+                {message.canRestore ? (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => void handleRestore()}
+                    className="block w-full px-3 py-2 text-start text-xs font-bold text-emerald-700 hover:bg-emerald-50"
+                  >
+                    {isAr ? "استعادة" : "Restore"}
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
         ) : null}
       </div>
       {error ? <p className="px-1 text-[11px] text-red-600">{error}</p> : null}

@@ -31,6 +31,14 @@ export const createEmptySchoolIntelligencePayload = (): SchoolIntelligencePayloa
   interventions: [],
   opportunityMapping: [],
   strategicInsights: [],
+  growthTrends: {
+    highlights: [],
+    participationTrajectory: "stable",
+    forecastSignalAr: "",
+    forecastSignalEn: "",
+    summaryAr: "",
+    summaryEn: "",
+  },
   governance: {
     readOnly: true,
     explainable: true,

@@ -27,6 +27,19 @@ export const PARTNERSHIP_SUPERVISOR_ROLE = "partnershipSupervisor" as const;
 export const isPartnershipSupervisorRole = (role: string | undefined | null): boolean =>
   String(role || "").trim() === PARTNERSHIP_SUPERVISOR_ROLE;
 
+/** Admin routes partnership supervisors may open (training module + academic years read). */
+export const PARTNERSHIP_SUPERVISOR_ADMIN_PREFIXES = [
+  "/admin/partnerships",
+  "/admin/academic-years",
+] as const;
+
+export const isPartnershipSupervisorAllowedAdminPath = (pathname: string): boolean => {
+  const path = String(pathname || "").split("?")[0] || "";
+  return PARTNERSHIP_SUPERVISOR_ADMIN_PREFIXES.some(
+    (prefix) => path === prefix || path.startsWith(`${prefix}/`)
+  );
+};
+
 /** Training institution portal users (Model B). */
 export const TRAINING_INSTITUTION_ROLE = "trainingInstitution" as const;
 

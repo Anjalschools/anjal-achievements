@@ -23,6 +23,9 @@ export type RootCauseSummary = {
   firstFailureTime: string | null;
   lastRetryTime: string | null;
   snapshotAvailable: boolean;
+  isHealthy?: boolean;
+  rootCauseTitleAr?: string;
+  rootCauseTitleEn?: string;
 };
 
 export type HealthBreakdownItem = {
@@ -145,20 +148,40 @@ const parseErrorCategory = (
     return "Snapshot Save Failed";
   }
   if (warnings.length > 0) return "Service Degradation";
-  return diagnostics?.status === "degraded" ? "Partial Degradation" : "Unknown";
+  if (diagnostics?.status === "degraded") return "Partial Degradation";
+  if (diagnostics?.status === "success") return "No active issue";
+  return "Unknown";
 };
 
-export const buildRootCauseSummary = (diagnostics?: SchoolIntelligencePageDiagnostics): RootCauseSummary => {
+export const buildRootCauseSummary = (
+  diagnostics?: SchoolIntelligencePageDiagnostics,
+  options?: { unavailableSections?: number }
+): RootCauseSummary => {
   const snapshotAvailable = resolveSnapshotAvailable(diagnostics);
   const snapshotStep = diagnostics?.steps?.find((s) => s.step === "snapshot_fallback");
   const firstFailure = diagnostics?.firstFailure;
+  const unavailableSections = options?.unavailableSections ?? 0;
+  const isHealthy =
+    unavailableSections === 0 &&
+    !firstFailure &&
+    (diagnostics?.warnings?.length ?? 0) === 0 &&
+    (diagnostics?.status === "success" || diagnostics?.status === "degraded");
+
+  const errorCategory = isHealthy
+    ? "No active issue"
+    : parseErrorCategory(diagnostics, snapshotAvailable);
 
   return {
-    failingService: firstFailure?.service || parseFailingService(diagnostics),
-    errorCategory: parseErrorCategory(diagnostics, snapshotAvailable),
+    failingService: isHealthy
+      ? "School Intelligence Network"
+      : firstFailure?.service || parseFailingService(diagnostics),
+    errorCategory,
     firstFailureTime: firstFailure?.timestamp ?? diagnostics?.generatedAt ?? diagnostics?.buildTimestamp ?? null,
     lastRetryTime: diagnostics?.buildTimestamp ?? (snapshotStep ? diagnostics?.generatedAt ?? null : null),
     snapshotAvailable,
+    isHealthy,
+    rootCauseTitleAr: isHealthy ? "لا توجد مشكلة نشطة" : undefined,
+    rootCauseTitleEn: isHealthy ? "No active issue" : undefined,
   };
 };
 
@@ -342,7 +365,9 @@ export const resolveTransparentPageState = (
     intelligenceScore,
     diagnostics,
   });
-  const rootCause = buildRootCauseSummary(diagnostics);
+  const rootCause = buildRootCauseSummary(diagnostics, {
+    unavailableSections: sectionCounts.unavailable,
+  });
   const snapshotVisibility = buildSnapshotVisibility(diagnostics, data);
   const recoveryHistory = buildRecoveryHistoryFromDiagnostics(diagnostics);
 

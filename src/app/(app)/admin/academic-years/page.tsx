@@ -110,6 +110,21 @@ const AcademicYearsAdminPage = () => {
 
   const runAction = async (id: string, action: "set_current" | "lock" | "unlock" | "archive") => {
     if (!canManage) return;
+    const confirmMessages: Record<typeof action, string> = {
+      set_current: isAr
+        ? "تغيير العام الحالي سيؤثر على جميع الطلبات الجديدة والتقارير المستقبلية.\n\nهل تريد المتابعة؟"
+        : "Changing the current year affects new applications and future reports.\n\nContinue?",
+      lock: isAr
+        ? "قفل العام الدراسي يمنع الطلبات والتعديلات الجديدة.\n\nهل تريد المتابعة؟"
+        : "Locking this year prevents new applications and edits.\n\nContinue?",
+      unlock: isAr
+        ? "إعادة فتح العام الدراسي ستسمح مجدداً بالطلبات والتعديلات.\n\nهل تريد المتابعة؟"
+        : "Unlocking this year will allow applications and edits again.\n\nContinue?",
+      archive: isAr
+        ? "أرشفة العام الدراسي تنقله إلى السجل التاريخي.\n\nهل تريد المتابعة؟"
+        : "Archiving moves this year to historical records.\n\nContinue?",
+    };
+    if (!window.confirm(confirmMessages[action])) return;
     setSaving(true);
     setError(null);
     try {
@@ -169,6 +184,36 @@ const AcademicYearsAdminPage = () => {
       return "—";
     }
   };
+
+  const renderStatusBadges = (row: AcademicYearRow) => (
+    <div className="flex flex-wrap gap-1">
+      {row.isCurrent ? (
+        <span className="inline-flex rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
+          {isAr ? "الحالي" : "Current"}
+        </span>
+      ) : null}
+      {row.status === "archived" ? (
+        <span className="inline-flex rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-bold text-slate-700">
+          {isAr ? "مؤرشف" : "Archived"}
+        </span>
+      ) : null}
+      {row.isLocked ? (
+        <span className="inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-900">
+          {isAr ? "مقفل" : "Locked"}
+        </span>
+      ) : null}
+      {row.status === "active" && !row.isLocked ? (
+        <span className="inline-flex rounded-full bg-sky-100 px-2 py-0.5 text-[10px] font-bold text-sky-800">
+          {isAr ? "نشط" : "Active"}
+        </span>
+      ) : null}
+      {!row.isCurrent && row.status !== "archived" && row.status !== "active" && !row.isLocked ? (
+        <span className="inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-600">
+          {statusLabel[row.status] || row.status}
+        </span>
+      ) : null}
+    </div>
+  );
 
   const summaryCards = [
     {
@@ -307,7 +352,7 @@ const AcademicYearsAdminPage = () => {
                         formatPeriod(row)
                       )}
                     </td>
-                    <td className="px-3 py-3">{statusLabel[row.status] || row.status}</td>
+                    <td className="px-3 py-3">{renderStatusBadges(row)}</td>
                     <td className="px-3 py-3">
                       {row.isCurrent ? (
                         <span className="inline-flex items-center gap-1 text-emerald-700">
