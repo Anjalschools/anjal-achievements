@@ -5,6 +5,7 @@ import type {
   SchoolIntelligenceFirstFailureDiagnostics,
   SchoolIntelligenceQuerySourceMapEntry,
   SchoolIntelligenceSnapshotPayloadTrace,
+  SchoolIntelligenceSnapshotPolicyDiagnostics,
 } from "@/lib/school-intelligence/school-intelligence-diagnostics-types";
 
 export type SchoolIntelligenceBuildStatus = "success" | "degraded" | "unavailable";
@@ -35,6 +36,7 @@ export type SchoolIntelligencePageDiagnostics = {
   chunkRecovery?: SchoolIntelligenceChunkRecoveryDiagnostics[];
   bsonSerializationTraces?: SchoolIntelligenceBsonSerializationTrace[];
   snapshotPayloadTrace?: SchoolIntelligenceSnapshotPayloadTrace;
+  snapshotPolicy?: SchoolIntelligenceSnapshotPolicyDiagnostics[];
 };
 
 export type SectionEmptyKind = "no_data" | "failure" | "snapshot";

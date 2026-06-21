@@ -400,6 +400,9 @@ export const profileMongoOperation = async <T>(input: {
       key: snapshotKey,
       domain,
       payload: result,
+      collection: input.collection,
+      queryName: input.pipelineName || input.operation,
+      executionMs: durationMs,
     });
     if (slow) {
       console.warn("[MongoProfile] slow query", {

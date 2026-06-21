@@ -46,6 +46,7 @@ const attachBuildTrace = (
     chunkRecovery: trace.chunkRecovery,
     bsonSerializationTraces: trace.bsonSerializationTraces,
     snapshotPayloadTrace: trace.snapshotPayloadTrace,
+    snapshotPolicy: trace.snapshotPolicy,
   };
 };
 
@@ -219,4 +220,5 @@ export const sanitizeSchoolIntelligenceDiagnostics = (
     chunkRecovery: diagnostics.chunkRecovery,
     bsonSerializationTraces: diagnostics.bsonSerializationTraces,
     snapshotPayloadTrace: diagnostics.snapshotPayloadTrace,
+    snapshotPolicy: diagnostics.snapshotPolicy,
   });

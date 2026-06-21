@@ -8,6 +8,8 @@ import {
   resolveSnapshotSaveTarget,
 } from "@/lib/school-intelligence/school-intelligence-snapshot-payload-trace";
 import { guardSnapshotPayloadBeforeSave } from "@/lib/school-intelligence/school-intelligence-snapshot-payload-guard";
+import { applyQuerySnapshotPolicy } from "@/lib/school-intelligence/school-intelligence-query-snapshot-policy";
+import { recordSchoolIntelligenceSnapshotPolicy } from "@/lib/school-intelligence/school-intelligence-section-tracer";
 import { SCHOOL_INTEL_PAYLOAD_SNAPSHOT_KEY } from "@/lib/school-intelligence/school-intelligence-boot";
 
 const snapshotKey = (kind: IntelligenceSnapshotKind, key: string) => `${kind}:${key}`;
@@ -55,13 +57,43 @@ export const saveQuerySnapshot = async (input: {
   key: string;
   domain: IntelligenceServiceDomain;
   payload: unknown;
-}) =>
-  saveIntelligenceSnapshot({
+  collection: string;
+  queryName: string;
+  executionMs: number;
+}) => {
+  const saveTarget = resolveSnapshotSaveTarget("query", input.key);
+  const policy = applyQuerySnapshotPolicy({
+    snapshotKey: input.key,
+    saveTarget,
+    payload: input.payload,
+    collection: input.collection,
+    queryName: input.queryName,
+    executionMs: input.executionMs,
+  });
+
+  recordSchoolIntelligenceSnapshotPolicy(policy.diagnostics);
+
+  console.info("[QuerySnapshotPolicy]", {
+    saveTarget: policy.diagnostics.saveTarget,
+    mode: policy.diagnostics.mode,
+    originalBytes: policy.diagnostics.originalBytes,
+    storedBytes: policy.diagnostics.storedBytes,
+    downgraded: policy.diagnostics.downgraded,
+    queryName: policy.diagnostics.queryName,
+    collection: policy.diagnostics.collection,
+  });
+
+  if (!policy.shouldPersist) {
+    return;
+  }
+
+  await saveIntelligenceSnapshot({
     key: input.key,
     domain: input.domain,
     kind: "query",
-    payload: input.payload,
+    payload: policy.payload,
   });
+};
 
 export const saveSchoolIntelligenceSnapshot = async (input: {
   payload: unknown;

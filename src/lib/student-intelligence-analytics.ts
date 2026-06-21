@@ -460,6 +460,9 @@ export const buildStudentIntelligenceResilient = async (
       key: STUDENT_INTEL_FACET_SNAPSHOT_KEY,
       domain: "achievement_intelligence",
       payload: facetDoc,
+      collection: Achievement.collection.name,
+      queryName: "student_intelligence_facet",
+      executionMs: Date.now() - intelT0,
     });
   } catch (error) {
     console.timeEnd("aggregate-achievements");
@@ -580,6 +583,9 @@ export const buildStudentIntelligenceResilient = async (
       key: STUDENT_INTEL_SCHOOL_GRAPH_SNAPSHOT_KEY,
       domain: "achievement_intelligence",
       payload,
+      collection: "student_intelligence",
+      queryName: "student_intelligence_school_graph",
+      executionMs: Date.now() - intelT0,
     }).catch((saveError) => {
       console.warn("[AchievementIntelligence] failed to save school graph snapshot", saveError);
     });
