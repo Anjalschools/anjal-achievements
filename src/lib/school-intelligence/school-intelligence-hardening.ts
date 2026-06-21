@@ -9,7 +9,7 @@ import {
 import type { SchoolIntelligencePayload } from "@/lib/school-intelligence/school-intelligence-types";
 import {
   loadIntelligenceSnapshot,
-  saveIntelligenceSnapshot,
+  saveSchoolIntelligenceSnapshot,
 } from "@/lib/school-improvement/intelligence-snapshot-store";
 import {
   logSchoolIntelligenceBoot,
@@ -45,6 +45,7 @@ const attachBuildTrace = (
     querySourceMap: trace.querySourceMap,
     chunkRecovery: trace.chunkRecovery,
     bsonSerializationTraces: trace.bsonSerializationTraces,
+    snapshotPayloadTrace: trace.snapshotPayloadTrace,
   };
 };
 
@@ -96,10 +97,7 @@ export const buildSchoolIntelligenceNetworkResilient = async (): Promise<SchoolI
 
       try {
         await traceSchoolIntelligenceSnapshotSave(SNAPSHOT_KEY, () =>
-          saveIntelligenceSnapshot({
-            key: SNAPSHOT_KEY,
-            domain: "school_improvement",
-            kind: "full_payload",
+          saveSchoolIntelligenceSnapshot({
             payload: intelligence,
           })
         );
@@ -220,4 +218,5 @@ export const sanitizeSchoolIntelligenceDiagnostics = (
     querySourceMap: diagnostics.querySourceMap,
     chunkRecovery: diagnostics.chunkRecovery,
     bsonSerializationTraces: diagnostics.bsonSerializationTraces,
+    snapshotPayloadTrace: diagnostics.snapshotPayloadTrace,
   });

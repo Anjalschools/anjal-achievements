@@ -6,6 +6,7 @@ export type SchoolIntelligenceFailureClassification =
   | "Import Failure"
   | "Environment Failure"
   | "Query Payload Too Large"
+  | "Snapshot Payload Too Large"
   | "Unknown Failure";
 
 export type SchoolIntelligenceMongoFailureContext = {
@@ -78,6 +79,13 @@ export const classifySchoolIntelligenceFailure = (input: {
 }): SchoolIntelligenceFailureClassification => {
   const errorName = input.errorName ?? (input.error instanceof Error ? input.error.name : "");
   const message = `${input.errorMessage ?? ""} ${input.error instanceof Error ? input.error.message : ""}`.toLowerCase();
+
+  if (
+    message.includes("snapshot_payload_too_large") ||
+    errorName === "SchoolIntelligenceSnapshotPayloadTooLargeError"
+  ) {
+    return "Snapshot Payload Too Large";
+  }
 
   if (
     message.includes("query_payload_too_large") ||

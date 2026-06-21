@@ -6,6 +6,7 @@ import {
 import type { SchoolIntelligenceQuerySourceEntry } from "@/lib/school-intelligence/school-intelligence-query-source-trace";
 import type { SchoolIntelligenceChunkRecoveryDiagnostics } from "@/lib/school-intelligence/school-intelligence-bson-safety";
 import type { SchoolIntelligenceBsonSerializationTrace } from "@/lib/school-intelligence/school-intelligence-bson-serialization-trace";
+import type { SchoolIntelligenceSnapshotPayloadTrace } from "@/lib/school-intelligence/school-intelligence-snapshot-payload-trace";
 
 export type SchoolIntelligenceFirstFailure = SchoolIntelligenceFirstFailureRecord;
 
@@ -23,6 +24,7 @@ type SchoolIntelligenceBuildTraceStore = {
   querySourceMap?: SchoolIntelligenceQuerySourceEntry[];
   chunkRecovery?: SchoolIntelligenceChunkRecoveryDiagnostics[];
   bsonSerializationTraces?: SchoolIntelligenceBsonSerializationTrace[];
+  snapshotPayloadTrace?: SchoolIntelligenceSnapshotPayloadTrace;
 };
 
 const storage = new AsyncLocalStorage<SchoolIntelligenceBuildTraceStore>();
@@ -70,6 +72,14 @@ export const recordSchoolIntelligenceBsonSerializationTrace = (
   if (!store) return;
   if (!store.bsonSerializationTraces) store.bsonSerializationTraces = [];
   store.bsonSerializationTraces.push(entry);
+};
+
+export const recordSchoolIntelligenceSnapshotPayloadTrace = (
+  entry: SchoolIntelligenceSnapshotPayloadTrace
+) => {
+  const store = storage.getStore();
+  if (!store) return;
+  store.snapshotPayloadTrace = entry;
 };
 
 const logSectionFailed = (
@@ -170,6 +180,7 @@ export const traceSchoolIntelligenceSnapshotSave = async (
       key: resolvedKey,
       errorName,
       errorMessage,
+      snapshotPayloadTrace: store?.snapshotPayloadTrace,
     });
     if (store) {
       store.snapshotSave = {

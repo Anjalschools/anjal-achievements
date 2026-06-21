@@ -3,6 +3,7 @@ import type { SchoolIntelligencePayload } from "@/lib/school-intelligence/school
 import type { SchoolIntelligenceQuerySourceEntry } from "@/lib/school-intelligence/school-intelligence-query-source-trace";
 import type { SchoolIntelligenceChunkRecoveryDiagnostics } from "@/lib/school-intelligence/school-intelligence-bson-safety";
 import type { SchoolIntelligenceBsonSerializationTrace } from "@/lib/school-intelligence/school-intelligence-bson-serialization-trace";
+import type { SchoolIntelligenceSnapshotPayloadTrace } from "@/lib/school-intelligence/school-intelligence-snapshot-payload-trace";
 
 export type SchoolIntelligenceBuildStatus = "success" | "degraded" | "unavailable";
 
@@ -57,6 +58,7 @@ export type SchoolIntelligenceQuerySourceMapEntry = SchoolIntelligenceQuerySourc
 
 export type { SchoolIntelligenceChunkRecoveryDiagnostics } from "@/lib/school-intelligence/school-intelligence-bson-safety";
 export type { SchoolIntelligenceBsonSerializationTrace } from "@/lib/school-intelligence/school-intelligence-bson-serialization-trace";
+export type { SchoolIntelligenceSnapshotPayloadTrace } from "@/lib/school-intelligence/school-intelligence-snapshot-payload-trace";
 
 export type SchoolIntelligenceSnapshotSaveDiagnostics = {
   attempted: boolean;
@@ -83,6 +85,7 @@ export type SchoolIntelligenceDiagnostics = {
   querySourceMap?: SchoolIntelligenceQuerySourceMapEntry[];
   chunkRecovery?: SchoolIntelligenceChunkRecoveryDiagnostics[];
   bsonSerializationTraces?: SchoolIntelligenceBsonSerializationTrace[];
+  snapshotPayloadTrace?: SchoolIntelligenceSnapshotPayloadTrace;
 };
 
 export type SchoolIntelligenceBuildResult = {

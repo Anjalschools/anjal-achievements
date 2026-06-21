@@ -5,6 +5,7 @@ import {
   pickPrimaryQuerySourceEntry,
 } from "@/lib/school-intelligence/school-intelligence-query-source-trace";
 import { pickLatestSerializationTrace } from "@/lib/school-intelligence/school-intelligence-bson-serialization-trace";
+import { formatSnapshotFieldSizesSummary } from "@/lib/school-intelligence/school-intelligence-snapshot-payload-trace";
 import { AlertOctagon, Clock, Database, ServerCrash } from "lucide-react";
 
 type SchoolIntelligenceFirstFailurePanelProps = {
@@ -79,7 +80,17 @@ const SchoolIntelligenceFirstFailurePanel = ({
         }
       : undefined);
 
-  if (!firstFailure && !snapshotSave?.attempted && !payloadSource && !serializationTrace) return null;
+  const snapshotPayloadTrace = diagnostics?.snapshotPayloadTrace;
+
+  if (
+    !firstFailure &&
+    !snapshotSave?.attempted &&
+    !payloadSource &&
+    !serializationTrace &&
+    !snapshotPayloadTrace
+  ) {
+    return null;
+  }
 
   const queryLabel =
     firstFailure?.queryName ||
@@ -220,6 +231,47 @@ const SchoolIntelligenceFirstFailurePanel = ({
               </div>
             ))}
           </div>
+        </div>
+      ) : null}
+
+      {snapshotPayloadTrace ? (
+        <div className="mb-3 rounded-xl border border-orange-200 bg-orange-50/40 px-3 py-3">
+          <h3 className="mb-2 text-sm font-bold text-orange-950">
+            {isAr ? "تتبع حمولة Snapshot" : "Snapshot payload trace"}
+          </h3>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <RootCauseField
+              label={isAr ? "هدف الحفظ" : "Save target"}
+              value={snapshotPayloadTrace.saveTarget}
+              className="sm:col-span-2"
+            />
+            <RootCauseField
+              label={isAr ? "حجم الحمولة" : "Payload size"}
+              value={`${snapshotPayloadTrace.payloadBytes} B`}
+            />
+            <RootCauseField
+              label={isAr ? "أكبر حقل (مستوى أعلى)" : "Largest top-level field"}
+              value={snapshotPayloadTrace.largestTopLevelField || (isAr ? "—" : "—")}
+            />
+            <RootCauseField
+              label={isAr ? "حجم أكبر حقل" : "Largest field size"}
+              value={`${snapshotPayloadTrace.largestFieldBytes ?? 0} B`}
+            />
+            <RootCauseField
+              label={isAr ? "عدد المفاتيح" : "Top-level keys"}
+              value={String(snapshotPayloadTrace.topLevelKeys.length)}
+            />
+          </div>
+          {Object.keys(snapshotPayloadTrace.fieldSizes).length > 0 ? (
+            <div className="mt-2 rounded-lg border border-border/70 bg-white px-3 py-2">
+              <p className="text-xs text-text-light">
+                {isAr ? "أحجام الحقول المتتبعة" : "Tracked field sizes"}
+              </p>
+              <p className="mt-1 break-all text-xs font-medium text-text">
+                {formatSnapshotFieldSizesSummary(snapshotPayloadTrace.fieldSizes)}
+              </p>
+            </div>
+          ) : null}
         </div>
       ) : null}
 

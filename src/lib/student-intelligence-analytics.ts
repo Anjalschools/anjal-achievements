@@ -12,7 +12,7 @@ import {
 import { profileMongoAggregate } from "@/lib/school-improvement/intelligence-mongo-profiler";
 import {
   loadIntelligenceSnapshot,
-  saveIntelligenceSnapshot,
+  saveQuerySnapshot,
 } from "@/lib/school-improvement/intelligence-snapshot-store";
 import { IntelligenceQueryTimeoutError } from "@/lib/school-improvement/intelligence-self-healing";
 import {
@@ -456,10 +456,9 @@ export const buildStudentIntelligenceResilient = async (
       participation: facetDoc?.byParticipation?.length ?? 0,
     });
 
-    await saveIntelligenceSnapshot({
+    await saveQuerySnapshot({
       key: STUDENT_INTEL_FACET_SNAPSHOT_KEY,
       domain: "achievement_intelligence",
-      kind: "query",
       payload: facetDoc,
     });
   } catch (error) {
@@ -577,10 +576,9 @@ export const buildStudentIntelligenceResilient = async (
   };
 
   if (schoolGraph) {
-    await saveIntelligenceSnapshot({
+    await saveQuerySnapshot({
       key: STUDENT_INTEL_SCHOOL_GRAPH_SNAPSHOT_KEY,
       domain: "achievement_intelligence",
-      kind: "query",
       payload,
     }).catch((saveError) => {
       console.warn("[AchievementIntelligence] failed to save school graph snapshot", saveError);

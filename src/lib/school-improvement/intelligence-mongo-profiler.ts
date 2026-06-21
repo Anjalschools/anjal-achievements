@@ -8,7 +8,7 @@ import { recordIntelligenceRecoveryEvent } from "@/lib/school-improvement/intell
 import { resolveQueryDomain } from "@/lib/school-improvement/intelligence-service-isolation";
 import {
   loadIntelligenceSnapshot,
-  saveIntelligenceSnapshot,
+  saveQuerySnapshot,
 } from "@/lib/school-improvement/intelligence-snapshot-store";
 import {
   IntelligenceQueryTimeoutError,
@@ -396,10 +396,9 @@ export const profileMongoOperation = async <T>(input: {
       documentsReturned,
       slow,
     });
-    await saveIntelligenceSnapshot({
+    await saveQuerySnapshot({
       key: snapshotKey,
       domain,
-      kind: "query",
       payload: result,
     });
     if (slow) {

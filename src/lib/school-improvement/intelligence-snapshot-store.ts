@@ -4,6 +4,11 @@ import IntelligenceSectionSnapshot, {
   type IntelligenceServiceDomain,
   type IntelligenceSnapshotKind,
 } from "@/models/IntelligenceSectionSnapshot";
+import {
+  guardSnapshotPayloadBeforeSave,
+  resolveSnapshotSaveTarget,
+} from "@/lib/school-intelligence/school-intelligence-snapshot-payload-trace";
+import { SCHOOL_INTEL_PAYLOAD_SNAPSHOT_KEY } from "@/lib/school-intelligence/school-intelligence-boot";
 
 const snapshotKey = (kind: IntelligenceSnapshotKind, key: string) => `${kind}:${key}`;
 
@@ -18,14 +23,19 @@ export const saveIntelligenceSnapshot = async (input: {
   kind: IntelligenceSnapshotKind;
   payload: unknown;
 }) => {
-  await connectDB();
   const resolvedKey = snapshotKey(input.kind, input.key);
+  const saveTarget = resolveSnapshotSaveTarget(input.kind, input.key);
+
+  guardSnapshotPayloadBeforeSave(input.payload, saveTarget);
+
+  await connectDB();
   if (isSchoolIntelligenceSnapshotKey(input.key)) {
     console.info("[SchoolIntelligence Snapshot Save]", {
       logicalKey: input.key,
       resolvedKey,
       kind: input.kind,
       domain: input.domain,
+      saveTarget,
     });
   }
   await IntelligenceSectionSnapshot.findOneAndUpdate(
@@ -40,6 +50,29 @@ export const saveIntelligenceSnapshot = async (input: {
     { upsert: true, new: true, setDefaultsOnInsert: true }
   );
 };
+
+export const saveQuerySnapshot = async (input: {
+  key: string;
+  domain: IntelligenceServiceDomain;
+  payload: unknown;
+}) =>
+  saveIntelligenceSnapshot({
+    key: input.key,
+    domain: input.domain,
+    kind: "query",
+    payload: input.payload,
+  });
+
+export const saveSchoolIntelligenceSnapshot = async (input: {
+  payload: unknown;
+  domain?: IntelligenceServiceDomain;
+}) =>
+  saveIntelligenceSnapshot({
+    key: SCHOOL_INTEL_PAYLOAD_SNAPSHOT_KEY,
+    domain: input.domain ?? "school_improvement",
+    kind: "full_payload",
+    payload: input.payload,
+  });
 
 export const loadIntelligenceSnapshot = async <T>(
   key: string,
