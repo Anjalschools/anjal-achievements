@@ -177,8 +177,18 @@ const PartnershipsTrainingAchievementsPage = () => {
               <tbody>
                 {items.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="px-2 py-8 text-center text-slate-500">
-                      {isAr ? "لا توجد إنجازات تدريب بعد." : "No training achievements yet."}
+                    <td colSpan={5} className="px-2 py-12 text-center">
+                      <p className="text-base font-bold text-slate-700">
+                        {isAr
+                          ? "لا توجد إنجازات تدريب معتمدة حتى الآن"
+                          : "No approved training achievements yet"}
+                      </p>
+                      <Link
+                        href="/admin/partnerships/applications"
+                        className="mt-4 inline-flex rounded-xl bg-primary px-4 py-2 text-sm font-bold text-white"
+                      >
+                        {isAr ? "عرض طلبات التدريب" : "View training applications"}
+                      </Link>
                     </td>
                   </tr>
                 ) : (

@@ -13,6 +13,10 @@ import {
   trainingApplicationStatusLabel,
 } from "@/lib/partnerships/partnerships-application-status-ui";
 import { Headphones, Loader2, Send, Users } from "lucide-react";
+import PartnershipMessageBubble, {
+  type PartnershipMessageBubbleRow,
+} from "@/components/partnerships/PartnershipMessageBubble";
+import PartnershipMessageCenterEmptyState from "@/components/partnerships/PartnershipMessageCenterEmptyState";
 
 type ThreadRow = {
   id: string;
@@ -26,13 +30,7 @@ type ThreadRow = {
   status: string;
 };
 
-type MessageRow = {
-  id: string;
-  senderRole: string;
-  body: string;
-  createdAt: string | null;
-  isMine: boolean;
-};
+type MessageRow = PartnershipMessageBubbleRow;
 
 const InstitutionMessagesPage = () => {
   const locale = getLocale();
@@ -214,9 +212,7 @@ const InstitutionMessagesPage = () => {
 
           <SectionCard padding="sm">
             {!activeId ? (
-              <p className="py-10 text-center text-sm text-text-light">
-                {isAr ? "اختر محادثة." : "Select a conversation."}
-              </p>
+              <PartnershipMessageCenterEmptyState isAr={isAr} />
             ) : (
               <>
                 {error ? <p className="mb-2 text-sm text-red-600">{error}</p> : null}
@@ -227,15 +223,19 @@ const InstitutionMessagesPage = () => {
                     </p>
                   ) : (
                     messages.map((row) => (
-                      <div
+                      <PartnershipMessageBubble
                         key={row.id}
-                        className={`rounded-xl px-3 py-2 text-sm ${
-                          row.isMine ? "ms-6 bg-primary/10 text-foreground" : "me-6 bg-gray-100 text-text"
-                        }`}
-                      >
-                        <p className="mb-0.5 text-[10px] font-bold uppercase text-text-light">{row.senderRole}</p>
-                        <p>{row.body}</p>
-                      </div>
+                        message={row}
+                        isAr={isAr}
+                        apiBase="/api/institution/training/messages"
+                        align={row.isMine ? "end" : "start"}
+                        bubbleClassName={
+                          row.isMine ? "bg-primary/10 text-foreground" : "bg-gray-100 text-text"
+                        }
+                        onUpdated={(updated) =>
+                          setMessages((prev) => prev.map((item) => (item.id === updated.id ? updated : item)))
+                        }
+                      />
                     ))
                   )}
                 </div>

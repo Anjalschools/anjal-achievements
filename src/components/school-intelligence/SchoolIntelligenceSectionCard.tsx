@@ -12,6 +12,7 @@ import type { ReactNode } from "react";
 const statusBadgeTone: Record<SchoolIntelligenceSectionStatus, string> = {
   available: "bg-emerald-50 text-emerald-800 ring-emerald-200",
   snapshot: "bg-blue-50 text-blue-800 ring-blue-200",
+  no_data: "bg-slate-50 text-slate-700 ring-slate-200",
   unavailable: "bg-amber-50 text-amber-800 ring-amber-200",
 };
 
@@ -22,6 +23,8 @@ type SchoolIntelligenceSectionCardProps = {
   globalStatus: SchoolIntelligenceBuildStatus;
   diagnostics?: SchoolIntelligencePageDiagnostics;
   hasData: boolean;
+  emptyTitle?: string;
+  emptyDescription?: string;
   children: ReactNode;
 };
 
@@ -32,6 +35,8 @@ const SchoolIntelligenceSectionCard = ({
   globalStatus,
   diagnostics,
   hasData,
+  emptyTitle,
+  emptyDescription,
   children,
 }: SchoolIntelligenceSectionCardProps) => {
   const emptyKind = resolveSectionEmptyKind(sectionStatus, globalStatus, diagnostics);
@@ -46,7 +51,14 @@ const SchoolIntelligenceSectionCard = ({
           {sectionStatusLabel(sectionStatus, isAr)}
         </span>
       </div>
-      {hasData ? children : <SchoolIntelligenceEmptyState isAr={isAr} kind={emptyKind} />}
+      {hasData ? children : (
+        <SchoolIntelligenceEmptyState
+          isAr={isAr}
+          kind={emptyKind}
+          title={emptyTitle}
+          description={emptyDescription}
+        />
+      )}
     </SectionCard>
   );
 };

@@ -16,6 +16,11 @@ import {
   notifySupervisorTrainingMessage,
 } from "@/lib/partnerships/partnerships-training-notifications";
 import Notification from "@/models/Notification";
+import {
+  enrichMessagePermissions,
+  recordPartnershipMessageSent,
+  serializePartnershipMessageRow,
+} from "@/lib/partnerships/partnership-message-mutation-service";
 
 const preview = (text: string) => String(text || "").trim().slice(0, 280);
 
@@ -237,18 +242,18 @@ export const listInstitutionThreadMessages = async (
       .sort({ createdAt: 1 })
       .lean();
 
+    const userObjectId = new mongoose.Types.ObjectId(institutionUserId);
     return {
       ok: true as const,
       threadKind: "supervisor" as const,
       applicationId: "",
-      items: messages.map((row) => ({
-        id: String(row._id),
-        senderRole: row.senderRole,
-        body: row.body,
-        templateKey: row.templateKey || null,
-        createdAt: row.createdAt ? new Date(row.createdAt).toISOString() : null,
-        isMine: row.senderRole === "institution" && String(row.senderId) === institutionUserId,
-      })),
+      items: messages.map((row) =>
+        enrichMessagePermissions(serializePartnershipMessageRow(row, userObjectId), {
+          role: "trainingInstitution",
+          senderId: String(row.senderId),
+          userId: userObjectId,
+        })
+      ),
     };
   }
 
@@ -273,18 +278,18 @@ export const listInstitutionThreadMessages = async (
     .sort({ createdAt: 1 })
     .lean();
 
+  const userObjectId = new mongoose.Types.ObjectId(institutionUserId);
   return {
     ok: true as const,
     threadKind: "student" as const,
     applicationId: String(thread.applicationId),
-    items: messages.map((row) => ({
-      id: String(row._id),
-      senderRole: row.senderRole,
-      body: row.body,
-      templateKey: row.templateKey || null,
-      createdAt: row.createdAt ? new Date(row.createdAt).toISOString() : null,
-      isMine: row.senderRole === "institution" && String(row.senderId) === institutionUserId,
-    })),
+    items: messages.map((row) =>
+      enrichMessagePermissions(serializePartnershipMessageRow(row, userObjectId), {
+        role: "trainingInstitution",
+        senderId: String(row.senderId),
+        userId: userObjectId,
+      })
+    ),
   };
 };
 
@@ -311,11 +316,19 @@ export const sendInstitutionSupervisorMessage = async (input: {
   thread.lastMessageAt = new Date();
   await thread.save();
 
-  await PartnershipMessage.create({
+  const message = await PartnershipMessage.create({
     threadId: thread._id,
     senderId: input.institutionUserId,
     senderRole: "institution",
     body,
+  });
+
+  await recordPartnershipMessageSent({
+    messageId: message._id,
+    threadId: thread._id,
+    actorId: new mongoose.Types.ObjectId(input.institutionUserId),
+    actorRole: "trainingInstitution",
+    metadata: { organizationId: input.organizationId, threadKind: "supervisor" },
   });
 
   await notifySupervisorTrainingMessage({
@@ -374,11 +387,19 @@ export const sendInstitutionThreadMessage = async (input: {
   thread.lastMessageAt = new Date();
   await thread.save();
 
-  await PartnershipMessage.create({
+  const message = await PartnershipMessage.create({
     threadId: thread._id,
     senderId: input.institutionUserId,
     senderRole: "institution",
     body,
+  });
+
+  await recordPartnershipMessageSent({
+    messageId: message._id,
+    threadId: thread._id,
+    actorId: new mongoose.Types.ObjectId(input.institutionUserId),
+    actorRole: "trainingInstitution",
+    metadata: { applicationId: input.applicationId, organizationId: input.organizationId },
   });
 
   const applicationDoc = await StudentTrainingApplication.findById(application._id);

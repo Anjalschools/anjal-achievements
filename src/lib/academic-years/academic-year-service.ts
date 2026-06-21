@@ -301,3 +301,53 @@ export const deleteAcademicYear = async (input: {
     before,
   });
 };
+
+export const archiveAcademicYear = async (input: {
+  id: string;
+  actor: AuditActor;
+  request?: NextRequest;
+}) => {
+  await connectDB();
+  if (!mongoose.Types.ObjectId.isValid(input.id)) throw new Error("Invalid academic year id");
+
+  const doc = await AcademicYear.findById(input.id);
+  if (!doc) throw new Error("Academic year not found");
+  if (doc.isCurrent) throw new Error("Cannot archive the current academic year");
+
+  const before = serializeYear(doc.toObject());
+  doc.status = "archived";
+  doc.isCurrent = false;
+  doc.updatedBy = input.actor.id;
+  await doc.save();
+
+  const after = serializeYear(doc.toObject());
+  await auditYearChange({
+    actionType: "academic_year_archived",
+    entityId: String(doc._id),
+    entityTitle: doc.label,
+    descriptionAr: `تم أرشفة العام الدراسي: ${doc.label}`,
+    actor: input.actor,
+    request: input.request,
+    before,
+    after,
+  });
+
+  return after;
+};
+
+export type AcademicYearDashboardSummary = {
+  current: AcademicYearRow | null;
+  total: number;
+  activeCount: number;
+  archivedCount: number;
+};
+
+export const summarizeAcademicYears = async (): Promise<AcademicYearDashboardSummary> => {
+  const items = await listAcademicYears();
+  return {
+    current: items.find((row) => row.isCurrent) || null,
+    total: items.length,
+    activeCount: items.filter((row) => row.status === "active").length,
+    archivedCount: items.filter((row) => row.status === "archived").length,
+  };
+};

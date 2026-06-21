@@ -5,6 +5,14 @@ import type { SchoolIntelligenceChunkRecoveryDiagnostics } from "@/lib/school-in
 import type { SchoolIntelligenceBsonSerializationTrace } from "@/lib/school-intelligence/school-intelligence-bson-serialization-trace";
 import type { SchoolIntelligenceSnapshotPayloadTrace } from "@/lib/school-intelligence/school-intelligence-snapshot-payload-trace";
 import type { SchoolIntelligenceSnapshotPolicyDiagnostics } from "@/lib/school-intelligence/school-intelligence-query-snapshot-policy";
+import type { TalentDiscoveryDiagnostics } from "@/lib/school-intelligence/talent-discovery";
+import type { SchoolIntelligenceFinalReadinessDiagnostics } from "@/lib/school-intelligence/school-intelligence-final-readiness";
+import type { SchoolIntelligenceExecutiveSummary } from "@/lib/school-intelligence/school-intelligence-executive-summary";
+import type {
+  SchoolIntelligenceDiagnosticsSchemaMeta,
+  SchoolIntelligenceSnapshotDiagnostics,
+} from "@/lib/school-intelligence/school-intelligence-diagnostics-schema";
+import type { SchoolIntelligenceSectionKey, SchoolIntelligenceSectionStatus } from "@/lib/school-intelligence/school-intelligence-page-types";
 
 export type SchoolIntelligenceBuildStatus = "success" | "degraded" | "unavailable";
 
@@ -61,6 +69,17 @@ export type { SchoolIntelligenceChunkRecoveryDiagnostics } from "@/lib/school-in
 export type { SchoolIntelligenceBsonSerializationTrace } from "@/lib/school-intelligence/school-intelligence-bson-serialization-trace";
 export type { SchoolIntelligenceSnapshotPayloadTrace } from "@/lib/school-intelligence/school-intelligence-snapshot-payload-trace";
 export type { SchoolIntelligenceSnapshotPolicyDiagnostics } from "@/lib/school-intelligence/school-intelligence-query-snapshot-policy";
+export type { TalentDiscoveryDiagnostics } from "@/lib/school-intelligence/talent-discovery";
+export type { SchoolIntelligenceFinalReadinessDiagnostics } from "@/lib/school-intelligence/school-intelligence-final-readiness";
+export type { SchoolIntelligenceExecutiveSummary } from "@/lib/school-intelligence/school-intelligence-executive-summary";
+export type {
+  SchoolIntelligenceDiagnosticsSchemaMeta,
+  SchoolIntelligenceSnapshotDiagnostics,
+} from "@/lib/school-intelligence/school-intelligence-diagnostics-schema";
+
+export type SchoolIntelligenceSectionReport = {
+  status: SchoolIntelligenceSectionStatus;
+};
 
 export type SchoolIntelligenceSnapshotSaveDiagnostics = {
   attempted: boolean;
@@ -89,6 +108,13 @@ export type SchoolIntelligenceDiagnostics = {
   bsonSerializationTraces?: SchoolIntelligenceBsonSerializationTrace[];
   snapshotPayloadTrace?: SchoolIntelligenceSnapshotPayloadTrace;
   snapshotPolicy?: SchoolIntelligenceSnapshotPolicyDiagnostics[];
+  talentDiscovery?: TalentDiscoveryDiagnostics;
+  finalReadiness?: SchoolIntelligenceFinalReadinessDiagnostics;
+  executiveSummary?: SchoolIntelligenceExecutiveSummary;
+  sectionReports?: Partial<Record<SchoolIntelligenceSectionKey, SchoolIntelligenceSectionReport>>;
+  snapshotDiagnostics?: SchoolIntelligenceSnapshotDiagnostics;
+  schemaVersion?: SchoolIntelligenceDiagnosticsSchemaMeta["schemaVersion"];
+  schemaPolicy?: SchoolIntelligenceDiagnosticsSchemaMeta["schemaPolicy"];
 };
 
 export type SchoolIntelligenceBuildResult = {

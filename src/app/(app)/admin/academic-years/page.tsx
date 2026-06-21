@@ -4,8 +4,9 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import PageContainer from "@/components/layout/PageContainer";
 import PageHeader from "@/components/layout/PageHeader";
 import SectionCard from "@/components/layout/SectionCard";
+import IconActionButton from "@/components/ui/IconActionButton";
 import { getLocale } from "@/lib/i18n";
-import { CalendarRange, Loader2, Lock, Unlock, Star } from "lucide-react";
+import { Archive, CalendarRange, Loader2, Lock, Pencil, Star, Unlock } from "lucide-react";
 
 type AcademicYearRow = {
   id: string;
@@ -20,6 +21,13 @@ type AcademicYearRow = {
   status: string;
 };
 
+type AcademicYearSummary = {
+  current: AcademicYearRow | null;
+  total: number;
+  activeCount: number;
+  archivedCount: number;
+};
+
 const toInputDate = (value: string) => (value ? value.slice(0, 10) : "");
 
 const AcademicYearsAdminPage = () => {
@@ -29,10 +37,20 @@ const AcademicYearsAdminPage = () => {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [items, setItems] = useState<AcademicYearRow[]>([]);
+  const [summary, setSummary] = useState<AcademicYearSummary>({
+    current: null,
+    total: 0,
+    activeCount: 0,
+    archivedCount: 0,
+  });
   const [canManage, setCanManage] = useState(false);
   const [name, setName] = useState("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editStartDate, setEditStartDate] = useState("");
+  const [editEndDate, setEditEndDate] = useState("");
 
   const statusLabel = useMemo(
     () =>
@@ -54,6 +72,7 @@ const AcademicYearsAdminPage = () => {
       if (!res.ok) throw new Error(typeof json.error === "string" ? json.error : "Failed");
       setItems(Array.isArray(json.items) ? json.items : []);
       setCanManage(json.canManage === true);
+      if (json.summary) setSummary(json.summary as AcademicYearSummary);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error");
       setItems([]);
@@ -89,7 +108,7 @@ const AcademicYearsAdminPage = () => {
     }
   };
 
-  const runAction = async (id: string, action: "set_current" | "lock" | "unlock") => {
+  const runAction = async (id: string, action: "set_current" | "lock" | "unlock" | "archive") => {
     if (!canManage) return;
     setSaving(true);
     setError(null);
@@ -109,6 +128,38 @@ const AcademicYearsAdminPage = () => {
     }
   };
 
+  const startEdit = (row: AcademicYearRow) => {
+    setEditingId(row.id);
+    setEditName(row.name);
+    setEditStartDate(toInputDate(row.startDate));
+    setEditEndDate(toInputDate(row.endDate));
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingId || !canManage) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/admin/academic-years/${encodeURIComponent(editingId)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: editName.trim(),
+          startDate: editStartDate,
+          endDate: editEndDate,
+        }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(typeof json.error === "string" ? json.error : "Failed");
+      setEditingId(null);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Error");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const formatPeriod = (row: AcademicYearRow) => {
     try {
       const start = new Date(row.startDate).toLocaleDateString(isAr ? "ar-SA" : "en-US");
@@ -118,6 +169,16 @@ const AcademicYearsAdminPage = () => {
       return "—";
     }
   };
+
+  const summaryCards = [
+    {
+      label: isAr ? "العام الحالي" : "Current year",
+      value: summary.current?.label || summary.current?.name || (isAr ? "—" : "—"),
+    },
+    { label: isAr ? "عدد الأعوام" : "Total years", value: String(summary.total) },
+    { label: isAr ? "الأعوام النشطة" : "Active years", value: String(summary.activeCount) },
+    { label: isAr ? "الأعوام المؤرشفة" : "Archived years", value: String(summary.archivedCount) },
+  ];
 
   return (
     <PageContainer>
@@ -131,6 +192,15 @@ const AcademicYearsAdminPage = () => {
       />
 
       {error ? <p className="mb-4 text-sm text-red-600">{error}</p> : null}
+
+      <div className="mb-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {summaryCards.map((card) => (
+          <SectionCard key={card.label} className="p-4">
+            <p className="text-xs font-semibold text-text-light">{card.label}</p>
+            <p className="mt-1 text-lg font-black text-foreground">{card.value}</p>
+          </SectionCard>
+        ))}
+      </div>
 
       {canManage ? (
         <SectionCard className="mb-6">
@@ -204,9 +274,39 @@ const AcademicYearsAdminPage = () => {
               </thead>
               <tbody>
                 {items.map((row) => (
-                  <tr key={row.id} className="border-b border-border/50">
-                    <td className="px-3 py-3 font-semibold">{row.label || row.name}</td>
-                    <td className="px-3 py-3">{formatPeriod(row)}</td>
+                  <tr key={row.id} className="border-b border-border/50 align-top">
+                    <td className="px-3 py-3 font-semibold">
+                      {editingId === row.id ? (
+                        <input
+                          value={editName}
+                          onChange={(e) => setEditName(e.target.value)}
+                          className="w-full rounded-lg border border-border px-2 py-1"
+                          aria-label={isAr ? "تعديل الاسم" : "Edit name"}
+                        />
+                      ) : (
+                        row.label || row.name
+                      )}
+                    </td>
+                    <td className="px-3 py-3">
+                      {editingId === row.id ? (
+                        <div className="flex flex-col gap-1">
+                          <input
+                            type="date"
+                            value={editStartDate}
+                            onChange={(e) => setEditStartDate(e.target.value)}
+                            className="rounded-lg border border-border px-2 py-1"
+                          />
+                          <input
+                            type="date"
+                            value={editEndDate}
+                            onChange={(e) => setEditEndDate(e.target.value)}
+                            className="rounded-lg border border-border px-2 py-1"
+                          />
+                        </div>
+                      ) : (
+                        formatPeriod(row)
+                      )}
+                    </td>
                     <td className="px-3 py-3">{statusLabel[row.status] || row.status}</td>
                     <td className="px-3 py-3">
                       {row.isCurrent ? (
@@ -234,34 +334,72 @@ const AcademicYearsAdminPage = () => {
                     {canManage ? (
                       <td className="px-3 py-3">
                         <div className="flex flex-wrap gap-2">
-                          {!row.isCurrent && !row.isLocked ? (
-                            <button
-                              type="button"
-                              disabled={saving}
-                              onClick={() => void runAction(row.id, "set_current")}
-                              className="rounded-lg border border-primary/30 px-2 py-1 text-xs font-bold text-primary"
-                            >
-                              {isAr ? "تعيين كحالي" : "Set current"}
-                            </button>
-                          ) : null}
-                          {!row.isLocked ? (
-                            <button
-                              type="button"
-                              disabled={saving}
-                              onClick={() => void runAction(row.id, "lock")}
-                              className="rounded-lg border border-amber-300 px-2 py-1 text-xs font-bold text-amber-900"
-                            >
-                              {isAr ? "قفل" : "Lock"}
-                            </button>
+                          {editingId === row.id ? (
+                            <>
+                              <button
+                                type="button"
+                                disabled={saving}
+                                onClick={() => void handleSaveEdit()}
+                                className="rounded-lg bg-primary px-2 py-1 text-xs font-bold text-white"
+                              >
+                                {isAr ? "حفظ" : "Save"}
+                              </button>
+                              <button
+                                type="button"
+                                disabled={saving}
+                                onClick={() => setEditingId(null)}
+                                className="rounded-lg border border-border px-2 py-1 text-xs font-bold"
+                              >
+                                {isAr ? "إلغاء" : "Cancel"}
+                              </button>
+                            </>
                           ) : (
-                            <button
-                              type="button"
-                              disabled={saving}
-                              onClick={() => void runAction(row.id, "unlock")}
-                              className="rounded-lg border border-emerald-300 px-2 py-1 text-xs font-bold text-emerald-900"
-                            >
-                              {isAr ? "إعادة فتح" : "Unlock"}
-                            </button>
+                            <>
+                              {!row.isLocked && row.status !== "archived" ? (
+                                <IconActionButton
+                                  label={isAr ? "تعديل" : "Edit"}
+                                  disabled={saving}
+                                  onClick={() => startEdit(row)}
+                                >
+                                  <Pencil className="h-4 w-4" aria-hidden />
+                                </IconActionButton>
+                              ) : null}
+                              {!row.isCurrent && !row.isLocked && row.status !== "archived" ? (
+                                <IconActionButton
+                                  label={isAr ? "تعيين كعام حالي" : "Set as current year"}
+                                  disabled={saving}
+                                  onClick={() => void runAction(row.id, "set_current")}
+                                >
+                                  <Star className="h-4 w-4 text-primary" aria-hidden />
+                                </IconActionButton>
+                              ) : null}
+                              {!row.isLocked && row.status !== "archived" ? (
+                                <IconActionButton
+                                  label={isAr ? "قفل" : "Lock year"}
+                                  disabled={saving}
+                                  onClick={() => void runAction(row.id, "lock")}
+                                >
+                                  <Lock className="h-4 w-4 text-amber-800" aria-hidden />
+                                </IconActionButton>
+                              ) : (
+                                <IconActionButton
+                                  label={isAr ? "إعادة فتح" : "Unlock year"}
+                                  disabled={saving}
+                                  onClick={() => void runAction(row.id, "unlock")}
+                                >
+                                  <Unlock className="h-4 w-4 text-emerald-800" aria-hidden />
+                                </IconActionButton>
+                              )}
+                              {!row.isCurrent && row.status !== "archived" ? (
+                                <IconActionButton
+                                  label={isAr ? "أرشفة" : "Archive year"}
+                                  disabled={saving}
+                                  onClick={() => void runAction(row.id, "archive")}
+                                >
+                                  <Archive className="h-4 w-4" aria-hidden />
+                                </IconActionButton>
+                              ) : null}
+                            </>
                           )}
                         </div>
                       </td>

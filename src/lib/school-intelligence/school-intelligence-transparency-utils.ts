@@ -10,6 +10,10 @@ import {
   countSectionsByStatus,
   countSlowSignals,
 } from "@/lib/school-intelligence/school-intelligence-page-utils";
+import {
+  buildFinalReadinessDiagnostics,
+  deriveIntelligenceScore,
+} from "@/lib/school-intelligence/school-intelligence-final-readiness";
 
 export type SectionEmptyKind = "no_data" | "failure" | "snapshot";
 
@@ -165,6 +169,7 @@ export const resolveSectionEmptyKind = (
 ): SectionEmptyKind | null => {
   if (sectionStatus === "available") return null;
   if (sectionStatus === "snapshot") return "snapshot";
+  if (sectionStatus === "no_data") return "no_data";
 
   const hasFailure =
     globalStatus === "unavailable" ||
@@ -215,9 +220,9 @@ export const buildSnapshotVisibility = (
 
 export const buildHealthScoreBreakdown = (
   diagnostics?: SchoolIntelligencePageDiagnostics,
-  sectionCounts?: { available: number; snapshot: number; unavailable: number }
+  sectionCounts?: { available: number; snapshot: number; noData: number; unavailable: number }
 ): HealthScoreBreakdown => {
-  const counts = sectionCounts ?? { available: 0, snapshot: 0, unavailable: 0 };
+  const counts = sectionCounts ?? { available: 0, snapshot: 0, noData: 0, unavailable: 0 };
   const slowCount = countSlowSignals(diagnostics);
   const snapshotAvailable = resolveSnapshotAvailable(diagnostics);
   const serviceWarnings = (diagnostics?.warnings ?? []).filter(
@@ -323,12 +328,20 @@ export const resolveTransparentPageState = (
   const snapshotAvailable = resolveSnapshotAvailable(diagnostics);
   const provisionalMap = buildSectionStatusMap(data, apiStatus, snapshotInUse);
   const provisionalCounts = countSectionsByStatus(provisionalMap);
-  const availableSections = provisionalCounts.available + provisionalCounts.snapshot;
+  const availableSections =
+    provisionalCounts.available + provisionalCounts.snapshot + provisionalCounts.noData;
   const hasDiagnostics = Boolean(diagnostics);
   const status = reclassifySystemStatus(apiStatus, availableSections, hasDiagnostics);
   const sectionStatusMap = buildSectionStatusMap(data, status, snapshotInUse);
   const sectionCounts = countSectionsByStatus(sectionStatusMap);
   const healthBreakdown = buildHealthScoreBreakdown(diagnostics, sectionCounts);
+  const intelligenceScore = deriveIntelligenceScore(data, sectionStatusMap);
+  const finalReadiness = buildFinalReadinessDiagnostics({
+    sectionCounts,
+    healthScore: healthBreakdown.total,
+    intelligenceScore,
+    diagnostics,
+  });
   const rootCause = buildRootCauseSummary(diagnostics);
   const snapshotVisibility = buildSnapshotVisibility(diagnostics, data);
   const recoveryHistory = buildRecoveryHistoryFromDiagnostics(diagnostics);
@@ -344,5 +357,7 @@ export const resolveTransparentPageState = (
     rootCause,
     snapshotVisibility,
     recoveryHistory,
+    intelligenceScore,
+    finalReadiness,
   };
 };

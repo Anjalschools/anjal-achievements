@@ -4,10 +4,12 @@ import { actorFromUser } from "@/lib/audit-log-service";
 import { jsonInternalServerError } from "@/lib/api-safe-response";
 import { requireAcademicYearAdmin, requireAcademicYearRead } from "@/lib/academic-years/academic-year-auth";
 import {
+  archiveAcademicYear,
   deleteAcademicYear,
   getAcademicYearById,
   lockAcademicYear,
   setAcademicYearAsCurrent,
+  summarizeAcademicYears,
   unlockAcademicYear,
   updateAcademicYear,
 } from "@/lib/academic-years/academic-year-service";
@@ -61,6 +63,10 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     }
     if (action === "unlock") {
       const item = await unlockAcademicYear({ id, actor, request });
+      return NextResponse.json({ ok: true, item });
+    }
+    if (action === "archive") {
+      const item = await archiveAcademicYear({ id, actor, request });
       return NextResponse.json({ ok: true, item });
     }
 

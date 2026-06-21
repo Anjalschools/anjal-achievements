@@ -7,8 +7,13 @@ import SchoolIntelligenceAdminActions from "@/components/school-intelligence/Sch
 import SchoolIntelligenceDiagnosticExpander from "@/components/school-intelligence/SchoolIntelligenceDiagnosticExpander";
 import SchoolIntelligenceDiagnosticsSummary from "@/components/school-intelligence/SchoolIntelligenceDiagnosticsSummary";
 import SchoolIntelligenceEmptyState from "@/components/school-intelligence/SchoolIntelligenceEmptyState";
+import SchoolIntelligenceExecutiveSummaryPanel from "@/components/school-intelligence/SchoolIntelligenceExecutiveSummaryPanel";
+import SchoolIntelligenceFinalReadinessPanel from "@/components/school-intelligence/SchoolIntelligenceFinalReadinessPanel";
 import SchoolIntelligenceFirstFailurePanel from "@/components/school-intelligence/SchoolIntelligenceFirstFailurePanel";
+import SchoolIntelligenceGlossaryPanel from "@/components/school-intelligence/SchoolIntelligenceGlossaryPanel";
 import SchoolIntelligenceHealthBreakdown from "@/components/school-intelligence/SchoolIntelligenceHealthBreakdown";
+import SchoolIntelligenceMetricHelp from "@/components/school-intelligence/SchoolIntelligenceMetricHelp";
+import SchoolIntelligenceProductionCertificationPanel from "@/components/school-intelligence/SchoolIntelligenceProductionCertificationPanel";
 import SchoolIntelligenceRecoveryHistory from "@/components/school-intelligence/SchoolIntelligenceRecoveryHistory";
 import SchoolIntelligenceRootCausePanel from "@/components/school-intelligence/SchoolIntelligenceRootCausePanel";
 import SchoolIntelligenceSectionCard from "@/components/school-intelligence/SchoolIntelligenceSectionCard";
@@ -22,11 +27,18 @@ import type {
   SchoolIntelligencePageDiagnostics,
 } from "@/lib/school-intelligence/school-intelligence-page-types";
 import {
-  deriveDisplayScoresFromDiagnostics,
   parseSchoolIntelligenceResponse,
   resolveDataSource,
   resolveLastSuccessfulUpdate,
 } from "@/lib/school-intelligence/school-intelligence-page-utils";
+import { TALENT_DISCOVERY_NO_DATA_MESSAGE } from "@/lib/school-intelligence/school-intelligence-glossary";
+import {
+  interpretHealthScore,
+  interpretIntelligenceScore,
+  interpretParticipationRate,
+  interpretSsi,
+  interpretationToneClass,
+} from "@/lib/school-intelligence/school-intelligence-metric-interpretation";
 import type { SchoolIntelligencePayload } from "@/lib/school-intelligence/school-intelligence-types";
 import {
   mergeRecoveryHistoryWithMonitoring,
@@ -75,12 +87,9 @@ const SchoolIntelligencePage = () => {
     snapshotVisibility,
     snapshotAvailable,
     recoveryHistory: diagnosticsRecovery,
+    intelligenceScore,
+    finalReadiness,
   } = transparency;
-
-  const displayScores = useMemo(
-    () => deriveDisplayScoresFromDiagnostics(diagnostics),
-    [diagnostics]
-  );
 
   const recoveryHistory = useMemo(
     () => mergeRecoveryHistoryWithMonitoring(diagnosticsRecovery, monitoringRecovery),
@@ -176,6 +185,17 @@ const SchoolIntelligencePage = () => {
     Boolean(data) &&
     (data!.schoolExcellence.excellenceIndex > 0 || data!.studentSuccessGraph.totalNodes > 0);
 
+  const avgSsiInterpretation = data
+    ? interpretSsi(data.studentSuccessGraph.avgSuccessIndex)
+    : null;
+  const participationInterpretation = data
+    ? interpretParticipationRate(data.schoolExcellence.participationRatePct)
+    : null;
+  const healthInterpretation = interpretHealthScore(healthBreakdown.total);
+  const intelligenceInterpretation = interpretIntelligenceScore(
+    diagnostics?.finalReadiness?.intelligenceScore ?? intelligenceScore
+  );
+
   const showTransparencyPanels = !loading && Boolean(diagnostics || data);
 
   return (
@@ -190,6 +210,13 @@ const SchoolIntelligencePage = () => {
       />
 
       <div className="mb-4 flex flex-wrap items-center gap-2">
+        <SchoolIntelligenceGlossaryPanel isAr={isAr} />
+        {diagnostics?.finalReadiness?.certificationStatus === "CERTIFIED_PRODUCTION_READY" ? (
+          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-600 px-3 py-1 text-xs font-bold text-white">
+            <Shield className="h-3 w-3" aria-hidden />
+            {isAr ? "✔ معتمد للإنتاج" : "✔ Production Certified"}
+          </span>
+        ) : null}
         <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-800 ring-1 ring-emerald-200">
           <Shield className="h-3 w-3" aria-hidden />
           {isAr ? "قراءة فقط — بلا تعديل للبيانات" : "Read-only — no data mutation"}
@@ -246,6 +273,18 @@ const SchoolIntelligencePage = () => {
           <SchoolIntelligenceSectionHealthTable isAr={isAr} sectionStatusMap={sectionStatusMap} />
           <SchoolIntelligenceSnapshotVisibility isAr={isAr} snapshot={snapshotVisibility} />
           <SchoolIntelligenceHealthBreakdown isAr={isAr} breakdown={healthBreakdown} />
+          <SchoolIntelligenceProductionCertificationPanel
+            isAr={isAr}
+            readiness={diagnostics?.finalReadiness ?? finalReadiness}
+          />
+          <SchoolIntelligenceExecutiveSummaryPanel
+            isAr={isAr}
+            summary={diagnostics?.executiveSummary}
+          />
+          <SchoolIntelligenceFinalReadinessPanel
+            isAr={isAr}
+            readiness={diagnostics?.finalReadiness ?? finalReadiness}
+          />
           <SchoolIntelligenceRecoveryHistory isAr={isAr} recovery={recoveryHistory} />
         </>
       ) : null}
@@ -268,8 +307,9 @@ const SchoolIntelligencePage = () => {
             isAr={isAr}
             diagnostics={diagnostics}
             healthScore={healthBreakdown.total}
-            resilienceScore={displayScores.resilienceScore}
-            availableSections={sectionCounts.available + sectionCounts.snapshot}
+            intelligenceScore={diagnostics?.finalReadiness?.intelligenceScore ?? intelligenceScore}
+            availableSections={sectionCounts.available + sectionCounts.snapshot + sectionCounts.noData}
+            noDataSections={sectionCounts.noData}
             unavailableSections={sectionCounts.unavailable}
           />
         </div>
@@ -294,25 +334,63 @@ const SchoolIntelligencePage = () => {
           >
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
               <div className="rounded-2xl border border-border/70 p-4">
-                <p className="text-xs text-text-light">{isAr ? "تميز المدرسة" : "School excellence"}</p>
+                <p className="inline-flex items-center gap-1 text-xs text-text-light">
+                  {isAr ? "تميز المدرسة" : "School excellence"}
+                  <SchoolIntelligenceMetricHelp isAr={isAr} metricKey="school_excellence" />
+                </p>
                 <p className="text-3xl font-black text-emerald-700">{data.schoolExcellence.excellenceIndex}</p>
               </div>
               {[
                 {
                   label: isAr ? "مؤشر نجاح الطلاب" : "Avg student success",
                   value: data.studentSuccessGraph.avgSuccessIndex,
+                  helpKey: "ssi" as const,
                 },
                 {
                   label: isAr ? "معدل المشاركة" : "Participation rate",
                   value: `${data.schoolExcellence.participationRatePct}%`,
+                  helpKey: "participation_rate" as const,
                 },
-                { label: isAr ? "تدخلات" : "Interventions", value: data.interventions.length },
+                {
+                  label: isAr ? "تدخلات" : "Interventions",
+                  value: data.interventions.length,
+                  helpKey: "intervention_engine" as const,
+                },
               ].map((card) => (
                 <div key={card.label} className="rounded-2xl border border-border/70 p-4">
-                  <p className="text-xs text-text-light">{card.label}</p>
+                  <p className="inline-flex items-center gap-1 text-xs text-text-light">
+                    {card.label}
+                    <SchoolIntelligenceMetricHelp isAr={isAr} metricKey={card.helpKey} />
+                  </p>
                   <p className="text-2xl font-black">{card.value}</p>
+                  {card.label.includes(isAr ? "نجاح" : "success") && avgSsiInterpretation ? (
+                    <p className={`mt-1 text-xs font-medium ${interpretationToneClass(avgSsiInterpretation.tone)}`}>
+                      {isAr ? avgSsiInterpretation.labelAr : avgSsiInterpretation.labelEn}
+                    </p>
+                  ) : null}
+                  {card.label.includes(isAr ? "المشاركة" : "Participation") && participationInterpretation ? (
+                    <p
+                      className={`mt-1 text-xs font-medium ${interpretationToneClass(participationInterpretation.tone)}`}
+                    >
+                      {isAr ? participationInterpretation.labelAr : participationInterpretation.labelEn}
+                    </p>
+                  ) : null}
                 </div>
               ))}
+            </div>
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              <div className="rounded-xl border border-border/60 bg-muted/20 px-3 py-2 text-xs">
+                <span className="font-semibold">{isAr ? "تفسير مؤشر الصحة:" : "Health score interpretation:"}</span>{" "}
+                <span className={interpretationToneClass(healthInterpretation.tone)}>
+                  {isAr ? healthInterpretation.labelAr : healthInterpretation.labelEn}
+                </span>
+              </div>
+              <div className="rounded-xl border border-border/60 bg-muted/20 px-3 py-2 text-xs">
+                <span className="font-semibold">{isAr ? "تفسير مؤشر الذكاء:" : "Intelligence score interpretation:"}</span>{" "}
+                <span className={interpretationToneClass(intelligenceInterpretation.tone)}>
+                  {isAr ? intelligenceInterpretation.labelAr : intelligenceInterpretation.labelEn}
+                </span>
+              </div>
             </div>
           </SchoolIntelligenceSectionCard>
 
@@ -322,6 +400,7 @@ const SchoolIntelligencePage = () => {
               <span className="flex items-center gap-2">
                 <GraduationCap className="h-4 w-4" aria-hidden />
                 {isAr ? "رؤى استراتيجية" : "Strategic insights"}
+                <SchoolIntelligenceMetricHelp isAr={isAr} metricKey="intelligence_score" />
               </span>
             }
             sectionStatus={sectionStatusMap.strategic_insights}
@@ -342,7 +421,12 @@ const SchoolIntelligencePage = () => {
           <div className="grid gap-4 lg:grid-cols-2">
             <SchoolIntelligenceSectionCard
               isAr={isAr}
-              title={isAr ? "نجاح الطلاب (SSI)" : "Student success (SSI)"}
+              title={
+              <span className="inline-flex items-center gap-2">
+                {isAr ? "نجاح الطلاب (SSI)" : "Student success (SSI)"}
+                <SchoolIntelligenceMetricHelp isAr={isAr} metricKey="ssi" />
+              </span>
+            }
               sectionStatus={sectionStatusMap.student_success}
               globalStatus={status}
               diagnostics={diagnostics}
@@ -372,7 +456,12 @@ const SchoolIntelligencePage = () => {
 
             <SchoolIntelligenceSectionCard
               isAr={isAr}
-              title={isAr ? "تميز الأقسام والمسارات" : "Department excellence"}
+              title={
+              <span className="inline-flex items-center gap-2">
+                {isAr ? "تميز الأقسام والمسارات" : "Department excellence"}
+                <SchoolIntelligenceMetricHelp isAr={isAr} metricKey="department_excellence" />
+              </span>
+            }
               sectionStatus={sectionStatusMap.department_excellence}
               globalStatus={status}
               diagnostics={diagnostics}
@@ -392,11 +481,20 @@ const SchoolIntelligencePage = () => {
           <div className="grid gap-4 lg:grid-cols-2">
             <SchoolIntelligenceSectionCard
               isAr={isAr}
-              title={isAr ? "اكتشاف المواهب" : "Talent discovery"}
-              sectionStatus={sectionStatusMap.talent_discovery}
-              globalStatus={status}
-              diagnostics={diagnostics}
-              hasData={data.talentDiscovery.length > 0}
+            title={
+              <span className="inline-flex items-center gap-2">
+                {isAr ? "اكتشاف المواهب" : "Talent discovery"}
+                <SchoolIntelligenceMetricHelp isAr={isAr} metricKey="talent_discovery" />
+              </span>
+            }
+            sectionStatus={sectionStatusMap.talent_discovery}
+            globalStatus={status}
+            diagnostics={diagnostics}
+            hasData={data.talentDiscovery.length > 0}
+            emptyTitle={isAr ? "لا توجد بيانات كافية" : "Insufficient data"}
+            emptyDescription={
+              isAr ? TALENT_DISCOVERY_NO_DATA_MESSAGE.ar : TALENT_DISCOVERY_NO_DATA_MESSAGE.en
+            }
             >
               <ul className="divide-y divide-border/60 text-sm">
                 {data.talentDiscovery.slice(0, 10).map((row) => (
@@ -410,7 +508,12 @@ const SchoolIntelligencePage = () => {
 
             <SchoolIntelligenceSectionCard
               isAr={isAr}
-              title={isAr ? "محرك التدخل" : "Intervention engine"}
+              title={
+              <span className="inline-flex items-center gap-2">
+                {isAr ? "محرك التدخل" : "Intervention engine"}
+                <SchoolIntelligenceMetricHelp isAr={isAr} metricKey="intervention_engine" />
+              </span>
+            }
               sectionStatus={sectionStatusMap.interventions}
               globalStatus={status}
               diagnostics={diagnostics}
@@ -430,7 +533,12 @@ const SchoolIntelligencePage = () => {
           <div className="grid gap-4 lg:grid-cols-2">
             <SchoolIntelligenceSectionCard
               isAr={isAr}
-              title={isAr ? "خريطة الفرص" : "Opportunity mapping"}
+              title={
+              <span className="inline-flex items-center gap-2">
+                {isAr ? "خريطة الفرص" : "Opportunity mapping"}
+                <SchoolIntelligenceMetricHelp isAr={isAr} metricKey="opportunity_map" />
+              </span>
+            }
               sectionStatus={sectionStatusMap.opportunity_mapping}
               globalStatus={status}
               diagnostics={diagnostics}
@@ -448,7 +556,12 @@ const SchoolIntelligencePage = () => {
 
             <SchoolIntelligenceSectionCard
               isAr={isAr}
-              title={isAr ? "النمو الطولي" : "Growth tracking"}
+              title={
+              <span className="inline-flex items-center gap-2">
+                {isAr ? "النمو الطولي" : "Growth tracking"}
+                <SchoolIntelligenceMetricHelp isAr={isAr} metricKey="longitudinal_growth" />
+              </span>
+            }
               sectionStatus={sectionStatusMap.longitudinal_growth}
               globalStatus={status}
               diagnostics={diagnostics}

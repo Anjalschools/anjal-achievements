@@ -37,7 +37,7 @@ describe("school intelligence execution chain audit", () => {
     const page = await fs.readFile("src/app/(app)/admin/school-intelligence/page.tsx", "utf8");
     expect(boot).toContain("[SchoolIntelligence] using optimized intelligence path");
     expect(boot).toContain("[SchoolIntelligence] snapshot fallback enabled");
-    expect(boot).toContain('SCHOOL_INTELLIGENCE_RUNTIME_VERSION = "10.3.3.D"');
+    expect(boot).toContain('SCHOOL_INTELLIGENCE_RUNTIME_VERSION = "10.3.3.D.13"');
     expect(route).toContain("[SchoolIntelligence Route Active]");
     expect(route).toContain("runtimeVersion");
     expect(page).toContain("parseSchoolIntelligenceResponse");

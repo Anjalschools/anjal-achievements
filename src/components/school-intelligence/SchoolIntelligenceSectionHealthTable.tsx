@@ -12,12 +12,14 @@ type SchoolIntelligenceSectionHealthTableProps = {
 const statusIcon = (status: SchoolIntelligenceSectionStatus) => {
   if (status === "available") return <CheckCircle2 className="h-4 w-4 text-emerald-600" aria-hidden />;
   if (status === "snapshot") return <AlertTriangle className="h-4 w-4 text-blue-600" aria-hidden />;
+  if (status === "no_data") return <AlertTriangle className="h-4 w-4 text-slate-500" aria-hidden />;
   return <XCircle className="h-4 w-4 text-amber-600" aria-hidden />;
 };
 
 const statusText = (status: SchoolIntelligenceSectionStatus, isAr: boolean) => {
   if (status === "available") return isAr ? "متاح" : "Available";
   if (status === "snapshot") return isAr ? "نسخة محفوظة" : "Snapshot";
+  if (status === "no_data") return isAr ? "لا توجد بيانات كافية" : "Insufficient data";
   return isAr ? "غير متاح" : "Unavailable";
 };
 

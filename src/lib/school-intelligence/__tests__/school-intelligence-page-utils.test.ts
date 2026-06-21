@@ -84,8 +84,16 @@ describe("school-intelligence-page-utils", () => {
     expect(scores.resilienceScore).toBeGreaterThan(0);
   });
 
-  it("marks empty sections unavailable", () => {
+  it("marks empty talent discovery as no_data when the graph is healthy", () => {
     expect(resolveSectionStatus("talent_discovery", emptyPayload(), "success", false)).toBe("unavailable");
+    expect(
+      resolveSectionStatus(
+        "talent_discovery",
+        { ...emptyPayload(), studentSuccessGraph: { totalNodes: 12, avgSuccessIndex: 50, topStudents: [] } } as SchoolIntelligencePayload,
+        "success",
+        false
+      )
+    ).toBe("no_data");
   });
 
   it("marks populated sections snapshot when degraded with fallback", () => {

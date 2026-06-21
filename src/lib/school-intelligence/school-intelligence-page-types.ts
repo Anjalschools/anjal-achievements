@@ -6,6 +6,8 @@ import type {
   SchoolIntelligenceQuerySourceMapEntry,
   SchoolIntelligenceSnapshotPayloadTrace,
   SchoolIntelligenceSnapshotPolicyDiagnostics,
+  TalentDiscoveryDiagnostics,
+  SchoolIntelligenceFinalReadinessDiagnostics,
 } from "@/lib/school-intelligence/school-intelligence-diagnostics-types";
 
 export type SchoolIntelligenceBuildStatus = "success" | "degraded" | "unavailable";
@@ -37,6 +39,13 @@ export type SchoolIntelligencePageDiagnostics = {
   bsonSerializationTraces?: SchoolIntelligenceBsonSerializationTrace[];
   snapshotPayloadTrace?: SchoolIntelligenceSnapshotPayloadTrace;
   snapshotPolicy?: SchoolIntelligenceSnapshotPolicyDiagnostics[];
+  talentDiscovery?: TalentDiscoveryDiagnostics;
+  finalReadiness?: SchoolIntelligenceFinalReadinessDiagnostics;
+  executiveSummary?: import("@/lib/school-intelligence/school-intelligence-executive-summary").SchoolIntelligenceExecutiveSummary;
+  sectionReports?: Partial<Record<SchoolIntelligenceSectionKey, { status: SchoolIntelligenceSectionStatus }>>;
+  snapshotDiagnostics?: import("@/lib/school-intelligence/school-intelligence-diagnostics-schema").SchoolIntelligenceSnapshotDiagnostics;
+  schemaVersion?: string;
+  schemaPolicy?: string;
 };
 
 export type SectionEmptyKind = "no_data" | "failure" | "snapshot";
@@ -68,4 +77,10 @@ export type SchoolIntelligenceSectionKey =
   | "opportunity_mapping"
   | "longitudinal_growth";
 
-export type SchoolIntelligenceSectionStatus = "available" | "snapshot" | "unavailable";
+export type SchoolIntelligenceSectionStatus = "available" | "snapshot" | "no_data" | "unavailable";
+
+export type {
+  SchoolIntelligenceFinalReadinessDiagnostics,
+  TalentDiscoveryDiagnostics,
+  SchoolIntelligenceExecutiveSummary,
+} from "@/lib/school-intelligence/school-intelligence-diagnostics-types";

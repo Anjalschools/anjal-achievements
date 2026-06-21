@@ -9,6 +9,10 @@ import Link from "next/link";
 import TrainingApplicationStatusBadge from "@/components/partnerships/TrainingApplicationStatusBadge";
 import type { StudentTrainingDashboardContext } from "@/lib/partnerships/partnerships-student-dashboard-context";
 import { Briefcase, HelpCircle, Loader2, Mail, Plus, Send, X } from "lucide-react";
+import PartnershipMessageBubble, {
+  type PartnershipMessageBubbleRow,
+} from "@/components/partnerships/PartnershipMessageBubble";
+import PartnershipMessageCenterEmptyState from "@/components/partnerships/PartnershipMessageCenterEmptyState";
 
 type ThreadRow = {
   id: string;
@@ -22,14 +26,7 @@ type ThreadRow = {
   inquiryType?: string | null;
 };
 
-type MessageRow = {
-  id: string;
-  senderRole: string;
-  body: string;
-  templateKey: string | null;
-  createdAt: string | null;
-  isMine: boolean;
-};
+type MessageRow = PartnershipMessageBubbleRow;
 
 type InquiryContext = {
   allowedInquiryTypes: string[];
@@ -300,10 +297,8 @@ const SummerTrainingMessagesPage = () => {
 
         <SectionCard className="min-h-[420px] flex-1">
           {!activeId ? (
-            <div className="flex flex-col items-center justify-center gap-4 py-12 text-center sm:py-16">
-              <p className="text-slate-500">
-                {isAr ? "اختر محادثة لعرض الرسائل." : "Select a thread to view messages."}
-              </p>
+            <div className="flex flex-col items-center gap-4">
+              <PartnershipMessageCenterEmptyState isAr={isAr} />
               {threads.length === 0 ? (
                 <button
                   type="button"
@@ -319,19 +314,18 @@ const SummerTrainingMessagesPage = () => {
             <>
               <div className="mb-4 max-h-[50vh] space-y-3 overflow-y-auto">
                 {messages.map((msg) => (
-                  <div
+                  <PartnershipMessageBubble
                     key={msg.id}
-                    className={`max-w-[85%] rounded-2xl px-4 py-2 text-sm ${
-                      msg.isMine ? "ms-auto bg-primary/10 text-slate-900" : "bg-slate-100 text-slate-800"
-                    }`}
-                  >
-                    <p className="whitespace-pre-wrap">{msg.body}</p>
-                    {msg.createdAt ? (
-                      <p className="mt-1 text-[10px] text-slate-500">
-                        {new Date(msg.createdAt).toLocaleString(isAr ? "ar-SA" : "en-GB")}
-                      </p>
-                    ) : null}
-                  </div>
+                    message={msg}
+                    isAr={isAr}
+                    align={msg.isMine ? "end" : "start"}
+                    bubbleClassName={
+                      msg.isMine ? "bg-primary/10 text-slate-900" : "bg-slate-100 text-slate-800"
+                    }
+                    onUpdated={(updated) =>
+                      setMessages((prev) => prev.map((row) => (row.id === updated.id ? updated : row)))
+                    }
+                  />
                 ))}
               </div>
               <div className="flex gap-2 border-t border-slate-100 pt-4">

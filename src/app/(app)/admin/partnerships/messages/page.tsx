@@ -11,6 +11,10 @@ import {
   PARTNERSHIP_MESSAGE_TEMPLATES,
 } from "@/lib/partnerships/partnerships-messaging-constants";
 import { Loader2, Mail, Send, Users } from "lucide-react";
+import PartnershipMessageBubble, {
+  type PartnershipMessageBubbleRow,
+} from "@/components/partnerships/PartnershipMessageBubble";
+import PartnershipMessageCenterEmptyState from "@/components/partnerships/PartnershipMessageCenterEmptyState";
 
 type ThreadRow = {
   id: string;
@@ -23,14 +27,7 @@ type ThreadRow = {
   unreadCount: number;
 };
 
-type MessageRow = {
-  id: string;
-  senderRole: string;
-  body: string;
-  templateKey: string | null;
-  createdAt: string | null;
-  isMine: boolean;
-};
+type MessageRow = PartnershipMessageBubbleRow;
 
 type OpportunityOption = { id: string; title: string };
 
@@ -291,9 +288,7 @@ const PartnershipsMessagesAdminPage = () => {
 
         <SectionCard className="min-h-[420px] flex-1">
           {!activeId ? (
-            <p className="py-16 text-center text-slate-500">
-              {isAr ? "اختر محادثة." : "Select a thread."}
-            </p>
+            <PartnershipMessageCenterEmptyState isAr={isAr} />
           ) : (
             <>
               <div className="mb-3">
@@ -315,16 +310,18 @@ const PartnershipsMessagesAdminPage = () => {
               </div>
               <div className="mb-4 max-h-[45vh] space-y-3 overflow-y-auto">
                 {messages.map((msg) => (
-                  <div
+                  <PartnershipMessageBubble
                     key={msg.id}
-                    className={`max-w-[85%] rounded-2xl px-4 py-2 text-sm ${
-                      msg.senderRole === "supervisor"
-                        ? "ms-auto bg-primary/10"
-                        : "bg-slate-100"
-                    }`}
-                  >
-                    <p className="whitespace-pre-wrap">{msg.body}</p>
-                  </div>
+                    message={msg}
+                    isAr={isAr}
+                    align={msg.senderRole === "supervisor" ? "end" : "start"}
+                    bubbleClassName={
+                      msg.senderRole === "supervisor" ? "bg-primary/10" : "bg-slate-100"
+                    }
+                    onUpdated={(updated) =>
+                      setMessages((prev) => prev.map((row) => (row.id === updated.id ? updated : row)))
+                    }
+                  />
                 ))}
               </div>
               <div className="flex gap-2 border-t border-slate-100 pt-4">

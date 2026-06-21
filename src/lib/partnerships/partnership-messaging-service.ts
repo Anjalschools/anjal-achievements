@@ -11,6 +11,11 @@ import {
   notifySupervisorTrainingMessage,
 } from "@/lib/partnerships/partnerships-training-notifications";
 import {
+  enrichMessagePermissions,
+  recordPartnershipMessageSent,
+  serializePartnershipMessageRow,
+} from "@/lib/partnerships/partnership-message-mutation-service";
+import {
   PARTNERSHIP_MESSAGE_TEMPLATE_LABELS,
   type PartnershipBulkTarget,
   type PartnershipMessageTemplateKey,
@@ -123,6 +128,14 @@ export const sendPartnershipMessage = async (input: {
     body,
     templateKey,
     metadata: templateKey ? { templateKey } : undefined,
+  });
+
+  await recordPartnershipMessageSent({
+    messageId: message._id,
+    threadId: thread._id,
+    actorId: input.senderId,
+    actorRole: input.senderRole === "student" ? "student" : String(input.senderRole),
+    metadata: { applicationId: String(application._id), templateKey: templateKey || null },
   });
 
   const notifyUserId =
@@ -325,6 +338,14 @@ export const sendPartnershipThreadMessage = async (input: {
     body,
   });
 
+  await recordPartnershipMessageSent({
+    messageId: message._id,
+    threadId: thread._id,
+    actorId: input.senderId,
+    actorRole: input.senderRole === "student" ? "student" : String(input.senderRole),
+    metadata: { threadId: String(thread._id) },
+  });
+
   if (input.senderRole === "supervisor") {
     await notifyStudentSupervisorReply({
       studentId: thread.studentId,
@@ -398,13 +419,12 @@ export const listPartnershipThreadMessages = async (input: {
       applicationId: thread.applicationId ? String(thread.applicationId) : "",
       threadKind: thread.threadKind || "application",
     },
-    items: messages.map((row) => ({
-      id: String(row._id),
-      senderRole: row.senderRole,
-      body: row.body,
-      templateKey: row.templateKey || null,
-      createdAt: row.createdAt ? new Date(row.createdAt).toISOString() : null,
-      isMine: String(row.senderId) === String(input.userId),
-    })),
+    items: messages.map((row) =>
+      enrichMessagePermissions(serializePartnershipMessageRow(row, input.userId), {
+        role: input.role,
+        senderId: String(row.senderId),
+        userId: input.userId,
+      })
+    ),
   };
 };

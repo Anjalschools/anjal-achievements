@@ -1,6 +1,12 @@
 import mongoose, { Document, Model, Schema, Types } from "mongoose";
 import { PARTNERSHIP_MESSAGE_TEMPLATES } from "@/lib/partnerships/partnerships-messaging-constants";
 
+export type PartnershipMessageEditHistoryEntry = {
+  previousContent: string;
+  editedAt: Date;
+  editedBy: Types.ObjectId;
+};
+
 export interface IPartnershipMessage extends Document {
   threadId: Types.ObjectId;
   senderId: Types.ObjectId;
@@ -8,9 +14,25 @@ export interface IPartnershipMessage extends Document {
   body: string;
   templateKey?: (typeof PARTNERSHIP_MESSAGE_TEMPLATES)[number];
   metadata?: Record<string, unknown>;
+  editedAt?: Date;
+  editedBy?: Types.ObjectId;
+  isEdited?: boolean;
+  editHistory?: PartnershipMessageEditHistoryEntry[];
+  isDeleted?: boolean;
+  deletedAt?: Date;
+  deletedBy?: Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
 }
+
+const EditHistorySchema = new Schema<PartnershipMessageEditHistoryEntry>(
+  {
+    previousContent: { type: String, required: true, maxlength: 8000 },
+    editedAt: { type: Date, required: true },
+    editedBy: { type: Schema.Types.ObjectId, ref: "User", required: true },
+  },
+  { _id: false }
+);
 
 const PartnershipMessageSchema = new Schema<IPartnershipMessage>(
   {
@@ -20,6 +42,13 @@ const PartnershipMessageSchema = new Schema<IPartnershipMessage>(
     body: { type: String, required: true, trim: true, maxlength: 8000 },
     templateKey: { type: String, enum: PARTNERSHIP_MESSAGE_TEMPLATES, sparse: true, index: true },
     metadata: { type: Schema.Types.Mixed },
+    editedAt: { type: Date },
+    editedBy: { type: Schema.Types.ObjectId, ref: "User" },
+    isEdited: { type: Boolean, default: false },
+    editHistory: { type: [EditHistorySchema], default: undefined },
+    isDeleted: { type: Boolean, default: false, index: true },
+    deletedAt: { type: Date },
+    deletedBy: { type: Schema.Types.ObjectId, ref: "User" },
   },
   { timestamps: true }
 );

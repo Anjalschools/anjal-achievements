@@ -16,7 +16,10 @@ import {
   ADMINISTRATIVELY_CANCELLED_STATUS,
   ADMIN_TRAINING_CANCEL_REASONS,
 } from "@/lib/partnerships/partnerships-admin-cancel-constants";
-import { ArrowLeft, Loader2 } from "lucide-react";
+import { ArrowLeft, BarChart3, FileDown, FileSpreadsheet, Loader2, Printer } from "lucide-react";
+import InstitutionApplicantStatsModal from "@/components/partnerships/InstitutionApplicantStatsModal";
+import IconActionButton from "@/components/ui/IconActionButton";
+import { exportTrainingApplicationsTable } from "@/lib/partnerships/training-applications-table-export";
 
 type ApplicationRow = {
   id: string;
@@ -92,6 +95,11 @@ const PartnershipsApplicationsAdminPage = () => {
   const [cancelReasonCode, setCancelReasonCode] = useState<string>(ADMIN_TRAINING_CANCEL_REASONS[0].code);
   const [cancelReasonNote, setCancelReasonNote] = useState("");
   const [cancelling, setCancelling] = useState(false);
+  const [yearRecords, setYearRecords] = useState<
+    Array<{ id: string; label: string; name: string; isCurrent: boolean }>
+  >([]);
+  const [statsOrg, setStatsOrg] = useState<{ id: string; name: string } | null>(null);
+  const [exporting, setExporting] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -135,6 +143,23 @@ const PartnershipsApplicationsAdminPage = () => {
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    void (async () => {
+      const res = await fetch("/api/admin/academic-years", { cache: "no-store" });
+      const json = await res.json().catch(() => ({}));
+      if (res.ok && Array.isArray(json.items)) {
+        setYearRecords(
+          json.items.map((row: { id: string; label: string; name: string; isCurrent: boolean }) => ({
+            id: row.id,
+            label: row.label || row.name,
+            name: row.name,
+            isCurrent: row.isCurrent === true,
+          }))
+        );
+      }
+    })();
+  }, []);
 
   const opportunityOptions = useMemo(() => {
     if (!organizationId) return filterOptions.opportunities;
@@ -223,6 +248,75 @@ const PartnershipsApplicationsAdminPage = () => {
     }
   };
 
+  const resolveSchoolYearId = () => {
+    if (academicYear) {
+      const match = yearRecords.find(
+        (row) => row.label === academicYear || row.name === academicYear
+      );
+      if (match) return match.id;
+    }
+    return yearRecords.find((row) => row.isCurrent)?.id || yearRecords[0]?.id || "";
+  };
+
+  const buildExportRows = () => {
+    const headers = isAr
+      ? ["الطالب", "الصف", "المرحلة", "المدرسة", "المؤسسة", "الفرصة", "الحالة", "العام"]
+      : ["Student", "Grade", "Stage", "School", "Organization", "Opportunity", "Status", "Year"];
+    const rows = items.map((row) => ({
+      [headers[0]]: row.studentSnapshot.fullName,
+      [headers[1]]: row.studentSnapshot.grade,
+      [headers[2]]: stageLabel(row.studentSnapshot.stage, isAr),
+      [headers[3]]: row.studentSnapshot.school || "—",
+      [headers[4]]: row.organizationName,
+      [headers[5]]: row.opportunityTitle,
+      [headers[6]]: trainingApplicationStatusLabel(row.status, isAr),
+      [headers[7]]: row.academicYear,
+    }));
+    return { headers, rows };
+  };
+
+  const handleExportTable = async (format: "xlsx" | "csv") => {
+    setExporting(true);
+    setError(null);
+    try {
+      const { headers, rows } = buildExportRows();
+      await exportTrainingApplicationsTable({
+        headers,
+        rows,
+        filenameBase: `training-applications-${new Date().toISOString().slice(0, 10)}`,
+        format,
+      });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Error");
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const handleExportApprovedPdf = () => {
+    if (!organizationId) {
+      setError(isAr ? "اختر مؤسسة لتصدير كشف المعتمدين." : "Select an organization to export approved students.");
+      return;
+    }
+    const schoolYearId = resolveSchoolYearId();
+    if (!schoolYearId) {
+      setError(isAr ? "تعذر تحديد العام الدراسي." : "Could not resolve school year.");
+      return;
+    }
+    window.open(
+      `/api/training/reports/approved-students?institutionId=${encodeURIComponent(organizationId)}&schoolYearId=${encodeURIComponent(schoolYearId)}`,
+      "_blank",
+      "noopener,noreferrer"
+    );
+  };
+
+  const handlePrint = () => {
+    window.print();
+  };
+
+  const selectedOrganizationName =
+    filterOptions.organizations.find((row) => row.id === organizationId)?.name || "";
+
   const dashboardCards = [
     { key: "total", label: isAr ? "إجمالي الطلبات" : "Total applications", value: dashboard.total, tone: "bg-slate-50 text-slate-900" },
     { key: "underReview", label: isAr ? "قيد المراجعة" : "Under review", value: dashboard.underReview, tone: "bg-amber-50 text-amber-950" },
@@ -233,7 +327,7 @@ const PartnershipsApplicationsAdminPage = () => {
 
   return (
     <PageContainer>
-      <div className="mb-4">
+      <div className="mb-4 print:hidden">
         <Link
           href="/admin/partnerships"
           className="inline-flex items-center gap-2 text-sm font-semibold text-primary hover:underline"
@@ -252,7 +346,7 @@ const PartnershipsApplicationsAdminPage = () => {
         }
       />
 
-      <div className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+      <div className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5 print:hidden">
         {dashboardCards.map((card) => (
           <div key={card.key} className={`rounded-2xl border border-border/70 p-4 shadow-sm ${card.tone}`}>
             <p className="text-xs font-semibold opacity-80">{card.label}</p>
@@ -261,7 +355,7 @@ const PartnershipsApplicationsAdminPage = () => {
         ))}
       </div>
 
-      <SectionCard className="mb-4">
+      <SectionCard className="mb-4 print:hidden">
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           <select
             value={status}
@@ -345,9 +439,62 @@ const PartnershipsApplicationsAdminPage = () => {
             ))}
           </select>
         </div>
+        <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-border/60 pt-4">
+          <IconActionButton
+            label={isAr ? "إحصائيات المؤسسة" : "Institution statistics"}
+            disabled={!organizationId}
+            onClick={() =>
+              setStatsOrg(
+                organizationId
+                  ? { id: organizationId, name: selectedOrganizationName }
+                  : null
+              )
+            }
+          >
+            <BarChart3 className="h-4 w-4 text-primary" aria-hidden />
+          </IconActionButton>
+          <button
+            type="button"
+            onClick={handleExportApprovedPdf}
+            disabled={!organizationId}
+            className="inline-flex items-center gap-1 rounded-xl border border-primary/30 px-3 py-2 text-sm font-bold text-primary disabled:opacity-50"
+            title={isAr ? "تصدير PDF" : "Export PDF"}
+          >
+            <FileDown className="h-4 w-4" aria-hidden />
+            {isAr ? "تصدير PDF" : "Export PDF"}
+          </button>
+          <button
+            type="button"
+            onClick={() => void handleExportTable("xlsx")}
+            disabled={exporting || items.length === 0}
+            className="inline-flex items-center gap-1 rounded-xl border border-border px-3 py-2 text-sm font-bold disabled:opacity-50"
+            title={isAr ? "تصدير Excel" : "Export Excel"}
+          >
+            <FileSpreadsheet className="h-4 w-4" aria-hidden />
+            Excel
+          </button>
+          <button
+            type="button"
+            onClick={() => void handleExportTable("csv")}
+            disabled={exporting || items.length === 0}
+            className="inline-flex items-center gap-1 rounded-xl border border-border px-3 py-2 text-sm font-bold disabled:opacity-50"
+            title={isAr ? "تصدير CSV" : "Export CSV"}
+          >
+            CSV
+          </button>
+          <button
+            type="button"
+            onClick={handlePrint}
+            className="inline-flex items-center gap-1 rounded-xl border border-border px-3 py-2 text-sm font-bold"
+            title={isAr ? "طباعة" : "Print"}
+          >
+            <Printer className="h-4 w-4" aria-hidden />
+            {isAr ? "طباعة" : "Print"}
+          </button>
+        </div>
       </SectionCard>
 
-      <SectionCard className="mb-4">
+      <SectionCard className="mb-4 print:hidden">
         <h2 className="mb-3 text-sm font-bold">{isAr ? "عمليات جماعية" : "Bulk operations"}</h2>
         <div className="flex flex-wrap items-center gap-2">
           <select
@@ -395,7 +542,7 @@ const PartnershipsApplicationsAdminPage = () => {
         </div>
       </SectionCard>
 
-      <SectionCard>
+      <SectionCard id="training-applications-print">
         {loading ? (
           <div className="flex items-center justify-center gap-2 py-10 text-text-light">
             <Loader2 className="h-5 w-5 animate-spin" aria-hidden />
@@ -410,7 +557,7 @@ const PartnershipsApplicationsAdminPage = () => {
             <table className="min-w-full text-sm">
               <thead>
                 <tr className="border-b border-border/70 text-start">
-                  <th className="px-3 py-2">
+                  <th className="px-3 py-2 print:hidden">
                     <input
                       type="checkbox"
                       checked={items.length > 0 && selectedIds.length === items.length}
@@ -426,13 +573,13 @@ const PartnershipsApplicationsAdminPage = () => {
                   <th className="px-3 py-2 font-bold">{isAr ? "العام الدراسي" : "Academic year"}</th>
                   <th className="px-3 py-2 font-bold">{isAr ? "التقديم" : "Submitted"}</th>
                   <th className="px-3 py-2 font-bold">{isAr ? "الحالة" : "Status"}</th>
-                  <th className="px-3 py-2 font-bold">{isAr ? "إجراء" : "Action"}</th>
+                  <th className="px-3 py-2 font-bold print:hidden">{isAr ? "إجراء" : "Action"}</th>
                 </tr>
               </thead>
               <tbody>
                 {items.map((row) => (
                   <tr key={row.id} className="border-b border-border/50">
-                    <td className="px-3 py-3">
+                    <td className="px-3 py-3 print:hidden">
                       <input
                         type="checkbox"
                         checked={selectedIds.includes(row.id)}
@@ -457,7 +604,7 @@ const PartnershipsApplicationsAdminPage = () => {
                         {trainingApplicationStatusLabel(row.status, isAr)}
                       </span>
                     </td>
-                    <td className="px-3 py-3">
+                    <td className="px-3 py-3 print:hidden">
                       <div className="flex flex-wrap items-center gap-2">
                         <Link
                           href={`/admin/partnerships/applications/${row.id}`}
@@ -560,6 +707,15 @@ const PartnershipsApplicationsAdminPage = () => {
           </div>
         </div>
       ) : null}
+
+      <InstitutionApplicantStatsModal
+        organizationId={statsOrg?.id || ""}
+        organizationName={statsOrg?.name || ""}
+        academicYear={academicYear || undefined}
+        isAr={isAr}
+        open={Boolean(statsOrg)}
+        onClose={() => setStatsOrg(null)}
+      />
     </PageContainer>
   );
 };

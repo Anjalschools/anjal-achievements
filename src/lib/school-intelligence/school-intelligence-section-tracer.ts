@@ -7,6 +7,7 @@ import {
 import type { SchoolIntelligenceQuerySourceEntry } from "@/lib/school-intelligence/school-intelligence-query-source-trace";
 import type { SchoolIntelligenceChunkRecoveryDiagnostics } from "@/lib/school-intelligence/school-intelligence-bson-safety";
 import type { SchoolIntelligenceBsonSerializationTrace } from "@/lib/school-intelligence/school-intelligence-bson-serialization-trace";
+import type { TalentDiscoveryDiagnostics } from "@/lib/school-intelligence/talent-discovery";
 import type { SchoolIntelligenceSnapshotPayloadTrace } from "@/lib/school-intelligence/school-intelligence-snapshot-payload-trace";
 import type { SchoolIntelligenceSnapshotPolicyDiagnostics } from "@/lib/school-intelligence/school-intelligence-query-snapshot-policy";
 
@@ -28,6 +29,7 @@ type SchoolIntelligenceBuildTraceStore = {
   bsonSerializationTraces?: SchoolIntelligenceBsonSerializationTrace[];
   snapshotPayloadTrace?: SchoolIntelligenceSnapshotPayloadTrace;
   snapshotPolicy?: SchoolIntelligenceSnapshotPolicyDiagnostics[];
+  talentDiscovery?: TalentDiscoveryDiagnostics;
 };
 
 const storage = new AsyncLocalStorage<SchoolIntelligenceBuildTraceStore>();
@@ -93,6 +95,12 @@ export const recordSchoolIntelligenceSnapshotPolicy = (
   if (!store) return;
   if (!store.snapshotPolicy) store.snapshotPolicy = [];
   store.snapshotPolicy.push(entry);
+};
+
+export const recordSchoolIntelligenceTalentDiscovery = (entry: TalentDiscoveryDiagnostics) => {
+  const store = storage.getStore();
+  if (!store) return;
+  store.talentDiscovery = entry;
 };
 
 const logSectionFailed = (

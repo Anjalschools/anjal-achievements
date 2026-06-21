@@ -284,3 +284,61 @@ export const buildPartnershipAnalyticsSummary = async () => {
     measuredAt: new Date().toISOString(),
   };
 };
+
+const PENDING_STATUSES = new Set([
+  "submitted",
+  "under_review",
+  "institution_review",
+  "awaiting_interview",
+  "awaiting_school_approval",
+]);
+
+export type InstitutionApplicantDashboard = {
+  totalApplicants: number;
+  approved: number;
+  rejected: number;
+  pending: number;
+  acceptanceRatePct: number;
+  schoolsRepresented: number;
+  gradesDistribution: Array<{ grade: string; count: number }>;
+};
+
+export const buildInstitutionApplicantDashboard = async (
+  organizationId: string,
+  academicYear?: string
+): Promise<InstitutionApplicantDashboard> => {
+  const { applications } = await loadOrganizationApplications(organizationId);
+  const scoped = academicYear
+    ? applications.filter((row) => String(row.academicYearLabel || row.academicYear || "") === academicYear)
+    : applications;
+
+  const approved = scoped.filter((row) => ACCEPTED_STATUSES.has(String(row.status))).length;
+  const rejected = scoped.filter((row) => REJECTED_STATUSES.has(String(row.status))).length;
+  const pending = scoped.filter((row) => PENDING_STATUSES.has(String(row.status))).length;
+  const totalApplicants = scoped.filter((row) => String(row.status) !== "withdrawn").length;
+  const decisionPool = approved + rejected;
+
+  const schools = new Set(
+    scoped
+      .map((row) => String(row.studentSnapshot?.school || row.studentSnapshot?.schoolType || "").trim())
+      .filter(Boolean)
+  );
+
+  const gradeCounts = new Map<string, number>();
+  for (const row of scoped) {
+    const grade = String(row.studentSnapshot?.grade || "").trim() || "unknown";
+    gradeCounts.set(grade, (gradeCounts.get(grade) || 0) + 1);
+  }
+
+  return {
+    totalApplicants,
+    approved,
+    rejected,
+    pending,
+    acceptanceRatePct: roundPct(approved, decisionPool),
+    schoolsRepresented: schools.size,
+    gradesDistribution: [...gradeCounts.entries()]
+      .map(([grade, count]) => ({ grade, count }))
+      .sort((a, b) => a.grade.localeCompare(b.grade, "ar")),
+  };
+};

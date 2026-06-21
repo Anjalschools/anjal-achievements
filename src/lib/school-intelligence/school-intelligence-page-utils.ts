@@ -111,10 +111,19 @@ const sectionHasData = (key: SchoolIntelligenceSectionKey, data: SchoolIntellige
 export const resolveSectionStatus = (
   key: SchoolIntelligenceSectionKey,
   data: SchoolIntelligencePayload | null,
-  _globalStatus: SchoolIntelligenceBuildStatus,
+  globalStatus: SchoolIntelligenceBuildStatus,
   snapshotUsed: boolean
 ): SchoolIntelligenceSectionStatus => {
-  if (!data || !sectionHasData(key, data)) return "unavailable";
+  if (!data) return "unavailable";
+
+  if (key === "talent_discovery" && data.talentDiscovery.length === 0) {
+    if (globalStatus !== "unavailable" && data.studentSuccessGraph.totalNodes > 0) {
+      return "no_data";
+    }
+    return "unavailable";
+  }
+
+  if (!sectionHasData(key, data)) return "unavailable";
   if (snapshotUsed) return "snapshot";
   return "available";
 };
@@ -144,12 +153,14 @@ export const countSectionsByStatus = (
 ) => ({
   available: Object.values(map).filter((s) => s === "available").length,
   snapshot: Object.values(map).filter((s) => s === "snapshot").length,
+  noData: Object.values(map).filter((s) => s === "no_data").length,
   unavailable: Object.values(map).filter((s) => s === "unavailable").length,
 });
 
 export const sectionStatusLabel = (status: SchoolIntelligenceSectionStatus, isAr: boolean) => {
   if (status === "available") return isAr ? "متاح" : "Available";
   if (status === "snapshot") return isAr ? "نسخة محفوظة" : "Snapshot";
+  if (status === "no_data") return isAr ? "لا توجد بيانات كافية" : "Insufficient data";
   return isAr ? "غير متاح" : "Unavailable";
 };
 

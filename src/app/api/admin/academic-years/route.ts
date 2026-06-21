@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { actorFromUser } from "@/lib/audit-log-service";
 import { jsonInternalServerError } from "@/lib/api-safe-response";
 import { requireAcademicYearAdmin, requireAcademicYearRead } from "@/lib/academic-years/academic-year-auth";
-import { createAcademicYear, listAcademicYears } from "@/lib/academic-years/academic-year-service";
+import { createAcademicYear, listAcademicYears, summarizeAcademicYears } from "@/lib/academic-years/academic-year-service";
 import { getPromotionPreview } from "@/lib/academic-years/promotion-preview";
 import type { IUser } from "@/models/User";
 
@@ -16,7 +16,12 @@ export async function GET(request: NextRequest) {
   try {
     const includePreview = new URL(request.url).searchParams.get("preview") === "1";
     const items = await listAcademicYears();
-    const payload: Record<string, unknown> = { ok: true, items, canManage: gate.canManage };
+    const payload: Record<string, unknown> = {
+      ok: true,
+      items,
+      canManage: gate.canManage,
+      summary: await summarizeAcademicYears(),
+    };
     if (includePreview && gate.canManage) {
       payload.promotionPreview = await getPromotionPreview();
     }

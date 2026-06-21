@@ -108,13 +108,14 @@ describe("school-intelligence-transparency-utils", () => {
   it("uses distinct empty kinds for failure vs no data", () => {
     expect(resolveSectionEmptyKind("unavailable", "unavailable", { warnings: ["timeout"] })).toBe("failure");
     expect(resolveSectionEmptyKind("unavailable", "success", undefined)).toBe("no_data");
+    expect(resolveSectionEmptyKind("no_data", "success", undefined)).toBe("no_data");
     expect(resolveSectionEmptyKind("snapshot", "degraded", undefined)).toBe("snapshot");
   });
 
   it("builds health score breakdown with deductions", () => {
     const breakdown = buildHealthScoreBreakdown(
       { status: "unavailable", warnings: ["aggregation_slow_or_timeout", "service_down"] },
-      { available: 1, snapshot: 1, unavailable: 6 }
+      { available: 1, snapshot: 1, noData: 0, unavailable: 6 }
     );
     expect(breakdown.total).toBeLessThan(100);
     expect(breakdown.items.length).toBeGreaterThan(0);

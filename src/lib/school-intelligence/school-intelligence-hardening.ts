@@ -21,6 +21,14 @@ import {
   runWithSchoolIntelligenceBuildTrace,
   traceSchoolIntelligenceSnapshotSave,
 } from "@/lib/school-intelligence/school-intelligence-section-tracer";
+import {
+  buildFinalReadinessDiagnostics,
+  deriveIntelligenceScore,
+} from "@/lib/school-intelligence/school-intelligence-final-readiness";
+import { buildSchoolIntelligenceExecutiveSummary } from "@/lib/school-intelligence/school-intelligence-executive-summary";
+import { buildSchoolIntelligenceDiagnosticsSchemaMeta } from "@/lib/school-intelligence/school-intelligence-diagnostics-schema";
+import { buildSectionStatusMap, countSectionsByStatus } from "@/lib/school-intelligence/school-intelligence-page-utils";
+import { buildHealthScoreBreakdown } from "@/lib/school-intelligence/school-intelligence-transparency-utils";
 
 logSchoolIntelligenceBoot();
 
@@ -35,9 +43,28 @@ const withRuntimeMarkers = (
 });
 
 const attachBuildTrace = (
-  diagnostics: SchoolIntelligenceDiagnostics
+  diagnostics: SchoolIntelligenceDiagnostics,
+  intelligence?: SchoolIntelligencePayload
 ): SchoolIntelligenceDiagnostics => {
   const trace = getSchoolIntelligenceBuildTrace();
+  const sectionStatusMap = intelligence
+    ? buildSectionStatusMap(intelligence, diagnostics.status, diagnostics.snapshotFallback)
+    : buildSectionStatusMap(createEmptySchoolIntelligencePayload(), diagnostics.status, diagnostics.snapshotFallback);
+  const sectionCounts = countSectionsByStatus(sectionStatusMap);
+  const healthScore = buildHealthScoreBreakdown(diagnostics, sectionCounts).total;
+  const intelligenceScore = deriveIntelligenceScore(intelligence ?? null, sectionStatusMap);
+  const schemaMeta = buildSchoolIntelligenceDiagnosticsSchemaMeta();
+  const finalReadiness = buildFinalReadinessDiagnostics({
+    sectionCounts,
+    healthScore,
+    intelligenceScore,
+    diagnostics: {
+      ...diagnostics,
+      talentDiscovery: trace.talentDiscovery,
+      snapshotSave: trace.snapshotSave,
+    },
+  });
+
   return {
     ...diagnostics,
     firstFailure: trace.firstFailure,
@@ -47,6 +74,21 @@ const attachBuildTrace = (
     bsonSerializationTraces: trace.bsonSerializationTraces,
     snapshotPayloadTrace: trace.snapshotPayloadTrace,
     snapshotPolicy: trace.snapshotPolicy,
+    talentDiscovery: trace.talentDiscovery,
+    finalReadiness,
+    executiveSummary: intelligence
+      ? buildSchoolIntelligenceExecutiveSummary({ intelligence, readiness: finalReadiness })
+      : undefined,
+    sectionReports: Object.fromEntries(
+      Object.entries(sectionStatusMap).map(([key, status]) => [key, { status }])
+    ),
+    snapshotDiagnostics: {
+      snapshotSave: trace.snapshotSave,
+      snapshotPayloadTrace: trace.snapshotPayloadTrace,
+      snapshotPolicy: trace.snapshotPolicy,
+    },
+    schemaVersion: schemaMeta.schemaVersion,
+    schemaPolicy: schemaMeta.schemaPolicy,
   };
 };
 
@@ -118,7 +160,8 @@ export const buildSchoolIntelligenceNetworkResilient = async (): Promise<SchoolI
             steps,
             warnings: sanitizeClientWarnings(warnings),
             snapshotFallback: false,
-          })
+          }),
+          intelligence
         ),
       };
     } catch (error) {
@@ -157,7 +200,8 @@ export const buildSchoolIntelligenceNetworkResilient = async (): Promise<SchoolI
               messageAr: "تم عرض آخر نسخة ناجحة من البيانات",
               messageEn: "Showing last successful snapshot",
               timeoutSource: message.includes("exceeded") ? "achievement_intelligence" : undefined,
-            })
+            }),
+            cached
           ),
         };
       }
@@ -221,4 +265,11 @@ export const sanitizeSchoolIntelligenceDiagnostics = (
     bsonSerializationTraces: diagnostics.bsonSerializationTraces,
     snapshotPayloadTrace: diagnostics.snapshotPayloadTrace,
     snapshotPolicy: diagnostics.snapshotPolicy,
+    talentDiscovery: diagnostics.talentDiscovery,
+    finalReadiness: diagnostics.finalReadiness,
+    executiveSummary: diagnostics.executiveSummary,
+    sectionReports: diagnostics.sectionReports,
+    snapshotDiagnostics: diagnostics.snapshotDiagnostics,
+    schemaVersion: diagnostics.schemaVersion,
+    schemaPolicy: diagnostics.schemaPolicy,
   });
