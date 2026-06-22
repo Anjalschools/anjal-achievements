@@ -12,6 +12,7 @@ import {
 } from "@/lib/partnerships/partnerships-training-notifications";
 import {
   enrichMessagePermissions,
+  normalizePartnershipSenderId,
   recordPartnershipMessageSent,
   serializePartnershipMessageRow,
 } from "@/lib/partnerships/partnership-message-mutation-service";
@@ -126,9 +127,9 @@ export const sendPartnershipMessage = async (input: {
     senderId: input.senderId,
     senderRole: input.senderRole,
     body,
-    messageType: templateKey ? "system" : "user",
+    messageType: "user",
     templateKey,
-    metadata: templateKey ? { templateKey, automated: true } : undefined,
+    metadata: templateKey ? { templateKey, source: "manual_template" } : undefined,
   });
 
   await recordPartnershipMessageSent({
@@ -422,14 +423,29 @@ export const listPartnershipThreadMessages = async (input: {
       applicationId: thread.applicationId ? String(thread.applicationId) : "",
       threadKind: thread.threadKind || "application",
     },
-    items: messages.map((row) =>
-      enrichMessagePermissions(serializePartnershipMessageRow(row, input.userId), {
+    items: messages.map((row) => {
+      const senderId = normalizePartnershipSenderId(row.senderId);
+      const enriched = enrichMessagePermissions(serializePartnershipMessageRow(row, input.userId), {
         role: input.role,
-        senderId: String(row.senderId),
+        senderId,
         userId: input.userId,
         messageType: row.messageType,
         metadata: row.metadata,
-      })
-    ),
+      });
+      if (process.env.PARTNERSHIP_MESSAGE_DEBUG === "1") {
+        console.info("[partnership-message-permissions]", {
+          messageId: enriched.id,
+          senderId,
+          currentUserId: String(input.userId),
+          role: input.role,
+          messageType: enriched.messageType,
+          isSystem: enriched.isSystem,
+          canEdit: enriched.canEdit,
+          canDelete: enriched.canDelete,
+          canRestore: enriched.canRestore,
+        });
+      }
+      return enriched;
+    }),
   };
 };

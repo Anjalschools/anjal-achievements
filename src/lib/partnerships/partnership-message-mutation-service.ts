@@ -33,10 +33,26 @@ const PARTNERSHIP_MESSAGE_DELETE_ROLE_SET = new Set<string>(PARTNERSHIP_MESSAGE_
 /** @deprecated Use PARTNERSHIP_MESSAGE_EDIT_ROLES */
 export const SUPERVISOR_EDIT_ROLES = PARTNERSHIP_MESSAGE_EDIT_ROLE_SET;
 
+export const PARTNERSHIP_AUTOMATED_MESSAGE_KINDS = new Set(["institution_handoff"]);
+
+export const normalizePartnershipSenderId = (senderId: unknown): string => {
+  if (senderId == null) return "";
+  if (typeof senderId === "string") return senderId;
+  if (typeof senderId === "object" && "_id" in senderId) {
+    return String((senderId as { _id: unknown })._id);
+  }
+  return String(senderId);
+};
+
 const isOwnMessage = (
-  senderId: mongoose.Types.ObjectId | string,
+  senderId: mongoose.Types.ObjectId | string | unknown,
   userId: mongoose.Types.ObjectId | string
-): boolean => String(senderId) === String(userId);
+): boolean => normalizePartnershipSenderId(senderId) === String(userId);
+
+const isLegacyManualTemplateMessage = (metadata?: Record<string, unknown> | null): boolean => {
+  const meta = metadata || {};
+  return Boolean(meta.templateKey) && !meta.kind;
+};
 
 export const canManageOwnPartnershipMessage = (input: {
   role: string;
@@ -54,10 +70,17 @@ export const isPartnershipSystemMessage = (row: {
   messageType?: string | null;
   metadata?: Record<string, unknown> | null;
 }): boolean => {
-  if (row.messageType === "system") return true;
   const meta = row.metadata || {};
+
+  if (isLegacyManualTemplateMessage(meta)) return false;
+
+  if (typeof meta.kind === "string") {
+    const kind = meta.kind.trim();
+    if (kind && PARTNERSHIP_AUTOMATED_MESSAGE_KINDS.has(kind)) return true;
+  }
+
+  if (row.messageType === "system") return true;
   if (meta.automated === true) return true;
-  if (typeof meta.kind === "string" && meta.kind.trim()) return true;
   return false;
 };
 
@@ -187,6 +210,7 @@ export const serializePartnershipMessageRow = (
 
   return {
     id: String(row._id),
+    senderId: normalizePartnershipSenderId(row.senderId),
     senderRole: row.senderRole,
     messageType,
     isSystem,
@@ -198,7 +222,7 @@ export const serializePartnershipMessageRow = (
     isDeleted,
     deletedAt: row.deletedAt ? new Date(row.deletedAt).toISOString() : null,
     canRestore,
-    isMine: String(row.senderId) === String(userId),
+    isMine: isOwnMessage(row.senderId, userId),
     canEdit: false,
     canDelete: false,
   };

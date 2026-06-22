@@ -89,6 +89,26 @@ describe("partnership message mutation permissions", () => {
     expect(isPartnershipSystemMessage({ messageType: "system" })).toBe(true);
     expect(isPartnershipSystemMessage({ metadata: { kind: "institution_handoff" } })).toBe(true);
   });
+
+  it("treats manual template sends as user messages (not system)", () => {
+    const userId = "507f1f77bcf86cd799439011";
+    const legacyTemplateRow = {
+      messageType: "system" as const,
+      metadata: { templateKey: "interview_invite", automated: true },
+    };
+    const newTemplateRow = {
+      messageType: "user" as const,
+      metadata: { templateKey: "interview_invite", source: "manual_template" },
+    };
+    expect(isPartnershipSystemMessage(legacyTemplateRow)).toBe(false);
+    expect(isPartnershipSystemMessage(newTemplateRow)).toBe(false);
+    expect(canEditPartnershipMessage({ role: "admin", senderId: userId, userId, ...legacyTemplateRow })).toBe(
+      true
+    );
+    expect(canEditPartnershipMessage({ role: "partnershipSupervisor", senderId: userId, userId, ...newTemplateRow })).toBe(
+      true
+    );
+  });
 });
 
 describe("partnership supervisor admin navigation", () => {

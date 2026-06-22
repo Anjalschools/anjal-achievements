@@ -5,6 +5,7 @@ import { Loader2, MoreVertical } from "lucide-react";
 
 export type PartnershipMessageBubbleRow = {
   id: string;
+  senderId?: string;
   senderRole: string;
   body: string;
   messageType?: "user" | "system";
