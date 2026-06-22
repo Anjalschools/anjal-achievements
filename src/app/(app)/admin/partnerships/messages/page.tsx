@@ -314,10 +314,8 @@ const PartnershipsMessagesAdminPage = () => {
                     key={msg.id}
                     message={msg}
                     isAr={isAr}
-                    align={msg.senderRole === "supervisor" ? "end" : "start"}
-                    bubbleClassName={
-                      msg.senderRole === "supervisor" ? "bg-primary/10" : "bg-slate-100"
-                    }
+                    align={msg.isMine ? "end" : "start"}
+                    bubbleClassName={msg.isMine ? "bg-primary/10" : "bg-slate-100"}
                     onUpdated={(updated) =>
                       setMessages((prev) => prev.map((row) => (row.id === updated.id ? updated : row)))
                     }

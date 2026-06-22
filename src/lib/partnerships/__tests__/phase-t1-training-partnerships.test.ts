@@ -7,9 +7,13 @@ import {
   canEditPartnershipMessage,
   canRestorePartnershipMessage,
   DELETED_MESSAGE_PLACEHOLDER_AR,
+  enrichMessagePermissions,
   isPartnershipSystemMessage,
+  partnershipUserIdsMatch,
   PARTNERSHIP_MESSAGE_DELETE_UNDO_MS,
+  serializePartnershipMessageRow,
 } from "@/lib/partnerships/partnership-message-mutation-service";
+import mongoose from "mongoose";
 import { isPartnershipSupervisorAllowedAdminPath } from "@/lib/achievement-reviewer-roles";
 
 describe("partnership message mutation permissions", () => {
@@ -96,18 +100,61 @@ describe("partnership message mutation permissions", () => {
       messageType: "system" as const,
       metadata: { templateKey: "interview_invite", automated: true },
     };
+    const legacyTopLevelTemplateRow = {
+      messageType: "system" as const,
+      templateKey: "interview_invite",
+      metadata: { automated: true },
+    };
     const newTemplateRow = {
       messageType: "user" as const,
       metadata: { templateKey: "interview_invite", source: "manual_template" },
     };
     expect(isPartnershipSystemMessage(legacyTemplateRow)).toBe(false);
+    expect(isPartnershipSystemMessage(legacyTopLevelTemplateRow)).toBe(false);
     expect(isPartnershipSystemMessage(newTemplateRow)).toBe(false);
     expect(canEditPartnershipMessage({ role: "admin", senderId: userId, userId, ...legacyTemplateRow })).toBe(
       true
     );
-    expect(canEditPartnershipMessage({ role: "partnershipSupervisor", senderId: userId, userId, ...newTemplateRow })).toBe(
-      true
-    );
+    expect(
+      canEditPartnershipMessage({ role: "partnershipSupervisor", senderId: userId, userId, ...legacyTopLevelTemplateRow })
+    ).toBe(true);
+  });
+
+  it("matches ownership across ObjectId and string ids", () => {
+    const userId = "507f1f77bcf86cd799439011";
+    const objectId = new mongoose.Types.ObjectId(userId);
+    expect(partnershipUserIdsMatch(objectId, userId)).toBe(true);
+    expect(partnershipUserIdsMatch({ _id: objectId }, userId)).toBe(true);
+  });
+
+  it("enriches thread payload with edit/delete for message owner", () => {
+    const userId = new mongoose.Types.ObjectId("507f1f77bcf86cd799439011");
+    const row = {
+      _id: new mongoose.Types.ObjectId(),
+      senderId: userId,
+      senderRole: "supervisor",
+      messageType: "system",
+      templateKey: "interview_invite",
+      metadata: { automated: true },
+      body: "مرحباً",
+      createdAt: new Date(),
+    };
+    const serialized = serializePartnershipMessageRow(row, userId);
+    expect(serialized.isSystem).toBe(false);
+    expect(serialized.messageType).toBe("user");
+
+    const enriched = enrichMessagePermissions(serialized, {
+      role: "admin",
+      senderId: String(userId),
+      userId,
+      messageType: row.messageType,
+      templateKey: row.templateKey,
+      metadata: row.metadata,
+    });
+
+    expect(enriched.canEdit).toBe(true);
+    expect(enriched.canDelete).toBe(true);
+    expect(enriched.canRestore).toBe(false);
   });
 });
 

@@ -18,6 +18,7 @@ import {
 import Notification from "@/models/Notification";
 import {
   enrichMessagePermissions,
+  normalizePartnershipSenderId,
   recordPartnershipMessageSent,
   serializePartnershipMessageRow,
 } from "@/lib/partnerships/partnership-message-mutation-service";
@@ -250,9 +251,10 @@ export const listInstitutionThreadMessages = async (
       items: messages.map((row) =>
         enrichMessagePermissions(serializePartnershipMessageRow(row, userObjectId), {
           role: "trainingInstitution",
-          senderId: String(row.senderId),
+          senderId: normalizePartnershipSenderId(row.senderId),
           userId: userObjectId,
           messageType: row.messageType,
+          templateKey: row.templateKey,
           metadata: row.metadata,
         })
       ),
@@ -288,9 +290,10 @@ export const listInstitutionThreadMessages = async (
     items: messages.map((row) =>
       enrichMessagePermissions(serializePartnershipMessageRow(row, userObjectId), {
         role: "trainingInstitution",
-        senderId: String(row.senderId),
+        senderId: normalizePartnershipSenderId(row.senderId),
         userId: userObjectId,
         messageType: row.messageType,
+        templateKey: row.templateKey,
         metadata: row.metadata,
       })
     ),

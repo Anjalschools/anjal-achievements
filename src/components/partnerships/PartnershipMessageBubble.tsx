@@ -124,11 +124,40 @@ const PartnershipMessageBubble = ({
     }
   };
 
-  const isMineBubble = align === "end" || message.isMine;
-  const showActions =
-    !message.isSystem &&
-    !editing &&
-    (message.canEdit || message.canDelete || message.canRestore);
+  const isMineBubble = align === "end" || message.isMine === true;
+  const canEdit = message.canEdit === true;
+  const canDelete = message.canDelete === true;
+  const canRestore = message.canRestore === true;
+  const showActions = !editing && (canEdit || canDelete || canRestore);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const debugEnabled =
+      process.env.NODE_ENV !== "production" ||
+      window.localStorage.getItem("partnershipMessageDebug") === "1";
+    if (!debugEnabled) return;
+    console.log("[PartnershipMessageBubble]", {
+      id: message.id,
+      canEdit,
+      canDelete,
+      canRestore,
+      showActions,
+      messageType: message.messageType,
+      isSystem: message.isSystem,
+      isMine: message.isMine,
+      senderId: message.senderId,
+    });
+  }, [
+    message.id,
+    message.messageType,
+    message.isSystem,
+    message.isMine,
+    message.senderId,
+    canEdit,
+    canDelete,
+    canRestore,
+    showActions,
+  ]);
 
   return (
     <div
@@ -188,7 +217,7 @@ const PartnershipMessageBubble = ({
               type="button"
               onClick={() => setMenuOpen((open) => !open)}
               disabled={busy}
-              className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-slate-500 opacity-0 transition hover:bg-slate-100 hover:text-slate-800 focus-visible:opacity-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-primary group-hover:opacity-100 group-focus-within:opacity-100 aria-expanded:opacity-100"
+              className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-slate-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-primary"
               aria-label={isAr ? "إجراءات الرسالة" : "Message actions"}
               aria-haspopup="menu"
               aria-expanded={menuOpen}
@@ -203,7 +232,7 @@ const PartnershipMessageBubble = ({
                   isMineBubble ? "left-0" : "right-0"
                 }`}
               >
-                {message.canEdit ? (
+                {canEdit ? (
                   <button
                     type="button"
                     role="menuitem"
@@ -217,7 +246,7 @@ const PartnershipMessageBubble = ({
                     {isAr ? "تعديل" : "Edit"}
                   </button>
                 ) : null}
-                {message.canDelete ? (
+                {canDelete ? (
                   <button
                     type="button"
                     role="menuitem"
@@ -227,7 +256,7 @@ const PartnershipMessageBubble = ({
                     {isAr ? "حذف" : "Delete"}
                   </button>
                 ) : null}
-                {message.canRestore ? (
+                {canRestore ? (
                   <button
                     type="button"
                     role="menuitem"

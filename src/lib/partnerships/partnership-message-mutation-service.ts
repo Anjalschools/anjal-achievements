@@ -37,42 +37,81 @@ export const PARTNERSHIP_AUTOMATED_MESSAGE_KINDS = new Set(["institution_handoff
 
 export const normalizePartnershipSenderId = (senderId: unknown): string => {
   if (senderId == null) return "";
-  if (typeof senderId === "string") return senderId;
-  if (typeof senderId === "object" && "_id" in senderId) {
-    return String((senderId as { _id: unknown })._id);
+  if (typeof senderId === "string") return senderId.trim();
+  if (senderId instanceof mongoose.Types.ObjectId) return senderId.toHexString();
+  if (typeof senderId === "object") {
+    const maybeObjectId = senderId as { toHexString?: () => string; toString?: () => string };
+    if (typeof maybeObjectId.toHexString === "function") {
+      return maybeObjectId.toHexString();
+    }
+    if ("$oid" in senderId) {
+      return String((senderId as { $oid: unknown }).$oid).trim();
+    }
+    if ("_id" in senderId) {
+      return normalizePartnershipSenderId((senderId as { _id: unknown })._id);
+    }
+    if (typeof maybeObjectId.toString === "function") {
+      const value = maybeObjectId.toString();
+      if (value && value !== "[object Object]") return value;
+    }
   }
-  return String(senderId);
+  return String(senderId).trim();
 };
+
+export const partnershipUserIdsMatch = (left: unknown, right: unknown): boolean => {
+  const leftId = normalizePartnershipSenderId(left);
+  const rightId = normalizePartnershipSenderId(right);
+  if (!leftId || !rightId) return false;
+  if (leftId === rightId) return true;
+  if (mongoose.Types.ObjectId.isValid(leftId) && mongoose.Types.ObjectId.isValid(rightId)) {
+    return new mongoose.Types.ObjectId(leftId).equals(new mongoose.Types.ObjectId(rightId));
+  }
+  return false;
+};
+
+export const resolvePartnershipActorId = (user: { _id?: unknown; id?: unknown }): string =>
+  normalizePartnershipSenderId(user._id ?? user.id);
 
 const isOwnMessage = (
   senderId: mongoose.Types.ObjectId | string | unknown,
-  userId: mongoose.Types.ObjectId | string
-): boolean => normalizePartnershipSenderId(senderId) === String(userId);
+  userId: mongoose.Types.ObjectId | string | unknown
+): boolean => partnershipUserIdsMatch(senderId, userId);
 
-const isLegacyManualTemplateMessage = (metadata?: Record<string, unknown> | null): boolean => {
-  const meta = metadata || {};
-  return Boolean(meta.templateKey) && !meta.kind;
+const roleCanEditPartnershipMessage = (role: string): boolean =>
+  PARTNERSHIP_MESSAGE_EDIT_ROLE_SET.has(String(role || "").trim());
+
+const roleCanDeletePartnershipMessage = (role: string): boolean =>
+  PARTNERSHIP_MESSAGE_DELETE_ROLE_SET.has(String(role || "").trim());
+
+const resolvePartnershipTemplateKey = (row: {
+  templateKey?: string | null;
+  metadata?: Record<string, unknown> | null;
+}): string => {
+  const meta = row.metadata || {};
+  const fromMeta = typeof meta.templateKey === "string" ? meta.templateKey.trim() : "";
+  const fromRow = typeof row.templateKey === "string" ? row.templateKey.trim() : "";
+  return fromMeta || fromRow;
 };
 
-export const canManageOwnPartnershipMessage = (input: {
-  role: string;
-  senderId: mongoose.Types.ObjectId | string;
-  userId: mongoose.Types.ObjectId | string;
-  messageType?: PartnershipMessageType | string;
+const isManualUserTemplateMessage = (row: {
+  templateKey?: string | null;
   metadata?: Record<string, unknown> | null;
 }): boolean => {
-  if (isPartnershipSystemMessage(input)) return false;
-  if (!isOwnMessage(input.senderId, input.userId)) return false;
-  return PARTNERSHIP_MESSAGE_DELETE_ROLE_SET.has(String(input.role || ""));
+  const templateKey = resolvePartnershipTemplateKey(row);
+  if (!templateKey) return false;
+  const meta = row.metadata || {};
+  if (typeof meta.kind === "string" && meta.kind.trim()) return false;
+  return true;
 };
 
 export const isPartnershipSystemMessage = (row: {
   messageType?: string | null;
+  templateKey?: string | null;
   metadata?: Record<string, unknown> | null;
 }): boolean => {
-  const meta = row.metadata || {};
+  if (isManualUserTemplateMessage(row)) return false;
 
-  if (isLegacyManualTemplateMessage(meta)) return false;
+  const meta = row.metadata || {};
 
   if (typeof meta.kind === "string") {
     const kind = meta.kind.trim();
@@ -86,14 +125,45 @@ export const isPartnershipSystemMessage = (row: {
 
 export const resolvePartnershipMessageType = (row: {
   messageType?: string | null;
+  templateKey?: string | null;
   metadata?: Record<string, unknown> | null;
 }): PartnershipMessageType => (isPartnershipSystemMessage(row) ? "system" : "user");
+
+export const buildPartnershipMessagePermissionInput = (input: {
+  role: string;
+  senderId: string;
+  userId: mongoose.Types.ObjectId;
+  messageType?: PartnershipMessageType | string;
+  templateKey?: string | null;
+  metadata?: Record<string, unknown> | null;
+}) => ({
+  role: input.role,
+  senderId: input.senderId,
+  userId: input.userId,
+  messageType: input.messageType,
+  templateKey: input.templateKey,
+  metadata: input.metadata,
+});
+
+export const canManageOwnPartnershipMessage = (input: {
+  role: string;
+  senderId: mongoose.Types.ObjectId | string;
+  userId: mongoose.Types.ObjectId | string;
+  messageType?: PartnershipMessageType | string;
+  templateKey?: string | null;
+  metadata?: Record<string, unknown> | null;
+}): boolean => {
+  if (isPartnershipSystemMessage(input)) return false;
+  if (!isOwnMessage(input.senderId, input.userId)) return false;
+  return PARTNERSHIP_MESSAGE_DELETE_ROLE_SET.has(String(input.role || ""));
+};
 
 export const canEditPartnershipMessage = (input: {
   role: string;
   senderId: mongoose.Types.ObjectId | string;
   userId: mongoose.Types.ObjectId | string;
   messageType?: PartnershipMessageType | string;
+  templateKey?: string | null;
   metadata?: Record<string, unknown> | null;
 }): boolean => {
   if (isPartnershipSystemMessage(input)) return false;
@@ -106,6 +176,7 @@ export const canDeletePartnershipMessage = (input: {
   senderId: mongoose.Types.ObjectId | string;
   userId: mongoose.Types.ObjectId | string;
   messageType?: PartnershipMessageType | string;
+  templateKey?: string | null;
   metadata?: Record<string, unknown> | null;
 }): boolean => canManageOwnPartnershipMessage(input);
 
@@ -116,6 +187,7 @@ export const canRestorePartnershipMessage = (input: {
   senderId?: mongoose.Types.ObjectId | string;
   userId?: mongoose.Types.ObjectId | string;
   messageType?: PartnershipMessageType | string;
+  templateKey?: string | null;
   metadata?: Record<string, unknown> | null;
 }): boolean => {
   if (!input.isDeleted || !input.deletedAt) return false;
@@ -128,6 +200,7 @@ export const canRestorePartnershipMessage = (input: {
       senderId: input.senderId,
       userId: input.userId,
       messageType: input.messageType,
+      templateKey: input.templateKey,
       metadata: input.metadata,
     });
   }
@@ -235,33 +308,45 @@ export const enrichMessagePermissions = (
     senderId: string;
     userId: mongoose.Types.ObjectId;
     messageType?: PartnershipMessageType | string;
+    templateKey?: string | null;
     metadata?: Record<string, unknown> | null;
   }
 ) => {
-  if (row.isSystem) {
+  const owner = row.isMine === true;
+  const role = String(input.role || "").trim();
+
+  if (row.isSystem || !owner) {
     return { ...row, canEdit: false, canDelete: false, canRestore: false };
   }
-  const permissionInput = {
-    role: input.role,
-    senderId: input.senderId,
-    userId: input.userId,
-    messageType: input.messageType,
-    metadata: input.metadata,
-  };
+
   return {
     ...row,
-    canEdit:
-      !row.isDeleted &&
-      canEditPartnershipMessage(permissionInput),
-    canDelete:
-      !row.isDeleted &&
-      canDeletePartnershipMessage(permissionInput),
+    canEdit: !row.isDeleted && roleCanEditPartnershipMessage(role),
+    canDelete: !row.isDeleted && roleCanDeletePartnershipMessage(role),
     canRestore:
       row.isDeleted &&
-      row.canRestore &&
-      canManageOwnPartnershipMessage(permissionInput),
+      row.canRestore === true &&
+      roleCanDeletePartnershipMessage(role),
   };
 };
+
+const enrichInputFromMessageDoc = (
+  message: {
+    senderId: mongoose.Types.ObjectId;
+    messageType?: string;
+    templateKey?: string;
+    metadata?: Record<string, unknown>;
+  },
+  userId: mongoose.Types.ObjectId,
+  role: string
+) => ({
+  role,
+  senderId: normalizePartnershipSenderId(message.senderId),
+  userId,
+  messageType: message.messageType,
+  templateKey: message.templateKey,
+  metadata: message.metadata,
+});
 
 export const editPartnershipMessage = async (input: {
   messageId: string;
@@ -278,13 +363,9 @@ export const editPartnershipMessage = async (input: {
   if (message.isDeleted) throw new Error("Cannot edit a deleted message");
 
   if (
-    !canEditPartnershipMessage({
-      role: input.role,
-      senderId: message.senderId,
-      userId: input.userId,
-      messageType: message.messageType,
-      metadata: message.metadata,
-    })
+    !canEditPartnershipMessage(
+      buildPartnershipMessagePermissionInput(enrichInputFromMessageDoc(message, input.userId, input.role))
+    )
   ) {
     throw new Error("Forbidden");
   }
@@ -330,13 +411,7 @@ export const editPartnershipMessage = async (input: {
 
   return enrichMessagePermissions(
     serializePartnershipMessageRow(message.toObject(), input.userId),
-    {
-      role: input.role,
-      senderId: String(message.senderId),
-      userId: input.userId,
-      messageType: message.messageType,
-      metadata: message.metadata,
-    }
+    enrichInputFromMessageDoc(message, input.userId, input.role)
   );
 };
 
@@ -353,25 +428,15 @@ export const softDeletePartnershipMessage = async (input: {
   if (message.isDeleted) {
     return enrichMessagePermissions(
       serializePartnershipMessageRow(message.toObject(), input.userId),
-      {
-        role: input.role,
-        senderId: String(message.senderId),
-        userId: input.userId,
-        messageType: message.messageType,
-        metadata: message.metadata,
-      }
+      enrichInputFromMessageDoc(message, input.userId, input.role)
     );
   }
   if (isPartnershipSystemMessage(message.toObject())) throw new Error("System messages cannot be deleted");
 
   if (
-    !canDeletePartnershipMessage({
-      role: input.role,
-      senderId: message.senderId,
-      userId: input.userId,
-      messageType: message.messageType,
-      metadata: message.metadata,
-    })
+    !canDeletePartnershipMessage(
+      buildPartnershipMessagePermissionInput(enrichInputFromMessageDoc(message, input.userId, input.role))
+    )
   ) {
     throw new Error("Forbidden");
   }
@@ -397,13 +462,7 @@ export const softDeletePartnershipMessage = async (input: {
 
   return enrichMessagePermissions(
     serializePartnershipMessageRow(message.toObject(), input.userId),
-    {
-      role: input.role,
-      senderId: String(message.senderId),
-      userId: input.userId,
-      messageType: message.messageType,
-      metadata: message.metadata,
-    }
+    enrichInputFromMessageDoc(message, input.userId, input.role)
   );
 };
 
@@ -419,6 +478,9 @@ export const restorePartnershipMessage = async (input: {
   if (!message) throw new Error("Message not found");
   if (!message.isDeleted) throw new Error("Message is not deleted");
   if (isPartnershipSystemMessage(message.toObject())) throw new Error("System messages cannot be restored");
+  const permissionInput = buildPartnershipMessagePermissionInput(
+    enrichInputFromMessageDoc(message, input.userId, input.role)
+  );
   if (
     !canRestorePartnershipMessage({
       isDeleted: message.isDeleted,
@@ -427,21 +489,14 @@ export const restorePartnershipMessage = async (input: {
       senderId: message.senderId,
       userId: input.userId,
       messageType: message.messageType,
+      templateKey: message.templateKey,
       metadata: message.metadata,
     })
   ) {
     throw new Error("Restore window expired");
   }
 
-  if (
-    !canDeletePartnershipMessage({
-      role: input.role,
-      senderId: message.senderId,
-      userId: input.userId,
-      messageType: message.messageType,
-      metadata: message.metadata,
-    })
-  ) {
+  if (!canDeletePartnershipMessage(permissionInput)) {
     throw new Error("Forbidden");
   }
 
@@ -466,13 +521,7 @@ export const restorePartnershipMessage = async (input: {
 
   return enrichMessagePermissions(
     serializePartnershipMessageRow(message.toObject(), input.userId),
-    {
-      role: input.role,
-      senderId: String(message.senderId),
-      userId: input.userId,
-      messageType: message.messageType,
-      metadata: message.metadata,
-    }
+    enrichInputFromMessageDoc(message, input.userId, input.role)
   );
 };
 

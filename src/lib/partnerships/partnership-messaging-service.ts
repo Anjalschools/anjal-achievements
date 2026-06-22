@@ -14,6 +14,7 @@ import {
   enrichMessagePermissions,
   normalizePartnershipSenderId,
   recordPartnershipMessageSent,
+  resolvePartnershipActorId,
   serializePartnershipMessageRow,
 } from "@/lib/partnerships/partnership-message-mutation-service";
 import {
@@ -416,6 +417,8 @@ export const listPartnershipThreadMessages = async (input: {
     .sort({ createdAt: 1 })
     .lean();
 
+  const currentUserId = resolvePartnershipActorId({ _id: input.userId });
+
   return {
     thread: {
       id: String(thread._id),
@@ -430,21 +433,22 @@ export const listPartnershipThreadMessages = async (input: {
         senderId,
         userId: input.userId,
         messageType: row.messageType,
+        templateKey: row.templateKey,
         metadata: row.metadata,
       });
-      if (process.env.PARTNERSHIP_MESSAGE_DEBUG === "1") {
-        console.info("[partnership-message-permissions]", {
-          messageId: enriched.id,
-          senderId,
-          currentUserId: String(input.userId),
-          role: input.role,
-          messageType: enriched.messageType,
-          isSystem: enriched.isSystem,
-          canEdit: enriched.canEdit,
-          canDelete: enriched.canDelete,
-          canRestore: enriched.canRestore,
-        });
-      }
+      console.info("[partnership-message-permissions]", {
+        messageId: enriched.id,
+        messageType: enriched.messageType,
+        templateKey: enriched.templateKey,
+        senderId,
+        currentUserId,
+        role: input.role,
+        isMine: enriched.isMine,
+        isSystem: enriched.isSystem,
+        canEdit: enriched.canEdit,
+        canDelete: enriched.canDelete,
+        canRestore: enriched.canRestore,
+      });
       return enriched;
     }),
   };
