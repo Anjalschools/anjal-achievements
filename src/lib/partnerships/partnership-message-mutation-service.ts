@@ -83,6 +83,30 @@ const roleCanEditPartnershipMessage = (role: string): boolean =>
 const roleCanDeletePartnershipMessage = (role: string): boolean =>
   PARTNERSHIP_MESSAGE_DELETE_ROLE_SET.has(String(role || "").trim());
 
+/** System admin may moderate any user message (not system messages). */
+export const PARTNERSHIP_ADMIN_MESSAGE_MODERATOR_ROLE = "admin" as const;
+
+export const isPartnershipAdminMessageModerator = (role: string): boolean =>
+  String(role || "").trim() === PARTNERSHIP_ADMIN_MESSAGE_MODERATOR_ROLE;
+
+const canModeratePartnershipUserMessage = (input: {
+  role: string;
+  senderId: mongoose.Types.ObjectId | string;
+  userId: mongoose.Types.ObjectId | string;
+  messageType?: PartnershipMessageType | string;
+  templateKey?: string | null;
+  metadata?: Record<string, unknown> | null;
+  allowDeleteRoles?: boolean;
+}): boolean => {
+  if (isPartnershipSystemMessage(input)) return false;
+  const role = String(input.role || "").trim();
+  if (isPartnershipAdminMessageModerator(role)) return true;
+  if (!isOwnMessage(input.senderId, input.userId)) return false;
+  return input.allowDeleteRoles
+    ? roleCanDeletePartnershipMessage(role)
+    : roleCanEditPartnershipMessage(role);
+};
+
 const resolvePartnershipTemplateKey = (row: {
   templateKey?: string | null;
   metadata?: Record<string, unknown> | null;
@@ -154,11 +178,8 @@ export const canManageOwnPartnershipMessage = (input: {
   messageType?: PartnershipMessageType | string;
   templateKey?: string | null;
   metadata?: Record<string, unknown> | null;
-}): boolean => {
-  if (isPartnershipSystemMessage(input)) return false;
-  if (!isOwnMessage(input.senderId, input.userId)) return false;
-  return PARTNERSHIP_MESSAGE_DELETE_ROLE_SET.has(String(input.role || ""));
-};
+}): boolean =>
+  canModeratePartnershipUserMessage({ ...input, allowDeleteRoles: true });
 
 export const canEditPartnershipMessage = (input: {
   role: string;
@@ -167,11 +188,7 @@ export const canEditPartnershipMessage = (input: {
   messageType?: PartnershipMessageType | string;
   templateKey?: string | null;
   metadata?: Record<string, unknown> | null;
-}): boolean => {
-  if (isPartnershipSystemMessage(input)) return false;
-  if (!isOwnMessage(input.senderId, input.userId)) return false;
-  return PARTNERSHIP_MESSAGE_EDIT_ROLE_SET.has(String(input.role || ""));
-};
+}): boolean => canModeratePartnershipUserMessage({ ...input, allowDeleteRoles: false });
 
 export const canDeletePartnershipMessage = (input: {
   role: string;
@@ -180,7 +197,7 @@ export const canDeletePartnershipMessage = (input: {
   messageType?: PartnershipMessageType | string;
   templateKey?: string | null;
   metadata?: Record<string, unknown> | null;
-}): boolean => canManageOwnPartnershipMessage(input);
+}): boolean => canModeratePartnershipUserMessage({ ...input, allowDeleteRoles: true });
 
 export const canRestorePartnershipMessage = (input: {
   isDeleted?: boolean;
@@ -197,7 +214,7 @@ export const canRestorePartnershipMessage = (input: {
     return false;
   }
   if (input.role && input.senderId && input.userId) {
-    return canManageOwnPartnershipMessage({
+    return canDeletePartnershipMessage({
       role: input.role,
       senderId: input.senderId,
       userId: input.userId,
@@ -314,21 +331,36 @@ export const enrichMessagePermissions = (
     metadata?: Record<string, unknown> | null;
   }
 ) => {
-  const owner = row.isMine === true;
-  const role = String(input.role || "").trim();
+  const permissionInput = buildPartnershipMessagePermissionInput({
+    role: input.role,
+    senderId: input.senderId,
+    userId: input.userId,
+    messageType: input.messageType ?? row.messageType,
+    templateKey: input.templateKey ?? row.templateKey,
+    metadata: input.metadata,
+  });
 
-  if (row.isSystem || !owner) {
+  if (row.isSystem) {
     return { ...row, canEdit: false, canDelete: false, canRestore: false };
   }
 
   return {
     ...row,
-    canEdit: !row.isDeleted && roleCanEditPartnershipMessage(role),
-    canDelete: !row.isDeleted && roleCanDeletePartnershipMessage(role),
+    canEdit: !row.isDeleted && canEditPartnershipMessage(permissionInput),
+    canDelete: !row.isDeleted && canDeletePartnershipMessage(permissionInput),
     canRestore:
       row.isDeleted &&
       row.canRestore === true &&
-      roleCanDeletePartnershipMessage(role),
+      canRestorePartnershipMessage({
+        isDeleted: row.isDeleted,
+        deletedAt: row.deletedAt ? new Date(row.deletedAt) : null,
+        role: input.role,
+        senderId: input.senderId,
+        userId: input.userId,
+        messageType: input.messageType ?? row.messageType,
+        templateKey: input.templateKey ?? row.templateKey,
+        metadata: input.metadata,
+      }),
   };
 };
 

@@ -26,7 +26,8 @@ describe("partnership message mutation permissions", () => {
       true
     );
     expect(canEditPartnershipMessage({ role: "supervisor", senderId: userId, userId })).toBe(true);
-    expect(canEditPartnershipMessage({ role: "admin", senderId: otherId, userId })).toBe(false);
+    expect(canEditPartnershipMessage({ role: "admin", senderId: otherId, userId })).toBe(true);
+    expect(canDeletePartnershipMessage({ role: "admin", senderId: otherId, userId })).toBe(true);
     expect(canEditPartnershipMessage({ role: "trainingInstitution", senderId: userId, userId })).toBe(
       false
     );
