@@ -10,7 +10,45 @@ export const PARTNERSHIP_MESSAGE_DELETE_UNDO_MS = 15 * 60 * 1000;
 export const DELETED_MESSAGE_PLACEHOLDER_AR = "تم حذف هذه الرسالة";
 export const DELETED_MESSAGE_PLACEHOLDER_EN = "This message was deleted";
 
-const SUPERVISOR_EDIT_ROLES = new Set(["admin", "supervisor", "partnershipSupervisor"]);
+/** Roles that may edit/delete/restore their own user messages (ownership required). */
+export const PARTNERSHIP_MESSAGE_EDIT_ROLES = [
+  "admin",
+  "supervisor",
+  "partnershipSupervisor",
+  "schoolAdmin", // school partnership officer
+  "teacher", // school training coordinator
+] as const;
+
+const PARTNERSHIP_MESSAGE_EDIT_ROLE_SET = new Set<string>(PARTNERSHIP_MESSAGE_EDIT_ROLES);
+
+/** Roles that may delete/restore their own messages (includes portal participants). */
+export const PARTNERSHIP_MESSAGE_DELETE_ROLES = [
+  ...PARTNERSHIP_MESSAGE_EDIT_ROLES,
+  "trainingInstitution",
+  "student",
+] as const;
+
+const PARTNERSHIP_MESSAGE_DELETE_ROLE_SET = new Set<string>(PARTNERSHIP_MESSAGE_DELETE_ROLES);
+
+/** @deprecated Use PARTNERSHIP_MESSAGE_EDIT_ROLES */
+export const SUPERVISOR_EDIT_ROLES = PARTNERSHIP_MESSAGE_EDIT_ROLE_SET;
+
+const isOwnMessage = (
+  senderId: mongoose.Types.ObjectId | string,
+  userId: mongoose.Types.ObjectId | string
+): boolean => String(senderId) === String(userId);
+
+export const canManageOwnPartnershipMessage = (input: {
+  role: string;
+  senderId: mongoose.Types.ObjectId | string;
+  userId: mongoose.Types.ObjectId | string;
+  messageType?: PartnershipMessageType | string;
+  metadata?: Record<string, unknown> | null;
+}): boolean => {
+  if (isPartnershipSystemMessage(input)) return false;
+  if (!isOwnMessage(input.senderId, input.userId)) return false;
+  return PARTNERSHIP_MESSAGE_DELETE_ROLE_SET.has(String(input.role || ""));
+};
 
 export const isPartnershipSystemMessage = (row: {
   messageType?: string | null;
@@ -36,10 +74,8 @@ export const canEditPartnershipMessage = (input: {
   metadata?: Record<string, unknown> | null;
 }): boolean => {
   if (isPartnershipSystemMessage(input)) return false;
-  return (
-    SUPERVISOR_EDIT_ROLES.has(String(input.role || "")) &&
-    String(input.senderId) === String(input.userId)
-  );
+  if (!isOwnMessage(input.senderId, input.userId)) return false;
+  return PARTNERSHIP_MESSAGE_EDIT_ROLE_SET.has(String(input.role || ""));
 };
 
 export const canDeletePartnershipMessage = (input: {
@@ -48,22 +84,31 @@ export const canDeletePartnershipMessage = (input: {
   userId: mongoose.Types.ObjectId | string;
   messageType?: PartnershipMessageType | string;
   metadata?: Record<string, unknown> | null;
-}): boolean => {
-  if (isPartnershipSystemMessage(input)) return false;
-  if (String(input.senderId) !== String(input.userId)) return false;
-  const role = String(input.role || "");
-  if (SUPERVISOR_EDIT_ROLES.has(role)) return true;
-  if (role === "trainingInstitution") return true;
-  if (role === "student") return true;
-  return false;
-};
+}): boolean => canManageOwnPartnershipMessage(input);
 
-export const canRestorePartnershipMessage = (message: {
+export const canRestorePartnershipMessage = (input: {
   isDeleted?: boolean;
   deletedAt?: Date | null;
+  role?: string;
+  senderId?: mongoose.Types.ObjectId | string;
+  userId?: mongoose.Types.ObjectId | string;
+  messageType?: PartnershipMessageType | string;
+  metadata?: Record<string, unknown> | null;
 }): boolean => {
-  if (!message.isDeleted || !message.deletedAt) return false;
-  return Date.now() - new Date(message.deletedAt).getTime() <= PARTNERSHIP_MESSAGE_DELETE_UNDO_MS;
+  if (!input.isDeleted || !input.deletedAt) return false;
+  if (Date.now() - new Date(input.deletedAt).getTime() > PARTNERSHIP_MESSAGE_DELETE_UNDO_MS) {
+    return false;
+  }
+  if (input.role && input.senderId && input.userId) {
+    return canManageOwnPartnershipMessage({
+      role: input.role,
+      senderId: input.senderId,
+      userId: input.userId,
+      messageType: input.messageType,
+      metadata: input.metadata,
+    });
+  }
+  return true;
 };
 
 const recordMessageAudit = async (input: {
@@ -93,9 +138,13 @@ const assertThreadAccess = async (input: {
   const thread = await PartnershipThread.findById(input.threadId);
   if (!thread) throw new Error("Thread not found");
 
-  const isSupervisor = ["admin", "partnershipSupervisor", "supervisor", "schoolAdmin"].includes(
-    String(input.role || "")
-  );
+  const isSupervisor = [
+    "admin",
+    "partnershipSupervisor",
+    "supervisor",
+    "schoolAdmin",
+    "teacher",
+  ].includes(String(input.role || ""));
   const isInstitution = input.role === "trainingInstitution";
   const isStudent = String(thread.studentId) === String(input.userId);
 
@@ -130,12 +179,11 @@ export const serializePartnershipMessageRow = (
   const isDeleted = row.isDeleted === true;
   const messageType = resolvePartnershipMessageType(row);
   const isSystem = messageType === "system";
-  const canRestore =
-    !isSystem &&
-    canRestorePartnershipMessage({
-      isDeleted,
-      deletedAt: row.deletedAt,
-    });
+  const restoreWindowOpen =
+    isDeleted &&
+    row.deletedAt &&
+    Date.now() - new Date(row.deletedAt).getTime() <= PARTNERSHIP_MESSAGE_DELETE_UNDO_MS;
+  const canRestore = !isSystem && restoreWindowOpen;
 
   return {
     id: String(row._id),
@@ -169,26 +217,25 @@ export const enrichMessagePermissions = (
   if (row.isSystem) {
     return { ...row, canEdit: false, canDelete: false, canRestore: false };
   }
+  const permissionInput = {
+    role: input.role,
+    senderId: input.senderId,
+    userId: input.userId,
+    messageType: input.messageType,
+    metadata: input.metadata,
+  };
   return {
     ...row,
     canEdit:
       !row.isDeleted &&
-      canEditPartnershipMessage({
-        role: input.role,
-        senderId: input.senderId,
-        userId: input.userId,
-        messageType: input.messageType,
-        metadata: input.metadata,
-      }),
+      canEditPartnershipMessage(permissionInput),
     canDelete:
       !row.isDeleted &&
-      canDeletePartnershipMessage({
-        role: input.role,
-        senderId: input.senderId,
-        userId: input.userId,
-        messageType: input.messageType,
-        metadata: input.metadata,
-      }),
+      canDeletePartnershipMessage(permissionInput),
+    canRestore:
+      row.isDeleted &&
+      row.canRestore &&
+      canManageOwnPartnershipMessage(permissionInput),
   };
 };
 
@@ -348,7 +395,19 @@ export const restorePartnershipMessage = async (input: {
   if (!message) throw new Error("Message not found");
   if (!message.isDeleted) throw new Error("Message is not deleted");
   if (isPartnershipSystemMessage(message.toObject())) throw new Error("System messages cannot be restored");
-  if (!canRestorePartnershipMessage(message.toObject())) throw new Error("Restore window expired");
+  if (
+    !canRestorePartnershipMessage({
+      isDeleted: message.isDeleted,
+      deletedAt: message.deletedAt,
+      role: input.role,
+      senderId: message.senderId,
+      userId: input.userId,
+      messageType: message.messageType,
+      metadata: message.metadata,
+    })
+  ) {
+    throw new Error("Restore window expired");
+  }
 
   if (
     !canDeletePartnershipMessage({

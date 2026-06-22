@@ -246,6 +246,7 @@ export const listPartnershipThreadsForUser = async (input: {
     "partnershipSupervisor",
     "supervisor",
     "schoolAdmin",
+    "teacher",
   ].includes(String(input.role || ""));
 
   const threads = await PartnershipThread.find(
@@ -394,6 +395,7 @@ export const listPartnershipThreadMessages = async (input: {
     "partnershipSupervisor",
     "supervisor",
     "schoolAdmin",
+    "teacher",
   ].includes(String(input.role || ""));
 
   const allowed = isSupervisor || String(thread.studentId) === String(input.userId);

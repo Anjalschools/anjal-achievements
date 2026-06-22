@@ -21,11 +21,22 @@ describe("partnership message mutation permissions", () => {
     expect(canEditPartnershipMessage({ role: "partnershipSupervisor", senderId: userId, userId })).toBe(
       true
     );
+    expect(canEditPartnershipMessage({ role: "supervisor", senderId: userId, userId })).toBe(true);
     expect(canEditPartnershipMessage({ role: "admin", senderId: otherId, userId })).toBe(false);
     expect(canEditPartnershipMessage({ role: "trainingInstitution", senderId: userId, userId })).toBe(
       false
     );
     expect(canEditPartnershipMessage({ role: "student", senderId: userId, userId })).toBe(false);
+  });
+
+  it("allows school partnership staff to manage own user messages only", () => {
+    expect(canEditPartnershipMessage({ role: "schoolAdmin", senderId: userId, userId })).toBe(true);
+    expect(canEditPartnershipMessage({ role: "teacher", senderId: userId, userId })).toBe(true);
+    expect(canEditPartnershipMessage({ role: "schoolAdmin", senderId: otherId, userId })).toBe(false);
+    expect(canEditPartnershipMessage({ role: "teacher", senderId: otherId, userId })).toBe(false);
+    expect(canDeletePartnershipMessage({ role: "schoolAdmin", senderId: userId, userId })).toBe(true);
+    expect(canDeletePartnershipMessage({ role: "teacher", senderId: userId, userId })).toBe(true);
+    expect(canDeletePartnershipMessage({ role: "schoolAdmin", senderId: otherId, userId })).toBe(false);
   });
 
   it("allows owners in supported roles to delete messages", () => {
@@ -36,12 +47,30 @@ describe("partnership message mutation permissions", () => {
     expect(canDeletePartnershipMessage({ role: "student", senderId: otherId, userId })).toBe(false);
   });
 
-  it("allows restore only inside the undo window", () => {
+  it("allows restore only inside the undo window and for message owners", () => {
     const recent = new Date(Date.now() - 5 * 60 * 1000);
     const expired = new Date(Date.now() - PARTNERSHIP_MESSAGE_DELETE_UNDO_MS - 1000);
     expect(canRestorePartnershipMessage({ isDeleted: true, deletedAt: recent })).toBe(true);
     expect(canRestorePartnershipMessage({ isDeleted: true, deletedAt: expired })).toBe(false);
     expect(canRestorePartnershipMessage({ isDeleted: false, deletedAt: recent })).toBe(false);
+    expect(
+      canRestorePartnershipMessage({
+        isDeleted: true,
+        deletedAt: recent,
+        role: "schoolAdmin",
+        senderId: userId,
+        userId,
+      })
+    ).toBe(true);
+    expect(
+      canRestorePartnershipMessage({
+        isDeleted: true,
+        deletedAt: recent,
+        role: "schoolAdmin",
+        senderId: otherId,
+        userId,
+      })
+    ).toBe(false);
   });
 
   it("uses Arabic deleted placeholder constant", () => {
