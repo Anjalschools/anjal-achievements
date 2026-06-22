@@ -48,6 +48,7 @@ const InstitutionMessagesPage = () => {
   const [reply, setReply] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [messageActionsMode, setMessageActionsMode] = useState<"dropdown" | "inline">("dropdown");
 
   const loadThreads = useCallback(async () => {
     const res = await fetch("/api/institution/training/messages", { cache: "no-store" });
@@ -56,6 +57,9 @@ const InstitutionMessagesPage = () => {
       const students = Array.isArray(json.studentThreads) ? json.studentThreads : json.items || [];
       setStudentThreads(students);
       setSupervisorThread(json.supervisorThread || null);
+      if (typeof json.messageActionsMode === "string") {
+        setMessageActionsMode(json.messageActionsMode === "inline" ? "inline" : "dropdown");
+      }
 
       if (preselectedAppId) {
         const match = students.find((row: ThreadRow) => row.applicationId === preselectedAppId);
@@ -79,6 +83,9 @@ const InstitutionMessagesPage = () => {
       setMessages(json.items);
       setActiveKind(json.threadKind === "supervisor" ? "supervisor" : "student");
       setActiveApplicationId(typeof json.applicationId === "string" && json.applicationId ? json.applicationId : null);
+      if (typeof json.messageActionsMode === "string") {
+        setMessageActionsMode(json.messageActionsMode === "inline" ? "inline" : "dropdown");
+      }
     } else {
       setMessages([]);
     }
@@ -227,6 +234,7 @@ const InstitutionMessagesPage = () => {
                         key={row.id}
                         message={row}
                         isAr={isAr}
+                        actionsMode={messageActionsMode}
                         apiBase="/api/institution/training/messages"
                         align={row.isMine ? "end" : "start"}
                         bubbleClassName={

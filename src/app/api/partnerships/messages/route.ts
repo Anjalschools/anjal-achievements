@@ -28,6 +28,8 @@ import {
 import { actorFromUser, logAuditEvent } from "@/lib/audit-log-service";
 import { jsonInternalServerError } from "@/lib/api-safe-response";
 import { requireSession } from "@/lib/auth-guard";
+import { getPartnershipProgramSettings } from "@/lib/partnerships/partnerships-settings-service";
+import { normalizePartnershipMessageActionsMode } from "@/lib/partnerships/partnership-message-ui-constants";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -44,6 +46,10 @@ export async function GET(request: NextRequest) {
   const includeContext = request.nextUrl.searchParams.get("includeContext") === "1";
 
   try {
+    const messageActionsMode = normalizePartnershipMessageActionsMode(
+      (await getPartnershipProgramSettings()).messageActionsMode
+    );
+
     if (includeContext && role === "student") {
       const studentGate = await requireStudentApplicant();
       if (!studentGate.ok) return studentGate.response;
@@ -60,12 +66,16 @@ export async function GET(request: NextRequest) {
         if (!viewGate.ok) return viewGate.response;
       }
 
+      const includePermissionTrace =
+        isSupervisorRole(role) && request.nextUrl.searchParams.get("permissionTrace") === "1";
+
       const data = await listPartnershipThreadMessages({
         threadId,
         userId: gate.user._id,
         role,
+        includePermissionTrace,
       });
-      return NextResponse.json({ ok: true, ...data });
+      return NextResponse.json({ ok: true, messageActionsMode, ...data });
     }
 
     if (role === "student") {
@@ -80,7 +90,7 @@ export async function GET(request: NextRequest) {
       userId: gate.user._id,
       role,
     });
-    return NextResponse.json({ ok: true, items });
+    return NextResponse.json({ ok: true, messageActionsMode, items });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Error";
     if (message === "Forbidden" || message === "Thread not found") {

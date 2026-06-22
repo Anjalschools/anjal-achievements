@@ -23,6 +23,7 @@ type SettingsForm = {
   archiveMode: boolean;
   archivedAcademicYear: string;
   lastBackupSnapshotAt: string | null;
+  messageActionsMode: "dropdown" | "inline";
 };
 
 type QuotaRow = {
@@ -60,6 +61,7 @@ const defaultForm = (): SettingsForm => ({
   archiveMode: false,
   archivedAcademicYear: "",
   lastBackupSnapshotAt: null,
+  messageActionsMode: "dropdown",
 });
 
 const PartnershipsSettingsPage = () => {
@@ -99,6 +101,7 @@ const PartnershipsSettingsPage = () => {
         archiveMode: settings.archiveMode === true,
         archivedAcademicYear: settings.archivedAcademicYear || "",
         lastBackupSnapshotAt: settings.lastBackupSnapshotAt || null,
+        messageActionsMode: settings.messageActionsMode === "inline" ? "inline" : "dropdown",
       });
       setQuotas(Array.isArray(json.quotas) ? json.quotas : []);
       setSla(json.sla || null);
@@ -244,6 +247,25 @@ const PartnershipsSettingsPage = () => {
                 className="w-full rounded-xl border border-border px-3 py-2 text-sm"
                 aria-label={isAr ? "أقصى حجم للمرفقات (ميجابايت)" : "Max attachment size (MB)"}
               />
+              <label className="block text-sm">
+                <span className="mb-1 block font-bold">
+                  {isAr ? "عرض إجراءات الرسائل" : "Message actions display"}
+                </span>
+                <select
+                  value={form.messageActionsMode}
+                  onChange={(e) =>
+                    setForm((p) => ({
+                      ...p,
+                      messageActionsMode: e.target.value === "inline" ? "inline" : "dropdown",
+                    }))
+                  }
+                  className="w-full rounded-xl border border-border px-3 py-2 text-sm"
+                  aria-label={isAr ? "وضع إجراءات الرسائل" : "Message actions mode"}
+                >
+                  <option value="dropdown">{isAr ? "قائمة ⋮ منسدلة" : "Dropdown ⋮ menu"}</option>
+                  <option value="inline">{isAr ? "أزرار مباشرة (تعديل / حذف / استعادة)" : "Inline buttons (edit / delete / restore)"}</option>
+                </select>
+              </label>
               <button
                 type="button"
                 onClick={handleSave}

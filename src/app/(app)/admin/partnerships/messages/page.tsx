@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import PageContainer from "@/components/layout/PageContainer";
 import PageHeader from "@/components/layout/PageHeader";
 import SectionCard from "@/components/layout/SectionCard";
@@ -34,6 +35,8 @@ type OpportunityOption = { id: string; title: string };
 const PartnershipsMessagesAdminPage = () => {
   const locale = getLocale();
   const isAr = locale === "ar";
+  const searchParams = useSearchParams();
+  const forceInlineDebug = searchParams.get("uiDebug") === "1";
   const [loading, setLoading] = useState(true);
   const [threads, setThreads] = useState<ThreadRow[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -48,6 +51,7 @@ const PartnershipsMessagesAdminPage = () => {
   const [bulkTarget, setBulkTarget] = useState<string>("accepted");
   const [bulkTemplate, setBulkTemplate] = useState<string>("interview_invite");
   const [bulkSending, setBulkSending] = useState(false);
+  const [messageActionsMode, setMessageActionsMode] = useState<"dropdown" | "inline">("dropdown");
 
   const templateOptions = useMemo(
     () =>
@@ -63,6 +67,9 @@ const PartnershipsMessagesAdminPage = () => {
     const json = await res.json().catch(() => ({}));
     if (res.ok && Array.isArray(json.items)) setThreads(json.items);
     else setThreads([]);
+    if (typeof json.messageActionsMode === "string") {
+      setMessageActionsMode(json.messageActionsMode === "inline" ? "inline" : "dropdown");
+    }
   }, []);
 
   const loadOpportunities = useCallback(async () => {
@@ -98,6 +105,9 @@ const PartnershipsMessagesAdminPage = () => {
     const json = await res.json().catch(() => ({}));
     if (res.ok && Array.isArray(json.items)) setMessages(json.items);
     else setMessages([]);
+    if (typeof json.messageActionsMode === "string") {
+      setMessageActionsMode(json.messageActionsMode === "inline" ? "inline" : "dropdown");
+    }
     void loadThreads();
   };
 
@@ -314,6 +324,8 @@ const PartnershipsMessagesAdminPage = () => {
                     key={msg.id}
                     message={msg}
                     isAr={isAr}
+                    actionsMode={messageActionsMode}
+                    forceInlineDebug={forceInlineDebug}
                     align={msg.isMine ? "end" : "start"}
                     bubbleClassName={msg.isMine ? "bg-primary/10" : "bg-slate-100"}
                     onUpdated={(updated) =>

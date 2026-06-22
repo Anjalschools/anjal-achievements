@@ -6,6 +6,8 @@ import {
   sendInstitutionSupervisorMessage,
   sendInstitutionThreadMessage,
 } from "@/lib/partnerships/institution-messaging-service";
+import { getPartnershipProgramSettings } from "@/lib/partnerships/partnerships-settings-service";
+import { normalizePartnershipMessageActionsMode } from "@/lib/partnerships/partnership-message-ui-constants";
 import { requireTrainingInstitution } from "@/lib/partnerships/partnerships-institution-auth";
 
 export const dynamic = "force-dynamic";
@@ -23,6 +25,10 @@ export async function GET(request: NextRequest) {
   const threadId = new URL(request.url).searchParams.get("threadId")?.trim();
 
   try {
+    const messageActionsMode = normalizePartnershipMessageActionsMode(
+      (await getPartnershipProgramSettings()).messageActionsMode
+    );
+
     if (threadId) {
       const result = await listInstitutionThreadMessages(
         threadId,
@@ -32,6 +38,7 @@ export async function GET(request: NextRequest) {
       if (!result.ok) return NextResponse.json({ error: result.error }, { status: 404 });
       return NextResponse.json({
         ok: true,
+        messageActionsMode,
         threadKind: result.threadKind,
         applicationId: result.applicationId,
         items: result.items,
@@ -45,6 +52,7 @@ export async function GET(request: NextRequest) {
     );
     return NextResponse.json({
       ok: true,
+      messageActionsMode,
       studentThreads: center.studentThreads,
       supervisorThread: center.supervisorThread,
       items: center.items,

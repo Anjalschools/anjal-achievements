@@ -174,6 +174,15 @@ describe("Phase T.1 infrastructure", () => {
     return fs.readFile(path.join(process.cwd(), relativePath), "utf8");
   };
 
+  it("normalizes partnership message actions mode", async () => {
+    const { normalizePartnershipMessageActionsMode } = await import(
+      "@/lib/partnerships/partnership-message-ui-constants"
+    );
+    expect(normalizePartnershipMessageActionsMode("inline")).toBe("inline");
+    expect(normalizePartnershipMessageActionsMode("dropdown")).toBe("dropdown");
+    expect(normalizePartnershipMessageActionsMode("invalid")).toBe("dropdown");
+  });
+
   it("exposes message mutation API routes", async () => {
     expect(await readSrc("src/app/api/partnerships/messages/[id]/route.ts")).toContain("editPartnershipMessage");
     expect(await readSrc("src/app/api/partnerships/messages/[id]/restore/route.ts")).toContain(

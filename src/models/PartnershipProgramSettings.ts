@@ -16,6 +16,7 @@ export interface IPartnershipProgramSettings extends Document {
   archivedAcademicYear: string;
   backupIntegrationEnabled: boolean;
   lastBackupSnapshotAt?: Date;
+  messageActionsMode?: "dropdown" | "inline";
   updatedBy?: Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
@@ -37,6 +38,7 @@ const PartnershipProgramSettingsSchema = new Schema<IPartnershipProgramSettings>
     archiveMode: { type: Boolean, default: false },
     archivedAcademicYear: { type: String, trim: true, maxlength: 80, default: "" },
     backupIntegrationEnabled: { type: Boolean, default: true },
+    messageActionsMode: { type: String, enum: ["dropdown", "inline"], default: "dropdown" },
     lastBackupSnapshotAt: { type: Date },
     updatedBy: { type: Schema.Types.ObjectId, ref: "User" },
   },

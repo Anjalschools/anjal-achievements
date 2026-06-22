@@ -7,6 +7,7 @@ import {
   getPartnershipProgramSettings,
   updatePartnershipProgramSettings,
 } from "@/lib/partnerships/partnerships-settings-service";
+import { normalizePartnershipMessageActionsMode } from "@/lib/partnerships/partnership-message-ui-constants";
 import { getPartnershipSlaDashboard } from "@/lib/partnerships/partnerships-sla";
 
 export const dynamic = "force-dynamic";
@@ -60,6 +61,10 @@ export async function PATCH(request: NextRequest) {
           body.trainingCompletionSlaDays != null ? Number(body.trainingCompletionSlaDays) : undefined,
         backupIntegrationEnabled:
           typeof body.backupIntegrationEnabled === "boolean" ? body.backupIntegrationEnabled : undefined,
+        messageActionsMode:
+          body.messageActionsMode != null
+            ? normalizePartnershipMessageActionsMode(body.messageActionsMode)
+            : undefined,
       },
       gate.user._id
     );

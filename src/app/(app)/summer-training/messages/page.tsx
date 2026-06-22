@@ -61,6 +61,7 @@ const SummerTrainingMessagesPage = () => {
   const [composeApplicationId, setComposeApplicationId] = useState("");
   const [composing, setComposing] = useState(false);
   const [trainingContext, setTrainingContext] = useState<StudentTrainingDashboardContext | null>(null);
+  const [messageActionsMode, setMessageActionsMode] = useState<"dropdown" | "inline">("dropdown");
 
   const loadThreads = useCallback(async () => {
     const [threadsRes, contextRes, trainingRes] = await Promise.all([
@@ -75,6 +76,9 @@ const SummerTrainingMessagesPage = () => {
     } else {
       setThreads([]);
       if (!threadsRes.ok) setError(typeof json.error === "string" ? json.error : "Error");
+    }
+    if (typeof json.messageActionsMode === "string") {
+      setMessageActionsMode(json.messageActionsMode === "inline" ? "inline" : "dropdown");
     }
     if (contextRes.ok && contextJson.context) {
       setInquiryContext(contextJson.context as InquiryContext);
@@ -104,6 +108,9 @@ const SummerTrainingMessagesPage = () => {
     } else {
       setMessages([]);
       setError(typeof json.error === "string" ? json.error : "Error");
+    }
+    if (typeof json.messageActionsMode === "string") {
+      setMessageActionsMode(json.messageActionsMode === "inline" ? "inline" : "dropdown");
     }
     void loadThreads();
   };
@@ -318,6 +325,7 @@ const SummerTrainingMessagesPage = () => {
                     key={msg.id}
                     message={msg}
                     isAr={isAr}
+                    actionsMode={messageActionsMode}
                     align={msg.isMine ? "end" : "start"}
                     bubbleClassName={
                       msg.isMine ? "bg-primary/10 text-slate-900" : "bg-slate-100 text-slate-800"

@@ -1,7 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { Loader2, MoreVertical } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Loader2 } from "lucide-react";
+import PartnershipMessageActionsMenu, {
+  type PartnershipMessageActionItem,
+} from "@/components/partnerships/PartnershipMessageActionsMenu";
+import type { PartnershipMessageActionsMode } from "@/lib/partnerships/partnership-message-ui-constants";
 
 export type PartnershipMessageBubbleRow = {
   id: string;
@@ -27,6 +31,9 @@ type PartnershipMessageBubbleProps = {
   apiBase?: string;
   align?: "start" | "end";
   bubbleClassName?: string;
+  actionsMode?: PartnershipMessageActionsMode;
+  /** T.1.2.G/H — bypass ⋮ menu; render inline actions only for UI isolation. */
+  forceInlineDebug?: boolean;
   onUpdated?: (message: PartnershipMessageBubbleRow) => void;
 };
 
@@ -36,23 +43,18 @@ const PartnershipMessageBubble = ({
   apiBase = "/api/partnerships/messages",
   align = "start",
   bubbleClassName = "",
+  actionsMode = "dropdown",
+  forceInlineDebug = false,
   onUpdated,
 }: PartnershipMessageBubbleProps) => {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(message.body);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [menuOpen, setMenuOpen] = useState(false);
-  const menuRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    if (!menuOpen) return;
-    const handlePointerDown = (event: MouseEvent) => {
-      if (!menuRef.current?.contains(event.target as Node)) setMenuOpen(false);
-    };
-    document.addEventListener("mousedown", handlePointerDown);
-    return () => document.removeEventListener("mousedown", handlePointerDown);
-  }, [menuOpen]);
+    setDraft(message.body);
+  }, [message.body]);
 
   const formatTime = (value: string | null | undefined) => {
     if (!value) return "";
@@ -71,7 +73,6 @@ const PartnershipMessageBubble = ({
     if (!body) return;
     setBusy(true);
     setError(null);
-    setMenuOpen(false);
     try {
       const res = await fetch(`${apiBase}/${encodeURIComponent(message.id)}`, {
         method: "PATCH",
@@ -93,7 +94,6 @@ const PartnershipMessageBubble = ({
     if (!window.confirm(isAr ? "حذف هذه الرسالة؟" : "Delete this message?")) return;
     setBusy(true);
     setError(null);
-    setMenuOpen(false);
     try {
       const res = await fetch(`${apiBase}/${encodeURIComponent(message.id)}`, { method: "DELETE" });
       const json = await res.json().catch(() => ({}));
@@ -109,7 +109,6 @@ const PartnershipMessageBubble = ({
   const handleRestore = async () => {
     setBusy(true);
     setError(null);
-    setMenuOpen(false);
     try {
       const res = await fetch(`${apiBase}/${encodeURIComponent(message.id)}/restore`, {
         method: "POST",
@@ -124,46 +123,110 @@ const PartnershipMessageBubble = ({
     }
   };
 
+  const handleStartEdit = () => {
+    setDraft(message.body);
+    setEditing(true);
+  };
+
   const isMineBubble = align === "end" || message.isMine === true;
   const canEdit = message.canEdit === true;
   const canDelete = message.canDelete === true;
   const canRestore = message.canRestore === true;
   const showActions = !editing && (canEdit || canDelete || canRestore);
 
+  const [preferInlineOnCoarsePointer, setPreferInlineOnCoarsePointer] = useState(false);
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const debugEnabled =
-      process.env.NODE_ENV !== "production" ||
-      window.localStorage.getItem("partnershipMessageDebug") === "1";
-    if (!debugEnabled) return;
-    console.log("[PartnershipMessageBubble]", {
-      id: message.id,
-      canEdit,
-      canDelete,
-      canRestore,
-      showActions,
-      messageType: message.messageType,
-      isSystem: message.isSystem,
-      isMine: message.isMine,
-      senderId: message.senderId,
+    const coarse = window.matchMedia("(pointer: coarse)").matches;
+    const narrow = window.matchMedia("(max-width: 768px)").matches;
+    setPreferInlineOnCoarsePointer(coarse || narrow);
+  }, []);
+
+  const effectiveActionsMode = forceInlineDebug
+    ? "inline"
+    : actionsMode === "inline" || preferInlineOnCoarsePointer
+      ? "inline"
+      : "dropdown";
+
+  const inlineActionClass =
+    "inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] font-bold text-slate-800 shadow-sm transition hover:bg-slate-50 disabled:opacity-60";
+  const inlineDeleteClass =
+    "inline-flex items-center gap-1 rounded-lg border border-red-200 bg-white px-2 py-1 text-[11px] font-bold text-red-600 shadow-sm transition hover:bg-red-50 disabled:opacity-60";
+  const inlineRestoreClass =
+    "inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-white px-2 py-1 text-[11px] font-bold text-emerald-700 shadow-sm transition hover:bg-emerald-50 disabled:opacity-60";
+
+  const menuItems: PartnershipMessageActionItem[] = [];
+  if (canEdit) {
+    menuItems.push({
+      key: "edit",
+      label: isAr ? "تعديل" : "Edit",
+      emoji: "✏️",
+      tone: "default",
+      onSelect: handleStartEdit,
     });
-  }, [
-    message.id,
-    message.messageType,
-    message.isSystem,
-    message.isMine,
-    message.senderId,
-    canEdit,
-    canDelete,
-    canRestore,
-    showActions,
-  ]);
+  }
+  if (canDelete) {
+    menuItems.push({
+      key: "delete",
+      label: isAr ? "حذف" : "Delete",
+      emoji: "🗑",
+      tone: "danger",
+      onSelect: () => void handleDelete(),
+    });
+  }
+  if (canRestore) {
+    menuItems.push({
+      key: "restore",
+      label: isAr ? "استعادة" : "Restore",
+      emoji: "↩",
+      tone: "success",
+      onSelect: () => void handleRestore(),
+    });
+  }
+
+  const renderInlineActions = () => (
+    <div className="flex flex-wrap items-center gap-1.5" data-testid="partnership-message-inline-actions">
+      {canEdit ? (
+        <button
+          type="button"
+          onClick={handleStartEdit}
+          disabled={busy}
+          className={inlineActionClass}
+          aria-label={isAr ? "تعديل الرسالة" : "Edit message"}
+        >
+          <span aria-hidden>✏️</span>
+          {isAr ? "تعديل" : "Edit"}
+        </button>
+      ) : null}
+      {canDelete ? (
+        <button
+          type="button"
+          onClick={() => void handleDelete()}
+          disabled={busy}
+          className={inlineDeleteClass}
+          aria-label={isAr ? "حذف الرسالة" : "Delete message"}
+        >
+          <span aria-hidden>🗑</span>
+          {isAr ? "حذف" : "Delete"}
+        </button>
+      ) : null}
+      {canRestore ? (
+        <button
+          type="button"
+          onClick={() => void handleRestore()}
+          disabled={busy}
+          className={inlineRestoreClass}
+          aria-label={isAr ? "استعادة الرسالة" : "Restore message"}
+        >
+          <span aria-hidden>↩</span>
+          {isAr ? "استعادة" : "Restore"}
+        </button>
+      ) : null}
+    </div>
+  );
 
   return (
-    <div
-      className={`group flex flex-col gap-1 ${isMineBubble ? "items-end" : "items-start"}`}
-      tabIndex={showActions ? 0 : undefined}
-    >
+    <div className={`flex flex-col gap-1 ${isMineBubble ? "items-end" : "items-start"}`}>
       <div
         className={`max-w-[85%] rounded-2xl px-4 py-2 text-sm ${bubbleClassName} ${
           message.isDeleted ? "italic text-slate-500" : ""
@@ -205,71 +268,23 @@ const PartnershipMessageBubble = ({
         )}
       </div>
 
-      <div className="flex flex-wrap items-center gap-2 px-1 text-[11px] text-slate-500">
-        <span>{formatTime(message.createdAt)}</span>
-        {message.isEdited ? (
-          <span className="text-slate-400">{isAr ? "(تم التعديل)" : "(edited)"}</span>
-        ) : null}
-
-        {showActions ? (
-          <div ref={menuRef} className="relative">
-            <button
-              type="button"
-              onClick={() => setMenuOpen((open) => !open)}
-              disabled={busy}
-              className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-slate-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-primary"
-              aria-label={isAr ? "إجراءات الرسالة" : "Message actions"}
-              aria-haspopup="menu"
-              aria-expanded={menuOpen}
-              title={isAr ? "إجراءات" : "Actions"}
-            >
-              <MoreVertical className="h-4 w-4" aria-hidden />
-            </button>
-            {menuOpen ? (
-              <div
-                role="menu"
-                className={`absolute z-20 min-w-[9rem] rounded-xl border border-slate-200 bg-white py-1 shadow-lg ${
-                  isMineBubble ? "left-0" : "right-0"
-                }`}
-              >
-                {canEdit ? (
-                  <button
-                    type="button"
-                    role="menuitem"
-                    onClick={() => {
-                      setDraft(message.body);
-                      setEditing(true);
-                      setMenuOpen(false);
-                    }}
-                    className="block w-full px-3 py-2 text-start text-xs font-bold text-slate-800 hover:bg-slate-50"
-                  >
-                    {isAr ? "تعديل" : "Edit"}
-                  </button>
-                ) : null}
-                {canDelete ? (
-                  <button
-                    type="button"
-                    role="menuitem"
-                    onClick={() => void handleDelete()}
-                    className="block w-full px-3 py-2 text-start text-xs font-bold text-red-600 hover:bg-red-50"
-                  >
-                    {isAr ? "حذف" : "Delete"}
-                  </button>
-                ) : null}
-                {canRestore ? (
-                  <button
-                    type="button"
-                    role="menuitem"
-                    onClick={() => void handleRestore()}
-                    className="block w-full px-3 py-2 text-start text-xs font-bold text-emerald-700 hover:bg-emerald-50"
-                  >
-                    {isAr ? "استعادة" : "Restore"}
-                  </button>
-                ) : null}
-              </div>
-            ) : null}
-          </div>
-        ) : null}
+      <div className="flex max-w-full flex-col gap-1.5 px-1">
+        <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
+          <span>{formatTime(message.createdAt)}</span>
+          {message.isEdited ? (
+            <span className="text-slate-400">{isAr ? "(تم التعديل)" : "(edited)"}</span>
+          ) : null}
+          {showActions && effectiveActionsMode === "dropdown" ? (
+            <PartnershipMessageActionsMenu
+              isAr={isAr}
+              align={isMineBubble ? "end" : "start"}
+              busy={busy}
+              items={menuItems}
+              triggerLabel={isAr ? "إجراءات الرسالة" : "Message actions"}
+            />
+          ) : null}
+        </div>
+        {showActions && effectiveActionsMode === "inline" ? renderInlineActions() : null}
       </div>
       {error ? <p className="px-1 text-[11px] text-red-600">{error}</p> : null}
     </div>

@@ -13,6 +13,7 @@ export type PartnershipProgramSettingsData = {
   archivedAcademicYear: string;
   backupIntegrationEnabled: boolean;
   lastBackupSnapshotAt: string | null;
+  messageActionsMode: "dropdown" | "inline";
 };
 
 export const DEFAULT_PARTNERSHIP_PROGRAM_SETTINGS: PartnershipProgramSettingsData = {
@@ -30,4 +31,5 @@ export const DEFAULT_PARTNERSHIP_PROGRAM_SETTINGS: PartnershipProgramSettingsDat
   archivedAcademicYear: "",
   backupIntegrationEnabled: true,
   lastBackupSnapshotAt: null,
+  messageActionsMode: "dropdown",
 };

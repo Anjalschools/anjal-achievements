@@ -93,6 +93,8 @@ const resolvePartnershipTemplateKey = (row: {
   return fromMeta || fromRow;
 };
 
+export { resolvePartnershipTemplateKey };
+
 const isManualUserTemplateMessage = (row: {
   templateKey?: string | null;
   metadata?: Record<string, unknown> | null;
@@ -288,7 +290,7 @@ export const serializePartnershipMessageRow = (
     messageType,
     isSystem,
     body: isDeleted ? DELETED_MESSAGE_PLACEHOLDER_AR : String(row.body || ""),
-    templateKey: row.templateKey || null,
+    templateKey: resolvePartnershipTemplateKey(row) || null,
     createdAt: row.createdAt ? new Date(row.createdAt).toISOString() : null,
     editedAt: row.editedAt ? new Date(row.editedAt).toISOString() : null,
     isEdited: row.isEdited === true,

@@ -5,6 +5,7 @@ import {
   DEFAULT_PARTNERSHIP_PROGRAM_SETTINGS,
   type PartnershipProgramSettingsData,
 } from "@/lib/partnerships/partnerships-settings-defaults";
+import { normalizePartnershipMessageActionsMode } from "@/lib/partnerships/partnership-message-ui-constants";
 
 const serialize = (row: Record<string, unknown>): PartnershipProgramSettingsData => ({
   defaultAcademicYear: String(row.defaultAcademicYear || ""),
@@ -23,6 +24,7 @@ const serialize = (row: Record<string, unknown>): PartnershipProgramSettingsData
   lastBackupSnapshotAt: row.lastBackupSnapshotAt
     ? new Date(row.lastBackupSnapshotAt as Date).toISOString()
     : null,
+  messageActionsMode: normalizePartnershipMessageActionsMode(row.messageActionsMode),
 });
 
 export const getPartnershipProgramSettings = async (): Promise<PartnershipProgramSettingsData> => {
@@ -68,6 +70,9 @@ export const updatePartnershipProgramSettings = async (
   if (patch.archivedAcademicYear != null) update.archivedAcademicYear = String(patch.archivedAcademicYear).trim();
   if (typeof patch.backupIntegrationEnabled === "boolean") {
     update.backupIntegrationEnabled = patch.backupIntegrationEnabled;
+  }
+  if (patch.messageActionsMode != null) {
+    update.messageActionsMode = normalizePartnershipMessageActionsMode(patch.messageActionsMode);
   }
 
   const row = await PartnershipProgramSettings.findOneAndUpdate(

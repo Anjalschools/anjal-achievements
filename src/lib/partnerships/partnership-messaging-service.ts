@@ -18,6 +18,9 @@ import {
   serializePartnershipMessageRow,
 } from "@/lib/partnerships/partnership-message-mutation-service";
 import {
+  buildPartnershipMessagePermissionTraceRow,
+} from "@/lib/partnerships/partnership-message-permission-trace";
+import {
   PARTNERSHIP_MESSAGE_TEMPLATE_LABELS,
   type PartnershipBulkTarget,
   type PartnershipMessageTemplateKey,
@@ -387,6 +390,7 @@ export const listPartnershipThreadMessages = async (input: {
   threadId: string;
   userId: mongoose.Types.ObjectId;
   role: string;
+  includePermissionTrace?: boolean;
 }) => {
   await connectDB();
   const thread = await PartnershipThread.findById(input.threadId);
@@ -419,6 +423,31 @@ export const listPartnershipThreadMessages = async (input: {
 
   const currentUserId = resolvePartnershipActorId({ _id: input.userId });
 
+  const items = messages.map((row) => {
+    const senderId = normalizePartnershipSenderId(row.senderId);
+    const enriched = enrichMessagePermissions(serializePartnershipMessageRow(row, input.userId), {
+      role: input.role,
+      senderId,
+      userId: input.userId,
+      messageType: row.messageType,
+      templateKey: row.templateKey,
+      metadata: row.metadata,
+    });
+    return { ...enriched, currentUserId };
+  });
+
+  const includePermissionTrace =
+    input.includePermissionTrace === true || process.env.PARTNERSHIP_MESSAGE_DEBUG === "1";
+
+  if (includePermissionTrace) {
+    for (const enriched of items) {
+      console.info(
+        "[partnership-message-permissions]",
+        buildPartnershipMessagePermissionTraceRow(enriched, currentUserId)
+      );
+    }
+  }
+
   return {
     thread: {
       id: String(thread._id),
@@ -426,30 +455,11 @@ export const listPartnershipThreadMessages = async (input: {
       applicationId: thread.applicationId ? String(thread.applicationId) : "",
       threadKind: thread.threadKind || "application",
     },
-    items: messages.map((row) => {
-      const senderId = normalizePartnershipSenderId(row.senderId);
-      const enriched = enrichMessagePermissions(serializePartnershipMessageRow(row, input.userId), {
-        role: input.role,
-        senderId,
-        userId: input.userId,
-        messageType: row.messageType,
-        templateKey: row.templateKey,
-        metadata: row.metadata,
-      });
-      console.info("[partnership-message-permissions]", {
-        messageId: enriched.id,
-        messageType: enriched.messageType,
-        templateKey: enriched.templateKey,
-        senderId,
-        currentUserId,
-        role: input.role,
-        isMine: enriched.isMine,
-        isSystem: enriched.isSystem,
-        canEdit: enriched.canEdit,
-        canDelete: enriched.canDelete,
-        canRestore: enriched.canRestore,
-      });
-      return enriched;
-    }),
+    currentUserId,
+    viewerRole: String(input.role || ""),
+    items,
+    permissionTrace: includePermissionTrace
+      ? items.map((enriched) => buildPartnershipMessagePermissionTraceRow(enriched, currentUserId))
+      : undefined,
   };
 };
