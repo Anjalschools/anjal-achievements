@@ -19,7 +19,7 @@ export interface ITrainingAttachment extends Document {
 
 const TrainingAttachmentSchema = new Schema<ITrainingAttachment>(
   {
-    recordId: { type: Schema.Types.ObjectId, ref: "TrainingCompletionRecord", sparse: true, index: true },
+    recordId: { type: Schema.Types.ObjectId, ref: "TrainingCompletionRecord", sparse: true },
     applicationId: { type: Schema.Types.ObjectId, ref: "StudentTrainingApplication", sparse: true, index: true },
     requirementId: { type: Schema.Types.ObjectId, ref: "ApplicationRequirement", sparse: true, index: true },
     type: { type: String, enum: TRAINING_ATTACHMENT_TYPES, required: true, index: true },

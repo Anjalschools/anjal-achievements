@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import mongoose from "mongoose";
 import { jsonInternalServerError } from "@/lib/api-safe-response";
+import connectDB from "@/lib/mongodb";
+import TrainingCompletionRecord from "@/models/TrainingCompletionRecord";
+import { mergeSupervisorDefaults } from "@/lib/partnerships/institution-final-report-auto-populate";
 import { resolveInstitutionOrganizationForUser } from "@/lib/partnerships/institution-portal-service";
 import {
   generateInstitutionFinalReportTemplate,
@@ -39,15 +42,35 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
     const requiredHours = ctx
       ? computeOpportunityRequiredTrainingHours(ctx.opportunity?.trainingStart, ctx.opportunity?.trainingEnd)
       : 0;
+
+    let supervisorDefaults: { supervisorName: string; supervisorPhone: string } | null = null;
+    if (ctx) {
+      await connectDB();
+      const completionRecord = await TrainingCompletionRecord.findOne({
+        applicationId: ctx.application._id,
+      })
+        .select("supervisorName supervisorPhone")
+        .lean();
+      supervisorDefaults = mergeSupervisorDefaults({
+        organizationContactName: ctx.organization?.contactName,
+        organizationContactPhone: ctx.organization?.contactPhone,
+        completionSupervisorName: completionRecord?.supervisorName,
+        completionSupervisorPhone: completionRecord?.supervisorPhone,
+      });
+    }
+
     return NextResponse.json({
       ok: true,
       evaluation,
-      context: requiredHours
-        ? {
-            opportunityRequiredHours: requiredHours,
-            opportunityMaxAllowedHours: getTrainingHoursMaxAllowed(requiredHours),
-          }
-        : null,
+      context: {
+        ...(requiredHours
+          ? {
+              opportunityRequiredHours: requiredHours,
+              opportunityMaxAllowedHours: getTrainingHoursMaxAllowed(requiredHours),
+            }
+          : {}),
+        supervisorDefaults,
+      },
     });
   } catch (error) {
     console.error("[GET institution final-evaluation]", error);

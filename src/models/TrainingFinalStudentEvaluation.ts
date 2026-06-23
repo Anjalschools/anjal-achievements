@@ -49,9 +49,9 @@ const AttachmentRefSchema = new Schema(
 
 const TrainingFinalStudentEvaluationSchema = new Schema<ITrainingFinalStudentEvaluation>(
   {
-    applicationId: { type: Schema.Types.ObjectId, ref: "StudentTrainingApplication", required: true, unique: true, index: true },
+    applicationId: { type: Schema.Types.ObjectId, ref: "StudentTrainingApplication", required: true, unique: true },
     studentId: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
-    institutionId: { type: Schema.Types.ObjectId, ref: "PartnerOrganization", required: true, index: true },
+    institutionId: { type: Schema.Types.ObjectId, ref: "PartnerOrganization", required: true },
     opportunityId: { type: Schema.Types.ObjectId, ref: "TrainingOpportunity", required: true, index: true },
     trainingStartDate: { type: Date },
     trainingEndDate: { type: Date },

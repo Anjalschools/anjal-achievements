@@ -19,7 +19,7 @@ export interface IPartnershipMessageAudit extends Document {
 const PartnershipMessageAuditSchema = new Schema<IPartnershipMessageAudit>(
   {
     messageId: { type: Schema.Types.ObjectId, ref: "PartnershipMessage", required: true, index: true },
-    threadId: { type: Schema.Types.ObjectId, ref: "PartnershipThread", required: true, index: true },
+    threadId: { type: Schema.Types.ObjectId, ref: "PartnershipThread", required: true },
     action: {
       type: String,
       enum: ["sent", "edited", "deleted", "restored"],

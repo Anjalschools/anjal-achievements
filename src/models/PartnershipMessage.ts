@@ -39,7 +39,7 @@ const EditHistorySchema = new Schema<PartnershipMessageEditHistoryEntry>(
 
 const PartnershipMessageSchema = new Schema<IPartnershipMessage>(
   {
-    threadId: { type: Schema.Types.ObjectId, ref: "PartnershipThread", required: true, index: true },
+    threadId: { type: Schema.Types.ObjectId, ref: "PartnershipThread", required: true },
     senderId: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
     senderRole: { type: String, enum: ["student", "supervisor", "institution"], required: true, index: true },
     messageType: { type: String, enum: ["user", "system"], default: "user", index: true },

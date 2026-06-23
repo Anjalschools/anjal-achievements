@@ -19,13 +19,12 @@ export interface IInstitutionTalentRecommendation extends Document {
 const InstitutionTalentRecommendationSchema = new Schema<IInstitutionTalentRecommendation>(
   {
     studentId: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
-    institutionId: { type: Schema.Types.ObjectId, ref: "PartnerOrganization", required: true, index: true },
+    institutionId: { type: Schema.Types.ObjectId, ref: "PartnerOrganization", required: true },
     applicationId: {
       type: Schema.Types.ObjectId,
       ref: "StudentTrainingApplication",
       required: true,
       unique: true,
-      index: true,
     },
     outcomeRecordId: { type: Schema.Types.ObjectId, ref: "TrainingOutcomeRecord", sparse: true, index: true },
     recommendationDate: { type: Date, required: true, index: true },

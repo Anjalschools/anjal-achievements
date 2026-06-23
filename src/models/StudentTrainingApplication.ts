@@ -70,8 +70,8 @@ const TimelineEventSchema = new Schema(
 
 const StudentTrainingApplicationSchema = new Schema<IStudentTrainingApplication>(
   {
-    studentId: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
-    opportunityId: { type: Schema.Types.ObjectId, ref: "TrainingOpportunity", required: true, index: true },
+    studentId: { type: Schema.Types.ObjectId, ref: "User", required: true },
+    opportunityId: { type: Schema.Types.ObjectId, ref: "TrainingOpportunity", required: true },
     status: {
       type: String,
       enum: STUDENT_TRAINING_APPLICATION_STATUSES,

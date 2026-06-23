@@ -15,7 +15,6 @@ const InstitutionCandidateTagSchema = new Schema<IInstitutionCandidateTag>(
       type: Schema.Types.ObjectId,
       ref: "StudentTrainingApplication",
       required: true,
-      index: true,
     },
     organizationId: {
       type: Schema.Types.ObjectId,

@@ -37,8 +37,8 @@ export interface IInstitutionReview extends Document {
 
 const InstitutionReviewSchema = new Schema<IInstitutionReview>(
   {
-    applicationId: { type: Schema.Types.ObjectId, ref: "StudentTrainingApplication", required: true, index: true },
-    organizationId: { type: Schema.Types.ObjectId, ref: "PartnerOrganization", required: true, index: true },
+    applicationId: { type: Schema.Types.ObjectId, ref: "StudentTrainingApplication", required: true },
+    organizationId: { type: Schema.Types.ObjectId, ref: "PartnerOrganization", required: true },
     decision: { type: String, enum: INSTITUTION_DECISION_STATUSES, required: true, index: true },
     reviewKind: { type: String, enum: INSTITUTION_REVIEW_KINDS, default: "decision", index: true },
     notes: { type: String, trim: true, maxlength: 4000 },

@@ -6,6 +6,8 @@ import PageContainer from "@/components/layout/PageContainer";
 import PageHeader from "@/components/layout/PageHeader";
 import SectionCard from "@/components/layout/SectionCard";
 import PartnershipIntelligenceWidget from "@/components/admin/PartnershipIntelligenceWidget";
+import PartnershipExecutiveIntelligencePanel from "@/components/partnerships/PartnershipExecutiveIntelligencePanel";
+import type { PartnershipExecutiveIntelligence } from "@/lib/partnerships/partnership-recommendation-types";
 import { getLocale } from "@/lib/i18n";
 import { AlertTriangle, BarChart3, Loader2, Star, Trophy } from "lucide-react";
 
@@ -175,20 +177,39 @@ const PartnershipIntelligencePage = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<Dashboard | null>(null);
+  const [trainingExecutive, setTrainingExecutive] = useState<{
+    topTrainingPartners: Array<{ organizationId: string; organizationName: string; organizationTrainingQualityIndex: number; recommendationRatePct: number }>;
+    lowestRatedPartners: Array<{ organizationId: string; organizationName: string; averageStudentSatisfaction: number; organizationTrainingQualityIndex: number }>;
+    highestRecommendationRate: Array<{ organizationId: string; organizationName: string; recommendationRatePct: number }>;
+    institutionQualityRanking: Array<{ organizationId: string; organizationName: string; organizationTrainingQualityIndex: number; qualityCategoryAr: string; qualityCategoryEn: string }>;
+  } | null>(null);
+  const [partnershipIntelligence, setPartnershipIntelligence] = useState<PartnershipExecutiveIntelligence | null>(null);
+  const [partnershipIntelligenceLoading, setPartnershipIntelligenceLoading] = useState(true);
 
   const load = useCallback(async () => {
     setLoading(true);
+    setPartnershipIntelligenceLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/admin/partnerships/intelligence", { cache: "no-store" });
+      const [res, trainingRes, partnershipRes] = await Promise.all([
+        fetch("/api/admin/partnerships/intelligence", { cache: "no-store" }),
+        fetch("/api/admin/partnerships/training-intelligence", { cache: "no-store" }),
+        fetch("/api/admin/partnerships/partnership-recommendations", { cache: "no-store" }),
+      ]);
       const json = await res.json().catch(() => ({}));
+      const trainingJson = await trainingRes.json().catch(() => ({}));
+      const partnershipJson = await partnershipRes.json().catch(() => ({}));
       if (!res.ok) throw new Error(typeof json.error === "string" ? json.error : "Failed");
       setData(json.dashboard as Dashboard);
+      setTrainingExecutive(trainingRes.ok ? trainingJson.analytics || null : null);
+      setPartnershipIntelligence(partnershipRes.ok ? partnershipJson.intelligence || null : null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error");
       setData(null);
+      setPartnershipIntelligence(null);
     } finally {
       setLoading(false);
+      setPartnershipIntelligenceLoading(false);
     }
   }, []);
 
@@ -461,6 +482,88 @@ const PartnershipIntelligencePage = () => {
               ) : null}
             </SectionCard>
           ) : null}
+
+          {trainingExecutive ? (
+            <SectionCard className="mt-4">
+              <h3 className="mb-3 text-base font-bold text-foreground">
+                {isAr ? "تحليلات التدريب التنفيذية" : "Executive training analytics"}
+              </h3>
+              <div className="grid gap-4 lg:grid-cols-2">
+                <div>
+                  <p className="mb-2 text-sm font-bold text-foreground">
+                    {isAr ? "أفضل شركاء التدريب" : "Top training partners"}
+                  </p>
+                  <RankingTable
+                    rows={trainingExecutive.topTrainingPartners.map((row) => ({
+                      organizationId: row.organizationId,
+                      organizationName: row.organizationName,
+                      qualityScore: row.organizationTrainingQualityIndex,
+                      qualityLabelAr: `${row.organizationTrainingQualityIndex}%`,
+                      qualityLabelEn: `${row.organizationTrainingQualityIndex}%`,
+                      applicantCount: 0,
+                      acceptedCount: 0,
+                      completedTraineeCount: 0,
+                      acceptanceRatePct: row.recommendationRatePct,
+                      avgStudentRating: 0,
+                      averageResponseTimeDays: 0,
+                      activityScore: row.organizationTrainingQualityIndex,
+                    }))}
+                    isAr={isAr}
+                    valueKey="activityScore"
+                  />
+                </div>
+                <div>
+                  <p className="mb-2 text-sm font-bold text-foreground">
+                    {isAr ? "أقل المؤسسات تقييماً" : "Lowest rated partners"}
+                  </p>
+                  <ul className="space-y-1 text-sm text-text-light">
+                    {trainingExecutive.lowestRatedPartners.map((row) => (
+                      <li key={row.organizationId}>
+                        <Link
+                          href={`/admin/partnerships/organizations/${encodeURIComponent(row.organizationId)}`}
+                          className="font-semibold text-primary hover:underline"
+                        >
+                          {row.organizationName}
+                        </Link>{" "}
+                        — {row.averageStudentSatisfaction}/5 · {row.organizationTrainingQualityIndex}%
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+                <div>
+                  <p className="mb-2 text-sm font-bold text-foreground">
+                    {isAr ? "أعلى معدل توصية" : "Highest recommendation rate"}
+                  </p>
+                  <ul className="space-y-1 text-sm text-text-light">
+                    {trainingExecutive.highestRecommendationRate.map((row) => (
+                      <li key={row.organizationId}>
+                        {row.organizationName} — {row.recommendationRatePct}%
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+                <div>
+                  <p className="mb-2 text-sm font-bold text-foreground">
+                    {isAr ? "ترتيب جودة المؤسسات" : "Institution quality ranking"}
+                  </p>
+                  <ul className="max-h-48 space-y-1 overflow-y-auto text-sm text-text-light">
+                    {trainingExecutive.institutionQualityRanking.slice(0, 8).map((row, index) => (
+                      <li key={row.organizationId}>
+                        {index + 1}. {row.organizationName} — {row.organizationTrainingQualityIndex}% (
+                        {isAr ? row.qualityCategoryAr : row.qualityCategoryEn})
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            </SectionCard>
+          ) : null}
+
+          <PartnershipExecutiveIntelligencePanel
+            intelligence={partnershipIntelligence}
+            loading={partnershipIntelligenceLoading}
+            isAr={isAr}
+          />
         </>
       )}
     </PageContainer>

@@ -24,8 +24,8 @@ export interface IPartnershipThread extends Document {
 
 const PartnershipThreadSchema = new Schema<IPartnershipThread>(
   {
-    studentId: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
-    applicationId: { type: Schema.Types.ObjectId, ref: "StudentTrainingApplication", sparse: true, index: true },
+    studentId: { type: Schema.Types.ObjectId, ref: "User", required: true },
+    applicationId: { type: Schema.Types.ObjectId, ref: "StudentTrainingApplication" },
     opportunityId: { type: Schema.Types.ObjectId, ref: "TrainingOpportunity", sparse: true, index: true },
     threadKind: {
       type: String,

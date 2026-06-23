@@ -28,7 +28,6 @@ const TrainingAssessmentSchema = new Schema<ITrainingAssessment>(
       type: Schema.Types.ObjectId,
       ref: "StudentTrainingApplication",
       required: true,
-      index: true,
     },
     organizationId: {
       type: Schema.Types.ObjectId,

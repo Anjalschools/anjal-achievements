@@ -62,13 +62,22 @@ export const uploadTrainingReportFile = async (file: File): Promise<UploadedTrai
   return uploadAttachment(file);
 };
 
+/** Institution stamped report — PDF or scan (separate from student attachments). */
+export const uploadInstitutionReportFile = async (file: File): Promise<UploadedTrainingAttachment> => {
+  const mime = (file.type || "").toLowerCase();
+  const name = file.name.toLowerCase();
+  if (mime.startsWith("image/") || /\.(jpg|jpeg|png)$/i.test(name)) return uploadImage(file);
+  return uploadAttachment(file);
+};
+
 /** Training final evaluation evidence — reuses achievement image upload pipeline. */
 export const uploadTrainingEvidenceImage = async (file: File): Promise<UploadedTrainingAttachment> =>
   uploadImage(file);
 
-export const attachmentDisplayUrl = (storageKey: string): string => {
-  const key = String(storageKey || "").trim();
-  if (!key) return "";
-  if (key.startsWith("http://") || key.startsWith("https://")) return key;
-  return key;
-};
+export {
+  attachmentDisplayUrl,
+  isAttachmentDisplayUrlResolvable,
+  isBareR2AttachmentKey,
+  resolveAttachmentDisplayUrl,
+  type AttachmentDisplayUrlResult,
+} from "@/lib/partnerships/attachment-display-url";

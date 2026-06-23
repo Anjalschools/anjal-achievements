@@ -440,16 +440,21 @@ export const getAdminLeaderboard = async (filters: Omit<LeaderboardFilters, "sco
   });
 };
 
-const runFullRankedList = async (
+const buildRankedStudentPipelineStages = (
   filters: Omit<LeaderboardFilters, "page" | "limit" | "sortBy" | "sortOrder" | "includeSummary">
-): Promise<LeaderboardItem[]> => {
-  await connectDB();
+): {
+  achievementMatch: Record<string, unknown>;
+  userMatch: Record<string, unknown>;
+  searchMatch: Record<string, unknown> | null;
+  sortSpec: Record<string, 1 | -1>;
+  stages: mongoose.PipelineStage[];
+} => {
   const achievementMatch = buildAchievementMatch(filters);
   const userMatch = buildUserPostLookupMatch(filters);
   const searchMatch = buildSearchMatch(filters);
   const sortSpec = buildSortSpec({ ...filters, sortBy: "totalPoints", sortOrder: "desc" });
 
-  const pipeline: mongoose.PipelineStage[] = [
+  const stages: mongoose.PipelineStage[] = [
     { $match: achievementMatch },
     {
       $group: {
@@ -471,8 +476,19 @@ const runFullRankedList = async (
     { $unwind: "$user" },
     { $match: userMatch },
   ];
-  if (searchMatch) pipeline.push({ $match: searchMatch });
-  pipeline.push(
+  if (searchMatch) stages.push({ $match: searchMatch });
+
+  return { sortSpec, stages };
+};
+
+const runFullRankedList = async (
+  filters: Omit<LeaderboardFilters, "page" | "limit" | "sortBy" | "sortOrder" | "includeSummary">
+): Promise<LeaderboardItem[]> => {
+  await connectDB();
+  const { sortSpec, stages } = buildRankedStudentPipelineStages(filters);
+
+  const pipeline: mongoose.PipelineStage[] = [
+    ...stages,
     { $sort: sortSpec },
     {
       $project: {
@@ -483,8 +499,8 @@ const runFullRankedList = async (
         latestAchievementDate: 1,
         user: userProject,
       },
-    }
-  );
+    },
+  ];
 
   const rows = (await profileMongoAggregate(Achievement, {
     pipelineName: "leaderboard_admin_rows",
@@ -494,33 +510,95 @@ const runFullRankedList = async (
   return toLeaderboardItems(rows, 0);
 };
 
+type StudentRankAggregateResult = {
+  target: Array<{
+    totalPoints: number;
+    achievementsCount: number;
+    rank: number;
+  }>;
+  totalCount: Array<{ n: number }>;
+};
+
+const runStudentRankSummaryAggregate = async (
+  userId: string,
+  filters: Omit<LeaderboardFilters, "page" | "limit" | "sortBy" | "sortOrder" | "includeSummary" | "scope">
+): Promise<StudentRankSummaryResult> => {
+  await connectDB();
+  const userObjectId = new mongoose.Types.ObjectId(userId);
+  const { sortSpec, stages } = buildRankedStudentPipelineStages({ ...filters, scope: "hallOfFame" });
+
+  const pipeline: mongoose.PipelineStage[] = [
+    ...stages,
+    {
+      $setWindowFields: {
+        sortBy: sortSpec,
+        output: { rank: { $documentNumber: {} } },
+      },
+    },
+    {
+      $facet: {
+        target: [
+          { $match: { _id: userObjectId } },
+          { $limit: 1 },
+          {
+            $project: {
+              _id: 0,
+              totalPoints: 1,
+              achievementsCount: 1,
+              rank: 1,
+            },
+          },
+        ],
+        totalCount: [{ $count: "n" }],
+      },
+    },
+  ];
+
+  const raw = (
+    await profileMongoAggregate(Achievement, {
+      pipelineName: "leaderboard_student_rank_summary",
+      fn: () => Achievement.aggregate(pipeline) as Promise<StudentRankAggregateResult[]>,
+      countDocuments: (result) => (Array.isArray(result) ? result.length : 0),
+    })
+  )[0] as StudentRankAggregateResult | undefined;
+
+  const totalRankedStudents = raw?.totalCount?.[0]?.n ?? 0;
+  const target = raw?.target?.[0];
+  if (!target) {
+    return {
+      totalPoints: 0,
+      achievementsCount: 0,
+      rank: null,
+      totalRankedStudents,
+    };
+  }
+
+  return {
+    totalPoints: Number(target.totalPoints || 0),
+    achievementsCount: Number(target.achievementsCount || 0),
+    rank: Number(target.rank || 0) || null,
+    totalRankedStudents,
+  };
+};
+
+type StudentRankSummaryResult = {
+  totalPoints: number;
+  achievementsCount: number;
+  rank: number | null;
+  totalRankedStudents: number;
+};
+
 export const getStudentRankSummary = async (
   userId: string,
   filters: Omit<LeaderboardFilters, "page" | "limit" | "sortBy" | "sortOrder" | "includeSummary" | "scope"> = {}
-) => {
+): Promise<StudentRankSummaryResult> => {
   if (!mongoose.Types.ObjectId.isValid(userId)) {
     return {
       totalPoints: 0,
       achievementsCount: 0,
-      rank: null as number | null,
+      rank: null,
       totalRankedStudents: 0,
     };
   }
-  const all = await runFullRankedList({ ...filters, scope: "hallOfFame" });
-  const idx = all.findIndex((row) => row.userId === userId);
-  if (idx < 0) {
-    return {
-      totalPoints: 0,
-      achievementsCount: 0,
-      rank: null as number | null,
-      totalRankedStudents: all.length,
-    };
-  }
-  const row = all[idx];
-  return {
-    totalPoints: row.totalPoints,
-    achievementsCount: row.achievementsCount,
-    rank: row.rank,
-    totalRankedStudents: all.length,
-  };
+  return runStudentRankSummaryAggregate(userId, filters);
 };

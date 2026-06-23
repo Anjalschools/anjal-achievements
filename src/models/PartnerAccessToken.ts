@@ -12,8 +12,8 @@ export interface IPartnerAccessToken extends Document {
 
 const PartnerAccessTokenSchema = new Schema<IPartnerAccessToken>(
   {
-    organizationId: { type: Schema.Types.ObjectId, ref: "PartnerOrganization", required: true, index: true },
-    token: { type: String, required: true, unique: true, trim: true, maxlength: 200, index: true },
+    organizationId: { type: Schema.Types.ObjectId, ref: "PartnerOrganization", required: true },
+    token: { type: String, required: true, unique: true, trim: true, maxlength: 200 },
     expiresAt: { type: Date, required: true, index: true },
     active: { type: Boolean, default: true, index: true },
     createdBy: { type: Schema.Types.ObjectId, ref: "User", required: true },

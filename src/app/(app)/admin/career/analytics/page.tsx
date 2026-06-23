@@ -4,6 +4,8 @@ import { useCallback, useEffect, useState } from "react";
 import PageContainer from "@/components/layout/PageContainer";
 import PageHeader from "@/components/layout/PageHeader";
 import SectionCard from "@/components/layout/SectionCard";
+import ExecutiveTalentIntelligencePanel from "@/components/talent-pathway/ExecutiveTalentIntelligencePanel";
+import type { ExecutiveTalentIntelligence } from "@/lib/talent-pathway/talent-pathway-intelligence-types";
 import { getLocale } from "@/lib/i18n";
 import { Loader2 } from "lucide-react";
 
@@ -37,20 +39,30 @@ const CareerAnalyticsAdminPage = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [dashboard, setDashboard] = useState<Dashboard | null>(null);
+  const [talentIntelligence, setTalentIntelligence] = useState<ExecutiveTalentIntelligence | null>(null);
+  const [talentLoading, setTalentLoading] = useState(true);
 
   const load = useCallback(async () => {
     setLoading(true);
+    setTalentLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/admin/career/analytics", { cache: "no-store" });
+      const [res, talentRes] = await Promise.all([
+        fetch("/api/admin/career/analytics", { cache: "no-store" }),
+        fetch("/api/admin/talent-pathway/intelligence", { cache: "no-store" }),
+      ]);
       const json = await res.json().catch(() => ({}));
+      const talentJson = await talentRes.json().catch(() => ({}));
       if (!res.ok) throw new Error(typeof json.error === "string" ? json.error : "Failed");
       setDashboard(json.dashboard || null);
+      setTalentIntelligence(talentRes.ok ? talentJson.intelligence || null : null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error");
       setDashboard(null);
+      setTalentIntelligence(null);
     } finally {
       setLoading(false);
+      setTalentLoading(false);
     }
   }, []);
 
@@ -180,6 +192,12 @@ const CareerAnalyticsAdminPage = () => {
               ) : null}
             </SectionCard>
           ) : null}
+
+          <ExecutiveTalentIntelligencePanel
+            intelligence={talentIntelligence}
+            loading={talentLoading}
+            isAr={isAr}
+          />
         </div>
       )}
     </PageContainer>

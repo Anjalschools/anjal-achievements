@@ -23,7 +23,7 @@ export interface IVolunteerRecord extends Document {
 
 const VolunteerRecordSchema = new Schema<IVolunteerRecord>(
   {
-    studentId: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
+    studentId: { type: Schema.Types.ObjectId, ref: "User", required: true },
     title: { type: String, required: true, trim: true, maxlength: 300 },
     organization: { type: String, required: true, trim: true, maxlength: 300 },
     description: { type: String, trim: true, maxlength: 4000 },

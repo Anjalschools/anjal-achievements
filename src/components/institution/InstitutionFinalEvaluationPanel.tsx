@@ -25,16 +25,16 @@ type InstitutionFinalEvaluationPanelProps = {
 };
 
 const defaultScores = (): Record<InstitutionAssessmentScoreKey, number> => ({
-  attendanceScore: 4,
-  workEthicsScore: 4,
-  communicationScore: 4,
-  teamworkScore: 4,
-  learningSpeedScore: 4,
-  professionalismScore: 4,
-  initiativeScore: 4,
-  workQualityScore: 4,
-  safetyComplianceScore: 4,
-  taskExecutionScore: 4,
+  attendanceScore: 5,
+  workEthicsScore: 5,
+  communicationScore: 5,
+  teamworkScore: 5,
+  learningSpeedScore: 5,
+  professionalismScore: 5,
+  initiativeScore: 5,
+  workQualityScore: 5,
+  safetyComplianceScore: 5,
+  taskExecutionScore: 5,
 });
 
 const InstitutionFinalEvaluationPanel = ({
@@ -88,7 +88,14 @@ const InstitutionFinalEvaluationPanel = ({
         setRequiredHours(Number(json.context.opportunityRequiredHours || 0));
         setMaxAllowedHours(Number(json.context.opportunityMaxAllowedHours || 0));
       }
-      if (!e) return;
+      if (!e) {
+        const defaults = json.context?.supervisorDefaults as
+          | { supervisorName?: string; supervisorPhone?: string }
+          | undefined;
+        if (defaults?.supervisorName) setSupervisorName(defaults.supervisorName);
+        if (defaults?.supervisorPhone) setSupervisorPhone(defaults.supervisorPhone);
+        return;
+      }
       setScores(collapseInstitutionAssessmentScores(e));
       setOverallRecommendation(inferOverallRecommendation(e));
       const parsed = parseInstitutionStrengthsFields(String(e.strengths || ""));
@@ -96,9 +103,9 @@ const InstitutionFinalEvaluationPanel = ({
       setStrengths(parsed.strengths);
       setImprovementAreas(String(e.improvementAreas || ""));
       setRecommendationReason(String(e.recommendationReason || ""));
-      setSupervisorName(String(e.supervisorName || ""));
+      setSupervisorName(String(e.supervisorName || json.context?.supervisorDefaults?.supervisorName || ""));
       setSupervisorTitle(String(e.supervisorTitle || ""));
-      setSupervisorPhone(String(e.supervisorPhone || ""));
+      setSupervisorPhone(String(e.supervisorPhone || json.context?.supervisorDefaults?.supervisorPhone || ""));
       setAssignedTasks(String(e.assignedTasks || ""));
       setTrainingHours(e.trainingHours != null ? String(e.trainingHours) : "");
       setLocked(Boolean(e.locked) || e.supervisorReviewStatus === "approved");
@@ -213,7 +220,6 @@ const InstitutionFinalEvaluationPanel = ({
               disabled={readOnly || locked}
               onChange={(e) => setSupervisorName(e.target.value)}
               className="w-full rounded-xl border border-border px-3 py-2"
-              required
             />
           </label>
           <label className="text-sm">

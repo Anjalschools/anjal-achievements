@@ -59,8 +59,8 @@ export interface ITrainingFinalInstitutionEvaluation extends Document {
 
 const TrainingFinalInstitutionEvaluationSchema = new Schema<ITrainingFinalInstitutionEvaluation>(
   {
-    applicationId: { type: Schema.Types.ObjectId, ref: "StudentTrainingApplication", required: true, unique: true, index: true },
-    institutionId: { type: Schema.Types.ObjectId, ref: "PartnerOrganization", required: true, index: true },
+    applicationId: { type: Schema.Types.ObjectId, ref: "StudentTrainingApplication", required: true, unique: true },
+    institutionId: { type: Schema.Types.ObjectId, ref: "PartnerOrganization", required: true },
     studentId: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
     opportunityId: { type: Schema.Types.ObjectId, ref: "TrainingOpportunity", required: true, index: true },
     trainingStartDate: { type: Date },
@@ -102,7 +102,6 @@ const TrainingFinalInstitutionEvaluationSchema = new Schema<ITrainingFinalInstit
       type: String,
       enum: ["pending", "approved", "rejected", "resubmission_requested"],
       default: "pending",
-      index: true,
     },
     supervisorReviewNotes: { type: String, trim: true, maxlength: 4000 },
     supervisorReviewedAt: { type: Date },

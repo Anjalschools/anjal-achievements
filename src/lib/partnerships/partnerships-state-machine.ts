@@ -34,11 +34,16 @@ export const APPLICATION_STATUS_TRANSITIONS: Record<
 
 export const COMPLETION_STATUS_TRANSITIONS: Record<TrainingCompletionStatus, TrainingCompletionStatus[]> = {
   pending: ["submitted"],
-  submitted: ["under_review", "rejected", "approved"],
-  under_review: ["approved", "rejected", "pending"],
+  submitted: ["under_review", "rejected", "approved", "needs_revision"],
+  under_review: ["approved", "rejected", "needs_revision"],
+  needs_revision: ["resubmitted"],
+  resubmitted: ["approved", "rejected", "needs_revision"],
   approved: [],
   rejected: ["pending", "submitted"],
 };
+
+export const getAllowedCompletionTransitions = (current: string): TrainingCompletionStatus[] =>
+  COMPLETION_STATUS_TRANSITIONS[current as TrainingCompletionStatus] || [];
 
 export const canTransitionApplicationStatus = (
   current: string,

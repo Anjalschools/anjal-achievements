@@ -2,6 +2,8 @@ export const TRAINING_COMPLETION_STATUSES = [
   "pending",
   "submitted",
   "under_review",
+  "needs_revision",
+  "resubmitted",
   "approved",
   "rejected",
 ] as const;
@@ -24,6 +26,8 @@ export const TRAINING_COMPLETION_STATUS_LABELS: Record<
   pending: { ar: "مسودة", en: "Draft" },
   submitted: { ar: "مُرسل", en: "Submitted" },
   under_review: { ar: "قيد المراجعة", en: "Under review" },
+  needs_revision: { ar: "يحتاج تعديل", en: "Needs revision" },
+  resubmitted: { ar: "أُعيد إرساله", en: "Resubmitted" },
   approved: { ar: "معتمد", en: "Approved" },
   rejected: { ar: "مرفوض", en: "Rejected" },
 };

@@ -7,6 +7,8 @@ import SectionCard from "@/components/layout/SectionCard";
 import { getLocale } from "@/lib/i18n";
 import { Briefcase, Download, Loader2, Plus, Sparkles, Trash2 } from "lucide-react";
 import GraduateReadinessWidget from "@/components/career/GraduateReadinessWidget";
+import StudentTalentPathwayPanel from "@/components/talent-pathway/StudentTalentPathwayPanel";
+import AlumniTalentPreparationPanel from "@/components/talent-pathway/AlumniTalentPreparationPanel";
 
 type CareerPayload = {
   profile: { fullName: string; gradeLabelAr: string; gradeLabelEn: string };
@@ -197,6 +199,9 @@ const CareerProfilePage = () => {
           </div>
 
           <GraduateReadinessWidget />
+
+          <StudentTalentPathwayPanel />
+          <AlumniTalentPreparationPanel />
 
           <SectionCard>
             <h2 className="mb-3 flex items-center gap-2 text-base font-bold">

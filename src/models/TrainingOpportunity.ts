@@ -33,7 +33,7 @@ const TrainingOpportunitySchema = new Schema<ITrainingOpportunity>(
   {
     title: { type: String, required: true, trim: true, maxlength: 300 },
     description: { type: String, trim: true, maxlength: 12000 },
-    organizationId: { type: Schema.Types.ObjectId, ref: "PartnerOrganization", required: true, index: true },
+    organizationId: { type: Schema.Types.ObjectId, ref: "PartnerOrganization", required: true },
     targetGender: {
       type: String,
       enum: PARTNERSHIP_TARGET_GENDERS,

@@ -11,6 +11,7 @@ import { isApprovedTrainingPlacement } from "@/lib/partnerships/training-final-e
 import TrainingCertificateActions, {
   type TrainingCertificateSummary,
 } from "@/components/partnerships/TrainingCertificateActions";
+import StudentTrainingRecommendationsPanel from "@/components/partnerships/StudentTrainingRecommendationsPanel";
 import type { StudentTrainingApplicationSummary } from "@/lib/partnerships/partnerships-student-dashboard-context";
 import { getLocale } from "@/lib/i18n";
 import { Briefcase, Building2, CalendarDays, HelpCircle, Loader2, MessageSquarePlus, Send, Users } from "lucide-react";
@@ -132,6 +133,8 @@ const SummerTrainingListPage = () => {
           </div>
         </SectionCard>
       ) : null}
+
+      <StudentTrainingRecommendationsPanel />
 
       <SectionCard>
         {loading ? (

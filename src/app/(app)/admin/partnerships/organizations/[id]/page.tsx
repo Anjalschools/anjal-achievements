@@ -40,6 +40,18 @@ type Insights = {
   fastestResponse: InsightRow | null;
 };
 
+type TrainingQuality = {
+  organizationTrainingQualityIndex: number;
+  qualityCategoryAr: string;
+  qualityCategoryEn: string;
+  averageStudentSatisfaction: number;
+  averageInstitutionEvaluation: number;
+  recommendationRatePct: number;
+  approvalRatePct: number;
+  completionRatePct: number;
+  reportCount: number;
+};
+
 type Organization = {
   id: string;
   name: string;
@@ -62,6 +74,7 @@ const OrganizationAnalyticsPage = () => {
   const [organization, setOrganization] = useState<Organization | null>(null);
   const [stats, setStats] = useState<OrganizationStats | null>(null);
   const [insights, setInsights] = useState<Insights | null>(null);
+  const [trainingQuality, setTrainingQuality] = useState<TrainingQuality | null>(null);
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -74,6 +87,7 @@ const OrganizationAnalyticsPage = () => {
       setOrganization(json.organization || null);
       setStats(json.stats || null);
       setInsights(json.insights || null);
+      setTrainingQuality(json.trainingQuality || null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error");
     } finally {
@@ -213,6 +227,56 @@ const OrganizationAnalyticsPage = () => {
               ))}
             </div>
           </SectionCard>
+
+          {trainingQuality && trainingQuality.reportCount > 0 ? (
+            <SectionCard>
+              <h2 className="mb-4 text-base font-bold text-foreground">
+                {isAr ? "ذكاء التدريب — المؤسسة" : "Training intelligence — organization"}
+              </h2>
+              <div className="mb-4 rounded-xl border border-primary/20 bg-primary/5 px-4 py-3">
+                <p className="text-xs text-text-light">{isAr ? "مؤشر جودة التدريب" : "Training quality index"}</p>
+                <p className="text-2xl font-black text-primary">
+                  {trainingQuality.organizationTrainingQualityIndex}%
+                </p>
+                <p className="text-sm font-semibold">
+                  {isAr ? trainingQuality.qualityCategoryAr : trainingQuality.qualityCategoryEn}
+                </p>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                {[
+                  {
+                    label: isAr ? "متوسط رضا الطلاب" : "Avg student satisfaction",
+                    value: `${trainingQuality.averageStudentSatisfaction}/5`,
+                  },
+                  {
+                    label: isAr ? "متوسط تقييم المؤسسة" : "Avg institution evaluation",
+                    value: `${trainingQuality.averageInstitutionEvaluation}/5`,
+                  },
+                  {
+                    label: isAr ? "معدل التوصية" : "Recommendation rate",
+                    value: `${trainingQuality.recommendationRatePct}%`,
+                  },
+                  {
+                    label: isAr ? "معدل الاعتماد" : "Approval rate",
+                    value: `${trainingQuality.approvalRatePct}%`,
+                  },
+                  {
+                    label: isAr ? "معدل الإكمال" : "Completion rate",
+                    value: `${trainingQuality.completionRatePct}%`,
+                  },
+                  {
+                    label: isAr ? "عدد التقارير" : "Report count",
+                    value: String(trainingQuality.reportCount),
+                  },
+                ].map((card) => (
+                  <div key={card.label} className="rounded-xl border border-border/60 p-4">
+                    <p className="text-xs text-text-light">{card.label}</p>
+                    <p className="text-xl font-bold text-foreground">{card.value}</p>
+                  </div>
+                ))}
+              </div>
+            </SectionCard>
+          ) : null}
 
           <SectionCard>
             <h2 className="mb-4 text-base font-bold text-foreground">

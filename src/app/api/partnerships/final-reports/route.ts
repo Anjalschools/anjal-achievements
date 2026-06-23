@@ -87,7 +87,6 @@ export async function POST(request: NextRequest) {
       applicationId,
       studentId: gate.user._id,
       submit: body.submit === true,
-      organizationName: String(body.organizationName || "").trim() || undefined,
       supervisorName: String(body.supervisorName || "").trim() || undefined,
       supervisorPhone: String(body.supervisorPhone || "").trim() || undefined,
       trainingStartDate: String(body.trainingStartDate || "").trim() || undefined,
@@ -101,18 +100,37 @@ export async function POST(request: NextRequest) {
         body.studentBenefitRating != null ? Number(body.studentBenefitRating) : undefined,
       numberOfTrainees:
         body.numberOfTrainees != null ? Number(body.numberOfTrainees) : undefined,
+      positionTitle: String(body.positionTitle || "").trim() || undefined,
       assignedTasks: String(body.assignedTasks || "").trim() || undefined,
       studentReflection: String(body.studentReflection || "").trim() || undefined,
-      attendanceCommitment:
-        body.attendanceCommitment != null ? Number(body.attendanceCommitment) : undefined,
-      professionalEthics:
-        body.professionalEthics != null ? Number(body.professionalEthics) : undefined,
-      safetyCompliance: body.safetyCompliance != null ? Number(body.safetyCompliance) : undefined,
-      overallRecommendation:
-        body.overallRecommendation != null ? Number(body.overallRecommendation) : undefined,
-      institutionNotes: String(body.institutionNotes || "").trim() || undefined,
+      supervisorCooperationRating:
+        body.supervisorCooperationRating != null ? Number(body.supervisorCooperationRating) : undefined,
+      practicalBenefitRating:
+        body.practicalBenefitRating != null ? Number(body.practicalBenefitRating) : undefined,
+      workEnvironmentRating:
+        body.workEnvironmentRating != null ? Number(body.workEnvironmentRating) : undefined,
+      recommendInstitutionToPeers:
+        typeof body.recommendInstitutionToPeers === "boolean"
+          ? body.recommendInstitutionToPeers
+          : undefined,
+      biggestChallenge: String(body.biggestChallenge || "").trim() || undefined,
+      challengeResponse: String(body.challengeResponse || "").trim() || undefined,
+      wishedToLearn: String(body.wishedToLearn || "").trim() || undefined,
+      futureImpact: String(body.futureImpact || "").trim() || undefined,
       videoUrl: String(body.videoUrl || "").trim() || undefined,
       attachments: parseAttachments(body.attachments),
+      institutionReport:
+        body.institutionReport && typeof body.institutionReport === "object"
+          ? {
+              fileName: String((body.institutionReport as Record<string, unknown>).fileName || "").trim(),
+              storageKey: String(
+                (body.institutionReport as Record<string, unknown>).storageKey ||
+                  (body.institutionReport as Record<string, unknown>).url ||
+                  ""
+              ).trim(),
+              mimeType: String((body.institutionReport as Record<string, unknown>).mimeType || "").trim() || undefined,
+            }
+          : undefined,
     });
 
     if (body.submit === true) {

@@ -1,4 +1,5 @@
 import "server-only";
+import { buildTrainingCompletionSupervisorRatingAverage } from "@/lib/partnerships/training-completion-analytics";
 import connectDB from "@/lib/mongodb";
 import PartnerOrganization from "@/models/PartnerOrganization";
 import StudentCareerProfile from "@/models/StudentCareerProfile";
@@ -173,7 +174,7 @@ export const buildExecutiveDecisionIntelligence = async (): Promise<ExecutiveDec
       fn: () =>
         TrainingCompletionRecord.find({})
           .select(
-            "organizationId organizationName studentId status volunteerHours studentBenefitRating overallRecommendation attendanceCommitment professionalEthics"
+            "organizationId organizationName studentId status volunteerHours studentBenefitRating overallRecommendation attendanceCommitment professionalEthics supervisorCooperationRating practicalBenefitRating workEnvironmentRating recommendInstitutionToPeers"
           )
           .limit(5000)
           .lean(),
@@ -320,12 +321,7 @@ export const buildExecutiveDecisionIntelligence = async (): Promise<ExecutiveDec
       .map((r) => Number(r.studentBenefitRating || r.overallRecommendation || 0))
       .filter((v) => v > 0);
     const supervisorRatings = rows
-      .map((r) => {
-        const vals = [r.attendanceCommitment, r.professionalEthics, r.overallRecommendation].filter(
-          (v): v is number => typeof v === "number" && v > 0
-        );
-        return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
-      })
+      .map((r) => buildTrainingCompletionSupervisorRatingAverage(r))
       .filter((v) => v > 0);
     const hours = rows.reduce((s, r) => s + Number(r.volunteerHours || 0), 0);
     const avgBenefit = ratings.length ? Math.round((ratings.reduce((a, b) => a + b, 0) / ratings.length) * 10) / 10 : 0;

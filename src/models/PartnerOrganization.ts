@@ -54,7 +54,7 @@ const PartnerOrganizationSchema = new Schema<IPartnerOrganization>(
       decisions: { type: Boolean, default: true },
       finalReports: { type: Boolean, default: true },
     },
-    institutionUserId: { type: Schema.Types.ObjectId, ref: "User", sparse: true, unique: true, index: true },
+    institutionUserId: { type: Schema.Types.ObjectId, ref: "User", sparse: true, unique: true },
     institutionUserIds: [{ type: Schema.Types.ObjectId, ref: "User", index: true }],
     active: { type: Boolean, default: true, index: true },
   },

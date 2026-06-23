@@ -17,15 +17,34 @@ type LeanRecord = Pick<
   | "hasAllowance"
   | "studentBenefitRating"
   | "numberOfTrainees"
+  | "positionTitle"
   | "assignedTasks"
   | "studentReflection"
+  | "supervisorCooperationRating"
+  | "practicalBenefitRating"
+  | "workEnvironmentRating"
+  | "recommendInstitutionToPeers"
+  | "biggestChallenge"
+  | "challengeResponse"
+  | "wishedToLearn"
+  | "futureImpact"
   | "attendanceCommitment"
   | "professionalEthics"
   | "safetyCompliance"
   | "overallRecommendation"
   | "institutionNotes"
+  | "institutionReportSource"
+  | "institutionReportFileKey"
+  | "institutionReportFileName"
+  | "institutionReportExtraction"
+  | "institutionUploadedEvaluation"
   | "videoUrl"
   | "reviewNotes"
+  | "revisionRequestedAt"
+  | "revisionRequestedBy"
+  | "revisionReason"
+  | "resubmittedAt"
+  | "revisionAudit"
   | "reviewedAt"
   | "reviewedBy"
   | "submittedAt"
@@ -71,15 +90,44 @@ export const serializeTrainingCompletionRecord = (row: LeanRecord, context?: Rec
   hasAllowance: row.hasAllowance ?? null,
   studentBenefitRating: row.studentBenefitRating ?? null,
   numberOfTrainees: row.numberOfTrainees ?? null,
+  positionTitle: row.positionTitle || "",
   assignedTasks: row.assignedTasks || "",
   studentReflection: row.studentReflection || "",
+  supervisorCooperationRating: row.supervisorCooperationRating ?? null,
+  practicalBenefitRating: row.practicalBenefitRating ?? null,
+  workEnvironmentRating: row.workEnvironmentRating ?? null,
+  recommendInstitutionToPeers: row.recommendInstitutionToPeers ?? null,
+  biggestChallenge: row.biggestChallenge || "",
+  challengeResponse: row.challengeResponse || "",
+  wishedToLearn: row.wishedToLearn || "",
+  futureImpact: row.futureImpact || "",
   attendanceCommitment: row.attendanceCommitment ?? null,
   professionalEthics: row.professionalEthics ?? null,
   safetyCompliance: row.safetyCompliance ?? null,
   overallRecommendation: row.overallRecommendation ?? null,
   institutionNotes: row.institutionNotes || "",
+  institutionReportSource: row.institutionReportSource ?? null,
+  institutionReportFileKey: row.institutionReportFileKey || "",
+  institutionReportFileName: row.institutionReportFileName || "",
+  institutionReportExtraction: row.institutionReportExtraction ?? null,
+  institutionUploadedEvaluation: row.institutionUploadedEvaluation ?? null,
   videoUrl: row.videoUrl || "",
   reviewNotes: row.reviewNotes || "",
+  revisionRequestedAt: toIso(row.revisionRequestedAt),
+  revisionRequestedBy: row.revisionRequestedBy ? String(row.revisionRequestedBy) : null,
+  revisionReason: row.revisionReason || "",
+  resubmittedAt: toIso(row.resubmittedAt),
+  revisionAudit: Array.isArray(row.revisionAudit)
+    ? row.revisionAudit.map((entry) => ({
+        at: toIso(entry.at),
+        action: entry.action,
+        actorId: entry.actorId || null,
+        actorName: entry.actorName || null,
+        reason: entry.reason || null,
+        fromStatus: entry.fromStatus || null,
+        toStatus: entry.toStatus || null,
+      }))
+    : [],
   reviewedAt: toIso(row.reviewedAt),
   reviewedBy: row.reviewedBy ? String(row.reviewedBy) : null,
   submittedAt: toIso(row.submittedAt),

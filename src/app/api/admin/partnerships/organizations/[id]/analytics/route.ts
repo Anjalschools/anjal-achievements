@@ -9,6 +9,7 @@ import {
   buildOrganizationPerformanceStats,
 } from "@/lib/partnerships/institution-analytics-service";
 import { serializePartnerOrganization } from "@/lib/partnerships/partnerships-serialize";
+import { buildOrganizationTrainingQualityProfile } from "@/lib/partnerships/training-intelligence-service";
 import { PARTNER_ORGANIZATION_CATEGORY_LABELS } from "@/lib/partnerships/institution-analytics-constants";
 
 export const dynamic = "force-dynamic";
@@ -32,9 +33,10 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: "Organization not found" }, { status: 404 });
     }
 
-    const [stats, insights] = await Promise.all([
+    const [stats, insights, trainingQuality] = await Promise.all([
       buildOrganizationPerformanceStats(id),
       buildGlobalInstitutionInsights(),
+      buildOrganizationTrainingQualityProfile(id),
     ]);
 
     const categoryLabel =
@@ -48,6 +50,7 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
       categoryLabel,
       stats,
       insights,
+      trainingQuality,
     });
   } catch (error) {
     console.error("[GET /api/admin/partnerships/organizations/[id]/analytics]", error);
