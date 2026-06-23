@@ -1,17 +1,11 @@
-import { createRequire } from "module";
 import { PassThrough, Readable } from "stream";
 import unzipper from "unzipper";
 import { hashContent, serializeManifest, type BackupManifest } from "@/lib/backup/backup-manifest";
 import { resolveCollectionFileName } from "@/lib/backup/backup-constants";
 
-const require = createRequire(import.meta.url);
-const { ZipArchive } = require("archiver") as {
-  ZipArchive: new (options?: { zlib?: { level: number } }) => {
-    on: (event: string, handler: (error: Error) => void) => void;
-    pipe: (destination: PassThrough) => void;
-    append: (source: Buffer, options: { name: string }) => void;
-    finalize: () => void;
-  };
+const loadZipArchive = async () => {
+  const { ZipArchive } = await import(/* webpackIgnore: true */ "archiver");
+  return ZipArchive;
 };
 
 export type BackupPackageEntry = {
@@ -49,6 +43,7 @@ export const buildZipFromEntries = async (input: {
   };
   const manifestBuffer = Buffer.from(serializeManifest(manifestWithChecksums), "utf8");
 
+  const ZipArchive = await loadZipArchive();
   const archive = new ZipArchive({ zlib: { level: 6 } });
   const output = new PassThrough();
   const zipPromise = streamToBuffer(output);
