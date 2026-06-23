@@ -40,6 +40,7 @@ import {
   Megaphone,
   Users,
   Activity,
+  Archive,
   Award,
   Search,
   Images,
@@ -360,6 +361,11 @@ const AppSidebar = () => {
     icon: Activity,
     label: locale === "ar" ? "صحة النظام والاعتماد" : "System health & certification",
   };
+  const backupRestoreAdminItem = {
+    href: "/admin/system/backup",
+    icon: Archive,
+    label: locale === "ar" ? "النسخ الاحتياطي والاستعادة" : "Backup & restore",
+  };
   const aiNewsItem = {
     href: "/admin/ai/news",
     icon: Sparkles,
@@ -465,6 +471,7 @@ const AppSidebar = () => {
     { ...schoolIntelligenceAdminItem, capability: "advancedAnalytics" },
     { ...schoolImprovementAdminItem, capability: "advancedAnalytics" },
     { ...systemHealthAdminItem, capability: "platformSettings" },
+    { ...backupRestoreAdminItem, capability: "platformSettings" },
     { ...hallOfFameItem, capability: "viewAchievements" },
     { ...achievementsItem, capability: "viewAchievements" },
     { ...notificationsItem, capability: null },
