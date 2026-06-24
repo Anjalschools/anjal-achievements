@@ -11,20 +11,10 @@ import {
   type CreateBackupResult,
 } from "@/lib/backup/backup-service";
 import { resolveBackupStorageProvider } from "@/lib/backup/backup-storage";
-import {
-  buildZipFromEntries,
-  type BackupPackageEntry,
-  type BackupPackageExtraFile,
-} from "@/lib/backup/backup-zip";
+import { buildZipFromEntries, type BackupPackageEntry } from "@/lib/backup/backup-zip";
 import { isCloudinaryConfigured } from "@/lib/cloudinary";
 import { isR2Configured } from "@/lib/r2";
 import { scanStorageInventory } from "@/lib/disaster-recovery/storage-inventory";
-import { exportStorageObjects } from "@/lib/disaster-recovery/object-export";
-import {
-  serializeStorageManifest,
-  STORAGE_MANIFEST_VERSION,
-} from "@/lib/disaster-recovery/storage-manifest-types";
-import { summarizeStorageManifest } from "@/lib/disaster-recovery/dr-validation";
 import type { RetentionTier } from "@/lib/disaster-recovery/retention-policy";
 import type { StorageManifestEntry } from "@/lib/disaster-recovery/storage-manifest-types";
 import {
@@ -33,6 +23,7 @@ import {
   logDrDebug,
   runDrStage,
 } from "@/lib/disaster-recovery/dr-backup-logging";
+import { buildAndStoreStreamingDisasterRecoveryZip } from "@/lib/disaster-recovery/dr-streaming-backup";
 
 export type CreateDisasterRecoveryBackupInput = CreateBackupInput & {
   includeObjects?: boolean;
@@ -44,15 +35,6 @@ type ManifestStageResult = {
   entries: BackupPackageEntry[];
   recordCounts: Record<string, number>;
   academicYear: string | null;
-};
-
-type ObjectExportStageResult = {
-  extraFiles: BackupPackageExtraFile[];
-  objectCount: number;
-  objectSizeBytes: number;
-  recoveryReadinessScore: number;
-  exportedCount: number;
-  failedCount: number;
 };
 
 const buildDrFileName = (moduleId: BackupModuleId): string => {
@@ -107,6 +89,7 @@ export const createDisasterRecoveryBackup = async (
   });
 
   const includeObjects = input.includeObjects !== false;
+  const fileName = buildDrFileName(input.moduleId);
 
   try {
     const manifestStage = await runDrStage(
@@ -146,10 +129,13 @@ export const createDisasterRecoveryBackup = async (
       })
     );
 
-    let extraFiles: BackupPackageExtraFile[] = [];
     let objectCount = 0;
     let objectSizeBytes = 0;
     let recoveryReadinessScore = includeObjects ? 0 : 50;
+    let zipBuffer: Buffer | undefined;
+    let storedArtifact: Awaited<
+      ReturnType<typeof buildAndStoreStreamingDisasterRecoveryZip>
+    >["stored"] | null = null;
 
     if (includeObjects) {
       const inventory = await runDrStage(
@@ -167,94 +153,69 @@ export const createDisasterRecoveryBackup = async (
         })
       );
 
-      const objectExportStage = await runDrStage(
+      const streamingResult = await runDrStage(
         "object-export",
-        async (): Promise<ObjectExportStageResult> => {
-          const { exported, failures } = await exportStorageObjects(inventory, {
-            maxConcurrency: 3,
+        async () => {
+          manifestStage.manifest.objectCount = inventory.length;
+
+          return buildAndStoreStreamingDisasterRecoveryZip({
+            manifest: manifestStage.manifest,
+            entries: manifestStage.entries,
+            inventory,
+            fileName,
+            storageProvider: input.storageProvider,
           });
-          const mergedEntries = [...exported.map((row) => row.entry), ...failures];
-          const summary = summarizeStorageManifest(mergedEntries);
-
-          const manifestBuffer = Buffer.from(
-            serializeStorageManifest({
-              version: STORAGE_MANIFEST_VERSION,
-              createdAt: new Date().toISOString(),
-              ...summary,
-              entries: mergedEntries,
-            }),
-            "utf8"
-          );
-
-          const stageExtraFiles: BackupPackageExtraFile[] = [
-            {
-              path: "storage-manifest.json",
-              content: manifestBuffer,
-            },
-          ];
-
-          for (const row of exported) {
-            stageExtraFiles.push({ path: row.entry.archivePath, content: row.content });
-          }
-
-          const score = Math.round((summary.exportedCount / Math.max(1, summary.objectCount)) * 100);
-
-          return {
-            extraFiles: stageExtraFiles,
-            objectCount: summary.objectCount,
-            objectSizeBytes: summary.totalBytes,
-            recoveryReadinessScore: score,
-            exportedCount: summary.exportedCount,
-            failedCount: summary.failedCount,
-          };
         },
         (result) => ({
           objectCount: result.objectCount,
           exportedCount: result.exportedCount,
           failedCount: result.failedCount,
           objectSizeBytes: result.objectSizeBytes,
-          extraFileCount: result.extraFiles.length,
-          storageManifestBytes:
-            result.extraFiles.find((file) => file.path === "storage-manifest.json")?.content.byteLength || 0,
+          zipBytes: result.stored.sizeBytes,
+          storageProvider: result.stored.provider,
         })
       );
 
-      extraFiles = objectExportStage.extraFiles;
-      objectCount = objectExportStage.objectCount;
-      objectSizeBytes = objectExportStage.objectSizeBytes;
-      recoveryReadinessScore = objectExportStage.recoveryReadinessScore;
+      await runDrStage("zip", async () => streamingResult, (result) => ({
+        zipBytes: result.stored.sizeBytes,
+        streamed: true,
+      }));
+
+      objectCount = streamingResult.objectCount;
+      objectSizeBytes = streamingResult.objectSizeBytes;
+      recoveryReadinessScore = streamingResult.recoveryReadinessScore;
       manifestStage.manifest.objectCount = objectCount;
       manifestStage.manifest.objectSizeBytes = objectSizeBytes;
+      zipBuffer = streamingResult.zipBuffer;
+      storedArtifact = streamingResult.stored;
     } else {
       logDr("inventory:skipped", { reason: "includeObjects=false" });
       logDr("object-export:skipped", { reason: "includeObjects=false" });
-    }
 
-    const zipBuffer = await runDrStage(
-      "zip",
-      async () =>
-        buildZipFromEntries({
-          manifest: manifestStage.manifest,
-          entries: manifestStage.entries,
-          extraFiles,
-        }),
-      (buffer) => ({
-        zipBytes: buffer.byteLength,
-        collectionFiles: manifestStage.entries.length,
-        extraFiles: extraFiles.length,
-      })
-    );
+      zipBuffer = await runDrStage(
+        "zip",
+        async () =>
+          buildZipFromEntries({
+            manifest: manifestStage.manifest,
+            entries: manifestStage.entries,
+          }),
+        (buffer) => ({
+          zipBytes: buffer.byteLength,
+          collectionFiles: manifestStage.entries.length,
+        })
+      );
+    }
 
     const result = await runDrStage(
       "backup-record",
       async () => {
-        const fileName = buildDrFileName(input.moduleId);
-        const storage = resolveBackupStorageProvider(input.storageProvider);
-        const stored = await storage.store({
-          fileName,
-          body: zipBuffer,
-          contentType: "application/zip",
-        });
+        const stored =
+          storedArtifact ||
+          (await resolveBackupStorageProvider(input.storageProvider).store({
+            fileName,
+            body: zipBuffer as Buffer,
+            contentType: "application/zip",
+          }));
 
         const record = await BackupRecord.create({
           createdBy: input.createdByUserId,
@@ -279,7 +240,7 @@ export const createDisasterRecoveryBackup = async (
         });
 
         const recordId = String(record._id);
-        if (stored.provider === "local") {
+        if (stored.provider === "local" && zipBuffer) {
           cacheLocalBackupZip(recordId, zipBuffer);
         }
 

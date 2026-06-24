@@ -1,4 +1,5 @@
 import "server-only";
+import { readProcessMemorySnapshot } from "@/lib/disaster-recovery/dr-memory-metrics";
 
 export type DrBackupStage =
   | "manifest"
@@ -44,6 +45,10 @@ export class DisasterRecoveryBackupError extends Error {
 };
 
 const isDrDebugEnabled = (): boolean => process.env.DR_DEBUG === "1";
+
+export const logDrMemory = (event: string): void => {
+  logDr(event, readProcessMemorySnapshot());
+};
 
 export const logDr = (event: string, meta?: Record<string, unknown>): void => {
   if (meta && Object.keys(meta).length > 0) {

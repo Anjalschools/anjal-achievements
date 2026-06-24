@@ -6,6 +6,11 @@ import { getR2BucketName, getR2Client, isR2Configured } from "@/lib/r2";
 import { getCloudinary, isCloudinaryConfigured, resolveCloudinaryResourceType } from "@/lib/cloudinary";
 import { hashContent } from "@/lib/backup/backup-manifest";
 import { isHttpDownloadAllowed } from "@/lib/disaster-recovery/http-download-policy";
+import {
+  runSequentialObjectExport,
+  type StreamingObjectExportProgress,
+  type StreamingObjectExportResult,
+} from "@/lib/disaster-recovery/dr-export-streaming";
 import type { StorageManifestEntry } from "@/lib/disaster-recovery/storage-manifest-types";
 
 export { isHttpDownloadAllowed };
@@ -125,11 +130,25 @@ export const exportStorageObject = async (
   };
 };
 
+export type { StreamingObjectExportProgress, StreamingObjectExportResult };
+
+export const exportStorageObjectsStreaming = async (input: {
+  entries: StorageManifestEntry[];
+  onObjectReady: (payload: { entry: StorageManifestEntry; content: Buffer }) => Promise<void> | void;
+  onProgress?: (progress: StreamingObjectExportProgress) => void;
+}): Promise<StreamingObjectExportResult> =>
+  runSequentialObjectExport({
+    entries: input.entries,
+    exportObject: exportStorageObject,
+    onObjectReady: input.onObjectReady,
+    onProgress: input.onProgress,
+  });
+
 export const exportStorageObjects = async (
   entries: StorageManifestEntry[],
   options: { maxConcurrency?: number } = {}
 ): Promise<{ exported: ExportedObject[]; failures: StorageManifestEntry[] }> => {
-  const concurrency = Math.max(1, options.maxConcurrency ?? 3);
+  const concurrency = Math.max(1, options.maxConcurrency ?? 1);
   const exported: ExportedObject[] = [];
   const failures: StorageManifestEntry[] = [];
 

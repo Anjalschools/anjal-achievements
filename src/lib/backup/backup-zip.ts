@@ -29,6 +29,51 @@ export type BackupPackageExtraFile = {
   content: Buffer;
 };
 
+export type ZipArchiveWriter = {
+  append: (source: Buffer, options: { name: string }) => void;
+  finalize: () => Promise<void>;
+};
+
+export const createZipArchiveWriter = async (output: PassThrough): Promise<ZipArchiveWriter> => {
+  const ZipArchive = await loadZipArchive();
+  const archive = new ZipArchive({ zlib: { level: 6 } });
+
+  archive.on("error", (error) => {
+    output.destroy(error);
+  });
+
+  archive.pipe(output);
+
+  return {
+    append: (source, options) => {
+      archive.append(source, options);
+    },
+    finalize: async () => {
+      await archive.finalize();
+    },
+  };
+};
+
+export const appendManifestAndCollectionsToZip = async (input: {
+  writer: ZipArchiveWriter;
+  manifest: BackupManifest;
+  entries: BackupPackageEntry[];
+}): Promise<BackupManifest> => {
+  const checksums = Object.fromEntries(
+    input.entries.map((entry) => [entry.collectionKey, entry.checksum])
+  );
+  const manifestWithChecksums: BackupManifest = {
+    ...input.manifest,
+    checksums,
+  };
+  const manifestBuffer = Buffer.from(serializeManifest(manifestWithChecksums), "utf8");
+  input.writer.append(manifestBuffer, { name: "manifest.json" });
+  for (const entry of input.entries) {
+    input.writer.append(entry.content, { name: entry.fileName });
+  }
+  return manifestWithChecksums;
+};
+
 export const buildZipFromEntries = async (input: {
   manifest: BackupManifest;
   entries: BackupPackageEntry[];

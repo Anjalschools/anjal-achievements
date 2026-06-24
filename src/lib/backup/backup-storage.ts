@@ -19,6 +19,11 @@ export type BackupStorageProvider = {
     body: Buffer;
     contentType?: string;
   }) => Promise<StoredBackupArtifact>;
+  storeStream?: (input: {
+    fileName: string;
+    body: Readable;
+    contentType?: string;
+  }) => Promise<StoredBackupArtifact>;
   retrieve: (storageKey: string) => Promise<Buffer>;
 };
 
@@ -63,6 +68,33 @@ export const createR2BackupStorageProvider = (): BackupStorageProvider => ({
       storageKey: key,
       fileName,
       sizeBytes: body.byteLength,
+    };
+  },
+  storeStream: async ({ fileName, body, contentType = "application/zip" }) => {
+    if (!isR2Configured()) {
+      throw new Error("R2_NOT_CONFIGURED");
+    }
+    const key = `backups/${new Date().toISOString().slice(0, 10)}/${Date.now()}-${fileName}`;
+    const client = getR2Client();
+    let sizeBytes = 0;
+    body.on("data", (chunk: Buffer | string) => {
+      sizeBytes += Buffer.isBuffer(chunk) ? chunk.byteLength : Buffer.byteLength(chunk);
+    });
+
+    await client.send(
+      new PutObjectCommand({
+        Bucket: getR2BucketName(),
+        Key: key,
+        Body: body,
+        ContentType: contentType,
+      })
+    );
+
+    return {
+      provider: "r2",
+      storageKey: key,
+      fileName,
+      sizeBytes,
     };
   },
   retrieve: async (storageKey: string) => {
