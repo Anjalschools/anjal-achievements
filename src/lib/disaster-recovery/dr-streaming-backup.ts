@@ -9,7 +9,7 @@ import {
 } from "@/lib/backup/backup-storage";
 import type { BackupStorageProviderId } from "@/lib/backup/backup-constants";
 import { logDr, logDrMemory } from "@/lib/disaster-recovery/dr-backup-logging";
-import { exportStorageObjectsStreaming } from "@/lib/disaster-recovery/object-export";
+import { exportStorageObjectsStreamExport } from "@/lib/disaster-recovery/object-export";
 import {
   serializeStorageManifest,
   STORAGE_MANIFEST_VERSION,
@@ -67,21 +67,44 @@ export const buildAndStoreStreamingDisasterRecoveryZip = async (input: {
   const writer = await createZipArchiveWriter(output);
 
   for (const entry of input.entries) {
-    writer.append(entry.content, { name: entry.fileName });
+    await writer.append(entry.content, { name: entry.fileName });
   }
 
-  const { manifestEntries, failures, bytesExported } = await exportStorageObjectsStreaming({
+  let maxLiveObjectStreams = 0;
+  let liveObjectStreams = 0;
+  let processedObjectCount = 0;
+
+  const { manifestEntries, failures, bytesExported } = await exportStorageObjectsStreamExport({
     entries: input.inventory,
-    onObjectReady: async ({ entry, content }) => {
-      writer.append(content, { name: entry.archivePath });
+    onObjectReady: async ({ stream, archivePath }) => {
+      processedObjectCount += 1;
+      const shouldLogMemory =
+        processedObjectCount % 100 === 0 || processedObjectCount === input.inventory.length;
+      if (shouldLogMemory) {
+        logDrMemory("memory:before-object", processedObjectCount);
+      }
+
+      liveObjectStreams += 1;
+      maxLiveObjectStreams = Math.max(maxLiveObjectStreams, liveObjectStreams);
+      try {
+        await writer.append(stream, { name: archivePath });
+      } finally {
+        liveObjectStreams -= 1;
+      }
+
+      if (shouldLogMemory) {
+        logDrMemory("memory:after-object", processedObjectCount);
+      }
     },
     onProgress: (progress) => {
       if (progress.processed % 100 === 0 || progress.remaining === 0) {
-        logDr("export-progress", progress);
-        logDrMemory("memory:during-export");
+        logDr("export-progress", { ...progress, maxLiveObjectStreams });
+        logDrMemory("memory:during-export", progress.processed);
       }
     },
   });
+
+  logDr("stream-export:summary", { maxLiveObjectStreams });
 
   const mergedEntries = [...manifestEntries, ...failures];
   const summary = summarizeStorageManifest(mergedEntries);
@@ -95,10 +118,10 @@ export const buildAndStoreStreamingDisasterRecoveryZip = async (input: {
     objectSizeBytes: summary.totalBytes || bytesExported,
   };
 
-  writer.append(Buffer.from(serializeManifest(manifestWithChecksums), "utf8"), {
+  await writer.append(Buffer.from(serializeManifest(manifestWithChecksums), "utf8"), {
     name: "manifest.json",
   });
-  writer.append(
+  await writer.append(
     Buffer.from(
       serializeStorageManifest({
         version: STORAGE_MANIFEST_VERSION,

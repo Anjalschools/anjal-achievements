@@ -1,7 +1,9 @@
 import { PassThrough, Readable } from "stream";
+import { finished } from "stream/promises";
 import unzipper from "unzipper";
 import { hashContent, serializeManifest, type BackupManifest } from "@/lib/backup/backup-manifest";
 import { resolveCollectionFileName } from "@/lib/backup/backup-constants";
+import { isNodeReadableStream } from "@/lib/disaster-recovery/dr-stream-utils";
 
 const loadZipArchive = async () => {
   const { ZipArchive } = await import(/* webpackIgnore: true */ "archiver");
@@ -30,13 +32,15 @@ export type BackupPackageExtraFile = {
 };
 
 export type ZipArchiveWriter = {
-  append: (source: Buffer, options: { name: string }) => void;
+  append: (source: Buffer | Readable, options: { name: string }) => Promise<void>;
   finalize: () => Promise<void>;
+  pointer: () => number;
 };
 
 export const createZipArchiveWriter = async (output: PassThrough): Promise<ZipArchiveWriter> => {
   const ZipArchive = await loadZipArchive();
   const archive = new ZipArchive({ zlib: { level: 6 } });
+  let appendCount = 0;
 
   archive.on("error", (error) => {
     output.destroy(error);
@@ -45,12 +49,35 @@ export const createZipArchiveWriter = async (output: PassThrough): Promise<ZipAr
   archive.pipe(output);
 
   return {
-    append: (source, options) => {
+    append: async (source, options) => {
+      appendCount += 1;
+      const shouldLog = appendCount % 100 === 0 || appendCount === 1;
+      if (shouldLog) {
+        console.info("[DR] ZIP_APPEND_START", {
+          count: appendCount,
+          pointer: archive.pointer(),
+          name: options.name,
+        });
+      }
+
       archive.append(source, options);
+
+      if (isNodeReadableStream(source)) {
+        await finished(source as Readable);
+      }
+
+      if (shouldLog) {
+        console.info("[DR] ZIP_APPEND_END", {
+          count: appendCount,
+          pointer: archive.pointer(),
+          name: options.name,
+        });
+      }
     },
     finalize: async () => {
       await archive.finalize();
     },
+    pointer: () => archive.pointer(),
   };
 };
 
@@ -67,9 +94,9 @@ export const appendManifestAndCollectionsToZip = async (input: {
     checksums,
   };
   const manifestBuffer = Buffer.from(serializeManifest(manifestWithChecksums), "utf8");
-  input.writer.append(manifestBuffer, { name: "manifest.json" });
+  await input.writer.append(manifestBuffer, { name: "manifest.json" });
   for (const entry of input.entries) {
-    input.writer.append(entry.content, { name: entry.fileName });
+    await input.writer.append(entry.content, { name: entry.fileName });
   }
   return manifestWithChecksums;
 };

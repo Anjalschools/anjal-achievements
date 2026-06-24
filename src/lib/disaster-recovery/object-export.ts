@@ -7,17 +7,36 @@ import { getCloudinary, isCloudinaryConfigured, resolveCloudinaryResourceType } 
 import { hashContent } from "@/lib/backup/backup-manifest";
 import { isHttpDownloadAllowed } from "@/lib/disaster-recovery/http-download-policy";
 import {
+  exportStorageObjectsStreamingSource,
   runSequentialObjectExport,
+  runSequentialObjectStreamExport,
+  type ExportedObjectStreamPayload,
   type StreamingObjectExportProgress,
   type StreamingObjectExportResult,
 } from "@/lib/disaster-recovery/dr-export-streaming";
+import {
+  createHashingObjectStream,
+  webBodyToNodeStream,
+} from "@/lib/disaster-recovery/dr-stream-utils";
 import type { StorageManifestEntry } from "@/lib/disaster-recovery/storage-manifest-types";
 
 export { isHttpDownloadAllowed };
+export {
+  exportStorageObjectsStreamingSource,
+  type ExportedObjectStreamPayload,
+  type StreamingObjectExportProgress,
+  type StreamingObjectExportResult,
+};
 
 export type ExportedObject = {
   entry: StorageManifestEntry;
   content: Buffer;
+};
+
+export type ExportedObjectStream = {
+  entry: StorageManifestEntry;
+  stream: Readable;
+  completed: Promise<StorageManifestEntry>;
 };
 
 const streamToBuffer = async (stream: Readable): Promise<Buffer> => {
@@ -36,7 +55,7 @@ const decodeDataUrl = (dataUrl: string): Buffer => {
   return Buffer.from(match[2], "base64");
 };
 
-const downloadR2Object = async (key: string): Promise<Buffer> => {
+const openR2ObjectStream = async (key: string): Promise<Readable> => {
   if (!isR2Configured()) throw new Error("R2_NOT_CONFIGURED");
   const client = getR2Client();
   const response = await client.send(
@@ -46,7 +65,7 @@ const downloadR2Object = async (key: string): Promise<Buffer> => {
     })
   );
   if (!response.Body) throw new Error("R2_OBJECT_EMPTY");
-  return streamToBuffer(response.Body as Readable);
+  return response.Body as Readable;
 };
 
 const parseCloudinaryReference = (
@@ -62,29 +81,23 @@ const parseCloudinaryReference = (
   return { resourceType: "image", publicId: storageKey };
 };
 
-const downloadCloudinaryAsset = async (storageKey: string): Promise<Buffer> => {
+const resolveCloudinaryDownloadUrl = (storageKey: string): string => {
   if (!isCloudinaryConfigured()) throw new Error("CLOUDINARY_NOT_CONFIGURED");
   const cloudinary = getCloudinary();
   const { resourceType, publicId } = parseCloudinaryReference(storageKey);
 
-  let downloadUrl = publicId;
-  if (!/^https?:\/\//i.test(publicId)) {
-    downloadUrl = cloudinary.url(publicId, {
-      resource_type: resolveCloudinaryResourceType(resourceType),
-      secure: true,
-      flags: "attachment",
-    });
+  if (/^https?:\/\//i.test(publicId)) {
+    return publicId;
   }
 
-  const response = await fetch(downloadUrl);
-  if (!response.ok) {
-    throw new Error(`CLOUDINARY_DOWNLOAD_FAILED:${response.status}`);
-  }
-  const arrayBuffer = await response.arrayBuffer();
-  return Buffer.from(arrayBuffer);
+  return cloudinary.url(publicId, {
+    resource_type: resolveCloudinaryResourceType(resourceType),
+    secure: true,
+    flags: "attachment",
+  });
 };
 
-const downloadHttpAsset = async (url: string): Promise<Buffer> => {
+const openHttpObjectStream = async (url: string): Promise<Readable> => {
   if (!isHttpDownloadAllowed(url)) {
     throw new Error("HTTP_DOWNLOAD_NOT_ALLOWED");
   }
@@ -92,8 +105,68 @@ const downloadHttpAsset = async (url: string): Promise<Buffer> => {
   if (!response.ok) {
     throw new Error(`HTTP_DOWNLOAD_FAILED:${response.status}`);
   }
-  const arrayBuffer = await response.arrayBuffer();
-  return Buffer.from(arrayBuffer);
+  if (!response.body) {
+    throw new Error("HTTP_BODY_EMPTY");
+  }
+  return webBodyToNodeStream(response.body);
+};
+
+const openCloudinaryObjectStream = async (storageKey: string): Promise<Readable> => {
+  const downloadUrl = resolveCloudinaryDownloadUrl(storageKey);
+  const response = await fetch(downloadUrl);
+  if (!response.ok) {
+    throw new Error(`CLOUDINARY_DOWNLOAD_FAILED:${response.status}`);
+  }
+  if (!response.body) {
+    throw new Error("CLOUDINARY_BODY_EMPTY");
+  }
+  return webBodyToNodeStream(response.body);
+};
+
+const openInlineObjectStream = (storageKey: string): Readable => {
+  const content = decodeDataUrl(storageKey);
+  return Readable.from(content);
+};
+
+const openObjectSourceStream = async (entry: StorageManifestEntry): Promise<Readable> => {
+  if (entry.provider === "r2") {
+    return openR2ObjectStream(entry.storageKey);
+  }
+  if (entry.provider === "cloudinary") {
+    return openCloudinaryObjectStream(entry.storageKey);
+  }
+  if (entry.provider === "http") {
+    return openHttpObjectStream(entry.storageKey);
+  }
+  if (entry.provider === "inline") {
+    return openInlineObjectStream(entry.storageKey);
+  }
+  throw new Error(`UNSUPPORTED_PROVIDER:${entry.provider}`);
+};
+
+const downloadR2Object = async (key: string): Promise<Buffer> => {
+  return streamToBuffer(await openR2ObjectStream(key));
+};
+
+const downloadCloudinaryAsset = async (storageKey: string): Promise<Buffer> => {
+  return streamToBuffer(await openCloudinaryObjectStream(storageKey));
+};
+
+const downloadHttpAsset = async (url: string): Promise<Buffer> => {
+  return streamToBuffer(await openHttpObjectStream(url));
+};
+
+export const exportStorageObjectStream = async (
+  entry: StorageManifestEntry
+): Promise<ExportedObjectStream> => {
+  const sourceStream = await openObjectSourceStream(entry);
+  const { stream, completed } = createHashingObjectStream(entry, sourceStream);
+
+  return {
+    entry,
+    stream,
+    completed,
+  };
 };
 
 export const exportStorageObject = async (
@@ -115,7 +188,6 @@ export const exportStorageObject = async (
 
   const checksum = hashContent(content);
   if (entry.fileSize && entry.fileSize > 0 && content.byteLength !== entry.fileSize) {
-    // size mismatch is recorded but export still succeeds for DR completeness
     entry.errorMessage = `SIZE_MISMATCH:expected=${entry.fileSize},actual=${content.byteLength}`;
   }
 
@@ -130,8 +202,6 @@ export const exportStorageObject = async (
   };
 };
 
-export type { StreamingObjectExportProgress, StreamingObjectExportResult };
-
 export const exportStorageObjectsStreaming = async (input: {
   entries: StorageManifestEntry[];
   onObjectReady: (payload: { entry: StorageManifestEntry; content: Buffer }) => Promise<void> | void;
@@ -140,6 +210,25 @@ export const exportStorageObjectsStreaming = async (input: {
   runSequentialObjectExport({
     entries: input.entries,
     exportObject: exportStorageObject,
+    onObjectReady: input.onObjectReady,
+    onProgress: input.onProgress,
+  });
+
+export const exportStorageObjectsStreamExport = async (input: {
+  entries: StorageManifestEntry[];
+  onObjectReady: (payload: ExportedObjectStreamPayload) => Promise<void> | void;
+  onProgress?: (progress: StreamingObjectExportProgress) => void;
+}): Promise<StreamingObjectExportResult> =>
+  runSequentialObjectStreamExport({
+    entries: input.entries,
+    exportObjectStream: async (entry) => {
+      const exported = await exportStorageObjectStream(entry);
+      return {
+        stream: exported.stream,
+        completed: exported.completed,
+        archivePath: entry.archivePath,
+      };
+    },
     onObjectReady: input.onObjectReady,
     onProgress: input.onProgress,
   });

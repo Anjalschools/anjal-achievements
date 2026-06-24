@@ -46,8 +46,38 @@ export class DisasterRecoveryBackupError extends Error {
 
 const isDrDebugEnabled = (): boolean => process.env.DR_DEBUG === "1";
 
-export const logDrMemory = (event: string): void => {
-  logDr(event, readProcessMemorySnapshot());
+const resolveMemoryWarningThreshold = (envKey: string, fallbackBytes: number): number => {
+  const raw = process.env[envKey];
+  if (!raw) return fallbackBytes;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallbackBytes;
+};
+
+const MEMORY_WARNING_EXTERNAL_THRESHOLD = resolveMemoryWarningThreshold(
+  "DR_MEMORY_EXTERNAL_WARN_BYTES",
+  200 * 1024 * 1024
+);
+const MEMORY_WARNING_ARRAY_BUFFERS_THRESHOLD = resolveMemoryWarningThreshold(
+  "DR_MEMORY_ARRAYBUFFERS_WARN_BYTES",
+  150 * 1024 * 1024
+);
+
+export const logDrMemory = (event: string, processed?: number): void => {
+  const snapshot = readProcessMemorySnapshot();
+  logDr(event, snapshot);
+  if (
+    snapshot.external > MEMORY_WARNING_EXTERNAL_THRESHOLD ||
+    snapshot.arrayBuffers > MEMORY_WARNING_ARRAY_BUFFERS_THRESHOLD
+  ) {
+    logDr("MEMORY_GROWTH_WARNING", {
+      processed,
+      rss: snapshot.rss,
+      heapUsed: snapshot.heapUsed,
+      heapTotal: snapshot.heapTotal,
+      external: snapshot.external,
+      arrayBuffers: snapshot.arrayBuffers,
+    });
+  }
 };
 
 export const logDr = (event: string, meta?: Record<string, unknown>): void => {
