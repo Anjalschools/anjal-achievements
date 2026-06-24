@@ -177,9 +177,65 @@ export default function AdminBackupRestorePage() {
       });
       const json = (await res.json()) as {
         ok?: boolean;
-        data?: { recordId: string; downloadUrl?: string; recoveryReadinessScore?: number };
+        accepted?: boolean;
+        data?: {
+          recordId: string;
+          statusUrl?: string;
+          pollIntervalMs?: number;
+          recoveryReadinessScore?: number;
+        };
         error?: string;
       };
+
+      if (res.status === 202 && json.accepted && json.data?.recordId) {
+        setSuccess("جاري إنشاء نسخة الكوارث في الخلفية… سيتم التحديث تلقائياً.");
+        const recordId = json.data.recordId;
+        const pollMs = json.data.pollIntervalMs || 5000;
+        const deadline = Date.now() + 2 * 60 * 60 * 1000;
+
+        while (Date.now() < deadline) {
+          await new Promise((resolve) => setTimeout(resolve, pollMs));
+          const statusRes = await fetch(`/api/admin/backup/${recordId}`, {
+            credentials: "include",
+            cache: "no-store",
+          });
+          const statusJson = (await statusRes.json()) as {
+            data?: {
+              status?: string;
+              recoveryReadinessScore?: number;
+              errorMessage?: string;
+              jobPhase?: string;
+              processedObjects?: number;
+            };
+            error?: string;
+          };
+          if (!statusRes.ok || !statusJson.data) {
+            throw new Error(statusJson.error || "DR_STATUS_POLL_FAILED");
+          }
+
+          const { status, recoveryReadinessScore, errorMessage, jobPhase, processedObjects } =
+            statusJson.data;
+          if (status === "pending") {
+            setSuccess(
+              `جاري النسخ… المرحلة: ${jobPhase || "queued"} — ${processedObjects ?? 0} كائن`
+            );
+            continue;
+          }
+          if (status === "failed") {
+            throw new Error(errorMessage || "DR_BACKUP_FAILED");
+          }
+          if (status === "completed") {
+            setSuccess(
+              `تم إنشاء نسخة كوارث كاملة. جاهزية الاستعادة: ${recoveryReadinessScore ?? 0}%`
+            );
+            window.open(`/api/admin/backup/${recordId}/download`, "_blank");
+            await load();
+            return;
+          }
+        }
+        throw new Error("DR_BACKUP_TIMEOUT");
+      }
+
       if (!res.ok || !json.data) throw new Error(json.error || "DR_BACKUP_FAILED");
       setSuccess(
         `تم إنشاء نسخة كوارث كاملة. جاهزية الاستعادة: ${json.data.recoveryReadinessScore ?? 0}%`

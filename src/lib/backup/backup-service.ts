@@ -146,6 +146,9 @@ export const listBackupRecords = async (limit = 50) => {
     recordCounts: row.recordCounts ?? {},
     academicYearLabel: row.academicYearLabel,
     note: row.note,
+    errorMessage: row.errorMessage,
+    jobPhase: row.jobPhase,
+    processedObjects: row.processedObjects,
     createdAt: row.createdAt ? new Date(row.createdAt).toISOString() : null,
     createdBy: row.createdBy
       ? {
@@ -174,6 +177,15 @@ export const getBackupRecordById = async (id: string) => {
     recordCounts: row.recordCounts ?? {},
     academicYearLabel: row.academicYearLabel,
     note: row.note,
+    errorMessage: row.errorMessage,
+    includesObjectStorage: row.includesObjectStorage,
+    objectCount: row.objectCount,
+    recoveryReadinessScore: row.recoveryReadinessScore,
+    jobPhase: row.jobPhase,
+    processedObjects: row.processedObjects,
+    archivePointer: row.archivePointer,
+    jobStartedAt: row.jobStartedAt ? new Date(row.jobStartedAt).toISOString() : null,
+    jobCompletedAt: row.jobCompletedAt ? new Date(row.jobCompletedAt).toISOString() : null,
     createdAt: row.createdAt ? new Date(row.createdAt).toISOString() : null,
     createdBy: row.createdBy
       ? {

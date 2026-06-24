@@ -9,6 +9,7 @@ import {
 } from "@/lib/backup/backup-storage";
 import type { BackupStorageProviderId } from "@/lib/backup/backup-constants";
 import { logDr, logDrMemory } from "@/lib/disaster-recovery/dr-backup-logging";
+import { updateDrJobContext } from "@/lib/disaster-recovery/dr-job-context";
 import { exportStorageObjectsStreamExport } from "@/lib/disaster-recovery/object-export";
 import {
   serializeStorageManifest,
@@ -23,6 +24,12 @@ const streamToBuffer = async (stream: Readable): Promise<Buffer> => {
     chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
   }
   return Buffer.concat(chunks);
+};
+
+const logStreamingError = (phase: string, error: unknown): void => {
+  const message = error instanceof Error ? error.message : String(error);
+  const stack = error instanceof Error ? error.stack : undefined;
+  console.error(`[DR] STREAMING_ERROR ${phase}`, { message, stack });
 };
 
 export type StreamingDisasterRecoveryZipResult = {
@@ -52,6 +59,8 @@ export const buildAndStoreStreamingDisasterRecoveryZip = async (input: {
   const fileName = input.fileName;
 
   const usesR2Stream = input.storageProvider === "r2" && Boolean(storage.storeStream);
+
+  console.log("[DR] BEFORE storeStream/upload", { usesR2Stream, storageProvider: input.storageProvider });
   const storePromise = usesR2Stream
     ? storage.storeStream!({
         fileName,
@@ -64,45 +73,88 @@ export const buildAndStoreStreamingDisasterRecoveryZip = async (input: {
         )
       );
 
-  const writer = await createZipArchiveWriter(output);
+  let writer: Awaited<ReturnType<typeof createZipArchiveWriter>>;
+  try {
+    console.log("[DR] BEFORE createZipArchiveWriter");
+    writer = await createZipArchiveWriter(output);
+    console.log("[DR] AFTER createZipArchiveWriter");
+  } catch (error) {
+    logStreamingError("createZipArchiveWriter", error);
+    throw error;
+  }
 
-  for (const entry of input.entries) {
-    await writer.append(entry.content, { name: entry.fileName });
+  try {
+    console.log("[DR] BEFORE append collections", { count: input.entries.length });
+    for (const entry of input.entries) {
+      await writer.append(entry.content, { name: entry.fileName });
+    }
+    console.log("[DR] AFTER append collections");
+  } catch (error) {
+    logStreamingError("append-collections", error);
+    throw error;
   }
 
   let maxLiveObjectStreams = 0;
   let liveObjectStreams = 0;
   let processedObjectCount = 0;
 
-  const { manifestEntries, failures, bytesExported } = await exportStorageObjectsStreamExport({
-    entries: input.inventory,
-    onObjectReady: async ({ stream, archivePath }) => {
-      processedObjectCount += 1;
-      const shouldLogMemory =
-        processedObjectCount % 100 === 0 || processedObjectCount === input.inventory.length;
-      if (shouldLogMemory) {
-        logDrMemory("memory:before-object", processedObjectCount);
-      }
+  let manifestEntries: StorageManifestEntry[];
+  let failures: StorageManifestEntry[];
+  let bytesExported: number;
 
-      liveObjectStreams += 1;
-      maxLiveObjectStreams = Math.max(maxLiveObjectStreams, liveObjectStreams);
-      try {
-        await writer.append(stream, { name: archivePath });
-      } finally {
-        liveObjectStreams -= 1;
-      }
+  try {
+    console.log("[DR] BEFORE exportStorageObjectsStreamExport", { inventory: input.inventory.length });
+    const exportResult = await exportStorageObjectsStreamExport({
+      entries: input.inventory,
+      onObjectReady: async ({ stream, archivePath }) => {
+        processedObjectCount += 1;
+        updateDrJobContext({
+          processedObjects: processedObjectCount,
+          archivePointer: writer.pointer(),
+        });
 
-      if (shouldLogMemory) {
-        logDrMemory("memory:after-object", processedObjectCount);
-      }
-    },
-    onProgress: (progress) => {
-      if (progress.processed % 100 === 0 || progress.remaining === 0) {
-        logDr("export-progress", { ...progress, maxLiveObjectStreams });
-        logDrMemory("memory:during-export", progress.processed);
-      }
-    },
-  });
+        const shouldLogMemory =
+          processedObjectCount % 100 === 0 || processedObjectCount === input.inventory.length;
+        if (shouldLogMemory) {
+          logDrMemory("memory:before-object", processedObjectCount);
+        }
+
+        liveObjectStreams += 1;
+        maxLiveObjectStreams = Math.max(maxLiveObjectStreams, liveObjectStreams);
+        try {
+          await writer.append(stream, { name: archivePath });
+        } finally {
+          liveObjectStreams -= 1;
+        }
+
+        updateDrJobContext({ archivePointer: writer.pointer() });
+
+        if (shouldLogMemory) {
+          logDrMemory("memory:after-object", processedObjectCount);
+        }
+      },
+      onProgress: (progress) => {
+        updateDrJobContext({
+          processedObjects: progress.processed,
+          archivePointer: writer.pointer(),
+        });
+        if (progress.processed % 100 === 0 || progress.remaining === 0) {
+          logDr("export-progress", { ...progress, maxLiveObjectStreams, archivePointer: writer.pointer() });
+          logDrMemory("memory:during-export", progress.processed);
+        }
+      },
+    });
+    manifestEntries = exportResult.manifestEntries;
+    failures = exportResult.failures;
+    bytesExported = exportResult.bytesExported;
+    console.log("[DR] AFTER exportStorageObjectsStreamExport", {
+      exported: manifestEntries.length,
+      failed: failures.length,
+    });
+  } catch (error) {
+    logStreamingError("object-export", error);
+    throw error;
+  }
 
   logDr("stream-export:summary", { maxLiveObjectStreams });
 
@@ -118,25 +170,50 @@ export const buildAndStoreStreamingDisasterRecoveryZip = async (input: {
     objectSizeBytes: summary.totalBytes || bytesExported,
   };
 
-  await writer.append(Buffer.from(serializeManifest(manifestWithChecksums), "utf8"), {
-    name: "manifest.json",
-  });
-  await writer.append(
-    Buffer.from(
-      serializeStorageManifest({
-        version: STORAGE_MANIFEST_VERSION,
-        createdAt: new Date().toISOString(),
-        ...summary,
-        entries: mergedEntries,
-      }),
-      "utf8"
-    ),
-    { name: "storage-manifest.json" }
-  );
+  try {
+    console.log("[DR] BEFORE append manifests");
+    await writer.append(Buffer.from(serializeManifest(manifestWithChecksums), "utf8"), {
+      name: "manifest.json",
+    });
+    await writer.append(
+      Buffer.from(
+        serializeStorageManifest({
+          version: STORAGE_MANIFEST_VERSION,
+          createdAt: new Date().toISOString(),
+          ...summary,
+          entries: mergedEntries,
+        }),
+        "utf8"
+      ),
+      { name: "storage-manifest.json" }
+    );
+    console.log("[DR] AFTER append manifests");
+  } catch (error) {
+    logStreamingError("append-manifests", error);
+    throw error;
+  }
 
-  await writer.finalize();
+  try {
+    console.log("[DR] BEFORE archive.finalize");
+    await writer.finalize();
+    console.log("[DR] AFTER archive.finalize", { pointer: writer.pointer() });
+  } catch (error) {
+    logStreamingError("archive.finalize", error);
+    throw error;
+  }
 
-  const { stored, zipBuffer } = await storePromise;
+  let stored: StoredBackupArtifact;
+  let zipBuffer: Buffer | undefined;
+  try {
+    console.log("[DR] BEFORE await storePromise");
+    const storeResult = await storePromise;
+    stored = storeResult.stored;
+    zipBuffer = storeResult.zipBuffer;
+    console.log("[DR] AFTER await storePromise", { sizeBytes: stored.sizeBytes, provider: stored.provider });
+  } catch (error) {
+    logStreamingError("storePromise", error);
+    throw error;
+  }
 
   logDrMemory("memory:after-export");
   console.log("[DR] AFTER STREAMING ZIP");

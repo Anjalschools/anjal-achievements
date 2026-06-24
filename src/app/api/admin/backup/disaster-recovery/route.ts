@@ -1,15 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireSystemAdmin } from "@/lib/backup/backup-auth";
-import { createDisasterRecoveryBackup } from "@/lib/disaster-recovery/dr-backup-service";
-import { auditActorFromUser, logBackupAuditEvent } from "@/lib/backup/backup-audit";
+import { auditActorFromUser } from "@/lib/backup/backup-audit";
 import type { BackupModuleId, BackupStorageProviderId } from "@/lib/backup/backup-constants";
-import {
-  DisasterRecoveryBackupError,
-  toDisasterRecoveryErrorPayload,
-} from "@/lib/disaster-recovery/dr-backup-logging";
+import { startDisasterRecoveryBackupJob } from "@/lib/disaster-recovery/dr-backup-job";
+import { registerDrProcessDiagnostics } from "@/lib/disaster-recovery/dr-process-diagnostics";
 import type { RetentionTier } from "@/lib/disaster-recovery/retention-policy";
 
+registerDrProcessDiagnostics();
+console.log("[DR-ROUTE] MODULE LOADED");
+
 export const runtime = "nodejs";
+export const maxDuration = 60;
 
 const isBackupModule = (value: string): value is BackupModuleId =>
   [
@@ -30,18 +31,16 @@ const isStorageProvider = (value: string): value is BackupStorageProviderId =>
 const isRetentionTier = (value: string): value is RetentionTier =>
   value === "daily" || value === "weekly" || value === "monthly";
 
-const resolveDrErrorStatus = (error: unknown): number => {
-  if (!(error instanceof DisasterRecoveryBackupError)) return 500;
-  const code = error.message;
-  if (code === "R2_NOT_CONFIGURED" || code === "CLOUDINARY_NOT_CONFIGURED") return 503;
-  if (code.endsWith("_NOT_CONFIGURED")) return 503;
-  return 500;
-};
-
 export async function POST(request: NextRequest) {
+  console.log("[DR-ROUTE] POST ENTER");
   console.log("[DR-API] REQUEST RECEIVED");
+
   const gate = await requireSystemAdmin(request);
-  if (!gate.ok) return gate.response;
+  if (!gate.ok) {
+    console.log("[DR-AUTH] DENIED", { status: gate.response.status });
+    return gate.response;
+  }
+  console.log("[DR-AUTH] OK", { userId: String(gate.user._id) });
 
   let body: {
     module?: string;
@@ -69,53 +68,34 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Invalid retention tier" }, { status: 400 });
   }
 
-  try {
-    console.log("[DR-API] BEFORE SERVICE");
-    const result = await createDisasterRecoveryBackup({
+  console.log("[DR-API] BEFORE SERVICE (async job enqueue)");
+  const accepted = await startDisasterRecoveryBackupJob(
+    {
       moduleId,
       storageProvider,
       createdByUserId: String(gate.user._id),
       includeObjects: body.includeObjects !== false,
       retentionTier,
-    });
-    console.log("[DR-API] AFTER SERVICE");
-
-    await logBackupAuditEvent({
+    },
+    {
       request,
       actor: auditActorFromUser(gate.user),
-      actionType: "dr_backup_created",
-      entityId: result.recordId,
-      metadata: {
-        moduleId,
-        storageProvider,
-        objectCount: result.objectCount,
-        recoveryReadinessScore: result.recoveryReadinessScore,
-        retentionTier,
+    }
+  );
+  console.log("[DR-API] AFTER SERVICE (202 accepted)", { recordId: accepted.recordId });
+
+  return NextResponse.json(
+    {
+      ok: true,
+      accepted: true,
+      status: accepted.status,
+      data: {
+        recordId: accepted.recordId,
+        statusUrl: accepted.statusUrl,
+        fileName: accepted.fileName,
+        pollIntervalMs: 5000,
       },
-      descriptionAr: "إنشاء نسخة كوارث كاملة (قاعدة بيانات + تخزين كائنات)",
-    });
-
-    return NextResponse.json({ ok: true, data: result });
-  } catch (error) {
-    console.error("[DR-API] FAILED", error);
-    const payload = toDisasterRecoveryErrorPayload(error);
-    const status = resolveDrErrorStatus(error);
-
-    await logBackupAuditEvent({
-      request,
-      actor: auditActorFromUser(gate.user),
-      actionType: "dr_backup_failed",
-      metadata: {
-        moduleId,
-        storageProvider,
-        stage: payload.stage,
-        message: payload.message,
-        details: payload.details,
-      },
-      outcome: "failure",
-      descriptionAr: "فشل إنشاء نسخة كوارث كاملة",
-    }).catch(() => undefined);
-
-    return NextResponse.json(payload, { status });
-  }
+    },
+    { status: 202 }
+  );
 }

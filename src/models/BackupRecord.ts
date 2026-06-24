@@ -27,6 +27,11 @@ export interface IBackupRecord extends Document {
   retentionTier?: RetentionTier;
   validationStatus?: "pending" | "pass" | "fail";
   lastValidatedAt?: Date;
+  jobPhase?: string;
+  processedObjects?: number;
+  archivePointer?: number;
+  jobStartedAt?: Date;
+  jobCompletedAt?: Date;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -58,6 +63,11 @@ const BackupRecordSchema = new Schema<IBackupRecord>(
     retentionTier: { type: String, enum: ["daily", "weekly", "monthly"], default: "daily" },
     validationStatus: { type: String, enum: ["pending", "pass", "fail"], default: "pending" },
     lastValidatedAt: { type: Date },
+    jobPhase: { type: String, trim: true, maxlength: 80 },
+    processedObjects: { type: Number, min: 0 },
+    archivePointer: { type: Number, min: 0 },
+    jobStartedAt: { type: Date },
+    jobCompletedAt: { type: Date },
   },
   { timestamps: true }
 );

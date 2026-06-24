@@ -24,10 +24,12 @@ import {
   runDrStage,
 } from "@/lib/disaster-recovery/dr-backup-logging";
 import { buildAndStoreStreamingDisasterRecoveryZip } from "@/lib/disaster-recovery/dr-streaming-backup";
+import { updateDrJobContext } from "@/lib/disaster-recovery/dr-job-context";
 
 export type CreateDisasterRecoveryBackupInput = CreateBackupInput & {
   includeObjects?: boolean;
   retentionTier?: RetentionTier;
+  existingRecordId?: string;
 };
 
 type ManifestStageResult = {
@@ -94,6 +96,7 @@ export const createDisasterRecoveryBackup = async (
 
   try {
     console.log("[DR] BEFORE MANIFEST");
+    updateDrJobContext({ phase: "manifest" });
     const manifestStage = await runDrStage(
       "manifest",
       async (): Promise<ManifestStageResult> => {
@@ -141,6 +144,7 @@ export const createDisasterRecoveryBackup = async (
     >["stored"] | null = null;
 
     if (includeObjects) {
+      updateDrJobContext({ phase: "inventory" });
       const inventory = await runDrStage(
         "inventory",
         async () => {
@@ -156,6 +160,7 @@ export const createDisasterRecoveryBackup = async (
         })
       );
 
+      updateDrJobContext({ phase: "object-export", totalObjects: inventory.length });
       const streamingResult = await runDrStage(
         "object-export",
         async () => {
@@ -179,6 +184,7 @@ export const createDisasterRecoveryBackup = async (
         })
       );
 
+      updateDrJobContext({ phase: "zip" });
       await runDrStage("zip", async () => streamingResult, (result) => ({
         zipBytes: result.stored.sizeBytes,
         streamed: true,
@@ -212,6 +218,8 @@ export const createDisasterRecoveryBackup = async (
     const result = await runDrStage(
       "backup-record",
       async () => {
+        updateDrJobContext({ phase: "backup-record" });
+        console.log("[DR] BEFORE backup-record persist");
         const stored =
           storedArtifact ||
           (await resolveBackupStorageProvider(input.storageProvider).store({
@@ -220,12 +228,8 @@ export const createDisasterRecoveryBackup = async (
             contentType: "application/zip",
           }));
 
-        const record = await BackupRecord.create({
-          createdBy: input.createdByUserId,
-          backupType: input.moduleId,
-          backupModule: input.moduleId,
-          backupKind: includeObjects ? "disaster_recovery" : "database",
-          status: "completed",
+        const recordPayload = {
+          status: "completed" as const,
           sizeBytes: stored.sizeBytes,
           manifestVersion: manifestStage.manifest.version,
           storageProvider: stored.provider,
@@ -238,11 +242,29 @@ export const createDisasterRecoveryBackup = async (
           objectSizeBytes,
           recoveryReadinessScore,
           retentionTier: input.retentionTier || "daily",
-          validationStatus: "pending",
+          validationStatus: "pending" as const,
           includesObjectStorage: includeObjects,
-        });
+          jobPhase: "complete",
+          processedObjects: objectCount,
+          jobCompletedAt: new Date(),
+        };
 
-        const recordId = String(record._id);
+        let recordId: string;
+        if (input.existingRecordId) {
+          await BackupRecord.findByIdAndUpdate(input.existingRecordId, recordPayload);
+          recordId = input.existingRecordId;
+        } else {
+          const record = await BackupRecord.create({
+            createdBy: input.createdByUserId,
+            backupType: input.moduleId,
+            backupModule: input.moduleId,
+            backupKind: includeObjects ? "disaster_recovery" : "database",
+            ...recordPayload,
+          });
+          recordId = String(record._id);
+        }
+        console.log("[DR] AFTER backup-record persist", { recordId });
+
         if (stored.provider === "local" && zipBuffer) {
           cacheLocalBackupZip(recordId, zipBuffer);
         }

@@ -75,7 +75,9 @@ export const createZipArchiveWriter = async (output: PassThrough): Promise<ZipAr
       }
     },
     finalize: async () => {
+      console.log("[DR] BEFORE archive.finalize (writer)");
       await archive.finalize();
+      console.log("[DR] AFTER archive.finalize (writer)", { pointer: archive.pointer() });
     },
     pointer: () => archive.pointer(),
   };

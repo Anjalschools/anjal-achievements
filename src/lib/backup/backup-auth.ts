@@ -3,8 +3,10 @@ import { NextResponse } from "next/server";
 import { requireAdmin, type AuthGuardResult } from "@/lib/auth-guard";
 
 /** Platform system administrator (`admin` role — maps from systemAdmin in auth-default-route). */
-export const requireSystemAdmin = async (request?: NextRequest): Promise<AuthGuardResult> =>
-  requireAdmin(request);
+export const requireSystemAdmin = async (request?: NextRequest): Promise<AuthGuardResult> => {
+  console.log("[DR-AUTH] ENTER");
+  return requireAdmin(request);
+};
 
 export const assertSystemAdmin = async (
   request?: NextRequest
