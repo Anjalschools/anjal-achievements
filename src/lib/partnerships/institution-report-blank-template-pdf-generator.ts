@@ -309,7 +309,7 @@ const drawExpandedWritingArea = (ctx: SKRSContext2D, label: string, y: number, o
   const lineTop = areaY + 16;
   for (let i = 0; i < WRITING_LINE_COUNT; i++) {
     const lineY = lineTop + WRITING_LINE_GAP * i;
-    strokeLine(ctx, lineStartX, lineY, lineEndX, STROKE_RULE);
+    strokeLine(ctx, lineStartX, lineY, lineEndX, lineY, STROKE_RULE);
   }
   return areaY + WRITING_SECTION_HEIGHT + 4;
 };
@@ -335,7 +335,7 @@ const drawRecommendationSection = (ctx: SKRSContext2D, y: number): number => {
   y += 12;
   const reasonLineW = CONTENT_WIDTH * REASON_LINE_WIDTH_RATIO;
   const reasonLineX = MARGIN_X + (CONTENT_WIDTH - reasonLineW) / 2;
-  strokeLine(ctx, reasonLineX, y, reasonLineX + reasonLineW, STROKE_DIVIDER);
+  strokeLine(ctx, reasonLineX, y, reasonLineX + reasonLineW, y, STROKE_DIVIDER);
   return y + 14;
 };
 

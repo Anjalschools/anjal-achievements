@@ -9,7 +9,7 @@ const DEFAULT_TIMEOUT_MS = 55_000;
 
 export type VisionUserPart =
   | { type: "text"; text: string }
-  | { type: "image_url"; image_url: { url: string; detail?: "low" | "auto" } };
+  | { type: "image_url"; image_url: { url: string; detail?: "low" | "auto" | "high" } };
 
 export type OpenAiVisionJsonResult =
   | { ok: true; rawText: string; parsed: unknown }

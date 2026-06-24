@@ -27,6 +27,7 @@ export type TrainingReportConsistencyInput = {
   professionalEthics?: number | null;
   institutionUploadedEvaluation?: Record<string, unknown> | null;
   institutionNotes?: string;
+  institutionReportExtraction?: Record<string, unknown> | null;
 };
 
 export type TrainingConsistencyFieldComparison = {

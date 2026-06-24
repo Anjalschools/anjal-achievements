@@ -6,6 +6,7 @@ import type {
   InstitutionReportSource,
   InstitutionReportValidationResult,
 } from "@/lib/partnerships/institution-final-report-constants";
+import type { InstitutionReportDetectionFeedback } from "@/lib/partnerships/institution-final-report-visual-evidence";
 
 export type InstitutionUploadedEvaluation = {
   supervisorName?: string;
@@ -41,6 +42,11 @@ export type InstitutionReportExtractionMeta = {
   validationResult?: InstitutionReportValidationResult;
   reviewStatus?: InstitutionReportReviewStatus;
   riskFlags?: InstitutionReportRiskFlag[];
+  manualVerification?: boolean;
+  manualVerifiedAt?: Date;
+  manualVerifiedBy?: string;
+  detectionFeedback?: InstitutionReportDetectionFeedback;
+  modelFeedback?: { entries?: unknown[] };
 };
 
 export interface ITrainingCompletionRecord extends Document {

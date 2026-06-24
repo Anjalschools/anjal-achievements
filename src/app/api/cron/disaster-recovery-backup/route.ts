@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createDisasterRecoveryBackup } from "@/lib/disaster-recovery/dr-backup-service";
-import { logBackupAuditEvent } from "@/lib/backup/backup-audit";
+import { auditActorFromUser, logBackupAuditEvent } from "@/lib/backup/backup-audit";
 import connectDB from "@/lib/mongodb";
 import BackupRecord from "@/models/BackupRecord";
+import User from "@/models/User";
 import { isBackupExpired } from "@/lib/disaster-recovery/retention-policy";
 
 export const dynamic = "force-dynamic";
@@ -36,6 +37,13 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "SYSTEM_ADMIN_USER_ID not configured" }, { status: 503 });
   }
 
+  await connectDB();
+  const systemAdmin = await User.findById(actorUserId);
+  if (!systemAdmin) {
+    return NextResponse.json({ error: "SYSTEM_ADMIN_USER_ID invalid" }, { status: 503 });
+  }
+  const actor = auditActorFromUser(systemAdmin);
+
   try {
     const result = await runWithRetry(() =>
       createDisasterRecoveryBackup({
@@ -49,6 +57,7 @@ export async function GET(request: NextRequest) {
     );
 
     await logBackupAuditEvent({
+      actor,
       actionType: "dr_scheduled_backup",
       metadata: {
         recordId: result.recordId,
@@ -76,6 +85,7 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error("[cron/disaster-recovery-backup]", error);
     await logBackupAuditEvent({
+      actor,
       actionType: "dr_scheduled_backup_failed",
       metadata: { error: error instanceof Error ? error.message : "FAILED" },
       outcome: "failure",

@@ -43,3 +43,12 @@ export const getCloudinary = (): typeof cloudinarySdk => {
 };
 
 export default getCloudinary;
+
+export type CloudinaryResourceType = "raw" | "auto" | "image" | "video";
+
+export const resolveCloudinaryResourceType = (resourceType: string): CloudinaryResourceType => {
+  if (resourceType === "raw" || resourceType === "auto" || resourceType === "video") {
+    return resourceType;
+  }
+  return "image";
+};

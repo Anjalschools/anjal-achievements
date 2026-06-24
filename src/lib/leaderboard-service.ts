@@ -478,7 +478,7 @@ const buildRankedStudentPipelineStages = (
   ];
   if (searchMatch) stages.push({ $match: searchMatch });
 
-  return { sortSpec, stages };
+  return { achievementMatch, userMatch, searchMatch, sortSpec, stages };
 };
 
 const runFullRankedList = async (

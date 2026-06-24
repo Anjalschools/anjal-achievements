@@ -84,6 +84,7 @@ describe("phase 11.1 — enterprise backup & restore", () => {
         recordCounts: { users: 1 },
       },
       collections: {},
+      objects: {},
     });
     expect(report.status).toBe("FAIL");
     expect(report.reasons.some((reason) => reason.includes("غير مدعوم"))).toBe(true);

@@ -2,7 +2,7 @@ import "server-only";
 import { Readable } from "stream";
 import { PutObjectCommand } from "@aws-sdk/client-s3";
 import { getR2BucketName, getR2Client, isR2Configured } from "@/lib/r2";
-import { getCloudinary, isCloudinaryConfigured } from "@/lib/cloudinary";
+import { getCloudinary, isCloudinaryConfigured, resolveCloudinaryResourceType } from "@/lib/cloudinary";
 import type { StorageManifestEntry } from "@/lib/disaster-recovery/storage-manifest-types";
 
 export type ObjectRestoreProgress = {
@@ -54,7 +54,7 @@ const restoreCloudinaryAsset = async (
     const uploadStream = cloudinary.uploader.upload_stream(
       {
         public_id: publicId,
-        resource_type: resourceType === "raw" ? "raw" : resourceType,
+        resource_type: resolveCloudinaryResourceType(resourceType),
         overwrite: true,
       },
       (error) => {

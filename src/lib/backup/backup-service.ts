@@ -103,7 +103,7 @@ export const createBackup = async (input: CreateBackupInput): Promise<CreateBack
     storageKey: stored.storageKey,
     fileName,
     recordCounts,
-    academicYearLabel: academicYear,
+    academicYearLabel: academicYear ?? undefined,
     note: input.note,
   });
 

@@ -3,7 +3,9 @@ import connectDB from "@/lib/mongodb";
 import PartnerOrganization from "@/models/PartnerOrganization";
 import StudentTrainingApplication from "@/models/StudentTrainingApplication";
 import TrainingAttachment from "@/models/TrainingAttachment";
-import TrainingCompletionRecord from "@/models/TrainingCompletionRecord";
+import TrainingCompletionRecord, {
+  type InstitutionReportExtractionMeta,
+} from "@/models/TrainingCompletionRecord";
 import TrainingOpportunity from "@/models/TrainingOpportunity";
 import { appendTimelineEvent } from "@/lib/partnerships/partnerships-application-workflow";
 import {
@@ -671,7 +673,7 @@ export const markInstitutionReportManualVerification = async (input: {
   }
 
   const now = new Date();
-  const existing = record.institutionReportExtraction as Record<string, unknown>;
+  const existing = record.institutionReportExtraction as InstitutionReportExtractionMeta;
   record.institutionReportExtraction = {
     ...existing,
     manualVerification: true,
@@ -705,7 +707,7 @@ export const markInstitutionReportDetectionFeedback = async (input: {
   }
 
   const now = new Date();
-  const existing = record.institutionReportExtraction as Record<string, unknown>;
+  const existing = record.institutionReportExtraction as InstitutionReportExtractionMeta;
   const validationResult = existing.validationResult as Record<string, unknown> | undefined;
   const priorFeedback = (existing.detectionFeedback as InstitutionReportDetectionFeedback | undefined) || {};
   const priorModelFeedback = (existing.modelFeedback as { entries?: unknown[] } | undefined) || {

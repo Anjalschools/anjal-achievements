@@ -3,7 +3,7 @@ import { createHash } from "crypto";
 import { Readable } from "stream";
 import { GetObjectCommand } from "@aws-sdk/client-s3";
 import { getR2BucketName, getR2Client, isR2Configured } from "@/lib/r2";
-import { getCloudinary, isCloudinaryConfigured } from "@/lib/cloudinary";
+import { getCloudinary, isCloudinaryConfigured, resolveCloudinaryResourceType } from "@/lib/cloudinary";
 import { hashContent } from "@/lib/backup/backup-manifest";
 import { isHttpDownloadAllowed } from "@/lib/disaster-recovery/http-download-policy";
 import type { StorageManifestEntry } from "@/lib/disaster-recovery/storage-manifest-types";
@@ -65,7 +65,7 @@ const downloadCloudinaryAsset = async (storageKey: string): Promise<Buffer> => {
   let downloadUrl = publicId;
   if (!/^https?:\/\//i.test(publicId)) {
     downloadUrl = cloudinary.url(publicId, {
-      resource_type: resourceType === "raw" ? "raw" : resourceType,
+      resource_type: resolveCloudinaryResourceType(resourceType),
       secure: true,
       flags: "attachment",
     });

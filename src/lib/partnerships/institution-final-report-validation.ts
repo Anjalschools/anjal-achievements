@@ -22,7 +22,7 @@ const hasRating = (value: unknown): value is number =>
 
 const hasText = (value: unknown) => Boolean(String(value || "").trim());
 
-const countOcrRatingSelections = (text: string, labelPatterns: RegExp[]): number => {
+const countOcrRatingSelections = (text: string, labelPatterns: readonly RegExp[]): number => {
   for (const pattern of labelPatterns) {
     const match = text.match(pattern);
     if (!match || match.index == null) continue;
