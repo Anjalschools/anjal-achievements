@@ -26,6 +26,11 @@ import {
 import { buildAndStoreStreamingDisasterRecoveryZip } from "@/lib/disaster-recovery/dr-streaming-backup";
 import { updateDrJobContext } from "@/lib/disaster-recovery/dr-job-context";
 import { resolveDisasterRecoveryStorageProvider } from "@/lib/disaster-recovery/dr-storage-resolution";
+import {
+  logDrMilestone,
+  logDrException,
+  updateDrVerificationReport,
+} from "@/lib/disaster-recovery/dr-verification";
 
 export type CreateDisasterRecoveryBackupInput = CreateBackupInput & {
   includeObjects?: boolean;
@@ -261,6 +266,7 @@ export const createDisasterRecoveryBackup = async (
         if (input.existingRecordId) {
           await BackupRecord.findByIdAndUpdate(input.existingRecordId, recordPayload);
           recordId = input.existingRecordId;
+          logDrMilestone("BACKUP_RECORD_SAVED", { recordId, updated: true });
         } else {
           const record = await BackupRecord.create({
             createdBy: input.createdByUserId,
@@ -270,7 +276,11 @@ export const createDisasterRecoveryBackup = async (
             ...recordPayload,
           });
           recordId = String(record._id);
+          logDrMilestone("BACKUP_RECORD_CREATED", { recordId });
+          logDrMilestone("BACKUP_RECORD_SAVED", { recordId, updated: false });
         }
+        logDrMilestone("BACKUP_STATUS_COMPLETED", { recordId, status: "completed" });
+        updateDrVerificationReport({ backupSaved: true });
         console.log("[DR] AFTER backup-record persist", { recordId });
 
         if (stored.provider === "local" && zipBuffer) {
@@ -313,6 +323,7 @@ export const createDisasterRecoveryBackup = async (
     const stack = error instanceof Error ? error.stack : undefined;
     const stage = error instanceof DisasterRecoveryBackupError ? error.stage : "unknown";
     logDr("FAILED", { stage, message, stack });
+    logDrException(stage, error);
     throw error;
   }
 };

@@ -18,6 +18,19 @@ import { startDrHeartbeat, stopDrHeartbeat } from "@/lib/disaster-recovery/dr-he
 import { registerDrProcessDiagnostics } from "@/lib/disaster-recovery/dr-process-diagnostics";
 import { toDisasterRecoveryErrorPayload } from "@/lib/disaster-recovery/dr-backup-logging";
 import { resolveDisasterRecoveryStorageProvider } from "@/lib/disaster-recovery/dr-storage-resolution";
+import {
+  initDrVerification,
+  isDrVerificationActive,
+  logDrException,
+  logDrMilestone,
+  printDrFinalReport,
+  resetDrVerification,
+} from "@/lib/disaster-recovery/dr-verification";
+import {
+  initDrLeakDetection,
+  printDrLeakReport,
+  resetDrLeakDetection,
+} from "@/lib/disaster-recovery/dr-leak-detection";
 import type { RetentionTier } from "@/lib/disaster-recovery/retention-policy";
 
 registerDrProcessDiagnostics();
@@ -78,6 +91,8 @@ export const startDisasterRecoveryBackupJob = async (
 
   const recordId = String(record._id);
   console.log("[DR-JOB] pending record created", { recordId, fileName });
+  initDrVerification(recordId);
+  initDrLeakDetection();
 
   void executeDisasterRecoveryBackupJob(recordId, input, audit).catch((error) => {
     console.error("[DR-JOB] background execution failed to start", {
@@ -101,6 +116,9 @@ export const executeDisasterRecoveryBackupJob = async (
   audit?: JobAuditContext
 ): Promise<void> => {
   console.log("[DR-JOB] executeDisasterRecoveryBackupJob", { recordId });
+  if (!isDrVerificationActive()) {
+    initDrVerification(recordId);
+  }
   resetDrJobContext({ recordId, phase: "queued" });
   startDrHeartbeat(recordId);
 
@@ -124,6 +142,11 @@ export const executeDisasterRecoveryBackupJob = async (
   try {
     const result = await createDisasterRecoveryBackup(drInput);
     updateDrJobContext({ phase: "complete", processedObjects: result.objectCount || 0 });
+    logDrMilestone("BACKUP_JOB_COMPLETED", {
+      recordId,
+      objectCount: result.objectCount,
+      recoveryReadinessScore: result.recoveryReadinessScore,
+    });
     console.log("[DR-JOB] completed", { recordId, objectCount: result.objectCount });
 
     if (audit) {
@@ -145,6 +168,7 @@ export const executeDisasterRecoveryBackupJob = async (
     }
   } catch (error) {
     const payload = toDisasterRecoveryErrorPayload(error);
+    logDrException(payload.stage, error);
     console.error("[DR-JOB] failed", {
       recordId,
       stage: payload.stage,
@@ -187,5 +211,9 @@ export const executeDisasterRecoveryBackupJob = async (
       recordId: ctx.recordId,
       final: true,
     });
+    printDrFinalReport();
+    printDrLeakReport();
+    resetDrLeakDetection();
+    resetDrVerification();
   }
 };

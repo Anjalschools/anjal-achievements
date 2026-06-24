@@ -3,7 +3,13 @@ import { finished } from "stream/promises";
 import unzipper from "unzipper";
 import { hashContent, serializeManifest, type BackupManifest } from "@/lib/backup/backup-manifest";
 import { resolveCollectionFileName } from "@/lib/backup/backup-constants";
-import { isNodeReadableStream } from "@/lib/disaster-recovery/dr-stream-utils";
+import {
+  DR_ARCHIVE_FINALIZE_TIMEOUT_MS,
+  DR_STREAM_DRAIN_TIMEOUT_MS,
+  withDrTimeout,
+} from "@/lib/disaster-recovery/dr-async-timeout";
+import { logDrObjectDiag } from "@/lib/disaster-recovery/dr-stream-lifecycle";
+import { finishedWithTimeout, isNodeReadableStream } from "@/lib/disaster-recovery/dr-stream-utils";
 
 const loadZipArchive = async () => {
   const { ZipArchive } = await import(/* webpackIgnore: true */ "archiver");
@@ -35,6 +41,19 @@ export type ZipArchiveWriter = {
   append: (source: Buffer | Readable, options: { name: string }) => Promise<void>;
   finalize: () => Promise<void>;
   pointer: () => number;
+  getArchiveState?: () => { pointer: number; aborted?: boolean };
+  getArchiveDiagnostics?: () => {
+    archivePointer: number;
+    archiveAborted?: boolean;
+    archiveDestroyed?: boolean;
+    archiveReadableEnded?: boolean;
+    archiveListeners: Record<string, number>;
+    outputDestroyed?: boolean;
+    outputReadableEnded?: boolean;
+    outputWritableFinished?: boolean;
+    outputClosed?: boolean;
+    outputListeners: Record<string, number>;
+  };
 };
 
 export const createZipArchiveWriter = async (output: PassThrough): Promise<ZipArchiveWriter> => {
@@ -47,6 +66,10 @@ export const createZipArchiveWriter = async (output: PassThrough): Promise<ZipAr
   });
 
   archive.pipe(output);
+
+  const listenerNames = ["error", "end", "finish", "close", "data", "drain"];
+  const countListeners = (emitter: NodeJS.EventEmitter): Record<string, number> =>
+    Object.fromEntries(listenerNames.map((name) => [name, emitter.listenerCount(name)]));
 
   return {
     append: async (source, options) => {
@@ -63,7 +86,12 @@ export const createZipArchiveWriter = async (output: PassThrough): Promise<ZipAr
       archive.append(source, options);
 
       if (isNodeReadableStream(source)) {
-        await finished(source as Readable);
+        await finishedWithTimeout(
+          source as Readable,
+          DR_STREAM_DRAIN_TIMEOUT_MS,
+          "zipAppendDrain",
+          { objectKey: options.name }
+        );
       }
 
       if (shouldLog) {
@@ -76,10 +104,32 @@ export const createZipArchiveWriter = async (output: PassThrough): Promise<ZipAr
     },
     finalize: async () => {
       console.log("[DR] BEFORE archive.finalize (writer)");
-      await archive.finalize();
+      logDrObjectDiag("Finalize started", { pointer: archive.pointer() });
+      await withDrTimeout(
+        archive.finalize(),
+        DR_ARCHIVE_FINALIZE_TIMEOUT_MS,
+        "archiveFinalize"
+      );
+      logDrObjectDiag("Finalize finished", { pointer: archive.pointer() });
       console.log("[DR] AFTER archive.finalize (writer)", { pointer: archive.pointer() });
     },
     pointer: () => archive.pointer(),
+    getArchiveState: () => ({
+      pointer: archive.pointer(),
+      aborted: Boolean((archive as { _aborting?: boolean })._aborting),
+    }),
+    getArchiveDiagnostics: () => ({
+      archivePointer: archive.pointer(),
+      archiveAborted: Boolean((archive as { _aborting?: boolean })._aborting),
+      archiveDestroyed: Boolean((archive as { destroyed?: boolean }).destroyed),
+      archiveReadableEnded: Boolean((archive as { readableEnded?: boolean }).readableEnded),
+      archiveListeners: countListeners(archive),
+      outputDestroyed: output.destroyed,
+      outputReadableEnded: output.readableEnded,
+      outputWritableFinished: output.writableFinished,
+      outputClosed: Boolean((output as { closed?: boolean }).closed),
+      outputListeners: countListeners(output),
+    }),
   };
 };
 

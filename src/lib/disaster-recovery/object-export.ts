@@ -10,10 +10,16 @@ import {
   exportStorageObjectsStreamingSource,
   runSequentialObjectExport,
   runSequentialObjectStreamExport,
+  type DrStreamExportGuards,
   type ExportedObjectStreamPayload,
   type StreamingObjectExportProgress,
   type StreamingObjectExportResult,
 } from "@/lib/disaster-recovery/dr-export-streaming";
+import {
+  DR_OBJECT_DOWNLOAD_TIMEOUT_MS,
+  withDrAbortTimeout,
+} from "@/lib/disaster-recovery/dr-async-timeout";
+import { logDrObjectDiag } from "@/lib/disaster-recovery/dr-stream-lifecycle";
 import {
   createHashingObjectStream,
   webBodyToNodeStream,
@@ -27,6 +33,7 @@ import type { StorageManifestEntry } from "@/lib/disaster-recovery/storage-manif
 export { isHttpDownloadAllowed };
 export {
   exportStorageObjectsStreamingSource,
+  type DrStreamExportGuards,
   type ExportedObjectStreamPayload,
   type StreamingObjectExportProgress,
   type StreamingObjectExportResult,
@@ -59,17 +66,28 @@ const decodeDataUrl = (dataUrl: string): Buffer => {
   return Buffer.from(match[2], "base64");
 };
 
-const openR2ObjectStream = async (key: string): Promise<Readable> => {
+const openR2ObjectStream = async (key: string, objectKey: string): Promise<Readable> => {
   if (!isR2Configured()) throw new Error("R2_NOT_CONFIGURED");
-  const client = getR2Client();
-  const response = await client.send(
-    new GetObjectCommand({
-      Bucket: getR2BucketName(),
-      Key: key.replace(/^\/+/, ""),
-    })
+  return withDrAbortTimeout(
+    "r2ObjectDownload",
+    DR_OBJECT_DOWNLOAD_TIMEOUT_MS,
+    async (signal) => {
+      logDrObjectDiag("Download started", { objectKey, provider: "r2", storageKey: key });
+      const client = getR2Client();
+      const response = await client.send(
+        new GetObjectCommand({
+          Bucket: getR2BucketName(),
+          Key: key.replace(/^\/+/, ""),
+        }),
+        { abortSignal: signal }
+      );
+      if (!response.Body) throw new Error("R2_OBJECT_EMPTY");
+      const stream = response.Body as Readable;
+      logDrObjectDiag("Download open", { objectKey, provider: "r2" });
+      return stream;
+    },
+    { objectKey }
   );
-  if (!response.Body) throw new Error("R2_OBJECT_EMPTY");
-  return response.Body as Readable;
 };
 
 const parseCloudinaryReference = (
@@ -101,30 +119,49 @@ const resolveCloudinaryDownloadUrl = (storageKey: string): string => {
   });
 };
 
-const openHttpObjectStream = async (url: string): Promise<Readable> => {
+const openHttpObjectStream = async (url: string, objectKey: string): Promise<Readable> => {
   if (!isHttpDownloadAllowed(url)) {
     throw new Error("HTTP_DOWNLOAD_NOT_ALLOWED");
   }
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(`HTTP_DOWNLOAD_FAILED:${response.status}`);
-  }
-  if (!response.body) {
-    throw new Error("HTTP_BODY_EMPTY");
-  }
-  return webBodyToNodeStream(response.body);
+  return withDrAbortTimeout(
+    "httpObjectDownload",
+    DR_OBJECT_DOWNLOAD_TIMEOUT_MS,
+    async (signal) => {
+      logDrObjectDiag("Download started", { objectKey, provider: "http", url });
+      const response = await fetch(url, { signal });
+      if (!response.ok) {
+        throw new Error(`HTTP_DOWNLOAD_FAILED:${response.status}`);
+      }
+      if (!response.body) {
+        throw new Error("HTTP_BODY_EMPTY");
+      }
+      return webBodyToNodeStream(response.body);
+    },
+    { objectKey }
+  );
 };
 
-const openCloudinaryObjectStream = async (storageKey: string): Promise<Readable> => {
+const openCloudinaryObjectStream = async (
+  storageKey: string,
+  objectKey: string
+): Promise<Readable> => {
   const downloadUrl = resolveCloudinaryDownloadUrl(storageKey);
-  const response = await fetch(downloadUrl);
-  if (!response.ok) {
-    throw new Error(`CLOUDINARY_DOWNLOAD_FAILED:${response.status}`);
-  }
-  if (!response.body) {
-    throw new Error("CLOUDINARY_BODY_EMPTY");
-  }
-  return webBodyToNodeStream(response.body);
+  return withDrAbortTimeout(
+    "cloudinaryObjectDownload",
+    DR_OBJECT_DOWNLOAD_TIMEOUT_MS,
+    async (signal) => {
+      logDrObjectDiag("Download started", { objectKey, provider: "cloudinary", storageKey });
+      const response = await fetch(downloadUrl, { signal });
+      if (!response.ok) {
+        throw new Error(`CLOUDINARY_DOWNLOAD_FAILED:${response.status}`);
+      }
+      if (!response.body) {
+        throw new Error("CLOUDINARY_BODY_EMPTY");
+      }
+      return webBodyToNodeStream(response.body);
+    },
+    { objectKey }
+  );
 };
 
 const openInlineObjectStream = (storageKey: string): Readable => {
@@ -133,14 +170,15 @@ const openInlineObjectStream = (storageKey: string): Readable => {
 };
 
 const openObjectSourceStream = async (entry: StorageManifestEntry): Promise<Readable> => {
+  const objectKey = entry.archivePath;
   if (entry.provider === "r2") {
-    return openR2ObjectStream(entry.storageKey);
+    return openR2ObjectStream(entry.storageKey, objectKey);
   }
   if (entry.provider === "cloudinary") {
-    return openCloudinaryObjectStream(entry.storageKey);
+    return openCloudinaryObjectStream(entry.storageKey, objectKey);
   }
   if (entry.provider === "http") {
-    return openHttpObjectStream(entry.storageKey);
+    return openHttpObjectStream(entry.storageKey, objectKey);
   }
   if (entry.provider === "inline") {
     return openInlineObjectStream(entry.storageKey);
@@ -150,21 +188,21 @@ const openObjectSourceStream = async (entry: StorageManifestEntry): Promise<Read
 
 const downloadR2Object = async (key: string): Promise<Buffer> => {
   logDrBufferFallbackEnter("object-export.downloadR2Object");
-  const buffer = await streamToBuffer(await openR2ObjectStream(key));
+  const buffer = await streamToBuffer(await openR2ObjectStream(key, key));
   logDrBufferFallbackExit("object-export.downloadR2Object", buffer.byteLength);
   return buffer;
 };
 
 const downloadCloudinaryAsset = async (storageKey: string): Promise<Buffer> => {
   logDrBufferFallbackEnter("object-export.downloadCloudinaryAsset");
-  const buffer = await streamToBuffer(await openCloudinaryObjectStream(storageKey));
+  const buffer = await streamToBuffer(await openCloudinaryObjectStream(storageKey, storageKey));
   logDrBufferFallbackExit("object-export.downloadCloudinaryAsset", buffer.byteLength);
   return buffer;
 };
 
 const downloadHttpAsset = async (url: string): Promise<Buffer> => {
   logDrBufferFallbackEnter("object-export.downloadHttpAsset");
-  const buffer = await streamToBuffer(await openHttpObjectStream(url));
+  const buffer = await streamToBuffer(await openHttpObjectStream(url, url));
   logDrBufferFallbackExit("object-export.downloadHttpAsset", buffer.byteLength);
   return buffer;
 };
@@ -231,6 +269,7 @@ export const exportStorageObjectsStreamExport = async (input: {
   entries: StorageManifestEntry[];
   onObjectReady: (payload: ExportedObjectStreamPayload) => Promise<void> | void;
   onProgress?: (progress: StreamingObjectExportProgress) => void;
+  guards?: DrStreamExportGuards;
 }): Promise<StreamingObjectExportResult> =>
   runSequentialObjectStreamExport({
     entries: input.entries,
@@ -244,6 +283,7 @@ export const exportStorageObjectsStreamExport = async (input: {
     },
     onObjectReady: input.onObjectReady,
     onProgress: input.onProgress,
+    guards: input.guards,
   });
 
 export const exportStorageObjects = async (

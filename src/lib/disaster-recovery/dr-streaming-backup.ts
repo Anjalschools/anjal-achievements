@@ -1,5 +1,5 @@
 import "server-only";
-import { PassThrough } from "stream";
+import { PassThrough, type Readable } from "stream";
 import { serializeManifest, type BackupManifest } from "@/lib/backup/backup-manifest";
 import type { BackupPackageEntry } from "@/lib/backup/backup-zip";
 import { createZipArchiveWriter } from "@/lib/backup/backup-zip";
@@ -8,8 +8,18 @@ import {
   type StoredBackupArtifact,
 } from "@/lib/backup/backup-storage";
 import type { BackupStorageProviderId } from "@/lib/backup/backup-constants";
+import {
+  DR_UPLOAD_COMPLETE_TIMEOUT_MS,
+  withDrTimeout,
+} from "@/lib/disaster-recovery/dr-async-timeout";
 import { logDr, logDrMemory } from "@/lib/disaster-recovery/dr-backup-logging";
+import { DrExportWatchdog } from "@/lib/disaster-recovery/dr-export-watchdog";
 import { updateDrJobContext } from "@/lib/disaster-recovery/dr-job-context";
+import {
+  destroyDrStream,
+  logDrObjectDiag,
+  monitorDrStream,
+} from "@/lib/disaster-recovery/dr-stream-lifecycle";
 import { exportStorageObjectsStreamExport } from "@/lib/disaster-recovery/object-export";
 import {
   serializeStorageManifest,
@@ -21,6 +31,16 @@ import {
   assertDisasterRecoveryStreamingUpload,
   resolveDisasterRecoveryStorageProvider,
 } from "@/lib/disaster-recovery/dr-storage-resolution";
+import {
+  logDrMilestone,
+  trackDrPromise,
+  updateDrVerificationReport,
+  verifyArchiveLifecycle,
+} from "@/lib/disaster-recovery/dr-verification";
+import {
+  registerDrArchiverDiagnostics,
+  registerDrR2UploadDiagnostics,
+} from "@/lib/disaster-recovery/dr-leak-detection";
 
 const logStreamingError = (phase: string, error: unknown): void => {
   const message = error instanceof Error ? error.message : String(error);
@@ -68,6 +88,14 @@ export const buildAndStoreStreamingDisasterRecoveryZip = async (input: {
   logDrMemory("memory:before-export");
 
   const output = new PassThrough();
+  monitorDrStream(output, { objectKey: input.fileName, stage: "zip-upload" });
+  let uploadCompletedFlag = false;
+  registerDrR2UploadDiagnostics(() => ({
+    bodyStreamDestroyed: output.destroyed,
+    bodyStreamReadableEnded: output.readableEnded,
+    bodyStreamClosed: Boolean((output as { closed?: boolean }).closed),
+    uploadCompleted: uploadCompletedFlag,
+  }));
   const storage = resolveBackupStorageProvider(effectiveProvider);
   const fileName = input.fileName;
 
@@ -78,16 +106,37 @@ export const buildAndStoreStreamingDisasterRecoveryZip = async (input: {
     usesStreamingUpload: true,
   });
 
-  const storePromise = storage.storeStream!({
-    fileName,
-    body: output,
-    contentType: "application/zip",
-  }).then((stored) => ({ stored, zipBuffer: undefined as Buffer | undefined }));
+  logDrObjectDiag("Upload stream started", { objectKey: fileName, provider: effectiveProvider });
+  logDrMilestone("UPLOAD_STARTED", { fileName, provider: effectiveProvider });
+  const uploadStartedAt = Date.now();
+  const storePromise = trackDrPromise(
+    "storageUploadComplete",
+    withDrTimeout(
+      storage.storeStream!({
+        fileName,
+        body: output,
+        contentType: "application/zip",
+      }).then((stored) => {
+        logDrObjectDiag("Upload stream finished", {
+          objectKey: fileName,
+          provider: stored.provider,
+          sizeBytes: stored.sizeBytes,
+        });
+        return { stored, zipBuffer: undefined as Buffer | undefined };
+      }),
+      DR_UPLOAD_COMPLETE_TIMEOUT_MS,
+      "storageUploadComplete",
+      { objectKey: fileName }
+    )
+  );
 
   let writer: Awaited<ReturnType<typeof createZipArchiveWriter>>;
   try {
     console.log("[DR] BEFORE createZipArchiveWriter");
     writer = await createZipArchiveWriter(output);
+    if (writer.getArchiveDiagnostics) {
+      registerDrArchiverDiagnostics(writer.getArchiveDiagnostics);
+    }
     console.log("[DR] AFTER createZipArchiveWriter");
   } catch (error) {
     logStreamingError("createZipArchiveWriter", error);
@@ -110,6 +159,22 @@ export const buildAndStoreStreamingDisasterRecoveryZip = async (input: {
   let maxLiveObjectStreams = 0;
   let liveObjectStreams = 0;
   let processedObjectCount = 0;
+  let activeObjectStream: Readable | null = null;
+
+  const watchdog = new DrExportWatchdog({
+    onStall: (snapshot) => {
+      const stallError = new Error(
+        `DR_WATCHDOG_STALL:last=${snapshot.lastArchivePath ?? "unknown"}:idle=${Date.now() - snapshot.lastProgressAt}ms`
+      );
+      logDrObjectDiag("Watchdog abort", {
+        ...snapshot,
+        message: stallError.message,
+      });
+      destroyDrStream(activeObjectStream ?? undefined, stallError);
+      output.destroy(stallError);
+    },
+  });
+  watchdog.start();
 
   let manifestEntries: StorageManifestEntry[];
   let failures: StorageManifestEntry[];
@@ -119,8 +184,10 @@ export const buildAndStoreStreamingDisasterRecoveryZip = async (input: {
     console.log("[DR] BEFORE exportStorageObjectsStreamExport", { inventory: input.inventory.length });
     const exportResult = await exportStorageObjectsStreamExport({
       entries: input.inventory,
+      guards: { watchdog },
       onObjectReady: async ({ stream, archivePath }) => {
         processedObjectCount += 1;
+        activeObjectStream = stream;
         updateDrJobContext({
           processedObjects: processedObjectCount,
           archivePointer: writer.pointer(),
@@ -138,6 +205,7 @@ export const buildAndStoreStreamingDisasterRecoveryZip = async (input: {
           await writer.append(stream, { name: archivePath });
         } finally {
           liveObjectStreams -= 1;
+          activeObjectStream = null;
         }
 
         updateDrJobContext({ archivePointer: writer.pointer() });
@@ -168,10 +236,24 @@ export const buildAndStoreStreamingDisasterRecoveryZip = async (input: {
       exported: manifestEntries.length,
       failed: failures.length,
     });
+    updateDrVerificationReport({
+      objectsProcessed: manifestEntries.length,
+      objectsFailed: failures.length,
+      bytesExported,
+    });
+    logDrMilestone("OBJECT_EXPORT_COMPLETED", {
+      exported: manifestEntries.length,
+      failed: failures.length,
+      bytesExported,
+    });
   } catch (error) {
     logStreamingError("object-export", error);
     logStorageUploadFailed(effectiveProvider, error);
     throw error;
+  } finally {
+    watchdog.stop();
+    destroyDrStream(activeObjectStream ?? undefined);
+    activeObjectStream = null;
   }
 
   logDr("stream-export:summary", { maxLiveObjectStreams });
@@ -214,11 +296,24 @@ export const buildAndStoreStreamingDisasterRecoveryZip = async (input: {
 
   try {
     console.log("[DR] BEFORE archive.finalize");
+    logDrMilestone("ZIP_FINALIZE_STARTED", { pointer: writer.pointer() });
     await writer.finalize();
+    if (writer.getArchiveState) {
+      await verifyArchiveLifecycle({
+        getArchiveState: writer.getArchiveState,
+        output,
+      });
+    }
+    if (writer.getArchiveDiagnostics) {
+      registerDrArchiverDiagnostics(writer.getArchiveDiagnostics);
+    }
+    updateDrVerificationReport({ zipFinalized: true });
+    logDrMilestone("ZIP_FINALIZE_COMPLETED", { pointer: writer.pointer() });
     console.log("[DR] AFTER archive.finalize", { pointer: writer.pointer() });
   } catch (error) {
     logStreamingError("archive.finalize", error);
     logStorageUploadFailed(effectiveProvider, error);
+    output.destroy(error instanceof Error ? error : new Error(String(error)));
     throw error;
   }
 
@@ -229,6 +324,24 @@ export const buildAndStoreStreamingDisasterRecoveryZip = async (input: {
     const storeResult = await storePromise;
     stored = storeResult.stored;
     zipBuffer = storeResult.zipBuffer;
+    uploadCompletedFlag = true;
+    const uploadElapsedMs = Date.now() - uploadStartedAt;
+    updateDrVerificationReport({ uploadCompleted: true });
+    logDrMilestone("UPLOAD_COMPLETED", {
+      provider: stored.provider,
+      fileName: stored.fileName,
+      sizeBytes: stored.sizeBytes,
+      elapsedMs: uploadElapsedMs,
+    });
+    if (stored.provider === "r2") {
+      logDrMilestone("R2_UPLOAD_COMPLETED", {
+        bucket: stored.bucket,
+        key: stored.storageKey,
+        size: stored.sizeBytes,
+        etag: stored.etag,
+        elapsedMs: uploadElapsedMs,
+      });
+    }
     console.log("[DR] STORAGE_UPLOAD_COMPLETE", {
       provider: stored.provider,
       fileName: stored.fileName,

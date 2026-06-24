@@ -1,4 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
+
+vi.mock("server-only", () => ({}));
+
 import { runSequentialObjectExport } from "@/lib/disaster-recovery/dr-export-streaming";
 import type { StorageManifestEntry } from "@/lib/disaster-recovery/storage-manifest-types";
 

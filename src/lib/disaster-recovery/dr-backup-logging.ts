@@ -1,5 +1,6 @@
 import "server-only";
 import { readProcessMemorySnapshot } from "@/lib/disaster-recovery/dr-memory-metrics";
+import { logDrException, trackDrPromise } from "@/lib/disaster-recovery/dr-verification";
 
 export type DrBackupStage =
   | "manifest"
@@ -117,13 +118,14 @@ export const runDrStage = async <T>(
 ): Promise<T> => {
   logDr(`${stage}:start`);
   try {
-    const result = await fn();
+    const result = await trackDrPromise(`stage:${stage}`, fn());
     logDr(`${stage}:done`, metaOnDone ? metaOnDone(result) : undefined);
     return result;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     const stack = error instanceof Error ? error.stack : undefined;
     logDr(`${stage}:failed`, { message, stack, stage });
+    logDrException(stage, error);
     if (error instanceof DisasterRecoveryBackupError) {
       throw error;
     }

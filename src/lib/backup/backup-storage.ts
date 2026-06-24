@@ -10,6 +10,8 @@ export type StoredBackupArtifact = {
   fileName: string;
   sizeBytes: number;
   downloadUrl?: string;
+  bucket?: string;
+  etag?: string;
 };
 
 export type BackupStorageProvider = {
@@ -55,9 +57,10 @@ export const createR2BackupStorageProvider = (): BackupStorageProvider => ({
     }
     const key = `backups/${new Date().toISOString().slice(0, 10)}/${Date.now()}-${fileName}`;
     const client = getR2Client();
-    await client.send(
+    const bucket = getR2BucketName();
+    const response = await client.send(
       new PutObjectCommand({
-        Bucket: getR2BucketName(),
+        Bucket: bucket,
         Key: key,
         Body: body,
         ContentType: contentType,
@@ -68,6 +71,8 @@ export const createR2BackupStorageProvider = (): BackupStorageProvider => ({
       storageKey: key,
       fileName,
       sizeBytes: body.byteLength,
+      bucket,
+      etag: response.ETag,
     };
   },
   storeStream: async ({ fileName, body, contentType = "application/zip" }) => {
@@ -76,25 +81,27 @@ export const createR2BackupStorageProvider = (): BackupStorageProvider => ({
     }
     const key = `backups/${new Date().toISOString().slice(0, 10)}/${Date.now()}-${fileName}`;
     const client = getR2Client();
+    const bucket = getR2BucketName();
     let sizeBytes = 0;
     body.on("data", (chunk: Buffer | string) => {
       sizeBytes += Buffer.isBuffer(chunk) ? chunk.byteLength : Buffer.byteLength(chunk);
     });
 
-    await client.send(
+    const response = await client.send(
       new PutObjectCommand({
-        Bucket: getR2BucketName(),
+        Bucket: bucket,
         Key: key,
         Body: body,
         ContentType: contentType,
       })
     );
-
     return {
       provider: "r2",
       storageKey: key,
       fileName,
       sizeBytes,
+      bucket,
+      etag: response.ETag,
     };
   },
   retrieve: async (storageKey: string) => {

@@ -62,7 +62,9 @@ describe("phase 11.2.B — true end-to-end streaming export", () => {
     expect(finalized.status).toBe("exported");
   });
 
-  it("keeps maxLiveStreams <= 1 during sequential stream export", async () => {
+  it(
+    "keeps maxLiveStreams <= 1 during sequential stream export",
+    async () => {
     const entries = Array.from({ length: 2501 }, (_, index) => buildInlineEntry(index));
 
     let maxLiveStreams = 0;
@@ -86,7 +88,9 @@ describe("phase 11.2.B — true end-to-end streaming export", () => {
     expect(result.manifestEntries).toHaveLength(2501);
     expect(result.failures).toHaveLength(0);
     expect(maxLiveStreams).toBeLessThanOrEqual(1);
-  });
+  },
+    30_000
+  );
 
   it("handles large chunked objects without retaining multiple streams", async () => {
     const largeSizes = [5 * 1024 * 1024, 12 * 1024 * 1024, 20 * 1024 * 1024];

@@ -1,5 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createDisasterRecoveryBackup } from "@/lib/disaster-recovery/dr-backup-service";
+import {
+  initDrVerification,
+  logDrHttpMilestone,
+  logDrMilestone,
+  printDrFinalReport,
+  resetDrVerification,
+  updateDrVerificationReport,
+} from "@/lib/disaster-recovery/dr-verification";
+import {
+  initDrLeakDetection,
+  printDrLeakReport,
+  resetDrLeakDetection,
+} from "@/lib/disaster-recovery/dr-leak-detection";
 import { auditActorFromUser, logBackupAuditEvent } from "@/lib/backup/backup-audit";
 import connectDB from "@/lib/mongodb";
 import BackupRecord from "@/models/BackupRecord";
@@ -45,6 +58,8 @@ export async function GET(request: NextRequest) {
   const actor = auditActorFromUser(systemAdmin);
 
   try {
+    initDrVerification();
+    initDrLeakDetection();
     const result = await runWithRetry(() =>
       createDisasterRecoveryBackup({
         moduleId: "full",
@@ -55,6 +70,11 @@ export async function GET(request: NextRequest) {
         note: "scheduled-dr-backup",
       })
     );
+
+    logDrMilestone("BACKUP_JOB_COMPLETED", {
+      recordId: result.recordId,
+      objectCount: result.objectCount,
+    });
 
     await logBackupAuditEvent({
       actor,
@@ -76,12 +96,16 @@ export async function GET(request: NextRequest) {
       await BackupRecord.findByIdAndDelete(row._id);
     }
 
-    return NextResponse.json({
+    logDrHttpMilestone("HTTP_RESPONSE_READY", result.recordId, { status: 200 });
+    const response = NextResponse.json({
       ok: true,
       backupId: result.recordId,
       objectCount: result.objectCount,
       prunedMetadata: metadataDeletes.length,
     });
+    logDrHttpMilestone("HTTP_RESPONSE_SENT", result.recordId, { status: 200 });
+    updateDrVerificationReport({ responseSent: true });
+    return response;
   } catch (error) {
     console.error("[cron/disaster-recovery-backup]", error);
     await logBackupAuditEvent({
@@ -91,5 +115,10 @@ export async function GET(request: NextRequest) {
       outcome: "failure",
     }).catch(() => undefined);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  } finally {
+    printDrFinalReport();
+    printDrLeakReport();
+    resetDrLeakDetection();
+    resetDrVerification();
   }
 }

@@ -1,6 +1,12 @@
 import { createHash } from "crypto";
+import { finished } from "stream/promises";
 import { Readable, Transform } from "stream";
 import { pipeline } from "stream/promises";
+import {
+  DR_STREAM_COMPLETED_TIMEOUT_MS,
+  withDrTimeout,
+} from "@/lib/disaster-recovery/dr-async-timeout";
+import { destroyDrStream, logDrObjectDiag, monitorDrStream } from "@/lib/disaster-recovery/dr-stream-lifecycle";
 import type { StorageManifestEntry } from "@/lib/disaster-recovery/storage-manifest-types";
 
 export const isNodeReadableStream = (source: Buffer | Readable): source is Readable =>
@@ -8,6 +14,25 @@ export const isNodeReadableStream = (source: Buffer | Readable): source is Reada
 
 export const webBodyToNodeStream = (body: ReadableStream<Uint8Array>): Readable =>
   Readable.fromWeb(body as import("stream/web").ReadableStream);
+
+export const finishedWithTimeout = async (
+  stream: Readable,
+  timeoutMs: number,
+  operation: string,
+  meta?: { objectKey?: string }
+): Promise<void> => {
+  await withDrTimeout(finished(stream), timeoutMs, operation, meta);
+};
+
+export const pipelineWithTimeout = async (
+  source: Readable,
+  destination: NodeJS.WritableStream,
+  timeoutMs: number,
+  operation: string,
+  meta?: { objectKey?: string }
+): Promise<void> => {
+  await withDrTimeout(pipeline(source, destination), timeoutMs, operation, meta);
+};
 
 export type HashingObjectStream = {
   stream: Readable;
@@ -18,6 +43,12 @@ export const createHashingObjectStream = (
   entry: StorageManifestEntry,
   sourceStream: Readable
 ): HashingObjectStream => {
+  const objectKey = entry.archivePath;
+  const monitoredSource = monitorDrStream(sourceStream, {
+    objectKey,
+    stage: "object-source",
+  });
+
   const hash = createHash("sha256");
   let byteLength = 0;
 
@@ -52,6 +83,11 @@ export const createHashingObjectStream = (
         if (entry.fileSize && entry.fileSize > 0 && byteLength !== entry.fileSize) {
           errorMessage = `SIZE_MISMATCH:expected=${entry.fileSize},actual=${byteLength}`;
         }
+        logDrObjectDiag("Download finished", {
+          objectKey,
+          byteLength,
+          elapsedMs: undefined,
+        });
         settleCompleted({
           ...entry,
           fileSize: byteLength,
@@ -66,13 +102,22 @@ export const createHashingObjectStream = (
     },
   });
 
+  monitorDrStream(transform, { objectKey, stage: "hashing-transform" });
+
   transform.on("error", (error) => {
     rejectWith(error);
   });
 
-  pipeline(sourceStream, transform).catch((error) => {
-    transform.destroy(error);
-    rejectWith(error);
+  pipelineWithTimeout(
+    monitoredSource,
+    transform,
+    DR_STREAM_COMPLETED_TIMEOUT_MS,
+    "hashingPipeline",
+    { objectKey }
+  ).catch((error) => {
+    destroyDrStream(monitoredSource, error instanceof Error ? error : undefined);
+    destroyDrStream(transform, error instanceof Error ? error : undefined);
+    rejectWith(error instanceof Error ? error : new Error(String(error)));
   });
 
   return { stream: transform, completed };

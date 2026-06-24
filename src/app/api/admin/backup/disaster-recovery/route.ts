@@ -9,6 +9,10 @@ import {
   toDisasterRecoveryErrorPayload,
 } from "@/lib/disaster-recovery/dr-backup-logging";
 import { resolveDisasterRecoveryStorageProvider } from "@/lib/disaster-recovery/dr-storage-resolution";
+import {
+  logDrHttpMilestone,
+  updateDrVerificationReport,
+} from "@/lib/disaster-recovery/dr-verification";
 import type { RetentionTier } from "@/lib/disaster-recovery/retention-policy";
 
 registerDrProcessDiagnostics();
@@ -117,7 +121,12 @@ export async function POST(request: NextRequest) {
   );
   console.log("[DR-API] AFTER SERVICE (202 accepted)", { recordId: accepted.recordId });
 
-  return NextResponse.json(
+  logDrHttpMilestone("HTTP_RESPONSE_READY", accepted.recordId, {
+    status: 202,
+    fileName: accepted.fileName,
+  });
+
+  const response = NextResponse.json(
     {
       ok: true,
       accepted: true,
@@ -131,4 +140,9 @@ export async function POST(request: NextRequest) {
     },
     { status: 202 }
   );
+
+  logDrHttpMilestone("HTTP_RESPONSE_SENT", accepted.recordId, { status: 202 });
+  updateDrVerificationReport({ responseSent: true });
+
+  return response;
 }
