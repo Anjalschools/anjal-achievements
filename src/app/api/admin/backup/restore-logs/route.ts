@@ -19,6 +19,7 @@ export async function GET(request: NextRequest) {
         "backup_validated",
         "backup_dry_run",
         "dr_backup_created",
+        "dr_backup_failed",
         "dr_backup_validated",
         "dr_recovery_simulation",
         "dr_scheduled_backup",

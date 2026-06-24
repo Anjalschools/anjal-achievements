@@ -3,6 +3,10 @@ import { requireSystemAdmin } from "@/lib/backup/backup-auth";
 import { createDisasterRecoveryBackup } from "@/lib/disaster-recovery/dr-backup-service";
 import { auditActorFromUser, logBackupAuditEvent } from "@/lib/backup/backup-audit";
 import type { BackupModuleId, BackupStorageProviderId } from "@/lib/backup/backup-constants";
+import {
+  DisasterRecoveryBackupError,
+  toDisasterRecoveryErrorPayload,
+} from "@/lib/disaster-recovery/dr-backup-logging";
 import type { RetentionTier } from "@/lib/disaster-recovery/retention-policy";
 
 export const runtime = "nodejs";
@@ -25,6 +29,14 @@ const isStorageProvider = (value: string): value is BackupStorageProviderId =>
 
 const isRetentionTier = (value: string): value is RetentionTier =>
   value === "daily" || value === "weekly" || value === "monthly";
+
+const resolveDrErrorStatus = (error: unknown): number => {
+  if (!(error instanceof DisasterRecoveryBackupError)) return 500;
+  const code = error.message;
+  if (code === "R2_NOT_CONFIGURED" || code === "CLOUDINARY_NOT_CONFIGURED") return 503;
+  if (code.endsWith("_NOT_CONFIGURED")) return 503;
+  return 500;
+};
 
 export async function POST(request: NextRequest) {
   const gate = await requireSystemAdmin(request);
@@ -82,7 +94,24 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ ok: true, data: result });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "DR_BACKUP_FAILED";
-    return NextResponse.json({ error: message }, { status: 500 });
+    const payload = toDisasterRecoveryErrorPayload(error);
+    const status = resolveDrErrorStatus(error);
+
+    await logBackupAuditEvent({
+      request,
+      actor: auditActorFromUser(gate.user),
+      actionType: "dr_backup_failed",
+      metadata: {
+        moduleId,
+        storageProvider,
+        stage: payload.stage,
+        message: payload.message,
+        details: payload.details,
+      },
+      outcome: "failure",
+      descriptionAr: "فشل إنشاء نسخة كوارث كاملة",
+    }).catch(() => undefined);
+
+    return NextResponse.json(payload, { status });
   }
 }
