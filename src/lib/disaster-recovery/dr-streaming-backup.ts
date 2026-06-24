@@ -44,6 +44,7 @@ export const buildAndStoreStreamingDisasterRecoveryZip = async (input: {
   fileName: string;
   storageProvider: BackupStorageProviderId;
 }): Promise<StreamingDisasterRecoveryZipResult> => {
+  console.log("[DR] BEFORE STREAMING ZIP");
   logDrMemory("memory:before-export");
 
   const output = new PassThrough();
@@ -115,6 +116,7 @@ export const buildAndStoreStreamingDisasterRecoveryZip = async (input: {
   const { stored, zipBuffer } = await storePromise;
 
   logDrMemory("memory:after-export");
+  console.log("[DR] AFTER STREAMING ZIP");
 
   const recoveryReadinessScore = Math.round(
     (summary.exportedCount / Math.max(1, summary.objectCount)) * 100

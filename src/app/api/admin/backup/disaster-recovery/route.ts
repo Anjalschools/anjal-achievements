@@ -39,6 +39,7 @@ const resolveDrErrorStatus = (error: unknown): number => {
 };
 
 export async function POST(request: NextRequest) {
+  console.log("[DR-API] REQUEST RECEIVED");
   const gate = await requireSystemAdmin(request);
   if (!gate.ok) return gate.response;
 
@@ -69,6 +70,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
+    console.log("[DR-API] BEFORE SERVICE");
     const result = await createDisasterRecoveryBackup({
       moduleId,
       storageProvider,
@@ -76,6 +78,7 @@ export async function POST(request: NextRequest) {
       includeObjects: body.includeObjects !== false,
       retentionTier,
     });
+    console.log("[DR-API] AFTER SERVICE");
 
     await logBackupAuditEvent({
       request,
@@ -94,6 +97,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ ok: true, data: result });
   } catch (error) {
+    console.error("[DR-API] FAILED", error);
     const payload = toDisasterRecoveryErrorPayload(error);
     const status = resolveDrErrorStatus(error);
 

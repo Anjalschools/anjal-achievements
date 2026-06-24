@@ -81,6 +81,7 @@ const verifyExportProviderConfiguration = (inventory: StorageManifestEntry[]): v
 export const createDisasterRecoveryBackup = async (
   input: CreateDisasterRecoveryBackupInput
 ): Promise<CreateBackupResult & { objectCount?: number; recoveryReadinessScore?: number }> => {
+  console.log("[DR] SERVICE ENTER");
   logDr("START", {
     moduleId: input.moduleId,
     storageProvider: input.storageProvider,
@@ -92,6 +93,7 @@ export const createDisasterRecoveryBackup = async (
   const fileName = buildDrFileName(input.moduleId);
 
   try {
+    console.log("[DR] BEFORE MANIFEST");
     const manifestStage = await runDrStage(
       "manifest",
       async (): Promise<ManifestStageResult> => {
@@ -128,6 +130,7 @@ export const createDisasterRecoveryBackup = async (
         manifestVersion: result.manifest.version,
       })
     );
+    console.log("[DR] AFTER MANIFEST");
 
     let objectCount = 0;
     let objectSizeBytes = 0;
