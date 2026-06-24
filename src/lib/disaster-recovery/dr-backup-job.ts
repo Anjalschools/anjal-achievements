@@ -17,6 +17,7 @@ import {
 import { startDrHeartbeat, stopDrHeartbeat } from "@/lib/disaster-recovery/dr-heartbeat";
 import { registerDrProcessDiagnostics } from "@/lib/disaster-recovery/dr-process-diagnostics";
 import { toDisasterRecoveryErrorPayload } from "@/lib/disaster-recovery/dr-backup-logging";
+import { resolveDisasterRecoveryStorageProvider } from "@/lib/disaster-recovery/dr-storage-resolution";
 import type { RetentionTier } from "@/lib/disaster-recovery/retention-policy";
 
 registerDrProcessDiagnostics();
@@ -103,9 +104,16 @@ export const executeDisasterRecoveryBackupJob = async (
   resetDrJobContext({ recordId, phase: "queued" });
   startDrHeartbeat(recordId);
 
+  const includeObjects = input.includeObjects !== false;
+  const storageResolution = resolveDisasterRecoveryStorageProvider({
+    requested: input.storageProvider,
+    includeObjects,
+    source: "dr-backup-job",
+  });
+
   const drInput: CreateDisasterRecoveryBackupInput = {
     moduleId: input.moduleId,
-    storageProvider: input.storageProvider,
+    storageProvider: storageResolution.resolved,
     createdByUserId: input.createdByUserId,
     includeObjects: input.includeObjects,
     retentionTier: input.retentionTier,

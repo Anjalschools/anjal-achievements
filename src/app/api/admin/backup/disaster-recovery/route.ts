@@ -4,6 +4,11 @@ import { auditActorFromUser } from "@/lib/backup/backup-audit";
 import type { BackupModuleId, BackupStorageProviderId } from "@/lib/backup/backup-constants";
 import { startDisasterRecoveryBackupJob } from "@/lib/disaster-recovery/dr-backup-job";
 import { registerDrProcessDiagnostics } from "@/lib/disaster-recovery/dr-process-diagnostics";
+import {
+  DisasterRecoveryBackupError,
+  toDisasterRecoveryErrorPayload,
+} from "@/lib/disaster-recovery/dr-backup-logging";
+import { resolveDisasterRecoveryStorageProvider } from "@/lib/disaster-recovery/dr-storage-resolution";
 import type { RetentionTier } from "@/lib/disaster-recovery/retention-policy";
 
 registerDrProcessDiagnostics();
@@ -30,6 +35,20 @@ const isStorageProvider = (value: string): value is BackupStorageProviderId =>
 
 const isRetentionTier = (value: string): value is RetentionTier =>
   value === "daily" || value === "weekly" || value === "monthly";
+
+const resolveDrErrorStatus = (error: unknown): number => {
+  if (!(error instanceof DisasterRecoveryBackupError)) return 500;
+  const code = error.message;
+  if (
+    code === "R2_NOT_CONFIGURED" ||
+    code === "CLOUDINARY_NOT_CONFIGURED" ||
+    code === "DISASTER_RECOVERY_STREAMING_STORAGE_REQUIRED"
+  ) {
+    return 503;
+  }
+  if (code.endsWith("_NOT_CONFIGURED")) return 503;
+  return 500;
+};
 
 export async function POST(request: NextRequest) {
   console.log("[DR-ROUTE] POST ENTER");
@@ -68,13 +87,27 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Invalid retention tier" }, { status: 400 });
   }
 
+  const includeObjects = body.includeObjects !== false;
+  try {
+    resolveDisasterRecoveryStorageProvider({
+      requested: storageProvider,
+      includeObjects,
+      source: "api-route",
+    });
+  } catch (error) {
+    const payload = toDisasterRecoveryErrorPayload(error);
+    const status = resolveDrErrorStatus(error);
+    console.error("[DR-API] STORAGE_PROVIDER_REJECTED", payload);
+    return NextResponse.json(payload, { status });
+  }
+
   console.log("[DR-API] BEFORE SERVICE (async job enqueue)");
   const accepted = await startDisasterRecoveryBackupJob(
     {
       moduleId,
       storageProvider,
       createdByUserId: String(gate.user._id),
-      includeObjects: body.includeObjects !== false,
+      includeObjects,
       retentionTier,
     },
     {

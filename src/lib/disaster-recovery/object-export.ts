@@ -18,6 +18,10 @@ import {
   createHashingObjectStream,
   webBodyToNodeStream,
 } from "@/lib/disaster-recovery/dr-stream-utils";
+import {
+  logDrBufferFallbackEnter,
+  logDrBufferFallbackExit,
+} from "@/lib/disaster-recovery/dr-buffer-diagnostics";
 import type { StorageManifestEntry } from "@/lib/disaster-recovery/storage-manifest-types";
 
 export { isHttpDownloadAllowed };
@@ -145,15 +149,24 @@ const openObjectSourceStream = async (entry: StorageManifestEntry): Promise<Read
 };
 
 const downloadR2Object = async (key: string): Promise<Buffer> => {
-  return streamToBuffer(await openR2ObjectStream(key));
+  logDrBufferFallbackEnter("object-export.downloadR2Object");
+  const buffer = await streamToBuffer(await openR2ObjectStream(key));
+  logDrBufferFallbackExit("object-export.downloadR2Object", buffer.byteLength);
+  return buffer;
 };
 
 const downloadCloudinaryAsset = async (storageKey: string): Promise<Buffer> => {
-  return streamToBuffer(await openCloudinaryObjectStream(storageKey));
+  logDrBufferFallbackEnter("object-export.downloadCloudinaryAsset");
+  const buffer = await streamToBuffer(await openCloudinaryObjectStream(storageKey));
+  logDrBufferFallbackExit("object-export.downloadCloudinaryAsset", buffer.byteLength);
+  return buffer;
 };
 
 const downloadHttpAsset = async (url: string): Promise<Buffer> => {
-  return streamToBuffer(await openHttpObjectStream(url));
+  logDrBufferFallbackEnter("object-export.downloadHttpAsset");
+  const buffer = await streamToBuffer(await openHttpObjectStream(url));
+  logDrBufferFallbackExit("object-export.downloadHttpAsset", buffer.byteLength);
+  return buffer;
 };
 
 export const exportStorageObjectStream = async (

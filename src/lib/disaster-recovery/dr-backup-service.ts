@@ -25,6 +25,7 @@ import {
 } from "@/lib/disaster-recovery/dr-backup-logging";
 import { buildAndStoreStreamingDisasterRecoveryZip } from "@/lib/disaster-recovery/dr-streaming-backup";
 import { updateDrJobContext } from "@/lib/disaster-recovery/dr-job-context";
+import { resolveDisasterRecoveryStorageProvider } from "@/lib/disaster-recovery/dr-storage-resolution";
 
 export type CreateDisasterRecoveryBackupInput = CreateBackupInput & {
   includeObjects?: boolean;
@@ -93,6 +94,13 @@ export const createDisasterRecoveryBackup = async (
 
   const includeObjects = input.includeObjects !== false;
   const fileName = buildDrFileName(input.moduleId);
+
+  const storageResolution = resolveDisasterRecoveryStorageProvider({
+    requested: input.storageProvider,
+    includeObjects,
+    source: "dr-backup-service",
+  });
+  const effectiveStorageProvider = storageResolution.resolved;
 
   try {
     console.log("[DR] BEFORE MANIFEST");
@@ -171,7 +179,7 @@ export const createDisasterRecoveryBackup = async (
             entries: manifestStage.entries,
             inventory,
             fileName,
-            storageProvider: input.storageProvider,
+            storageProvider: effectiveStorageProvider,
           });
         },
         (result) => ({
@@ -222,7 +230,7 @@ export const createDisasterRecoveryBackup = async (
         console.log("[DR] BEFORE backup-record persist");
         const stored =
           storedArtifact ||
-          (await resolveBackupStorageProvider(input.storageProvider).store({
+          (await resolveBackupStorageProvider(effectiveStorageProvider).store({
             fileName,
             body: zipBuffer as Buffer,
             contentType: "application/zip",
