@@ -38,6 +38,7 @@ import {
   updateDrVerificationReport,
   verifyArchiveLifecycle,
 } from "@/lib/disaster-recovery/dr-verification";
+import { logDrStartupMilestone } from "@/lib/disaster-recovery/dr-job-startup";
 import {
   registerDrArchiverDiagnostics,
   registerDrR2UploadDiagnostics,
@@ -72,6 +73,11 @@ export const buildAndStoreStreamingDisasterRecoveryZip = async (input: {
   fileName: string;
   storageProvider: BackupStorageProviderId;
 }): Promise<StreamingDisasterRecoveryZipResult> => {
+  logDrStartupMilestone("STREAMING_BACKUP_ENTER", {
+    inventoryCount: input.inventory.length,
+    fileName: input.fileName,
+  });
+
   const storageResolution = resolveDisasterRecoveryStorageProvider({
     requested: input.storageProvider,
     includeObjects: true,
@@ -181,6 +187,9 @@ export const buildAndStoreStreamingDisasterRecoveryZip = async (input: {
 
   try {
     console.log("[DR] BEFORE exportStorageObjectsStreamExport", { inventory: input.inventory.length });
+    logDrStartupMilestone("OBJECT_EXPORT_STARTED", {
+      inventoryCount: input.inventory.length,
+    });
     const exportResult = await exportStorageObjectsStreamExport({
       entries: input.inventory,
       guards: { watchdog },

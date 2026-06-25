@@ -17,7 +17,17 @@ import {
 import { startDrHeartbeat, stopDrHeartbeat } from "@/lib/disaster-recovery/dr-heartbeat";
 import { registerDrProcessDiagnostics } from "@/lib/disaster-recovery/dr-process-diagnostics";
 import { toDisasterRecoveryErrorPayload } from "@/lib/disaster-recovery/dr-backup-logging";
-import { truncateDrErrorStack } from "@/lib/disaster-recovery/dr-diag-policy";
+import {
+  beginDrBackgroundJob,
+  dispatchDrBackgroundJob,
+  handleDrStartupFailure,
+  initDrJobStartup,
+  logDrStartupMilestone,
+  markDrJobQueued,
+  printDrStartupReport,
+  resetDrJobStartup,
+} from "@/lib/disaster-recovery/dr-job-startup";
+import { releaseDrJobLock } from "@/lib/disaster-recovery/dr-job-lock";
 import { resolveDisasterRecoveryStorageProvider } from "@/lib/disaster-recovery/dr-storage-resolution";
 import {
   initDrVerification,
@@ -67,6 +77,7 @@ export const startDisasterRecoveryBackupJob = async (
   audit?: JobAuditContext
 ): Promise<DisasterRecoveryJobAccepted> => {
   console.log("[DR-JOB] startDisasterRecoveryBackupJob");
+  markDrJobQueued();
   await connectDB();
 
   const includeObjects = input.includeObjects !== false;
@@ -91,17 +102,17 @@ export const startDisasterRecoveryBackupJob = async (
   });
 
   const recordId = String(record._id);
+  initDrJobStartup(recordId);
+  logDrStartupMilestone("QUEUE_JOB_CREATED", { recordId });
+  logDrStartupMilestone("BACKUP_RECORD_CREATED", { recordId, fileName });
+  logDrMilestone("BACKUP_RECORD_CREATED", { recordId });
   console.log("[DR-JOB] pending record created", { recordId, fileName });
   initDrVerification(recordId);
   initDrLeakDetection();
 
-  void executeDisasterRecoveryBackupJob(recordId, input, audit).catch((error) => {
-    console.error("[DR-JOB] background execution failed to start", {
-      recordId,
-      message: error instanceof Error ? error.message : String(error),
-      stack: truncateDrErrorStack(error),
-    });
-  });
+  dispatchDrBackgroundJob(recordId, () =>
+    executeDisasterRecoveryBackupJob(recordId, input, audit)
+  );
 
   return {
     recordId,
@@ -120,7 +131,15 @@ export const executeDisasterRecoveryBackupJob = async (
   if (!isDrVerificationActive()) {
     initDrVerification(recordId);
   }
-  resetDrJobContext({ recordId, phase: "queued" });
+
+  try {
+    await beginDrBackgroundJob(recordId);
+  } catch (error) {
+    await handleDrStartupFailure(recordId, error);
+    throw error;
+  }
+
+  resetDrJobContext({ recordId, phase: "manifest" });
   startDrHeartbeat(recordId);
 
   const includeObjects = input.includeObjects !== false;
@@ -212,9 +231,12 @@ export const executeDisasterRecoveryBackupJob = async (
       recordId: ctx.recordId,
       final: true,
     });
+    printDrStartupReport();
     printDrFinalReport();
     await printDrLeakReport();
+    releaseDrJobLock(recordId);
     resetDrLeakDetection();
     resetDrVerification();
+    resetDrJobStartup();
   }
 };

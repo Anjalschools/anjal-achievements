@@ -192,6 +192,7 @@ export default function AdminBackupRestorePage() {
         const recordId = json.data.recordId;
         const pollMs = json.data.pollIntervalMs || 5000;
         const deadline = Date.now() + 2 * 60 * 60 * 1000;
+        let lastJobPhase = "queued";
 
         while (Date.now() < deadline) {
           await new Promise((resolve) => setTimeout(resolve, pollMs));
@@ -215,6 +216,7 @@ export default function AdminBackupRestorePage() {
 
           const { status, recoveryReadinessScore, errorMessage, jobPhase, processedObjects } =
             statusJson.data;
+          lastJobPhase = jobPhase || lastJobPhase;
           if (status === "pending") {
             setSuccess(
               `جاري النسخ… المرحلة: ${jobPhase || "queued"} — ${processedObjects ?? 0} كائن`
@@ -233,7 +235,11 @@ export default function AdminBackupRestorePage() {
             return;
           }
         }
-        throw new Error("DR_BACKUP_TIMEOUT");
+        throw new Error(
+          lastJobPhase === "queued" || lastJobPhase === "starting"
+            ? "QUEUE_START_TIMEOUT"
+            : "DR_BACKUP_TIMEOUT"
+        );
       }
 
       if (!res.ok || !json.data) throw new Error(json.error || "DR_BACKUP_FAILED");

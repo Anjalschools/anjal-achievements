@@ -13,6 +13,7 @@ import {
   logDrHttpMilestone,
   updateDrVerificationReport,
 } from "@/lib/disaster-recovery/dr-verification";
+import { logDrStartupMilestone } from "@/lib/disaster-recovery/dr-job-startup";
 import type { RetentionTier } from "@/lib/disaster-recovery/retention-policy";
 
 registerDrProcessDiagnostics();
@@ -57,6 +58,7 @@ const resolveDrErrorStatus = (error: unknown): number => {
 export async function POST(request: NextRequest) {
   console.log("[DR-ROUTE] POST ENTER");
   console.log("[DR-API] REQUEST RECEIVED");
+  logDrStartupMilestone("HTTP_REQUEST_RECEIVED");
 
   const gate = await requireSystemAdmin(request);
   if (!gate.ok) {
