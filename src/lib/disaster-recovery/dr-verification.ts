@@ -1,5 +1,11 @@
 import type { Readable } from "stream";
 import { getDrJobContext } from "@/lib/disaster-recovery/dr-job-context";
+import {
+  DR_MAX_HANDLE_DETAIL_LOGS,
+  DR_MAX_TRACKED_PROMISES,
+  DR_MAX_TRACKED_STREAMS,
+  truncateDrErrorStack,
+} from "@/lib/disaster-recovery/dr-diag-policy";
 import { readProcessMemorySnapshot } from "@/lib/disaster-recovery/dr-memory-metrics";
 
 export type DrMilestone =
@@ -21,8 +27,6 @@ export type DrPromiseStatus = "pending" | "resolved" | "rejected" | "timeout";
 type DrPromiseEntry = {
   name: string;
   startedAt: number;
-  endedAt?: number;
-  durationMs?: number;
   status: DrPromiseStatus;
 };
 
@@ -32,8 +36,6 @@ type DrStreamEntry = {
   objectKey: string;
   stage: string;
   createdAt: number;
-  stack: string;
-  closed: boolean;
 };
 
 export type DrFinalReportFlags = {
@@ -131,54 +133,49 @@ export const logDrMilestone = (milestone: DrMilestone, extra?: Record<string, un
 
 export const logDrException = (phase: string, error: unknown): void => {
   const message = error instanceof Error ? error.message : String(error);
-  const stack = error instanceof Error ? error.stack : undefined;
   console.error("[DR] EXCEPTION", {
     phase,
     lastMilestone: session.lastMilestone ?? "NONE",
     lastReachedStage: getDrJobContext().phase,
     message,
-    stack,
+    stack: truncateDrErrorStack(error),
     ...buildMilestoneMeta(),
   });
 };
 
 export const trackDrPromise = <T>(name: string, promise: Promise<T>): Promise<T> => {
   if (!session.active) return promise;
+  if (session.promises.size >= DR_MAX_TRACKED_PROMISES) {
+    console.warn("[DR] REGISTRY_LIMIT", { registry: "promises", max: DR_MAX_TRACKED_PROMISES });
+    return promise;
+  }
 
-  const startedAt = Date.now();
-  const entry: DrPromiseEntry = { name, startedAt, status: "pending" };
-  session.promises.set(name, entry);
+  const key = `${name}:${session.promises.size + 1}`;
+  session.promises.set(key, { name, startedAt: Date.now(), status: "pending" });
 
-  const finalize = (status: DrPromiseStatus, error?: unknown): void => {
-    const current = session.promises.get(name);
-    if (!current || current.status !== "pending") return;
-    current.status = status;
-    current.endedAt = Date.now();
-    current.durationMs = current.endedAt - current.startedAt;
-    if (error instanceof Error) {
-      session.promises.set(name, { ...current });
-    }
-  };
-
-  return promise.then(
-    (value) => {
-      finalize("resolved");
-      return value;
-    },
-    (error) => {
-      finalize("rejected", error);
-      throw error;
-    }
-  );
+  return promise
+    .then(
+      (value) => {
+        session.promises.delete(key);
+        return value;
+      },
+      (error) => {
+        session.promises.delete(key);
+        throw error;
+      }
+    )
+    .finally(() => {
+      session.promises.delete(key);
+    });
 };
 
 export const markDrPromiseTimeout = (name: string): void => {
   if (!session.active) return;
-  const entry = session.promises.get(name);
-  if (!entry) return;
-  entry.status = "timeout";
-  entry.endedAt = Date.now();
-  entry.durationMs = entry.endedAt - entry.startedAt;
+  for (const [key, entry] of session.promises) {
+    if (entry.name === name || key.startsWith(`${name}:`)) {
+      session.promises.delete(key);
+    }
+  }
 };
 
 export const registerDrTrackedStream = (
@@ -186,28 +183,29 @@ export const registerDrTrackedStream = (
   context: { objectKey: string; stage: string }
 ): string => {
   if (!session.active) return "";
+  if (session.streams.size >= DR_MAX_TRACKED_STREAMS) {
+    console.warn("[DR] REGISTRY_LIMIT", { registry: "streams", max: DR_MAX_TRACKED_STREAMS });
+    return "";
+  }
+
   session.streamSeq += 1;
   const id = `stream-${session.streamSeq}`;
-  const entry: DrStreamEntry = {
+  session.streams.set(id, {
     id,
     type: stream.constructor?.name || "Readable",
     objectKey: context.objectKey,
     stage: context.stage,
     createdAt: Date.now(),
-    stack: new Error().stack || "unknown",
-    closed: false,
-  };
-  session.streams.set(id, entry);
+  });
 
-  const markClosed = (): void => {
-    const current = session.streams.get(id);
-    if (!current) return;
-    current.closed = true;
+  const remove = (): void => {
+    session.streams.delete(id);
   };
 
-  stream.once("close", markClosed);
-  stream.once("end", markClosed);
-  stream.once("error", markClosed);
+  stream.once("close", remove);
+  stream.once("end", remove);
+  stream.once("finish", remove);
+  stream.once("error", remove);
 
   return id;
 };
@@ -215,38 +213,45 @@ export const registerDrTrackedStream = (
 export const getPendingDrPromises = (): DrPromiseEntry[] =>
   Array.from(session.promises.values()).filter((entry) => entry.status === "pending");
 
-export const getOpenDrStreams = (): DrStreamEntry[] =>
-  Array.from(session.streams.values()).filter((entry) => !entry.closed);
+export const getOpenDrStreams = (): DrStreamEntry[] => Array.from(session.streams.values());
 
-export const logPendingDrPromises = (): void => {
+export const getDrVerificationRegistryCounts = (): {
+  activePromises: number;
+  activeStreams: number;
+} => ({
+  activePromises: session.promises.size,
+  activeStreams: session.streams.size,
+});
+
+const logPendingDrPromisesDetail = (): void => {
   const pending = getPendingDrPromises();
   if (pending.length === 0) return;
-  console.warn("[DR] Pending async operations:", {
+  console.warn("[DR] Pending async operations", {
     count: pending.length,
-    operations: pending.map((entry) => ({
-      name: entry.name,
-      startedAt: entry.startedAt,
-      elapsedMs: Date.now() - entry.startedAt,
-      status: entry.status,
-    })),
     ...buildMilestoneMeta(),
   });
+  for (const entry of pending.slice(0, DR_MAX_HANDLE_DETAIL_LOGS)) {
+    console.warn("[DR] PENDING_PROMISE", {
+      name: entry.name,
+      elapsedMs: Date.now() - entry.startedAt,
+      status: entry.status,
+    });
+  }
 };
 
-export const logOpenDrStreams = (): void => {
+const logOpenDrStreamsDetail = (): void => {
   const open = getOpenDrStreams();
-  console.info("[DR] Open Streams:", {
-    count: open.length,
-    streams: open.map((entry) => ({
+  if (open.length === 0) return;
+  console.warn("[DR] Open Streams", { count: open.length, ...buildMilestoneMeta() });
+  for (const entry of open.slice(0, DR_MAX_HANDLE_DETAIL_LOGS)) {
+    console.warn("[DR] OPEN_STREAM", {
       id: entry.id,
       type: entry.type,
       objectKey: entry.objectKey,
       stage: entry.stage,
       ageMs: Date.now() - entry.createdAt,
-      stack: entry.stack,
-    })),
-    ...buildMilestoneMeta(),
-  });
+    });
+  }
 };
 
 export type ArchiveVerifyState = {
@@ -296,7 +301,10 @@ export const verifyArchiveLifecycle = async (
 
   console.error("[DR] ARCHIVE_VERIFY_FAILED", {
     reason: "archive/output not settled within timeout",
-    state: lastState,
+    archivePointer: lastState?.archivePointer,
+    outputReadableEnded: lastState?.outputReadableEnded,
+    outputDestroyed: lastState?.outputDestroyed,
+    outputWritableFinished: lastState?.outputWritableFinished,
     ...buildMilestoneMeta(),
   });
   return lastState ?? {
@@ -310,40 +318,39 @@ export const verifyArchiveLifecycle = async (
 export const printDrFinalReport = (): void => {
   if (!session.active && session.jobStartedAt === 0) return;
 
-  logPendingDrPromises();
-  logOpenDrStreams();
-
   const elapsedMs = session.jobStartedAt > 0 ? Date.now() - session.jobStartedAt : 0;
-  const pendingCount = getPendingDrPromises().length;
-  const openStreamCount = getOpenDrStreams().length;
+  const pendingCount = session.promises.size;
+  const openStreamCount = session.streams.size;
   const { report } = session;
+  const jobCompleted = session.milestones.has("BACKUP_JOB_COMPLETED");
+  const hasLeaks = pendingCount > 0 || openStreamCount > 0;
 
-  const lines = [
-    "========== DR FINAL REPORT ==========",
-    `Objects Processed: ${report.objectsProcessed}`,
-    `Objects Failed: ${report.objectsFailed}`,
-    `Bytes Exported: ${report.bytesExported}`,
-    `ZIP Finalized: ${report.zipFinalized ? "yes" : "no"}`,
-    `Upload Completed: ${report.uploadCompleted ? "yes" : "no"}`,
-    `Backup Saved: ${report.backupSaved ? "yes" : "no"}`,
-    `Response Sent: ${report.responseSent ? "yes" : "no"}`,
-    `Open Streams: ${openStreamCount}`,
-    `Pending Promises: ${pendingCount}`,
-    `Elapsed Time: ${elapsedMs}ms`,
-    `Peak RSS: ${session.peakRss}`,
-    `Peak Heap: ${session.peakHeap}`,
-    `Last Milestone: ${session.lastMilestone ?? "NONE"}`,
-    `Milestones: ${Array.from(session.milestones).join(", ") || "NONE"}`,
-    "=====================================",
-  ];
+  console.info("========== DR FINAL REPORT ==========");
+  console.info(`Objects Processed: ${report.objectsProcessed}`);
+  console.info(`Objects Failed: ${report.objectsFailed}`);
+  console.info(`Bytes Exported: ${report.bytesExported}`);
+  console.info(`ZIP Finalized: ${report.zipFinalized ? "yes" : "no"}`);
+  console.info(`Upload Completed: ${report.uploadCompleted ? "yes" : "no"}`);
+  console.info(`Backup Saved: ${report.backupSaved ? "yes" : "no"}`);
+  console.info(`Response Sent: ${report.responseSent ? "yes" : "no"}`);
+  console.info(`Open Streams: ${openStreamCount}`);
+  console.info(`Pending Promises: ${pendingCount}`);
+  console.info(`Elapsed Time: ${elapsedMs}ms`);
+  console.info(`Peak RSS: ${session.peakRss}`);
+  console.info(`Peak Heap: ${session.peakHeap}`);
+  console.info(`Last Milestone: ${session.lastMilestone ?? "NONE"}`);
+  console.info("=====================================");
 
-  console.info(lines.join("\n"));
-
-  if (!session.milestones.has("BACKUP_JOB_COMPLETED")) {
+  if (!jobCompleted) {
     console.warn("[DR] BACKUP_JOB_NOT_COMPLETED", {
       lastMilestone: session.lastMilestone ?? "NONE",
       ...buildMilestoneMeta(),
     });
+  }
+
+  if (hasLeaks || !jobCompleted) {
+    logPendingDrPromisesDetail();
+    logOpenDrStreamsDetail();
   }
 };
 

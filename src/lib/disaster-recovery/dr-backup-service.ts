@@ -23,6 +23,7 @@ import {
   logDrDebug,
   runDrStage,
 } from "@/lib/disaster-recovery/dr-backup-logging";
+import { truncateDrErrorStack } from "@/lib/disaster-recovery/dr-diag-policy";
 import { buildAndStoreStreamingDisasterRecoveryZip } from "@/lib/disaster-recovery/dr-streaming-backup";
 import { updateDrJobContext } from "@/lib/disaster-recovery/dr-job-context";
 import { resolveDisasterRecoveryStorageProvider } from "@/lib/disaster-recovery/dr-storage-resolution";
@@ -320,9 +321,8 @@ export const createDisasterRecoveryBackup = async (
     return result;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    const stack = error instanceof Error ? error.stack : undefined;
     const stage = error instanceof DisasterRecoveryBackupError ? error.stage : "unknown";
-    logDr("FAILED", { stage, message, stack });
+    logDr("FAILED", { stage, message, stack: truncateDrErrorStack(error) });
     logDrException(stage, error);
     throw error;
   }

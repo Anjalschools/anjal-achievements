@@ -1,6 +1,8 @@
 import "server-only";
+import { truncateDrErrorStack } from "@/lib/disaster-recovery/dr-diag-policy";
+import { getDrLeakRegistryCounts } from "@/lib/disaster-recovery/dr-leak-detection";
 import { readProcessMemorySnapshot } from "@/lib/disaster-recovery/dr-memory-metrics";
-import { logDrException, trackDrPromise } from "@/lib/disaster-recovery/dr-verification";
+import { getDrVerificationRegistryCounts, logDrException, trackDrPromise } from "@/lib/disaster-recovery/dr-verification";
 
 export type DrBackupStage =
   | "manifest"
@@ -39,7 +41,7 @@ export class DisasterRecoveryBackupError extends Error {
       error: this.name,
       stage: this.stage,
       message: this.message,
-      stack: this.stack,
+      stack: truncateDrErrorStack(this),
       details: this.details,
     };
   }
@@ -62,6 +64,23 @@ const MEMORY_WARNING_ARRAY_BUFFERS_THRESHOLD = resolveMemoryWarningThreshold(
   "DR_MEMORY_ARRAYBUFFERS_WARN_BYTES",
   150 * 1024 * 1024
 );
+
+export const logDrExportMemorySnapshot = (processed: number): void => {
+  const snapshot = readProcessMemorySnapshot();
+  const { activePromises, activeStreams } = getDrVerificationRegistryCounts();
+  const { activeTimers, activeResources } = getDrLeakRegistryCounts();
+  console.info("[DR] EXPORT_MEMORY_SNAPSHOT", {
+    processed,
+    heapUsed: snapshot.heapUsed,
+    rss: snapshot.rss,
+    external: snapshot.external,
+    arrayBuffers: snapshot.arrayBuffers,
+    activeStreams,
+    activePromises,
+    activeTimers,
+    activeResources,
+  });
+};
 
 export const logDrMemory = (event: string, processed?: number): void => {
   const snapshot = readProcessMemorySnapshot();
@@ -100,14 +119,13 @@ export const toDisasterRecoveryErrorPayload = (error: unknown): DisasterRecovery
   }
 
   const message = error instanceof Error ? error.message : String(error);
-  const stack = error instanceof Error ? error.stack : undefined;
 
   return {
     ok: false,
     error: "DisasterRecoveryBackupError",
     stage: "unknown",
     message,
-    stack,
+    stack: truncateDrErrorStack(error),
   };
 };
 
@@ -123,15 +141,14 @@ export const runDrStage = async <T>(
     return result;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    const stack = error instanceof Error ? error.stack : undefined;
-    logDr(`${stage}:failed`, { message, stack, stage });
+    logDr(`${stage}:failed`, { message, stack: truncateDrErrorStack(error), stage });
     logDrException(stage, error);
     if (error instanceof DisasterRecoveryBackupError) {
       throw error;
     }
     throw new DisasterRecoveryBackupError(stage, message, {
       cause: error,
-      details: { stack },
+      details: { stack: truncateDrErrorStack(error) },
     });
   }
 };

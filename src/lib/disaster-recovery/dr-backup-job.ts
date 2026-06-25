@@ -17,6 +17,7 @@ import {
 import { startDrHeartbeat, stopDrHeartbeat } from "@/lib/disaster-recovery/dr-heartbeat";
 import { registerDrProcessDiagnostics } from "@/lib/disaster-recovery/dr-process-diagnostics";
 import { toDisasterRecoveryErrorPayload } from "@/lib/disaster-recovery/dr-backup-logging";
+import { truncateDrErrorStack } from "@/lib/disaster-recovery/dr-diag-policy";
 import { resolveDisasterRecoveryStorageProvider } from "@/lib/disaster-recovery/dr-storage-resolution";
 import {
   initDrVerification,
@@ -98,7 +99,7 @@ export const startDisasterRecoveryBackupJob = async (
     console.error("[DR-JOB] background execution failed to start", {
       recordId,
       message: error instanceof Error ? error.message : String(error),
-      stack: error instanceof Error ? error.stack : undefined,
+      stack: truncateDrErrorStack(error),
     });
   });
 

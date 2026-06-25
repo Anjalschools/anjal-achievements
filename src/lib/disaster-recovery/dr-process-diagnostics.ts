@@ -1,5 +1,7 @@
 import "server-only";
 
+import { truncateDrErrorStack } from "@/lib/disaster-recovery/dr-diag-policy";
+
 let registered = false;
 
 export const registerDrProcessDiagnostics = (): void => {
@@ -9,15 +11,17 @@ export const registerDrProcessDiagnostics = (): void => {
   process.on("uncaughtException", (error) => {
     console.error("[DR] uncaughtException", {
       message: error.message,
-      stack: error.stack,
+      stack: truncateDrErrorStack(error),
       name: error.name,
     });
   });
 
   process.on("unhandledRejection", (reason) => {
     const message = reason instanceof Error ? reason.message : String(reason);
-    const stack = reason instanceof Error ? reason.stack : undefined;
-    console.error("[DR] unhandledRejection", { message, stack, reason });
+    console.error("[DR] unhandledRejection", {
+      message,
+      stack: truncateDrErrorStack(reason),
+    });
   });
 
   process.on("SIGTERM", () => {

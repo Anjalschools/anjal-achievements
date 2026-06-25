@@ -4,6 +4,13 @@ import https from "node:https";
 import net from "node:net";
 import type { Readable } from "node:stream";
 import {
+  captureDrStack,
+  DR_MAX_HANDLE_DETAIL_LOGS,
+  DR_MAX_TRACKED_ASYNC_RESOURCES,
+  DR_MAX_TRACKED_TIMERS,
+  logDrRegistryLimit,
+} from "@/lib/disaster-recovery/dr-diag-policy";
+import {
   getOpenDrStreams,
   getPendingDrPromises,
 } from "@/lib/disaster-recovery/dr-verification";
@@ -18,16 +25,13 @@ type DrAsyncResourceEntry = {
   triggerAsyncId: number;
   type: string;
   createdAt: number;
-  destroyedAt?: number;
-  stack?: string;
 };
 
 type DrTimerEntry = {
   id: unknown;
   kind: "timeout" | "interval" | "immediate";
   createdAt: number;
-  stack: string;
-  cleared: boolean;
+  stack?: string;
 };
 
 type DrArchiverDiagnostics = {
@@ -52,8 +56,7 @@ type DrR2UploadDiagnostics = {
 
 type DrLeakSession = {
   active: boolean;
-  handleObjectKeys: Map<object, string>;
-  handleStacks: Map<object, string>;
+  handleObjectKeys: WeakMap<object, string>;
   asyncResources: Map<number, DrAsyncResourceEntry>;
   timers: Map<unknown, DrTimerEntry>;
   archiverDiagnostics?: () => DrArchiverDiagnostics;
@@ -68,8 +71,7 @@ type DrLeakSession = {
 
 const createEmptyLeakSession = (): DrLeakSession => ({
   active: false,
-  handleObjectKeys: new Map(),
-  handleStacks: new Map(),
+  handleObjectKeys: new WeakMap(),
   asyncResources: new Map(),
   timers: new Map(),
   baselineHandleCount: 0,
@@ -77,8 +79,6 @@ const createEmptyLeakSession = (): DrLeakSession => ({
 });
 
 let session: DrLeakSession = createEmptyLeakSession();
-
-const captureStack = (): string => new Error().stack || "unknown";
 
 const isMongoPersistentHandle = (handle: unknown): boolean => {
   if (!handle || typeof handle !== "object") return false;
@@ -103,7 +103,7 @@ const getActiveRequests = (): unknown[] => {
   return typeof proc._getActiveRequests === "function" ? proc._getActiveRequests() : [];
 };
 
-const describeHandle = (handle: unknown): Record<string, unknown> => {
+const describeHandlePrimitives = (handle: unknown): Record<string, unknown> => {
   if (!handle || typeof handle !== "object") {
     return { type: typeof handle };
   }
@@ -111,7 +111,6 @@ const describeHandle = (handle: unknown): Record<string, unknown> => {
   const obj = handle as Record<string, unknown>;
   const constructorName = handle.constructor?.name ?? "Unknown";
   const objectKey = session.handleObjectKeys.get(handle as object);
-  const stack = session.handleStacks.get(handle as object);
 
   const base: Record<string, unknown> = {
     type: constructorName,
@@ -120,7 +119,6 @@ const describeHandle = (handle: unknown): Record<string, unknown> => {
     readable: obj.readable,
     writable: obj.writable,
     objectKey,
-    stack,
   };
 
   if (typeof (handle as { hasRef?: () => boolean }).hasRef === "function") {
@@ -135,18 +133,29 @@ const describeHandle = (handle: unknown): Record<string, unknown> => {
     const socket = handle as net.Socket;
     return {
       ...base,
-      localAddress: socket.localAddress,
-      localPort: socket.localPort,
       remoteAddress: socket.remoteAddress,
       remotePort: socket.remotePort,
       bytesRead: socket.bytesRead,
       bytesWritten: socket.bytesWritten,
-      readyState: (socket as net.Socket & { readyState?: string }).readyState,
       mongoPersistent: isMongoPersistentHandle(handle),
     };
   }
 
   return base;
+};
+
+const trackTimer = (timer: unknown, kind: DrTimerEntry["kind"]): void => {
+  if (!session.active) return;
+  if (session.timers.size >= DR_MAX_TRACKED_TIMERS) {
+    logDrRegistryLimit("timers", DR_MAX_TRACKED_TIMERS);
+    return;
+  }
+  session.timers.set(timer, {
+    id: timer,
+    kind,
+    createdAt: Date.now(),
+    stack: captureDrStack(),
+  });
 };
 
 const patchTimers = (): void => {
@@ -157,44 +166,41 @@ const patchTimers = (): void => {
   session.originalSetImmediate = global.setImmediate;
 
   global.setTimeout = ((handler: TimerHandler, timeout?: number, ...args: unknown[]) => {
-    const timer = session.originalSetTimeout!(handler, timeout, ...args);
-    if (session.active) {
-      session.timers.set(timer, {
-        id: timer,
-        kind: "timeout",
-        createdAt: Date.now(),
-        stack: captureStack(),
-        cleared: false,
-      });
+    if (typeof handler !== "function") {
+      const timer = session.originalSetTimeout!(handler, timeout, ...args);
+      trackTimer(timer, "timeout");
+      return timer;
     }
+
+    const fn = handler as (...handlerArgs: unknown[]) => void;
+    let timer: ReturnType<typeof setTimeout>;
+    timer = session.originalSetTimeout!((...handlerArgs: unknown[]) => {
+      try {
+        fn(...handlerArgs);
+      } finally {
+        session.timers.delete(timer);
+      }
+    }, timeout, ...args);
+    trackTimer(timer, "timeout");
     return timer;
   }) as typeof setTimeout;
 
   global.setInterval = ((handler: TimerHandler, timeout?: number, ...args: unknown[]) => {
     const timer = session.originalSetInterval!(handler, timeout, ...args);
-    if (session.active) {
-      session.timers.set(timer, {
-        id: timer,
-        kind: "interval",
-        createdAt: Date.now(),
-        stack: captureStack(),
-        cleared: false,
-      });
-    }
+    trackTimer(timer, "interval");
     return timer;
   }) as typeof setInterval;
 
   global.setImmediate = ((handler: (...args: unknown[]) => void, ...args: unknown[]) => {
-    const immediate = session.originalSetImmediate!(handler, ...args);
-    if (session.active) {
-      session.timers.set(immediate, {
-        id: immediate,
-        kind: "immediate",
-        createdAt: Date.now(),
-        stack: captureStack(),
-        cleared: false,
-      });
-    }
+    const wrapped = (...immediateArgs: unknown[]) => {
+      try {
+        handler(...immediateArgs);
+      } finally {
+        session.timers.delete(immediate);
+      }
+    };
+    const immediate = session.originalSetImmediate!(wrapped, ...args);
+    trackTimer(immediate, "immediate");
     return immediate;
   }) as typeof setImmediate;
 
@@ -203,20 +209,17 @@ const patchTimers = (): void => {
   const originalClearImmediate = global.clearImmediate;
 
   global.clearTimeout = ((timer: ReturnType<typeof setTimeout>) => {
-    const entry = session.timers.get(timer);
-    if (entry) entry.cleared = true;
+    session.timers.delete(timer);
     originalClearTimeout(timer);
   }) as typeof clearTimeout;
 
   global.clearInterval = ((timer: ReturnType<typeof setInterval>) => {
-    const entry = session.timers.get(timer);
-    if (entry) entry.cleared = true;
+    session.timers.delete(timer);
     originalClearInterval(timer);
   }) as typeof clearInterval;
 
   global.clearImmediate = ((immediate: ReturnType<typeof setImmediate>) => {
-    const entry = session.timers.get(immediate);
-    if (entry) entry.cleared = true;
+    session.timers.delete(immediate);
     originalClearImmediate(immediate);
   }) as typeof clearImmediate;
 };
@@ -235,18 +238,19 @@ const startAsyncHook = (): void => {
   const hook = createHook({
     init(asyncId, type, triggerAsyncId) {
       if (!session.active) return;
+      if (session.asyncResources.size >= DR_MAX_TRACKED_ASYNC_RESOURCES) {
+        logDrRegistryLimit("asyncResources", DR_MAX_TRACKED_ASYNC_RESOURCES);
+        return;
+      }
       session.asyncResources.set(asyncId, {
         resourceId: asyncId,
         triggerAsyncId,
         type,
         createdAt: Date.now(),
-        stack: captureStack(),
       });
     },
     destroy(asyncId) {
-      const entry = session.asyncResources.get(asyncId);
-      if (!entry) return;
-      entry.destroyedAt = Date.now();
+      session.asyncResources.delete(asyncId);
     },
   });
   hook.enable();
@@ -281,21 +285,16 @@ export const resetDrLeakDetection = (): void => {
   session = createEmptyLeakSession();
 };
 
-export const registerDrHandleObjectKey = (
-  handle: object,
-  objectKey: string,
-  stack?: string
-): void => {
+export const registerDrHandleObjectKey = (handle: object, objectKey: string): void => {
   if (!session.active) return;
   session.handleObjectKeys.set(handle, objectKey);
-  session.handleStacks.set(handle, stack || captureStack());
 };
 
 export const registerDrTrackedStreamHandle = (
   stream: Readable,
   context: { objectKey: string; stage: string }
 ): void => {
-  registerDrHandleObjectKey(stream, context.objectKey, captureStack());
+  registerDrHandleObjectKey(stream, context.objectKey);
 };
 
 export const registerDrArchiverDiagnostics = (
@@ -309,6 +308,14 @@ export const registerDrR2UploadDiagnostics = (
 ): void => {
   session.r2UploadDiagnostics = getter;
 };
+
+export const getDrLeakRegistryCounts = (): {
+  activeTimers: number;
+  activeResources: number;
+} => ({
+  activeTimers: session.timers.size,
+  activeResources: session.asyncResources.size,
+});
 
 const inspectAgent = (agent: http.Agent | https.Agent, label: string): Record<string, unknown> => {
   const typed = agent as http.Agent & {
@@ -368,10 +375,7 @@ const inspectHttpAgents = async (): Promise<Record<string, unknown>[]> => {
 const inspectAwsSdkAgent = (): Record<string, unknown> => {
   try {
     const { getR2Client } = require("@/lib/r2") as { getR2Client: () => unknown };
-    const client = getR2Client() as {
-      config?: { requestHandler?: { httpHandler?: { socketWarningTimestamp?: number } } };
-      middlewareStack?: unknown;
-    };
+    const client = getR2Client() as { constructor?: { name?: string } };
     return {
       clientType: client?.constructor?.name ?? "Unknown",
       hasClient: Boolean(client),
@@ -383,7 +387,7 @@ const inspectAwsSdkAgent = (): Record<string, unknown> => {
   }
 };
 
-const logEventLoopSnapshot = (): { handles: unknown[]; requests: unknown[] } => {
+const logEventLoopSnapshot = (includeDetails: boolean): { handles: unknown[]; requests: unknown[] } => {
   const handles = getActiveHandles();
   const requests = getActiveRequests();
 
@@ -394,19 +398,22 @@ const logEventLoopSnapshot = (): { handles: unknown[]; requests: unknown[] } => 
     baselineRequests: session.baselineRequestCount,
   });
 
-  handles.forEach((handle, index) => {
-    console.info("[DR] ACTIVE_HANDLE", { index, ...describeHandle(handle) });
+  if (!includeDetails) {
+    return { handles, requests };
+  }
+
+  handles.slice(0, DR_MAX_HANDLE_DETAIL_LOGS).forEach((handle, index) => {
+    console.info("[DR] ACTIVE_HANDLE", { index, ...describeHandlePrimitives(handle) });
   });
 
-  requests.forEach((request, index) => {
-    console.info("[DR] ACTIVE_REQUEST", { index, ...describeHandle(request) });
+  requests.slice(0, DR_MAX_HANDLE_DETAIL_LOGS).forEach((request, index) => {
+    console.info("[DR] ACTIVE_REQUEST", { index, ...describeHandlePrimitives(request) });
   });
 
   return { handles, requests };
 };
 
-const getOpenTimers = (): DrTimerEntry[] =>
-  Array.from(session.timers.values()).filter((entry) => !entry.cleared);
+const getOpenTimers = (): DrTimerEntry[] => Array.from(session.timers.values());
 
 const getOpenSockets = (handles: unknown[]): Record<string, unknown>[] =>
   handles
@@ -414,11 +421,11 @@ const getOpenSockets = (handles: unknown[]): Record<string, unknown>[] =>
       const name = handle?.constructor?.name ?? "";
       return name === "Socket" || name === "TLSSocket";
     })
-    .map((handle) => describeHandle(handle))
+    .map((handle) => describeHandlePrimitives(handle))
     .filter((entry) => !entry.mongoPersistent && !entry.destroyed);
 
 const getPendingAsyncResources = (): DrAsyncResourceEntry[] =>
-  Array.from(session.asyncResources.values()).filter((entry) => !entry.destroyedAt);
+  Array.from(session.asyncResources.values());
 
 export { getPendingAsyncResources };
 
@@ -433,9 +440,19 @@ export const verifyDrArchiverListeners = (): DrArchiverDiagnostics | null => {
     ...Object.entries(diagnostics.outputListeners || {}).filter(([, count]) => count > 0),
   ];
   if (listenerIssues.length > 0) {
-    console.warn("[DR] ARCHIVER_LISTENERS_REMAIN", diagnostics);
+    console.warn("[DR] ARCHIVER_LISTENERS_REMAIN", {
+      archivePointer: diagnostics.archivePointer,
+      archiveAborted: diagnostics.archiveAborted,
+      archiveDestroyed: diagnostics.archiveDestroyed,
+      outputDestroyed: diagnostics.outputDestroyed,
+      outputClosed: diagnostics.outputClosed,
+    });
   } else {
-    console.info("[DR] ARCHIVER_VERIFY", diagnostics);
+    console.info("[DR] ARCHIVER_VERIFY", {
+      archivePointer: diagnostics.archivePointer,
+      outputDestroyed: diagnostics.outputDestroyed,
+      outputClosed: diagnostics.outputClosed,
+    });
   }
   return diagnostics;
 };
@@ -443,14 +460,46 @@ export const verifyDrArchiverListeners = (): DrArchiverDiagnostics | null => {
 export const verifyDrR2Upload = (): DrR2UploadDiagnostics | null => {
   if (!session.r2UploadDiagnostics) return null;
   const diagnostics = session.r2UploadDiagnostics();
-  console.info("[DR] AWS_SDK_UPLOAD_VERIFY", diagnostics);
+  console.info("[DR] AWS_SDK_UPLOAD_VERIFY", {
+    uploadCompleted: diagnostics.uploadCompleted,
+    bodyStreamDestroyed: diagnostics.bodyStreamDestroyed,
+    bodyStreamClosed: diagnostics.bodyStreamClosed,
+  });
   if (!diagnostics.uploadCompleted) {
-    console.warn("[DR] AWS_SDK_UPLOAD_INCOMPLETE", diagnostics);
+    console.warn("[DR] AWS_SDK_UPLOAD_INCOMPLETE", { uploadCompleted: false });
   }
   if (diagnostics.bodyStreamDestroyed === false || diagnostics.bodyStreamClosed === false) {
-    console.warn("[DR] AWS_SDK_BODY_STREAM_OPEN", diagnostics);
+    console.warn("[DR] AWS_SDK_BODY_STREAM_OPEN", {
+      bodyStreamDestroyed: diagnostics.bodyStreamDestroyed,
+      bodyStreamClosed: diagnostics.bodyStreamClosed,
+    });
   }
   return diagnostics;
+};
+
+const logOpenTimersDetail = (openTimers: DrTimerEntry[]): void => {
+  if (openTimers.length === 0) return;
+  console.warn("[DR] OPEN_TIMERS", { count: openTimers.length });
+  for (const entry of openTimers.slice(0, DR_MAX_HANDLE_DETAIL_LOGS)) {
+    console.warn("[DR] OPEN_TIMER", {
+      kind: entry.kind,
+      ageMs: Date.now() - entry.createdAt,
+      stack: entry.stack,
+    });
+  }
+};
+
+const logPendingAsyncDetail = (pendingAsync: DrAsyncResourceEntry[]): void => {
+  if (pendingAsync.length === 0) return;
+  console.warn("[DR] PENDING_ASYNC_RESOURCES", { count: pendingAsync.length });
+  for (const entry of pendingAsync.slice(0, DR_MAX_HANDLE_DETAIL_LOGS)) {
+    console.warn("[DR] PENDING_ASYNC_RESOURCE", {
+      resourceId: entry.resourceId,
+      triggerAsyncId: entry.triggerAsyncId,
+      type: entry.type,
+      ageMs: Date.now() - entry.createdAt,
+    });
+  }
 };
 
 export const printDrLeakReport = async (): Promise<void> => {
@@ -458,59 +507,50 @@ export const printDrLeakReport = async (): Promise<void> => {
     return;
   }
 
-  const { handles, requests } = logEventLoopSnapshot();
   const openTimers = getOpenTimers();
-  const openSockets = getOpenSockets(handles);
-  const pendingAsync = getPendingAsyncResources();
   const openStreams = getOpenDrStreams();
   const pendingPromises = getPendingDrPromises();
+  const pendingAsync = getPendingAsyncResources();
+
+  const hasLeaks =
+    openTimers.length > 0 ||
+    pendingAsync.length > 0 ||
+    openStreams.length > 0 ||
+    pendingPromises.length > 0;
+
+  const { handles, requests } = logEventLoopSnapshot(hasLeaks);
+  const openSockets = getOpenSockets(handles);
   const agents = await inspectHttpAgents();
   const awsAgent = inspectAwsSdkAgent();
 
-  console.info("[DR] HTTP_AGENT_VERIFY", { agents, awsAgent });
+  console.info("[DR] HTTP_AGENT_VERIFY", {
+    agentCount: agents.length,
+    awsClientType: awsAgent.clientType ?? awsAgent.error,
+  });
+  for (const agent of agents) {
+    console.info("[DR] HTTP_AGENT", agent);
+  }
+
   verifyDrArchiverListeners();
   verifyDrR2Upload();
-
-  if (openTimers.length > 0) {
-    console.warn("[DR] OPEN_TIMERS", {
-      count: openTimers.length,
-      timers: openTimers.map((entry) => ({
-        kind: entry.kind,
-        ageMs: Date.now() - entry.createdAt,
-        stack: entry.stack,
-      })),
-    });
-  }
-
-  if (pendingAsync.length > 0) {
-    console.warn("[DR] PENDING_ASYNC_RESOURCES", {
-      count: pendingAsync.length,
-      resources: pendingAsync.map((entry) => ({
-        resourceId: entry.resourceId,
-        triggerAsyncId: entry.triggerAsyncId,
-        type: entry.type,
-        ageMs: Date.now() - entry.createdAt,
-        stack: entry.stack,
-      })),
-    });
-  }
 
   const activeHandlesExMongo = countNonMongoHandles(handles);
   const activeRequestsCount = requests.length;
 
-  const lines = [
-    "========== DR LEAK REPORT ==========",
-    `Active Handles: ${activeHandlesExMongo}`,
-    `Active Requests: ${activeRequestsCount}`,
-    `Open Timers: ${openTimers.length}`,
-    `Open Sockets: ${openSockets.length}`,
-    `Pending Async Resources: ${pendingAsync.length}`,
-    `Open Streams: ${openStreams.length}`,
-    `Pending Promises: ${pendingPromises.length}`,
-    "===================================",
-  ];
+  console.info("========== DR LEAK REPORT ==========");
+  console.info(`Active Handles: ${activeHandlesExMongo}`);
+  console.info(`Active Requests: ${activeRequestsCount}`);
+  console.info(`Open Timers: ${openTimers.length}`);
+  console.info(`Open Sockets: ${openSockets.length}`);
+  console.info(`Pending Async Resources: ${pendingAsync.length}`);
+  console.info(`Open Streams: ${openStreams.length}`);
+  console.info(`Pending Promises: ${pendingPromises.length}`);
+  console.info("===================================");
 
-  console.info(lines.join("\n"));
+  if (hasLeaks) {
+    logOpenTimersDetail(openTimers);
+    logPendingAsyncDetail(pendingAsync);
+  }
 };
 
 export const runInDrAsyncScope = <T>(name: string, fn: () => T): T => {

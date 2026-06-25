@@ -12,7 +12,8 @@ import {
   DR_UPLOAD_COMPLETE_TIMEOUT_MS,
   withDrTimeout,
 } from "@/lib/disaster-recovery/dr-async-timeout";
-import { logDr, logDrMemory } from "@/lib/disaster-recovery/dr-backup-logging";
+import { logDr, logDrExportMemorySnapshot, logDrMemory } from "@/lib/disaster-recovery/dr-backup-logging";
+import { truncateDrErrorStack } from "@/lib/disaster-recovery/dr-diag-policy";
 import { DrExportWatchdog } from "@/lib/disaster-recovery/dr-export-watchdog";
 import { updateDrJobContext } from "@/lib/disaster-recovery/dr-job-context";
 import {
@@ -44,14 +45,12 @@ import {
 
 const logStreamingError = (phase: string, error: unknown): void => {
   const message = error instanceof Error ? error.message : String(error);
-  const stack = error instanceof Error ? error.stack : undefined;
-  console.error(`[DR] STREAMING_ERROR ${phase}`, { message, stack });
+  console.error(`[DR] STREAMING_ERROR ${phase}`, { message, stack: truncateDrErrorStack(error) });
 };
 
 const logStorageUploadFailed = (provider: string, error: unknown): void => {
   const message = error instanceof Error ? error.message : String(error);
-  const stack = error instanceof Error ? error.stack : undefined;
-  console.error("[DR] STORAGE_UPLOAD_FAILED", { provider, message, stack });
+  console.error("[DR] STORAGE_UPLOAD_FAILED", { provider, message, stack: truncateDrErrorStack(error) });
 };
 
 export type StreamingDisasterRecoveryZipResult = {
@@ -196,6 +195,7 @@ export const buildAndStoreStreamingDisasterRecoveryZip = async (input: {
         const shouldLogMemory =
           processedObjectCount % 100 === 0 || processedObjectCount === input.inventory.length;
         if (shouldLogMemory) {
+          logDrExportMemorySnapshot(processedObjectCount);
           logDrMemory("memory:before-object", processedObjectCount);
         }
 
@@ -211,6 +211,7 @@ export const buildAndStoreStreamingDisasterRecoveryZip = async (input: {
         updateDrJobContext({ archivePointer: writer.pointer() });
 
         if (shouldLogMemory) {
+          logDrExportMemorySnapshot(processedObjectCount);
           logDrMemory("memory:after-object", processedObjectCount);
         }
       },
@@ -225,7 +226,7 @@ export const buildAndStoreStreamingDisasterRecoveryZip = async (input: {
             maxLiveObjectStreams,
             archivePointer: writer.pointer(),
           });
-          logDrMemory("memory:during-export", progress.processed);
+          logDrExportMemorySnapshot(progress.processed);
         }
       },
     });
