@@ -3,6 +3,8 @@ import { readProcessMemorySnapshot } from "@/lib/disaster-recovery/dr-memory-met
 import { getDrJobContext, updateDrJobContext } from "@/lib/disaster-recovery/dr-job-context";
 import connectDB from "@/lib/mongodb";
 import BackupRecord from "@/models/BackupRecord";
+import { persistDrWorkerProgress } from "@/lib/disaster-recovery/worker/dr-worker-progress";
+import { persistDrWorkerIntervalHeartbeat } from "@/lib/disaster-recovery/worker/dr-worker-heartbeat";
 
 const HEARTBEAT_MS = 30_000;
 
@@ -12,11 +14,17 @@ const persistJobProgress = async (recordId: string | undefined): Promise<void> =
   if (!recordId) return;
   const ctx = getDrJobContext();
   try {
+    if (ctx.workerId) {
+      await persistDrWorkerIntervalHeartbeat(recordId, ctx.workerId);
+      return;
+    }
+
     await connectDB();
     await BackupRecord.findByIdAndUpdate(recordId, {
       jobPhase: ctx.phase,
       processedObjects: ctx.processedObjects,
       archivePointer: ctx.archivePointer,
+      heartbeatAt: new Date(),
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

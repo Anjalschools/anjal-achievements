@@ -32,6 +32,16 @@ export interface IBackupRecord extends Document {
   archivePointer?: number;
   jobStartedAt?: Date;
   jobCompletedAt?: Date;
+  totalObjects?: number;
+  bytesExported?: number;
+  heartbeatAt?: Date;
+  workerId?: string;
+  lockedAt?: Date;
+  cancelRequested?: boolean;
+  jobElapsedMs?: number;
+  jobMemoryRss?: number;
+  jobHeapUsed?: number;
+  leaseExpiresAt?: Date;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -68,6 +78,16 @@ const BackupRecordSchema = new Schema<IBackupRecord>(
     archivePointer: { type: Number, min: 0 },
     jobStartedAt: { type: Date },
     jobCompletedAt: { type: Date },
+    totalObjects: { type: Number, min: 0 },
+    bytesExported: { type: Number, min: 0 },
+    heartbeatAt: { type: Date },
+    workerId: { type: String, trim: true, maxlength: 200 },
+    lockedAt: { type: Date },
+    cancelRequested: { type: Boolean, default: false },
+    jobElapsedMs: { type: Number, min: 0 },
+    jobMemoryRss: { type: Number, min: 0 },
+    jobHeapUsed: { type: Number, min: 0 },
+    leaseExpiresAt: { type: Date },
   },
   { timestamps: true }
 );

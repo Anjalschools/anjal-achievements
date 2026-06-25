@@ -1,4 +1,4 @@
-import { describe, expect, it, afterEach, vi } from "vitest";
+import { describe, expect, it, afterEach, beforeEach, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
 
@@ -19,7 +19,13 @@ import {
   resetDrJobLock,
 } from "@/lib/disaster-recovery/dr-job-lock";
 import {
-  dispatchDrBackgroundJob,
+  enqueueBackupJob,
+  getBackupJobQueue,
+  resetBackupJobQueue,
+  setBackupJobQueue,
+} from "@/lib/disaster-recovery/worker/dr-job-queue";
+import { createInMemoryBackupJobQueue } from "@/lib/disaster-recovery/worker/dr-memory-job-queue";
+import {
   getDrStartupMilestones,
   getDrStartupTiming,
   handleDrStartupFailure,
@@ -33,34 +39,34 @@ import {
 import BackupRecord from "@/models/BackupRecord";
 
 describe("phase 11.6 — DR background job startup", () => {
+  beforeEach(() => {
+    setBackupJobQueue(createInMemoryBackupJobQueue());
+  });
+
   afterEach(() => {
     resetDrJobStartup();
     resetDrJobLock();
+    resetBackupJobQueue();
     vi.restoreAllMocks();
   });
 
-  it("dispatches background job via setImmediate with milestones", async () => {
+  it("enqueues jobs for persistent worker dispatch with milestones", async () => {
     markDrJobQueued();
     initDrJobStartup("record-start-1");
     markDrJobScheduled();
 
-    const runner = vi.fn().mockResolvedValue(undefined);
-    dispatchDrBackgroundJob("record-start-1", runner);
+    await enqueueBackupJob({
+      recordId: "record-start-1",
+      input: {
+        moduleId: "full",
+        storageProvider: "r2",
+        createdByUserId: "user-1",
+      },
+    });
+    logDrStartupMilestone("QUEUE_JOB_SCHEDULED", { recordId: "record-start-1" });
 
     expect(getDrStartupMilestones()).toContain("QUEUE_JOB_SCHEDULED");
-    expect(runner).not.toHaveBeenCalled();
-
-    await new Promise<void>((resolve) => {
-      setImmediate(() => resolve());
-    });
-    await new Promise<void>((resolve) => {
-      setImmediate(() => resolve());
-    });
-
-    expect(getDrStartupMilestones()).toEqual(
-      expect.arrayContaining(["QUEUE_JOB_DISPATCHED", "BACKGROUND_JOB_STARTING"])
-    );
-    expect(runner).toHaveBeenCalledTimes(1);
+    expect(await getBackupJobQueue().has("record-start-1")).toBe(true);
   });
 
   it("tracks queue and dispatch timing", () => {

@@ -10,6 +10,7 @@ import {
 import { buildBackupManifest } from "@/lib/backup/backup-manifest";
 import { buildBackupZipPackage, countCollectionDocuments } from "@/lib/backup/backup-package";
 import { resolveBackupStorageProvider } from "@/lib/backup/backup-storage";
+import { normalizeWorkerPhaseForRead } from "@/lib/disaster-recovery/worker/dr-worker-state";
 
 export type CreateBackupInput = {
   moduleId: BackupModuleId;
@@ -181,8 +182,17 @@ export const getBackupRecordById = async (id: string) => {
     includesObjectStorage: row.includesObjectStorage,
     objectCount: row.objectCount,
     recoveryReadinessScore: row.recoveryReadinessScore,
-    jobPhase: row.jobPhase,
+    jobPhase: normalizeWorkerPhaseForRead(row.jobPhase),
     processedObjects: row.processedObjects,
+    totalObjects: row.totalObjects,
+    bytesExported: row.bytesExported,
+    heartbeatAt: row.heartbeatAt ? new Date(row.heartbeatAt).toISOString() : null,
+    workerId: row.workerId,
+    jobElapsedMs: row.jobElapsedMs,
+    jobMemoryRss: row.jobMemoryRss,
+    jobHeapUsed: row.jobHeapUsed,
+    leaseExpiresAt: row.leaseExpiresAt ? new Date(row.leaseExpiresAt).toISOString() : null,
+    cancelRequested: row.cancelRequested === true,
     archivePointer: row.archivePointer,
     jobStartedAt: row.jobStartedAt ? new Date(row.jobStartedAt).toISOString() : null,
     jobCompletedAt: row.jobCompletedAt ? new Date(row.jobCompletedAt).toISOString() : null,

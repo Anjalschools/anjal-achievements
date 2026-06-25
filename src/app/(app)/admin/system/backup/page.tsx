@@ -15,6 +15,7 @@ import {
   Upload,
 } from "lucide-react";
 import { BACKUP_MODULES } from "@/lib/backup/backup-constants";
+import { readDrPollingResponseBody } from "@/lib/disaster-recovery/dr-polling-diagnostics";
 
 type BackupRow = {
   id: string;
@@ -200,7 +201,11 @@ export default function AdminBackupRestorePage() {
             credentials: "include",
             cache: "no-store",
           });
-          const statusJson = (await statusRes.json()) as {
+          const statusText = await readDrPollingResponseBody(
+            statusRes,
+            `/api/admin/backup/${recordId}`
+          );
+          const statusJson = JSON.parse(statusText) as {
             data?: {
               status?: string;
               recoveryReadinessScore?: number;

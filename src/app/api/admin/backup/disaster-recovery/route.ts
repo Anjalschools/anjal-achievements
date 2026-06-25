@@ -14,6 +14,7 @@ import {
   updateDrVerificationReport,
 } from "@/lib/disaster-recovery/dr-verification";
 import { logDrStartupMilestone } from "@/lib/disaster-recovery/dr-job-startup";
+import { runDrApiRoute } from "@/lib/disaster-recovery/dr-api-route-diagnostics";
 import type { RetentionTier } from "@/lib/disaster-recovery/retention-policy";
 
 registerDrProcessDiagnostics();
@@ -56,6 +57,9 @@ const resolveDrErrorStatus = (error: unknown): number => {
 };
 
 export async function POST(request: NextRequest) {
+  return runDrApiRoute(
+    { route: "/api/admin/backup/disaster-recovery", method: "POST" },
+    async () => {
   console.log("[DR-ROUTE] POST ENTER");
   console.log("[DR-API] REQUEST RECEIVED");
   logDrStartupMilestone("HTTP_REQUEST_RECEIVED");
@@ -147,4 +151,6 @@ export async function POST(request: NextRequest) {
   updateDrVerificationReport({ responseSent: true });
 
   return response;
+    }
+  );
 }

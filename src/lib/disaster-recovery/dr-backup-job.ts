@@ -1,70 +1,29 @@
 import "server-only";
 import connectDB from "@/lib/mongodb";
 import BackupRecord from "@/models/BackupRecord";
-import { type BackupModuleId, type BackupStorageProviderId } from "@/lib/backup/backup-constants";
-import { logBackupAuditEvent } from "@/lib/backup/backup-audit";
+import { type BackupModuleId } from "@/lib/backup/backup-constants";
 import type { AuditActor } from "@/lib/audit-log-service";
 import type { NextRequest } from "next/server";
 import {
-  createDisasterRecoveryBackup,
-  type CreateDisasterRecoveryBackupInput,
-} from "@/lib/disaster-recovery/dr-backup-service";
-import {
-  getDrJobContext,
-  resetDrJobContext,
-  updateDrJobContext,
-} from "@/lib/disaster-recovery/dr-job-context";
-import { startDrHeartbeat, stopDrHeartbeat } from "@/lib/disaster-recovery/dr-heartbeat";
-import { registerDrProcessDiagnostics } from "@/lib/disaster-recovery/dr-process-diagnostics";
-import { toDisasterRecoveryErrorPayload } from "@/lib/disaster-recovery/dr-backup-logging";
-import {
-  beginDrBackgroundJob,
-  dispatchDrBackgroundJob,
-  handleDrStartupFailure,
   initDrJobStartup,
   logDrStartupMilestone,
   markDrJobQueued,
-  printDrStartupReport,
-  resetDrJobStartup,
 } from "@/lib/disaster-recovery/dr-job-startup";
-import { releaseDrJobLock } from "@/lib/disaster-recovery/dr-job-lock";
-import { resolveDisasterRecoveryStorageProvider } from "@/lib/disaster-recovery/dr-storage-resolution";
+import { logDrMilestone } from "@/lib/disaster-recovery/dr-verification";
 import {
-  initDrVerification,
-  isDrVerificationActive,
-  logDrException,
-  logDrMilestone,
-  printDrFinalReport,
-  resetDrVerification,
-} from "@/lib/disaster-recovery/dr-verification";
-import {
-  initDrLeakDetection,
-  printDrLeakReport,
-  resetDrLeakDetection,
-} from "@/lib/disaster-recovery/dr-leak-detection";
-import type { RetentionTier } from "@/lib/disaster-recovery/retention-policy";
+  enqueueBackupJob,
+  type BackupJobQueuePayload,
+} from "@/lib/disaster-recovery/worker/dr-job-queue";
+import type {
+  DisasterRecoveryJobAccepted,
+  StartDisasterRecoveryJobInput,
+} from "@/lib/disaster-recovery/dr-backup-job-types";
 
-registerDrProcessDiagnostics();
+export type { DisasterRecoveryJobAccepted, StartDisasterRecoveryJobInput };
 
 const buildDrFileName = (moduleId: BackupModuleId): string => {
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
   return `anjal-dr-backup-${moduleId}-${stamp}.zip`;
-};
-
-export type StartDisasterRecoveryJobInput = {
-  moduleId: BackupModuleId;
-  storageProvider: BackupStorageProviderId;
-  createdByUserId: string;
-  includeObjects?: boolean;
-  retentionTier?: RetentionTier;
-  note?: string;
-};
-
-export type DisasterRecoveryJobAccepted = {
-  recordId: string;
-  status: "pending";
-  statusUrl: string;
-  fileName: string;
 };
 
 type JobAuditContext = {
@@ -74,7 +33,8 @@ type JobAuditContext = {
 
 export const startDisasterRecoveryBackupJob = async (
   input: StartDisasterRecoveryJobInput,
-  audit?: JobAuditContext
+  audit?: JobAuditContext,
+  options?: { source?: BackupJobQueuePayload["source"]; pruneExpiredOnComplete?: boolean }
 ): Promise<DisasterRecoveryJobAccepted> => {
   console.log("[DR-JOB] startDisasterRecoveryBackupJob");
   markDrJobQueued();
@@ -98,7 +58,10 @@ export const startDisasterRecoveryBackupJob = async (
     jobPhase: "queued",
     processedObjects: 0,
     archivePointer: 0,
+    totalObjects: 0,
     jobStartedAt: new Date(),
+    heartbeatAt: new Date(),
+    cancelRequested: false,
   });
 
   const recordId = String(record._id);
@@ -107,12 +70,24 @@ export const startDisasterRecoveryBackupJob = async (
   logDrStartupMilestone("BACKUP_RECORD_CREATED", { recordId, fileName });
   logDrMilestone("BACKUP_RECORD_CREATED", { recordId });
   console.log("[DR-JOB] pending record created", { recordId, fileName });
-  initDrVerification(recordId);
-  initDrLeakDetection();
 
-  dispatchDrBackgroundJob(recordId, () =>
-    executeDisasterRecoveryBackupJob(recordId, input, audit)
-  );
+  await enqueueBackupJob({
+    recordId,
+    input,
+    audit: audit
+      ? {
+          actor: {
+            id: audit.actor.id,
+            name: audit.actor.name,
+            email: audit.actor.email,
+            role: audit.actor.role,
+          },
+        }
+      : undefined,
+    source: options?.source ?? "api",
+    pruneExpiredOnComplete: options?.pruneExpiredOnComplete,
+  });
+  logDrStartupMilestone("QUEUE_JOB_SCHEDULED", { recordId });
 
   return {
     recordId,
@@ -122,121 +97,4 @@ export const startDisasterRecoveryBackupJob = async (
   };
 };
 
-export const executeDisasterRecoveryBackupJob = async (
-  recordId: string,
-  input: StartDisasterRecoveryJobInput,
-  audit?: JobAuditContext
-): Promise<void> => {
-  console.log("[DR-JOB] executeDisasterRecoveryBackupJob", { recordId });
-  if (!isDrVerificationActive()) {
-    initDrVerification(recordId);
-  }
-
-  try {
-    await beginDrBackgroundJob(recordId);
-  } catch (error) {
-    await handleDrStartupFailure(recordId, error);
-    throw error;
-  }
-
-  resetDrJobContext({ recordId, phase: "manifest" });
-  startDrHeartbeat(recordId);
-
-  const includeObjects = input.includeObjects !== false;
-  const storageResolution = resolveDisasterRecoveryStorageProvider({
-    requested: input.storageProvider,
-    includeObjects,
-    source: "dr-backup-job",
-  });
-
-  const drInput: CreateDisasterRecoveryBackupInput = {
-    moduleId: input.moduleId,
-    storageProvider: storageResolution.resolved,
-    createdByUserId: input.createdByUserId,
-    includeObjects: input.includeObjects,
-    retentionTier: input.retentionTier,
-    note: input.note,
-    existingRecordId: recordId,
-  };
-
-  try {
-    const result = await createDisasterRecoveryBackup(drInput);
-    updateDrJobContext({ phase: "complete", processedObjects: result.objectCount || 0 });
-    logDrMilestone("BACKUP_JOB_COMPLETED", {
-      recordId,
-      objectCount: result.objectCount,
-      recoveryReadinessScore: result.recoveryReadinessScore,
-    });
-    console.log("[DR-JOB] completed", { recordId, objectCount: result.objectCount });
-
-    if (audit) {
-      await logBackupAuditEvent({
-        request: audit.request,
-        actor: audit.actor,
-        actionType: "dr_backup_created",
-        entityId: recordId,
-        metadata: {
-          moduleId: input.moduleId,
-          storageProvider: input.storageProvider,
-          objectCount: result.objectCount,
-          recoveryReadinessScore: result.recoveryReadinessScore,
-          retentionTier: input.retentionTier || "daily",
-          asyncJob: true,
-        },
-        descriptionAr: "إنشاء نسخة كوارث كاملة (مهمة خلفية)",
-      }).catch(() => undefined);
-    }
-  } catch (error) {
-    const payload = toDisasterRecoveryErrorPayload(error);
-    logDrException(payload.stage, error);
-    console.error("[DR-JOB] failed", {
-      recordId,
-      stage: payload.stage,
-      message: payload.message,
-      stack: payload.stack,
-    });
-
-    await connectDB();
-    await BackupRecord.findByIdAndUpdate(recordId, {
-      status: "failed",
-      jobPhase: "failed",
-      errorMessage: payload.message,
-      jobCompletedAt: new Date(),
-    });
-
-    if (audit) {
-      await logBackupAuditEvent({
-        request: audit.request,
-        actor: audit.actor,
-        actionType: "dr_backup_failed",
-        metadata: {
-          moduleId: input.moduleId,
-          storageProvider: input.storageProvider,
-          stage: payload.stage,
-          message: payload.message,
-          asyncJob: true,
-        },
-        outcome: "failure",
-        descriptionAr: "فشل إنشاء نسخة كوارث كاملة (مهمة خلفية)",
-      }).catch(() => undefined);
-    }
-  } finally {
-    stopDrHeartbeat();
-    const ctx = getDrJobContext();
-    console.log("[DR] HEARTBEAT", {
-      phase: ctx.phase,
-      processedObjects: ctx.processedObjects,
-      totalObjects: ctx.totalObjects,
-      archivePointer: ctx.archivePointer,
-      recordId: ctx.recordId,
-      final: true,
-    });
-    printDrStartupReport();
-    printDrFinalReport();
-    await printDrLeakReport();
-    releaseDrJobLock(recordId);
-    resetDrLeakDetection();
-    resetDrVerification();
-    resetDrJobStartup();
-  }
-};
+export { executeDrBackupWorkerJob as executeDisasterRecoveryBackupJob } from "@/lib/disaster-recovery/worker/dr-worker";

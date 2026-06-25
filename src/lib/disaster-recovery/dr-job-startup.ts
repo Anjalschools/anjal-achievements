@@ -31,13 +31,13 @@ type DrStartupSession = {
   milestones: DrStartupMilestone[];
   lastMilestone?: DrStartupMilestone;
   failureReason?: string;
-  dispatchMethod: "setImmediate";
+  dispatchMethod: "queue" | "setImmediate";
   lockStatus?: DrJobLockStatus;
 };
 
 const createEmptySession = (): DrStartupSession => ({
   milestones: [],
-  dispatchMethod: "setImmediate",
+  dispatchMethod: "queue",
 });
 
 let session: DrStartupSession = createEmptySession();
@@ -220,8 +220,9 @@ export const beginDrBackgroundJob = async (recordId: string): Promise<void> => {
 
   await connectDB();
   await BackupRecord.findByIdAndUpdate(recordId, {
-    jobPhase: "started",
+    jobPhase: "starting",
     jobStartedAt: new Date(),
+    heartbeatAt: new Date(),
   });
 };
 

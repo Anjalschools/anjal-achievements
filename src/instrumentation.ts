@@ -7,6 +7,10 @@ export async function register() {
   console.log("[BUILD VERSION]", process.env.RENDER_GIT_COMMIT || "local");
   const { runEnvCheckOnce } = await import("@/lib/env-check");
   runEnvCheckOnce();
+  const { registerDrProcessDiagnostics } = await import(
+    "@/lib/disaster-recovery/dr-process-diagnostics"
+  );
+  registerDrProcessDiagnostics();
 }
 
 /** Server error hook — lightweight diagnostics for 502 root-cause tracing. */

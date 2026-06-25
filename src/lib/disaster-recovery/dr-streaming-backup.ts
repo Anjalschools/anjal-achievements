@@ -15,7 +15,9 @@ import {
 import { logDr, logDrExportMemorySnapshot, logDrMemory } from "@/lib/disaster-recovery/dr-backup-logging";
 import { truncateDrErrorStack } from "@/lib/disaster-recovery/dr-diag-policy";
 import { DrExportWatchdog } from "@/lib/disaster-recovery/dr-export-watchdog";
-import { updateDrJobContext } from "@/lib/disaster-recovery/dr-job-context";
+import { updateDrJobContext, getDrJobContext } from "@/lib/disaster-recovery/dr-job-context";
+import { logDrJobHeartbeat } from "@/lib/disaster-recovery/dr-job-heartbeat-diagnostics";
+import { emitDrWorkerObjectHeartbeat, assertDrJobNotCancelled } from "@/lib/disaster-recovery/worker/dr-worker-heartbeat";
 import {
   destroyDrStream,
   logDrObjectDiag,
@@ -210,6 +212,33 @@ export const buildAndStoreStreamingDisasterRecoveryZip = async (input: {
           archivePointer: writer.pointer(),
         });
 
+        const ctxBeforeAppend = getDrJobContext();
+        if (ctxBeforeAppend.recordId && ctxBeforeAppend.workerId) {
+          await assertDrJobNotCancelled(ctxBeforeAppend.recordId);
+        }
+
+        const shouldHeartbeat =
+          processedObjectCount === 1 || processedObjectCount % 100 === 0;
+        if (shouldHeartbeat) {
+          const ctx = getDrJobContext();
+          const heartbeatInput = {
+            processedObjects: processedObjectCount,
+            remainingObjects: input.inventory.length - processedObjectCount,
+            elapsed: Date.now() - (ctx.startedAtMs ?? uploadStartedAt),
+          };
+          logDrJobHeartbeat({
+            jobId: ctx.recordId,
+            ...heartbeatInput,
+          });
+          if (ctx.recordId && ctx.workerId) {
+            void emitDrWorkerObjectHeartbeat({
+              recordId: ctx.recordId,
+              workerId: ctx.workerId,
+              ...heartbeatInput,
+            });
+          }
+        }
+
         const shouldLogMemory =
           processedObjectCount % 100 === 0 || processedObjectCount === input.inventory.length;
         if (shouldLogMemory) {
@@ -250,6 +279,23 @@ export const buildAndStoreStreamingDisasterRecoveryZip = async (input: {
           archivePointer: writer.pointer(),
         });
         if (progress.processed % 100 === 0 || progress.remaining === 0) {
+          const ctx = getDrJobContext();
+          const heartbeatInput = {
+            processedObjects: progress.processed,
+            remainingObjects: progress.remaining,
+            elapsed: Date.now() - (ctx.startedAtMs ?? uploadStartedAt),
+          };
+          logDrJobHeartbeat({
+            jobId: ctx.recordId,
+            ...heartbeatInput,
+          });
+          if (ctx.recordId && ctx.workerId) {
+            void emitDrWorkerObjectHeartbeat({
+              recordId: ctx.recordId,
+              workerId: ctx.workerId,
+              ...heartbeatInput,
+            });
+          }
           logDr("export-progress", {
             ...progress,
             maxLiveObjectStreams,
