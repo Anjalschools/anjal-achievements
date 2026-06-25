@@ -7,6 +7,11 @@ import {
   withDrTimeout,
 } from "@/lib/disaster-recovery/dr-async-timeout";
 import type { DrExportWatchdog } from "@/lib/disaster-recovery/dr-export-watchdog";
+import {
+  buildDrObjectStreamContext,
+  logDrArchiveAppendFailed,
+  logDrDownloadProviderFailed,
+} from "@/lib/disaster-recovery/dr-object-stream-diagnostics";
 import { destroyDrStream, logDrObjectDiag } from "@/lib/disaster-recovery/dr-stream-lifecycle";
 
 export type StreamingObjectExportProgress = {
@@ -99,6 +104,7 @@ export const runSequentialObjectStreamExport = async (input: {
     if (!source) continue;
 
     const objectKey = source.archivePath;
+    const streamContext = buildDrObjectStreamContext({ entry: source });
     let activeStream: Readable | null = null;
     const objectStartedAt = Date.now();
 
@@ -151,6 +157,7 @@ export const runSequentialObjectStreamExport = async (input: {
       try {
         await withDrTimeout(appendPromise, appendDrainTimeoutMs, "archiveAppendDrain", { objectKey });
       } catch (error) {
+        logDrArchiveAppendFailed(streamContext, error);
         destroyDrStream(activeStream, error instanceof Error ? error : undefined);
         void appendPromise.catch(() => undefined);
         failures.push({
@@ -195,6 +202,7 @@ export const runSequentialObjectStreamExport = async (input: {
         elapsedMs: Date.now() - objectStartedAt,
       });
     } catch (error) {
+      logDrDownloadProviderFailed(streamContext, error);
       destroyDrStream(activeStream, error instanceof Error ? error : undefined);
       failures.push({
         ...source,

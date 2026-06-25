@@ -1,8 +1,7 @@
 import "server-only";
 import { createHash } from "crypto";
 import { Readable } from "stream";
-import { GetObjectCommand } from "@aws-sdk/client-s3";
-import { getR2BucketName, getR2Client, isR2Configured } from "@/lib/r2";
+import { isR2Configured } from "@/lib/r2";
 import { getCloudinary, isCloudinaryConfigured, resolveCloudinaryResourceType } from "@/lib/cloudinary";
 import { hashContent } from "@/lib/backup/backup-manifest";
 import { isHttpDownloadAllowed } from "@/lib/disaster-recovery/http-download-policy";
@@ -19,6 +18,12 @@ import {
   DR_OBJECT_DOWNLOAD_TIMEOUT_MS,
   withDrAbortTimeout,
 } from "@/lib/disaster-recovery/dr-async-timeout";
+import {
+  attachDrObjectStreamErrorLogging,
+  buildDrObjectStreamContext,
+  logDrDownloadProviderFailed,
+} from "@/lib/disaster-recovery/dr-object-stream-diagnostics";
+import { sendR2GetObject } from "@/lib/disaster-recovery/dr-r2-sdk";
 import { logDrObjectDiag } from "@/lib/disaster-recovery/dr-stream-lifecycle";
 import {
   createHashingObjectStream,
@@ -68,26 +73,35 @@ const decodeDataUrl = (dataUrl: string): Buffer => {
 
 const openR2ObjectStream = async (key: string, objectKey: string): Promise<Readable> => {
   if (!isR2Configured()) throw new Error("R2_NOT_CONFIGURED");
-  return withDrAbortTimeout(
-    "r2ObjectDownload",
-    DR_OBJECT_DOWNLOAD_TIMEOUT_MS,
-    async (signal) => {
-      logDrObjectDiag("Download started", { objectKey, provider: "r2", storageKey: key });
-      const client = getR2Client();
-      const response = await client.send(
-        new GetObjectCommand({
-          Bucket: getR2BucketName(),
-          Key: key.replace(/^\/+/, ""),
-        }),
-        { abortSignal: signal }
-      );
-      if (!response.Body) throw new Error("R2_OBJECT_EMPTY");
-      const stream = response.Body as Readable;
-      logDrObjectDiag("Download open", { objectKey, provider: "r2" });
-      return stream;
-    },
-    { objectKey }
-  );
+  try {
+    return await withDrAbortTimeout(
+      "r2ObjectDownload",
+      DR_OBJECT_DOWNLOAD_TIMEOUT_MS,
+      async (signal) => {
+        logDrObjectDiag("Download started", { objectKey, provider: "r2", storageKey: key });
+        const response = await sendR2GetObject({
+          key,
+          abortSignal: signal,
+        });
+        if (!response.Body) throw new Error("R2_OBJECT_EMPTY");
+        const stream = response.Body as Readable;
+        logDrObjectDiag("Download open", { objectKey, provider: "r2" });
+        return stream;
+      },
+      { objectKey }
+    );
+  } catch (error) {
+    logDrDownloadProviderFailed(
+      {
+        provider: "r2",
+        storageKey: key,
+        archivePath: objectKey,
+        streamName: "r2-download",
+      },
+      error
+    );
+    throw error;
+  }
 };
 
 const parseCloudinaryReference = (
@@ -123,22 +137,35 @@ const openHttpObjectStream = async (url: string, objectKey: string): Promise<Rea
   if (!isHttpDownloadAllowed(url)) {
     throw new Error("HTTP_DOWNLOAD_NOT_ALLOWED");
   }
-  return withDrAbortTimeout(
-    "httpObjectDownload",
-    DR_OBJECT_DOWNLOAD_TIMEOUT_MS,
-    async (signal) => {
-      logDrObjectDiag("Download started", { objectKey, provider: "http", url });
-      const response = await fetch(url, { signal });
-      if (!response.ok) {
-        throw new Error(`HTTP_DOWNLOAD_FAILED:${response.status}`);
-      }
-      if (!response.body) {
-        throw new Error("HTTP_BODY_EMPTY");
-      }
-      return webBodyToNodeStream(response.body);
-    },
-    { objectKey }
-  );
+  try {
+    return await withDrAbortTimeout(
+      "httpObjectDownload",
+      DR_OBJECT_DOWNLOAD_TIMEOUT_MS,
+      async (signal) => {
+        logDrObjectDiag("Download started", { objectKey, provider: "http", url });
+        const response = await fetch(url, { signal });
+        if (!response.ok) {
+          throw new Error(`HTTP_DOWNLOAD_FAILED:${response.status}`);
+        }
+        if (!response.body) {
+          throw new Error("HTTP_BODY_EMPTY");
+        }
+        return webBodyToNodeStream(response.body);
+      },
+      { objectKey }
+    );
+  } catch (error) {
+    logDrDownloadProviderFailed(
+      {
+        provider: "http",
+        storageKey: url,
+        archivePath: objectKey,
+        streamName: "http-download",
+      },
+      error
+    );
+    throw error;
+  }
 };
 
 const openCloudinaryObjectStream = async (
@@ -146,22 +173,35 @@ const openCloudinaryObjectStream = async (
   objectKey: string
 ): Promise<Readable> => {
   const downloadUrl = resolveCloudinaryDownloadUrl(storageKey);
-  return withDrAbortTimeout(
-    "cloudinaryObjectDownload",
-    DR_OBJECT_DOWNLOAD_TIMEOUT_MS,
-    async (signal) => {
-      logDrObjectDiag("Download started", { objectKey, provider: "cloudinary", storageKey });
-      const response = await fetch(downloadUrl, { signal });
-      if (!response.ok) {
-        throw new Error(`CLOUDINARY_DOWNLOAD_FAILED:${response.status}`);
-      }
-      if (!response.body) {
-        throw new Error("CLOUDINARY_BODY_EMPTY");
-      }
-      return webBodyToNodeStream(response.body);
-    },
-    { objectKey }
-  );
+  try {
+    return await withDrAbortTimeout(
+      "cloudinaryObjectDownload",
+      DR_OBJECT_DOWNLOAD_TIMEOUT_MS,
+      async (signal) => {
+        logDrObjectDiag("Download started", { objectKey, provider: "cloudinary", storageKey });
+        const response = await fetch(downloadUrl, { signal });
+        if (!response.ok) {
+          throw new Error(`CLOUDINARY_DOWNLOAD_FAILED:${response.status}`);
+        }
+        if (!response.body) {
+          throw new Error("CLOUDINARY_BODY_EMPTY");
+        }
+        return webBodyToNodeStream(response.body);
+      },
+      { objectKey }
+    );
+  } catch (error) {
+    logDrDownloadProviderFailed(
+      {
+        provider: "cloudinary",
+        storageKey,
+        archivePath: objectKey,
+        streamName: "cloudinary-download",
+      },
+      error
+    );
+    throw error;
+  }
 };
 
 const openInlineObjectStream = (storageKey: string): Readable => {
@@ -171,19 +211,28 @@ const openInlineObjectStream = (storageKey: string): Readable => {
 
 const openObjectSourceStream = async (entry: StorageManifestEntry): Promise<Readable> => {
   const objectKey = entry.archivePath;
-  if (entry.provider === "r2") {
-    return openR2ObjectStream(entry.storageKey, objectKey);
+  const context = buildDrObjectStreamContext({ entry, streamName: "object-source" });
+
+  try {
+    let stream: Readable;
+    if (entry.provider === "r2") {
+      stream = await openR2ObjectStream(entry.storageKey, objectKey);
+    } else if (entry.provider === "cloudinary") {
+      stream = await openCloudinaryObjectStream(entry.storageKey, objectKey);
+    } else if (entry.provider === "http") {
+      stream = await openHttpObjectStream(entry.storageKey, objectKey);
+    } else if (entry.provider === "inline") {
+      stream = openInlineObjectStream(entry.storageKey);
+    } else {
+      throw new Error(`UNSUPPORTED_PROVIDER:${entry.provider}`);
+    }
+
+    attachDrObjectStreamErrorLogging(stream, context);
+    return stream;
+  } catch (error) {
+    logDrDownloadProviderFailed(context, error);
+    throw error;
   }
-  if (entry.provider === "cloudinary") {
-    return openCloudinaryObjectStream(entry.storageKey, objectKey);
-  }
-  if (entry.provider === "http") {
-    return openHttpObjectStream(entry.storageKey, objectKey);
-  }
-  if (entry.provider === "inline") {
-    return openInlineObjectStream(entry.storageKey);
-  }
-  throw new Error(`UNSUPPORTED_PROVIDER:${entry.provider}`);
 };
 
 const downloadR2Object = async (key: string): Promise<Buffer> => {
@@ -212,6 +261,10 @@ export const exportStorageObjectStream = async (
 ): Promise<ExportedObjectStream> => {
   const sourceStream = await openObjectSourceStream(entry);
   const { stream, completed } = createHashingObjectStream(entry, sourceStream);
+  attachDrObjectStreamErrorLogging(stream, buildDrObjectStreamContext({
+    entry,
+    streamName: "hashing-output",
+  }));
 
   return {
     entry,

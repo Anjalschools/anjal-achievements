@@ -9,6 +9,7 @@ import {
   withDrTimeout,
 } from "@/lib/disaster-recovery/dr-async-timeout";
 import { logDrObjectDiag } from "@/lib/disaster-recovery/dr-stream-lifecycle";
+import { logDrArchiveAppendFailed } from "@/lib/disaster-recovery/dr-object-stream-diagnostics";
 import { finishedWithTimeout, isNodeReadableStream } from "@/lib/disaster-recovery/dr-stream-utils";
 
 const loadZipArchive = async () => {
@@ -86,12 +87,25 @@ export const createZipArchiveWriter = async (output: PassThrough): Promise<ZipAr
       archive.append(source, options);
 
       if (isNodeReadableStream(source)) {
-        await finishedWithTimeout(
-          source as Readable,
-          DR_STREAM_DRAIN_TIMEOUT_MS,
-          "zipAppendDrain",
-          { objectKey: options.name }
-        );
+        try {
+          await finishedWithTimeout(
+            source as Readable,
+            DR_STREAM_DRAIN_TIMEOUT_MS,
+            "zipAppendDrain",
+            { objectKey: options.name }
+          );
+        } catch (error) {
+          logDrArchiveAppendFailed(
+            {
+              provider: "zip",
+              archivePath: options.name,
+              storageKey: options.name,
+              streamName: "zip-append-drain",
+            },
+            error
+          );
+          throw error;
+        }
       }
 
       if (shouldLog) {

@@ -7,6 +7,11 @@ import {
   withDrTimeout,
 } from "@/lib/disaster-recovery/dr-async-timeout";
 import { destroyDrStream, logDrObjectDiag, monitorDrStream } from "@/lib/disaster-recovery/dr-stream-lifecycle";
+import {
+  attachDrObjectStreamErrorLogging,
+  buildDrObjectStreamContext,
+  logDrPipelineStreamError,
+} from "@/lib/disaster-recovery/dr-object-stream-diagnostics";
 import type { StorageManifestEntry } from "@/lib/disaster-recovery/storage-manifest-types";
 
 export const isNodeReadableStream = (source: Buffer | Readable): source is Readable =>
@@ -29,9 +34,29 @@ export const pipelineWithTimeout = async (
   destination: NodeJS.WritableStream,
   timeoutMs: number,
   operation: string,
-  meta?: { objectKey?: string }
+  meta?: { objectKey?: string; provider?: string; objectId?: string; streamName?: string }
 ): Promise<void> => {
-  await withDrTimeout(pipeline(source, destination), timeoutMs, operation, meta);
+  const pipelineContext = {
+    provider: meta?.provider ?? "unknown",
+    archivePath: meta?.objectKey ?? "unknown",
+    objectId: meta?.objectId,
+    streamName: meta?.streamName ?? operation,
+    storageKey: meta?.objectKey,
+  };
+
+  source.on("error", (error) => {
+    logDrPipelineStreamError({ ...pipelineContext, streamName: `${operation}:source` }, error);
+  });
+  destination.on("error", (error) => {
+    logDrPipelineStreamError({ ...pipelineContext, streamName: `${operation}:destination` }, error);
+  });
+
+  try {
+    await withDrTimeout(pipeline(source, destination), timeoutMs, operation, meta);
+  } catch (error) {
+    logDrPipelineStreamError({ ...pipelineContext, streamName: operation }, error);
+    throw error;
+  }
 };
 
 export type HashingObjectStream = {
@@ -44,6 +69,13 @@ export const createHashingObjectStream = (
   sourceStream: Readable
 ): HashingObjectStream => {
   const objectKey = entry.archivePath;
+  const streamContext = buildDrObjectStreamContext({ entry });
+
+  attachDrObjectStreamErrorLogging(sourceStream, {
+    ...streamContext,
+    streamName: "object-source-raw",
+  });
+
   const monitoredSource = monitorDrStream(sourceStream, {
     objectKey,
     stage: "object-source",
@@ -103,8 +135,16 @@ export const createHashingObjectStream = (
   });
 
   monitorDrStream(transform, { objectKey, stage: "hashing-transform" });
+  attachDrObjectStreamErrorLogging(transform, {
+    ...streamContext,
+    streamName: "hashing-transform",
+  });
 
   transform.on("error", (error) => {
+    logDrPipelineStreamError(
+      { ...streamContext, streamName: "hashing-transform" },
+      error
+    );
     rejectWith(error);
   });
 
@@ -113,8 +153,17 @@ export const createHashingObjectStream = (
     transform,
     DR_STREAM_COMPLETED_TIMEOUT_MS,
     "hashingPipeline",
-    { objectKey }
+    {
+      objectKey,
+      provider: entry.provider,
+      objectId: entry.id,
+      streamName: "hashingPipeline",
+    }
   ).catch((error) => {
+    logDrPipelineStreamError(
+      { ...streamContext, streamName: "hashingPipeline" },
+      error
+    );
     destroyDrStream(monitoredSource, error instanceof Error ? error : undefined);
     destroyDrStream(transform, error instanceof Error ? error : undefined);
     rejectWith(error instanceof Error ? error : new Error(String(error)));

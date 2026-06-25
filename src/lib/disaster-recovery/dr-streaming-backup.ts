@@ -39,6 +39,7 @@ import {
   verifyArchiveLifecycle,
 } from "@/lib/disaster-recovery/dr-verification";
 import { logDrStartupMilestone } from "@/lib/disaster-recovery/dr-job-startup";
+import { logDrArchiveAppendFailed } from "@/lib/disaster-recovery/dr-object-stream-diagnostics";
 import {
   registerDrArchiverDiagnostics,
   registerDrR2UploadDiagnostics,
@@ -220,6 +221,17 @@ export const buildAndStoreStreamingDisasterRecoveryZip = async (input: {
         maxLiveObjectStreams = Math.max(maxLiveObjectStreams, liveObjectStreams);
         try {
           await writer.append(stream, { name: archivePath });
+        } catch (error) {
+          logDrArchiveAppendFailed(
+            {
+              provider: "zip",
+              archivePath,
+              storageKey: archivePath,
+              streamName: "dr-streaming-zip-append",
+            },
+            error
+          );
+          throw error;
         } finally {
           liveObjectStreams -= 1;
           activeObjectStream = null;

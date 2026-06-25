@@ -1,7 +1,7 @@
 import "server-only";
 import { PassThrough, Readable } from "stream";
-import { PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
-import { getR2BucketName, getR2Client, isR2Configured } from "@/lib/r2";
+import { getR2BucketName, isR2Configured } from "@/lib/r2";
+import { sendR2GetObject, sendR2PutObject } from "@/lib/disaster-recovery/dr-r2-sdk";
 import type { BackupStorageProviderId } from "@/lib/backup/backup-constants";
 
 export type StoredBackupArtifact = {
@@ -56,16 +56,12 @@ export const createR2BackupStorageProvider = (): BackupStorageProvider => ({
       throw new Error("R2_NOT_CONFIGURED");
     }
     const key = `backups/${new Date().toISOString().slice(0, 10)}/${Date.now()}-${fileName}`;
-    const client = getR2Client();
     const bucket = getR2BucketName();
-    const response = await client.send(
-      new PutObjectCommand({
-        Bucket: bucket,
-        Key: key,
-        Body: body,
-        ContentType: contentType,
-      })
-    );
+    const response = await sendR2PutObject({
+      key,
+      body,
+      contentType,
+    });
     return {
       provider: "r2",
       storageKey: key,
@@ -79,32 +75,29 @@ export const createR2BackupStorageProvider = (): BackupStorageProvider => ({
     if (!isR2Configured()) {
       throw new Error("R2_NOT_CONFIGURED");
     }
-  
+
     const key = `backups/${new Date().toISOString().slice(0, 10)}/${Date.now()}-${fileName}`;
-    const client = getR2Client();
     const bucket = getR2BucketName();
-  
+
     console.info("[DR] R2_UPLOAD_START", {
       key,
       readableFlowing: body.readableFlowing,
       readableEnded: body.readableEnded,
       destroyed: body.destroyed,
     });
-  
-    const response = await client.send(
-      new PutObjectCommand({
-        Bucket: bucket,
-        Key: key,
-        Body: body,
-        ContentType: contentType,
-      })
-    );
-  
+
+    const response = await sendR2PutObject({
+      key,
+      body,
+      contentType,
+      uploadBody: body,
+    });
+
     console.info("[DR] R2_UPLOAD_COMPLETED", {
       key,
       etag: response.ETag,
     });
-  
+
     return {
       provider: "r2",
       storageKey: key,
@@ -114,18 +107,12 @@ export const createR2BackupStorageProvider = (): BackupStorageProvider => ({
       etag: response.ETag,
     };
   },
-  
+
   retrieve: async (storageKey: string) => {
     if (!isR2Configured()) {
       throw new Error("R2_NOT_CONFIGURED");
     }
-    const client = getR2Client();
-    const response = await client.send(
-      new GetObjectCommand({
-        Bucket: getR2BucketName(),
-        Key: storageKey,
-      })
-    );
+    const response = await sendR2GetObject({ key: storageKey });
     if (!response.Body) throw new Error("R2_OBJECT_EMPTY");
     return streamToBuffer(response.Body as Readable);
   },
