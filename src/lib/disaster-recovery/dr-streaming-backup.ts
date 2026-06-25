@@ -92,13 +92,16 @@ export const buildAndStoreStreamingDisasterRecoveryZip = async (input: {
   console.log("[DR] BEFORE STREAMING ZIP");
   logDrMemory("memory:before-export");
 
-  const output = new PassThrough();
-  monitorDrStream(output, { objectKey: input.fileName, stage: "zip-upload" });
+  const zipOutput = new PassThrough();
+  const uploadBody = new PassThrough();
+  zipOutput.pipe(uploadBody);
+
+  monitorDrStream(zipOutput, { objectKey: input.fileName, stage: "zip-upload" });
   let uploadCompletedFlag = false;
   registerDrR2UploadDiagnostics(() => ({
-    bodyStreamDestroyed: output.destroyed,
-    bodyStreamReadableEnded: output.readableEnded,
-    bodyStreamClosed: Boolean((output as { closed?: boolean }).closed),
+    bodyStreamDestroyed: uploadBody.destroyed,
+    bodyStreamReadableEnded: uploadBody.readableEnded,
+    bodyStreamClosed: Boolean((uploadBody as { closed?: boolean }).closed),
     uploadCompleted: uploadCompletedFlag,
   }));
   const storage = resolveBackupStorageProvider(effectiveProvider);
@@ -111,7 +114,11 @@ export const buildAndStoreStreamingDisasterRecoveryZip = async (input: {
     usesStreamingUpload: true,
   });
 
-  logDrObjectDiag("Upload stream started", { objectKey: fileName, provider: effectiveProvider });
+  logDrObjectDiag("Upload stream started", {
+    objectKey: fileName,
+    provider: effectiveProvider,
+    uploadReadableFlowing: uploadBody.readableFlowing,
+  });
   logDrMilestone("UPLOAD_STARTED", { fileName, provider: effectiveProvider });
   const uploadStartedAt = Date.now();
   const storePromise = trackDrPromise(
@@ -119,7 +126,7 @@ export const buildAndStoreStreamingDisasterRecoveryZip = async (input: {
     withDrTimeout(
       storage.storeStream!({
         fileName,
-        body: output,
+        body: uploadBody,
         contentType: "application/zip",
       }).then((stored) => {
         logDrObjectDiag("Upload stream finished", {
@@ -138,7 +145,7 @@ export const buildAndStoreStreamingDisasterRecoveryZip = async (input: {
   let writer: Awaited<ReturnType<typeof createZipArchiveWriter>>;
   try {
     console.log("[DR] BEFORE createZipArchiveWriter");
-    writer = await createZipArchiveWriter(output);
+    writer = await createZipArchiveWriter(zipOutput);
     if (writer.getArchiveDiagnostics) {
       registerDrArchiverDiagnostics(writer.getArchiveDiagnostics);
     }
@@ -176,7 +183,8 @@ export const buildAndStoreStreamingDisasterRecoveryZip = async (input: {
         message: stallError.message,
       });
       destroyDrStream(activeObjectStream ?? undefined, stallError);
-      output.destroy(stallError);
+      zipOutput.destroy(stallError);
+      uploadBody.destroy(stallError);
     },
   });
   watchdog.start();
@@ -311,7 +319,7 @@ export const buildAndStoreStreamingDisasterRecoveryZip = async (input: {
     if (writer.getArchiveState) {
       await verifyArchiveLifecycle({
         getArchiveState: writer.getArchiveState,
-        output,
+        output: zipOutput,
       });
     }
     if (writer.getArchiveDiagnostics) {
@@ -323,7 +331,9 @@ export const buildAndStoreStreamingDisasterRecoveryZip = async (input: {
   } catch (error) {
     logStreamingError("archive.finalize", error);
     logStorageUploadFailed(effectiveProvider, error);
-    output.destroy(error instanceof Error ? error : new Error(String(error)));
+    const destroyError = error instanceof Error ? error : new Error(String(error));
+    zipOutput.destroy(destroyError);
+    uploadBody.destroy(destroyError);
     throw error;
   }
 
