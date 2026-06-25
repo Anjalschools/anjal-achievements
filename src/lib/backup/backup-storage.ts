@@ -79,14 +79,18 @@ export const createR2BackupStorageProvider = (): BackupStorageProvider => ({
     if (!isR2Configured()) {
       throw new Error("R2_NOT_CONFIGURED");
     }
+  
     const key = `backups/${new Date().toISOString().slice(0, 10)}/${Date.now()}-${fileName}`;
     const client = getR2Client();
     const bucket = getR2BucketName();
-    let sizeBytes = 0;
-    body.on("data", (chunk: Buffer | string) => {
-      sizeBytes += Buffer.isBuffer(chunk) ? chunk.byteLength : Buffer.byteLength(chunk);
+  
+    console.info("[DR] R2_UPLOAD_START", {
+      key,
+      readableFlowing: body.readableFlowing,
+      readableEnded: body.readableEnded,
+      destroyed: body.destroyed,
     });
-
+  
     const response = await client.send(
       new PutObjectCommand({
         Bucket: bucket,
@@ -95,15 +99,22 @@ export const createR2BackupStorageProvider = (): BackupStorageProvider => ({
         ContentType: contentType,
       })
     );
+  
+    console.info("[DR] R2_UPLOAD_COMPLETED", {
+      key,
+      etag: response.ETag,
+    });
+  
     return {
       provider: "r2",
       storageKey: key,
       fileName,
-      sizeBytes,
+      sizeBytes: 0,
       bucket,
       etag: response.ETag,
     };
   },
+  
   retrieve: async (storageKey: string) => {
     if (!isR2Configured()) {
       throw new Error("R2_NOT_CONFIGURED");
