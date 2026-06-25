@@ -6,6 +6,7 @@ export type AwsSdkSendDiagnostics = {
   name?: string;
   stack?: string;
   cause?: unknown;
+  causeDetails?: AwsSdkSendDiagnostics;
   metadata?: unknown;
   fault?: unknown;
   retryable?: unknown;
