@@ -20,16 +20,16 @@ describe("phase 11.4 — DR leak detection", () => {
     resetDrVerification();
   });
 
-  it("prints leak report without throwing", () => {
+  it("prints leak report without throwing", async () => {
     initDrVerification("record-leak-1");
     initDrLeakDetection();
-    expect(() => printDrLeakReport()).not.toThrow();
+    await expect(printDrLeakReport()).resolves.toBeUndefined();
   });
 
-  it("tracks timers created during DR session", () => {
+  it("tracks timers created during DR session", async () => {
     initDrLeakDetection();
     const timer = setTimeout(() => undefined, 60_000);
-    printDrLeakReport();
+    await printDrLeakReport();
     clearTimeout(timer);
     expect(getPendingDrPromises()).toHaveLength(0);
     expect(getOpenDrStreams()).toHaveLength(0);

@@ -212,7 +212,7 @@ export const executeDisasterRecoveryBackupJob = async (
       final: true,
     });
     printDrFinalReport();
-    printDrLeakReport();
+    await printDrLeakReport();
     resetDrLeakDetection();
     resetDrVerification();
   }

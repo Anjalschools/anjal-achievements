@@ -1,4 +1,4 @@
-import { AsyncResource, createHook, type asyncHooks } from "node:async_hooks";
+import { AsyncResource, createHook, type AsyncHook } from "node:async_hooks";
 import http from "node:http";
 import https from "node:https";
 import net from "node:net";
@@ -23,7 +23,7 @@ type DrAsyncResourceEntry = {
 };
 
 type DrTimerEntry = {
-  id: ReturnType<typeof setTimeout>;
+  id: unknown;
   kind: "timeout" | "interval" | "immediate";
   createdAt: number;
   stack: string;
@@ -58,7 +58,7 @@ type DrLeakSession = {
   timers: Map<unknown, DrTimerEntry>;
   archiverDiagnostics?: () => DrArchiverDiagnostics;
   r2UploadDiagnostics?: () => DrR2UploadDiagnostics;
-  asyncHook?: asyncHooks.Hook;
+  asyncHook?: AsyncHook;
   originalSetTimeout?: typeof setTimeout;
   originalSetInterval?: typeof setInterval;
   originalSetImmediate?: typeof setImmediate;
@@ -184,7 +184,7 @@ const patchTimers = (): void => {
     return timer;
   }) as typeof setInterval;
 
-  global.setImmediate = ((handler: ImmediateHandler, ...args: unknown[]) => {
+  global.setImmediate = ((handler: (...args: unknown[]) => void, ...args: unknown[]) => {
     const immediate = session.originalSetImmediate!(handler, ...args);
     if (session.active) {
       session.timers.set(immediate, {
@@ -334,22 +334,32 @@ const inspectAgent = (agent: http.Agent | https.Agent, label: string): Record<st
   };
 };
 
-const inspectHttpAgents = (): Record<string, unknown>[] => {
+const inspectUndiciOptional = async (): Promise<Record<string, unknown> | null> => {
+  try {
+    const specifier = "undici";
+    const undici = (await Function(`return import(${JSON.stringify(specifier)})`)()) as {
+      getGlobalDispatcher?: () => { stats?: () => Record<string, unknown> };
+    };
+    const dispatcher = undici.getGlobalDispatcher?.();
+    if (dispatcher?.stats) {
+      return { label: "undici.globalDispatcher", ...dispatcher.stats() };
+    }
+    return null;
+  } catch {
+    console.info("[DR] HTTP_AGENT_VERIFY_SKIPPED", { reason: "undici_not_installed" });
+    return null;
+  }
+};
+
+const inspectHttpAgents = async (): Promise<Record<string, unknown>[]> => {
   const agents: Record<string, unknown>[] = [
     inspectAgent(http.globalAgent, "http.globalAgent"),
     inspectAgent(https.globalAgent, "https.globalAgent"),
   ];
 
-  try {
-    const undici = require("undici") as {
-      getGlobalDispatcher?: () => { stats?: () => Record<string, unknown> };
-    };
-    const dispatcher = undici.getGlobalDispatcher?.();
-    if (dispatcher?.stats) {
-      agents.push({ label: "undici.globalDispatcher", ...dispatcher.stats() });
-    }
-  } catch {
-    // undici optional
+  const undiciAgent = await inspectUndiciOptional();
+  if (undiciAgent) {
+    agents.push(undiciAgent);
   }
 
   return agents;
@@ -443,7 +453,7 @@ export const verifyDrR2Upload = (): DrR2UploadDiagnostics | null => {
   return diagnostics;
 };
 
-export const printDrLeakReport = (): void => {
+export const printDrLeakReport = async (): Promise<void> => {
   if (!session.active && session.baselineHandleCount === 0 && session.asyncResources.size === 0) {
     return;
   }
@@ -454,7 +464,7 @@ export const printDrLeakReport = (): void => {
   const pendingAsync = getPendingAsyncResources();
   const openStreams = getOpenDrStreams();
   const pendingPromises = getPendingDrPromises();
-  const agents = inspectHttpAgents();
+  const agents = await inspectHttpAgents();
   const awsAgent = inspectAwsSdkAgent();
 
   console.info("[DR] HTTP_AGENT_VERIFY", { agents, awsAgent });
