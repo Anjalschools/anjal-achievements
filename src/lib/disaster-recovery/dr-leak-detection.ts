@@ -8,8 +8,16 @@ import {
   DR_MAX_HANDLE_DETAIL_LOGS,
   DR_MAX_TRACKED_ASYNC_RESOURCES,
   DR_MAX_TRACKED_TIMERS,
-  logDrRegistryLimit,
+  shouldCaptureDrStacks,
 } from "@/lib/disaster-recovery/dr-diag-policy";
+import {
+  emitDeferredRegistryOverflowWarning,
+  isDrAsyncHookEnabled,
+  logDrRegistryLimit,
+  recordDrRegistryOverflow,
+  resetDrDiagGuard,
+  setDrAsyncHookEnabled,
+} from "@/lib/disaster-recovery/dr-diag-guard";
 import {
   getOpenDrStreams,
   getPendingDrPromises,
@@ -24,7 +32,7 @@ type DrAsyncResourceEntry = {
   resourceId: number;
   triggerAsyncId: number;
   type: string;
-  createdAt: number;
+  seq: number;
 };
 
 type DrTimerEntry = {
@@ -58,13 +66,11 @@ type DrLeakSession = {
   active: boolean;
   handleObjectKeys: WeakMap<object, string>;
   asyncResources: Map<number, DrAsyncResourceEntry>;
+  asyncResourceSeq: number;
   timers: Map<unknown, DrTimerEntry>;
   archiverDiagnostics?: () => DrArchiverDiagnostics;
   r2UploadDiagnostics?: () => DrR2UploadDiagnostics;
   asyncHook?: AsyncHook;
-  originalSetTimeout?: typeof setTimeout;
-  originalSetInterval?: typeof setInterval;
-  originalSetImmediate?: typeof setImmediate;
   baselineHandleCount: number;
   baselineRequestCount: number;
 };
@@ -73,12 +79,41 @@ const createEmptyLeakSession = (): DrLeakSession => ({
   active: false,
   handleObjectKeys: new WeakMap(),
   asyncResources: new Map(),
+  asyncResourceSeq: 0,
   timers: new Map(),
   baselineHandleCount: 0,
   baselineRequestCount: 0,
 });
 
 let session: DrLeakSession = createEmptyLeakSession();
+
+let timersPatched = false;
+const nativeSetTimeout = global.setTimeout.bind(global);
+const nativeSetInterval = global.setInterval.bind(global);
+const nativeSetImmediate = global.setImmediate.bind(global);
+const nativeClearTimeout = global.clearTimeout.bind(global);
+const nativeClearInterval = global.clearInterval.bind(global);
+const nativeClearImmediate = global.clearImmediate.bind(global);
+
+const onAsyncHookInit = (asyncId: number, type: string, triggerAsyncId: number): void => {
+  if (!session.active) return;
+  if (session.asyncResources.size >= DR_MAX_TRACKED_ASYNC_RESOURCES) {
+    recordDrRegistryOverflow("asyncResources");
+    return;
+  }
+  const seq = session.asyncResourceSeq;
+  session.asyncResourceSeq = seq + 1;
+  session.asyncResources.set(asyncId, {
+    resourceId: asyncId,
+    triggerAsyncId,
+    type,
+    seq,
+  });
+};
+
+const onAsyncHookDestroy = (asyncId: number): void => {
+  session.asyncResources.delete(asyncId);
+};
 
 const isMongoPersistentHandle = (handle: unknown): boolean => {
   if (!handle || typeof handle !== "object") return false;
@@ -154,27 +189,24 @@ const trackTimer = (timer: unknown, kind: DrTimerEntry["kind"]): void => {
     id: timer,
     kind,
     createdAt: Date.now(),
-    stack: captureDrStack(),
+    stack: isDrAsyncHookEnabled() ? undefined : captureDrStack(),
   });
 };
 
 const patchTimers = (): void => {
-  if (session.originalSetTimeout) return;
-
-  session.originalSetTimeout = global.setTimeout;
-  session.originalSetInterval = global.setInterval;
-  session.originalSetImmediate = global.setImmediate;
+  if (timersPatched) return;
+  timersPatched = true;
 
   global.setTimeout = ((handler: TimerHandler, timeout?: number, ...args: unknown[]) => {
     if (typeof handler !== "function") {
-      const timer = session.originalSetTimeout!(handler, timeout, ...args);
+      const timer = nativeSetTimeout(handler, timeout, ...args);
       trackTimer(timer, "timeout");
       return timer;
     }
 
     const fn = handler as (...handlerArgs: unknown[]) => void;
     let timer: ReturnType<typeof setTimeout>;
-    timer = session.originalSetTimeout!((...handlerArgs: unknown[]) => {
+    timer = nativeSetTimeout((...handlerArgs: unknown[]) => {
       try {
         fn(...handlerArgs);
       } finally {
@@ -186,7 +218,7 @@ const patchTimers = (): void => {
   }) as typeof setTimeout;
 
   global.setInterval = ((handler: TimerHandler, timeout?: number, ...args: unknown[]) => {
-    const timer = session.originalSetInterval!(handler, timeout, ...args);
+    const timer = nativeSetInterval(handler, timeout, ...args);
     trackTimer(timer, "interval");
     return timer;
   }) as typeof setInterval;
@@ -199,73 +231,69 @@ const patchTimers = (): void => {
         session.timers.delete(immediate);
       }
     };
-    const immediate = session.originalSetImmediate!(wrapped, ...args);
+    const immediate = nativeSetImmediate(wrapped, ...args);
     trackTimer(immediate, "immediate");
     return immediate;
   }) as typeof setImmediate;
 
-  const originalClearTimeout = global.clearTimeout;
-  const originalClearInterval = global.clearInterval;
-  const originalClearImmediate = global.clearImmediate;
-
   global.clearTimeout = ((timer: ReturnType<typeof setTimeout>) => {
     session.timers.delete(timer);
-    originalClearTimeout(timer);
+    nativeClearTimeout(timer);
   }) as typeof clearTimeout;
 
   global.clearInterval = ((timer: ReturnType<typeof setInterval>) => {
     session.timers.delete(timer);
-    originalClearInterval(timer);
+    nativeClearInterval(timer);
   }) as typeof clearInterval;
 
   global.clearImmediate = ((immediate: ReturnType<typeof setImmediate>) => {
     session.timers.delete(immediate);
-    originalClearImmediate(immediate);
+    nativeClearImmediate(immediate);
   }) as typeof clearImmediate;
 };
 
 const unpatchTimers = (): void => {
-  if (session.originalSetTimeout) global.setTimeout = session.originalSetTimeout;
-  if (session.originalSetInterval) global.setInterval = session.originalSetInterval;
-  if (session.originalSetImmediate) global.setImmediate = session.originalSetImmediate;
-  session.originalSetTimeout = undefined;
-  session.originalSetInterval = undefined;
-  session.originalSetImmediate = undefined;
+  if (!timersPatched) return;
+  global.setTimeout = nativeSetTimeout as typeof setTimeout;
+  global.setInterval = nativeSetInterval as typeof setInterval;
+  global.setImmediate = nativeSetImmediate as typeof setImmediate;
+  global.clearTimeout = nativeClearTimeout as typeof clearTimeout;
+  global.clearInterval = nativeClearInterval as typeof clearInterval;
+  global.clearImmediate = nativeClearImmediate as typeof clearImmediate;
+  timersPatched = false;
 };
 
 const startAsyncHook = (): void => {
   if (session.asyncHook) return;
   const hook = createHook({
     init(asyncId, type, triggerAsyncId) {
-      if (!session.active) return;
-      if (session.asyncResources.size >= DR_MAX_TRACKED_ASYNC_RESOURCES) {
-        logDrRegistryLimit("asyncResources", DR_MAX_TRACKED_ASYNC_RESOURCES);
-        return;
-      }
-      session.asyncResources.set(asyncId, {
-        resourceId: asyncId,
-        triggerAsyncId,
-        type,
-        createdAt: Date.now(),
-      });
+      onAsyncHookInit(asyncId, type, triggerAsyncId);
     },
     destroy(asyncId) {
-      session.asyncResources.delete(asyncId);
+      onAsyncHookDestroy(asyncId);
     },
   });
   hook.enable();
   session.asyncHook = hook;
+  setDrAsyncHookEnabled(true);
 };
 
 const stopAsyncHook = (): void => {
-  if (!session.asyncHook) return;
-  session.asyncHook.disable();
-  session.asyncHook = undefined;
+  if (!session.asyncHook && !isDrAsyncHookEnabled()) return;
+  if (session.asyncHook) {
+    session.asyncHook.disable();
+    session.asyncHook = undefined;
+  }
+  setDrAsyncHookEnabled(false);
+  emitDeferredRegistryOverflowWarning();
 };
 
 export const isDrLeakDetectionActive = (): boolean => session.active;
 
+export const isDrLeakHookEnabled = (): boolean => isDrAsyncHookEnabled();
+
 export const initDrLeakDetection = (): void => {
+  resetDrDiagGuard();
   session = createEmptyLeakSession();
   session.active = true;
   session.baselineHandleCount = getActiveHandles().length;
@@ -283,6 +311,7 @@ export const stopDrLeakDetection = (): void => {
 export const resetDrLeakDetection = (): void => {
   stopDrLeakDetection();
   session = createEmptyLeakSession();
+  resetDrDiagGuard();
 };
 
 export const registerDrHandleObjectKey = (handle: object, objectKey: string): void => {
@@ -480,11 +509,12 @@ export const verifyDrR2Upload = (): DrR2UploadDiagnostics | null => {
 const logOpenTimersDetail = (openTimers: DrTimerEntry[]): void => {
   if (openTimers.length === 0) return;
   console.warn("[DR] OPEN_TIMERS", { count: openTimers.length });
+  const stacksEnabled = shouldCaptureDrStacks();
   for (const entry of openTimers.slice(0, DR_MAX_HANDLE_DETAIL_LOGS)) {
     console.warn("[DR] OPEN_TIMER", {
       kind: entry.kind,
-      ageMs: Date.now() - entry.createdAt,
-      stack: entry.stack,
+      ageMs: entry.createdAt > 0 ? Date.now() - entry.createdAt : undefined,
+      stack: stacksEnabled ? entry.stack ?? captureDrStack() : undefined,
     });
   }
 };
@@ -497,12 +527,14 @@ const logPendingAsyncDetail = (pendingAsync: DrAsyncResourceEntry[]): void => {
       resourceId: entry.resourceId,
       triggerAsyncId: entry.triggerAsyncId,
       type: entry.type,
-      ageMs: Date.now() - entry.createdAt,
+      seq: entry.seq,
     });
   }
 };
 
 export const printDrLeakReport = async (): Promise<void> => {
+  stopAsyncHook();
+
   if (!session.active && session.baselineHandleCount === 0 && session.asyncResources.size === 0) {
     return;
   }
@@ -556,4 +588,9 @@ export const printDrLeakReport = async (): Promise<void> => {
 export const runInDrAsyncScope = <T>(name: string, fn: () => T): T => {
   const resource = new AsyncResource(`DR:${name}`);
   return resource.runInAsyncScope(fn);
+};
+
+export const __drLeakHookTestInternals = {
+  onAsyncHookInit,
+  onAsyncHookDestroy,
 };

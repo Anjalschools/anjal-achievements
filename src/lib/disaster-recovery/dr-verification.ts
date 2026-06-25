@@ -4,6 +4,7 @@ import {
   DR_MAX_HANDLE_DETAIL_LOGS,
   DR_MAX_TRACKED_PROMISES,
   DR_MAX_TRACKED_STREAMS,
+  logDrRegistryLimit,
   truncateDrErrorStack,
 } from "@/lib/disaster-recovery/dr-diag-policy";
 import { readProcessMemorySnapshot } from "@/lib/disaster-recovery/dr-memory-metrics";
@@ -146,7 +147,7 @@ export const logDrException = (phase: string, error: unknown): void => {
 export const trackDrPromise = <T>(name: string, promise: Promise<T>): Promise<T> => {
   if (!session.active) return promise;
   if (session.promises.size >= DR_MAX_TRACKED_PROMISES) {
-    console.warn("[DR] REGISTRY_LIMIT", { registry: "promises", max: DR_MAX_TRACKED_PROMISES });
+    logDrRegistryLimit("promises", DR_MAX_TRACKED_PROMISES);
     return promise;
   }
 
@@ -184,7 +185,7 @@ export const registerDrTrackedStream = (
 ): string => {
   if (!session.active) return "";
   if (session.streams.size >= DR_MAX_TRACKED_STREAMS) {
-    console.warn("[DR] REGISTRY_LIMIT", { registry: "streams", max: DR_MAX_TRACKED_STREAMS });
+    logDrRegistryLimit("streams", DR_MAX_TRACKED_STREAMS);
     return "";
   }
 

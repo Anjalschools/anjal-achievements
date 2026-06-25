@@ -19,6 +19,4 @@ export const truncateDrErrorStack = (error: unknown): string | undefined => {
   return error.stack.split("\n").slice(0, 6).join("\n");
 };
 
-export const logDrRegistryLimit = (registry: string, max: number): void => {
-  console.warn("[DR] REGISTRY_LIMIT", { registry, max });
-};
+export { logDrRegistryLimit } from "@/lib/disaster-recovery/dr-diag-guard";
