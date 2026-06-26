@@ -63,7 +63,10 @@ export const createZipArchiveWriter = async (output: PassThrough): Promise<ZipAr
   let appendCount = 0;
 
   archive.on("error", (error) => {
-    output.destroy(error);
+    logDrObjectDiag("Archive error", {
+      pointer: archive.pointer(),
+      message: error instanceof Error ? error.message : String(error),
+    });
   });
 
   archive.pipe(output);
@@ -119,8 +122,36 @@ export const createZipArchiveWriter = async (output: PassThrough): Promise<ZipAr
     finalize: async () => {
       console.log("[DR] BEFORE archive.finalize (writer)");
       logDrObjectDiag("Finalize started", { pointer: archive.pointer() });
+
+      let moduleSettled = false;
+      const moduleFinalize = archive.finalize().then(() => {
+        moduleSettled = true;
+      });
+
+      const outputDestroyedGuard = new Promise<void>((_, reject) => {
+        const cleanup = (): void => {
+          output.off("close", onClose);
+          output.off("error", onError);
+        };
+        const onClose = (): void => {
+          if (output.destroyed && !moduleSettled) {
+            cleanup();
+            reject(new Error("ARCHIVE_OUTPUT_DESTROYED_DURING_FINALIZE"));
+          }
+        };
+        const onError = (err: Error): void => {
+          if (!moduleSettled) {
+            cleanup();
+            reject(err);
+          }
+        };
+        output.on("close", onClose);
+        output.on("error", onError);
+        void moduleFinalize.finally(cleanup);
+      });
+
       await withDrTimeout(
-        archive.finalize(),
+        Promise.race([moduleFinalize, outputDestroyedGuard]),
         DR_ARCHIVE_FINALIZE_TIMEOUT_MS,
         "archiveFinalize"
       );

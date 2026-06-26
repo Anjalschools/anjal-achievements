@@ -96,11 +96,9 @@ export const buildAndStoreStreamingDisasterRecoveryZip = async (input: {
   console.log("[DR] BEFORE STREAMING ZIP");
   logDrMemory("memory:before-export");
 
-  const zipOutput = new PassThrough();
   const uploadBody = new PassThrough();
-  zipOutput.pipe(uploadBody);
 
-  monitorDrStream(zipOutput, { objectKey: input.fileName, stage: "zip-upload" });
+  monitorDrStream(uploadBody, { objectKey: input.fileName, stage: "zip-upload" });
   let uploadCompletedFlag = false;
   registerDrR2UploadDiagnostics(() => ({
     bodyStreamDestroyed: uploadBody.destroyed,
@@ -149,7 +147,7 @@ export const buildAndStoreStreamingDisasterRecoveryZip = async (input: {
   let writer: Awaited<ReturnType<typeof createZipArchiveWriter>>;
   try {
     console.log("[DR] BEFORE createZipArchiveWriter");
-    writer = await createZipArchiveWriter(zipOutput);
+    writer = await createZipArchiveWriter(uploadBody);
     if (writer.getArchiveDiagnostics) {
       registerDrArchiverDiagnostics(writer.getArchiveDiagnostics);
     }
@@ -187,7 +185,6 @@ export const buildAndStoreStreamingDisasterRecoveryZip = async (input: {
         message: stallError.message,
       });
       destroyDrStream(activeObjectStream ?? undefined, stallError);
-      zipOutput.destroy(stallError);
       uploadBody.destroy(stallError);
     },
   });
@@ -376,9 +373,6 @@ export const buildAndStoreStreamingDisasterRecoveryZip = async (input: {
     logDrMilestone("ZIP_FINALIZE_STARTED", { pointer: writer.pointer() });
     console.info("[DR] PRE_FINALIZE_STATE", {
       archivePointer: writer.pointer(),
-      zipDestroyed: zipOutput.destroyed,
-      zipReadableEnded: zipOutput.readableEnded,
-      zipWritableFinished: zipOutput.writableFinished,
       uploadDestroyed: uploadBody.destroyed,
       uploadReadableEnded: uploadBody.readableEnded,
       uploadWritableFinished: uploadBody.writableFinished,
@@ -388,9 +382,6 @@ export const buildAndStoreStreamingDisasterRecoveryZip = async (input: {
     const finalizeElapsedMs = Date.now() - finalizeStartedAt;
     console.info("[DR] POST_FINALIZE_STATE", {
       archivePointer: writer.pointer(),
-      zipDestroyed: zipOutput.destroyed,
-      zipReadableEnded: zipOutput.readableEnded,
-      zipWritableFinished: zipOutput.writableFinished,
       uploadDestroyed: uploadBody.destroyed,
       uploadReadableEnded: uploadBody.readableEnded,
       uploadWritableFinished: uploadBody.writableFinished,
@@ -402,7 +393,7 @@ export const buildAndStoreStreamingDisasterRecoveryZip = async (input: {
     if (writer.getArchiveState) {
       await verifyArchiveLifecycle({
         getArchiveState: writer.getArchiveState,
-        output: zipOutput,
+        output: uploadBody,
       });
     }
     if (writer.getArchiveDiagnostics) {
@@ -411,9 +402,6 @@ export const buildAndStoreStreamingDisasterRecoveryZip = async (input: {
     updateDrVerificationReport({ zipFinalized: true });
     logDrMilestone("ZIP_FINALIZE_COMPLETED", { pointer: writer.pointer() });
     console.log("[DR] AFTER archive.finalize", { pointer: writer.pointer() });
-    console.info("[DR] WAITING_FOR_ZIP_OUTPUT");
-    await finished(zipOutput);
-    console.info("[DR] ZIP_OUTPUT_FINISHED");
     console.info("[DR] WAITING_FOR_UPLOAD_STREAM");
     await finished(uploadBody);
     console.info("[DR] UPLOAD_STREAM_FINISHED");
@@ -422,7 +410,6 @@ export const buildAndStoreStreamingDisasterRecoveryZip = async (input: {
     logStreamingError("archive.finalize", error);
     logStorageUploadFailed(effectiveProvider, error);
     const destroyError = error instanceof Error ? error : new Error(String(error));
-    zipOutput.destroy(destroyError);
     uploadBody.destroy(destroyError);
     throw error;
   }
