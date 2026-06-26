@@ -346,21 +346,45 @@ export const buildAndStoreStreamingDisasterRecoveryZip = async (input: {
 
   try {
     console.log("[DR] BEFORE append manifests");
-    await writer.append(Buffer.from(serializeManifest(manifestWithChecksums), "utf8"), {
+    writer.logPipelineDiagnostics("ZIP_PRE_MANIFEST", {
+      exportedObjects: manifestEntries.length,
+      failedObjects: failures.length,
+      bytesExported,
+    });
+
+    const manifestBuffer = Buffer.from(serializeManifest(manifestWithChecksums), "utf8");
+    console.info("[DR] MANIFEST_APPEND_START", {
+      name: "manifest.json",
+      sizeBytes: manifestBuffer.byteLength,
+      pointer: writer.pointer(),
+    });
+    await writer.append(manifestBuffer, {
       name: "manifest.json",
     });
-    await writer.append(
-      Buffer.from(
-        serializeStorageManifest({
-          version: STORAGE_MANIFEST_VERSION,
-          createdAt: new Date().toISOString(),
-          ...summary,
-          entries: mergedEntries,
-        }),
-        "utf8"
-      ),
-      { name: "storage-manifest.json" }
+    console.info("[DR] MANIFEST_APPEND_COMPLETE", {
+      name: "manifest.json",
+      pointer: writer.pointer(),
+    });
+
+    const storageManifestBuffer = Buffer.from(
+      serializeStorageManifest({
+        version: STORAGE_MANIFEST_VERSION,
+        createdAt: new Date().toISOString(),
+        ...summary,
+        entries: mergedEntries,
+      }),
+      "utf8"
     );
+    console.info("[DR] MANIFEST_APPEND_START", {
+      name: "storage-manifest.json",
+      sizeBytes: storageManifestBuffer.byteLength,
+      pointer: writer.pointer(),
+    });
+    await writer.append(storageManifestBuffer, { name: "storage-manifest.json" });
+    console.info("[DR] MANIFEST_APPEND_COMPLETE", {
+      name: "storage-manifest.json",
+      pointer: writer.pointer(),
+    });
     console.log("[DR] AFTER append manifests");
   } catch (error) {
     logStreamingError("append-manifests", error);
@@ -371,6 +395,7 @@ export const buildAndStoreStreamingDisasterRecoveryZip = async (input: {
   try {
     console.log("[DR] BEFORE archive.finalize");
     logDrMilestone("ZIP_FINALIZE_STARTED", { pointer: writer.pointer() });
+    writer.logPipelineDiagnostics("ZIP_PRE_FINALIZE");
     console.info("[DR] PRE_FINALIZE_STATE", {
       archivePointer: writer.pointer(),
       uploadDestroyed: uploadBody.destroyed,

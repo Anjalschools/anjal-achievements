@@ -1,4 +1,5 @@
 import { PassThrough, Readable } from "stream";
+import { EventEmitter } from "events";
 import { finished } from "stream/promises";
 import unzipper from "unzipper";
 import { hashContent, serializeManifest, type BackupManifest } from "@/lib/backup/backup-manifest";
@@ -38,10 +39,104 @@ export type BackupPackageExtraFile = {
   content: Buffer;
 };
 
+export type ZipPipelineDiagnostics = {
+  phase: string;
+  at: string;
+  archivePointer: number;
+  queueLength: number;
+  queueIdle: boolean;
+  entriesQueued: number;
+  entriesProcessed: number;
+  pending: number;
+  archiveFinalized: boolean;
+  archiveFinalizing: boolean;
+  archiveAborted: boolean;
+  outputDestroyed: boolean;
+  outputWritableNeedDrain: boolean;
+  outputWritableLength: number;
+  outputReadableLength: number;
+  outputWritableEnded: boolean;
+  outputWritableFinished: boolean;
+  outputReadableEnded: boolean;
+  outputClosed: boolean;
+  archivePaused: boolean;
+};
+
+type ArchiverWithInternals = EventEmitter & {
+  pointer: () => number;
+  append: (source: Buffer | Readable, options: { name: string }) => void;
+  pipe: (destination: PassThrough) => void;
+  finalize: () => Promise<void>;
+  resume?: () => void;
+  isPaused?: () => boolean;
+  _queue?: {
+    idle: () => boolean;
+    length: () => number;
+    drain: (callback: () => void) => void;
+  };
+  _entriesCount?: number;
+  _entriesProcessedCount?: number;
+  _pending?: number;
+  _state?: {
+    finalize?: boolean;
+    finalizing?: boolean;
+    finalized?: boolean;
+    aborted?: boolean;
+  };
+};
+
+const readZipPipelineDiagnostics = (
+  archive: ArchiverWithInternals,
+  output: PassThrough,
+  phase: string
+): ZipPipelineDiagnostics => ({
+  phase,
+  at: new Date().toISOString(),
+  archivePointer: archive.pointer(),
+  queueLength: archive._queue?.length() ?? -1,
+  queueIdle: archive._queue?.idle() ?? false,
+  entriesQueued: archive._entriesCount ?? -1,
+  entriesProcessed: archive._entriesProcessedCount ?? -1,
+  pending: archive._pending ?? -1,
+  archiveFinalized: Boolean(archive._state?.finalized),
+  archiveFinalizing: Boolean(archive._state?.finalizing),
+  archiveAborted: Boolean(archive._state?.aborted),
+  outputDestroyed: output.destroyed,
+  outputWritableNeedDrain: output.writableNeedDrain,
+  outputWritableLength: output.writableLength,
+  outputReadableLength: output.readableLength,
+  outputWritableEnded: output.writableEnded,
+  outputWritableFinished: output.writableFinished,
+  outputReadableEnded: output.readableEnded,
+  outputClosed: Boolean((output as { closed?: boolean }).closed),
+  archivePaused: Boolean(archive.isPaused?.()),
+});
+
+const logZipPipelineDiagnostics = (
+  archive: ArchiverWithInternals,
+  output: PassThrough,
+  phase: string,
+  extra: Record<string, unknown> = {}
+): void => {
+  console.info("[DR] ZIP_PIPELINE_STATE", {
+    ...readZipPipelineDiagnostics(archive, output, phase),
+    ...extra,
+  });
+};
+
+const assertZipAppendSource = (source: Buffer | Readable): void => {
+  if (Buffer.isBuffer(source)) return;
+  if (isNodeReadableStream(source)) return;
+  throw new Error(
+    `ZIP_APPEND_INVALID_SOURCE:expected Buffer or Node.js Readable,got ${source === null ? "null" : typeof source}`
+  );
+};
+
 export type ZipArchiveWriter = {
   append: (source: Buffer | Readable, options: { name: string }) => Promise<void>;
   finalize: () => Promise<void>;
   pointer: () => number;
+  logPipelineDiagnostics: (phase: string, extra?: Record<string, unknown>) => void;
   getArchiveState?: () => { pointer: number; aborted?: boolean };
   getArchiveDiagnostics?: () => {
     archivePointer: number;
@@ -54,84 +149,120 @@ export type ZipArchiveWriter = {
     outputWritableFinished?: boolean;
     outputClosed?: boolean;
     outputListeners: Record<string, number>;
+    queueLength?: number;
+    queueIdle?: boolean;
+    entriesQueued?: number;
+    entriesProcessed?: number;
+    outputWritableNeedDrain?: boolean;
+    outputWritableLength?: number;
   };
 };
 
 export const createZipArchiveWriter = async (output: PassThrough): Promise<ZipArchiveWriter> => {
   const ZipArchive = await loadZipArchive();
-  const archive = new ZipArchive({ zlib: { level: 6 } });
+  const archive = new ZipArchive({ zlib: { level: 6 } }) as unknown as ArchiverWithInternals;
   let appendCount = 0;
 
-  archive.on("error", (error) => {
+  const listenerNames = ["error", "end", "finish", "close", "data", "drain", "entry", "progress"];
+  const countListeners = (emitter: NodeJS.EventEmitter): Record<string, number> =>
+    Object.fromEntries(listenerNames.map((name) => [name, emitter.listenerCount(name)]));
+
+  archive.on("error", (error: unknown) => {
     logDrObjectDiag("Archive error", {
       pointer: archive.pointer(),
       message: error instanceof Error ? error.message : String(error),
     });
   });
 
+  archive.on("entry", (data: { name?: string }) => {
+    logDrObjectDiag("Archive entry", {
+      pointer: archive.pointer(),
+      name: data.name,
+      entriesProcessed: archive._entriesProcessedCount,
+      entriesQueued: archive._entriesCount,
+    });
+  });
+
+  archive.on("progress", (progress: {
+    entries?: { total?: number; processed?: number };
+  }) => {
+    logDrObjectDiag("Archive progress", {
+      pointer: archive.pointer(),
+      entriesTotal: progress.entries?.total,
+      entriesProcessed: progress.entries?.processed,
+    });
+  });
+
+  archive.on("finish", () => {
+    logDrObjectDiag("Archive finish", { pointer: archive.pointer() });
+  });
+
+  archive.on("end", () => {
+    logDrObjectDiag("Archive end", { pointer: archive.pointer() });
+  });
+
   archive.pipe(output);
 
-  const listenerNames = ["error", "end", "finish", "close", "data", "drain"];
-  const countListeners = (emitter: NodeJS.EventEmitter): Record<string, number> =>
-    Object.fromEntries(listenerNames.map((name) => [name, emitter.listenerCount(name)]));
+  output.on("pipe", (source: Readable) => {
+    logDrObjectDiag("Output pipe", { sourceType: source.constructor.name });
+  });
+
+  output.on("unpipe", (source: Readable) => {
+    logDrObjectDiag("Output unpipe", { sourceType: source.constructor.name });
+  });
+
+  output.on("finish", () => {
+    logDrObjectDiag("Output finish", {
+      writableFinished: output.writableFinished,
+      readableEnded: output.readableEnded,
+    });
+  });
+
+  output.on("close", () => {
+    logDrObjectDiag("Output close", { destroyed: output.destroyed });
+  });
+
+  output.on("error", (error) => {
+    logDrObjectDiag("Output error", {
+      message: error instanceof Error ? error.message : String(error),
+    });
+  });
+
+  logZipPipelineDiagnostics(archive, output, "archive-created");
 
   return {
+    logPipelineDiagnostics: (phase, extra = {}) => logZipPipelineDiagnostics(archive, output, phase, extra),
     append: async (source, options) => {
-      appendCount += 1;
-      const shouldLog = appendCount % 100 === 0 || appendCount === 1;
-      if (shouldLog) {
-        console.info("[DR] ZIP_APPEND_START", {
-          count: appendCount,
-          pointer: archive.pointer(),
-          name: options.name,
-        });
-      }
+      assertZipAppendSource(source);
 
+      appendCount += 1;
       const entryName = options.name;
+      const shouldLog = appendCount % 100 === 0 || appendCount === 1;
       const appendContext = {
         provider: "zip" as const,
         archivePath: entryName,
         storageKey: entryName,
-        streamName: "zip-append-entry",
+        streamName: "zip-append-drain",
       };
 
-      const entryAppended = new Promise<void>((resolve, reject) => {
-        const onEntry = (data: { name?: string }): void => {
-          if (data.name !== entryName) return;
-          cleanup();
-          resolve();
-        };
-        const onError = (error: Error): void => {
-          cleanup();
-          reject(error);
-        };
-        const cleanup = (): void => {
-          archive.off("entry", onEntry);
-          archive.off("error", onError);
-        };
-
-        archive.on("entry", onEntry);
-        archive.on("error", onError);
-        archive.append(source, options);
+      logZipPipelineDiagnostics(archive, output, "append-before", {
+        appendCount,
+        entryName,
+        sourceType: Buffer.isBuffer(source) ? "buffer" : "stream",
+        sourceBytes: Buffer.isBuffer(source) ? source.byteLength : undefined,
       });
 
-      try {
-        await withDrTimeout(
-          entryAppended,
-          DR_STREAM_DRAIN_TIMEOUT_MS,
-          "zipAppendEntry",
-          { objectKey: entryName }
-        );
-      } catch (error) {
-        logDrArchiveAppendFailed(appendContext, error);
-        throw error;
+      if (shouldLog) {
+        console.info("[DR] ZIP_APPEND_START", {
+          count: appendCount,
+          pointer: archive.pointer(),
+          name: entryName,
+        });
       }
 
-      if (
-        isNodeReadableStream(source) &&
-        !source.destroyed &&
-        !source.readableEnded
-      ) {
+      archive.append(source, options);
+
+      if (isNodeReadableStream(source)) {
         try {
           await finishedWithTimeout(
             source as Readable,
@@ -140,26 +271,26 @@ export const createZipArchiveWriter = async (output: PassThrough): Promise<ZipAr
             { objectKey: entryName }
           );
         } catch (error) {
-          logDrArchiveAppendFailed(
-            {
-              ...appendContext,
-              streamName: "zip-append-drain",
-            },
-            error
-          );
+          logDrArchiveAppendFailed(appendContext, error);
           throw error;
         }
       }
+
+      logZipPipelineDiagnostics(archive, output, "append-complete", {
+        appendCount,
+        entryName,
+      });
 
       if (shouldLog) {
         console.info("[DR] ZIP_APPEND_END", {
           count: appendCount,
           pointer: archive.pointer(),
-          name: options.name,
+          name: entryName,
         });
       }
     },
     finalize: async () => {
+      logZipPipelineDiagnostics(archive, output, "finalize-before");
       console.log("[DR] BEFORE archive.finalize (writer)");
       logDrObjectDiag("Finalize started", { pointer: archive.pointer() });
 
@@ -195,25 +326,32 @@ export const createZipArchiveWriter = async (output: PassThrough): Promise<ZipAr
         DR_ARCHIVE_FINALIZE_TIMEOUT_MS,
         "archiveFinalize"
       );
+      logZipPipelineDiagnostics(archive, output, "finalize-after");
       logDrObjectDiag("Finalize finished", { pointer: archive.pointer() });
       console.log("[DR] AFTER archive.finalize (writer)", { pointer: archive.pointer() });
     },
     pointer: () => archive.pointer(),
     getArchiveState: () => ({
       pointer: archive.pointer(),
-      aborted: Boolean((archive as { _aborting?: boolean })._aborting),
+      aborted: Boolean(archive._state?.aborted),
     }),
     getArchiveDiagnostics: () => ({
       archivePointer: archive.pointer(),
-      archiveAborted: Boolean((archive as { _aborting?: boolean })._aborting),
+      archiveAborted: Boolean(archive._state?.aborted),
       archiveDestroyed: Boolean((archive as { destroyed?: boolean }).destroyed),
       archiveReadableEnded: Boolean((archive as { readableEnded?: boolean }).readableEnded),
-      archiveListeners: countListeners(archive),
+      archiveListeners: countListeners(archive as unknown as NodeJS.EventEmitter),
       outputDestroyed: output.destroyed,
       outputReadableEnded: output.readableEnded,
       outputWritableFinished: output.writableFinished,
       outputClosed: Boolean((output as { closed?: boolean }).closed),
       outputListeners: countListeners(output),
+      queueLength: archive._queue?.length(),
+      queueIdle: archive._queue?.idle(),
+      entriesQueued: archive._entriesCount,
+      entriesProcessed: archive._entriesProcessedCount,
+      outputWritableNeedDrain: output.writableNeedDrain,
+      outputWritableLength: output.writableLength,
     }),
   };
 };
