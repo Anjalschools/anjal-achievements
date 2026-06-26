@@ -165,7 +165,6 @@ export const createHashingObjectStream = (
       error
     );
     destroyDrStream(monitoredSource, error instanceof Error ? error : undefined);
-    destroyDrStream(transform, error instanceof Error ? error : undefined);
     rejectWith(error instanceof Error ? error : new Error(String(error)));
   });
 

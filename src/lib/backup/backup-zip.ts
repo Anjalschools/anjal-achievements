@@ -87,22 +87,62 @@ export const createZipArchiveWriter = async (output: PassThrough): Promise<ZipAr
         });
       }
 
-      archive.append(source, options);
+      const entryName = options.name;
+      const appendContext = {
+        provider: "zip" as const,
+        archivePath: entryName,
+        storageKey: entryName,
+        streamName: "zip-append-entry",
+      };
 
-      if (isNodeReadableStream(source)) {
+      const entryAppended = new Promise<void>((resolve, reject) => {
+        const onEntry = (data: { name?: string }): void => {
+          if (data.name !== entryName) return;
+          cleanup();
+          resolve();
+        };
+        const onError = (error: Error): void => {
+          cleanup();
+          reject(error);
+        };
+        const cleanup = (): void => {
+          archive.off("entry", onEntry);
+          archive.off("error", onError);
+        };
+
+        archive.on("entry", onEntry);
+        archive.on("error", onError);
+        archive.append(source, options);
+      });
+
+      try {
+        await withDrTimeout(
+          entryAppended,
+          DR_STREAM_DRAIN_TIMEOUT_MS,
+          "zipAppendEntry",
+          { objectKey: entryName }
+        );
+      } catch (error) {
+        logDrArchiveAppendFailed(appendContext, error);
+        throw error;
+      }
+
+      if (
+        isNodeReadableStream(source) &&
+        !source.destroyed &&
+        !source.readableEnded
+      ) {
         try {
           await finishedWithTimeout(
             source as Readable,
             DR_STREAM_DRAIN_TIMEOUT_MS,
             "zipAppendDrain",
-            { objectKey: options.name }
+            { objectKey: entryName }
           );
         } catch (error) {
           logDrArchiveAppendFailed(
             {
-              provider: "zip",
-              archivePath: options.name,
-              storageKey: options.name,
+              ...appendContext,
               streamName: "zip-append-drain",
             },
             error
