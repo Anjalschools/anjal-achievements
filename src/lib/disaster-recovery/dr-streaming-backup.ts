@@ -177,15 +177,10 @@ export const buildAndStoreStreamingDisasterRecoveryZip = async (input: {
 
   const watchdog = new DrExportWatchdog({
     onStall: (snapshot) => {
-      const stallError = new Error(
-        `DR_WATCHDOG_STALL:last=${snapshot.lastArchivePath ?? "unknown"}:idle=${Date.now() - snapshot.lastProgressAt}ms`
-      );
-      logDrObjectDiag("Watchdog abort", {
+      logDrObjectDiag("Watchdog stall detected", {
         ...snapshot,
-        message: stallError.message,
+        idleMs: Date.now() - snapshot.lastProgressAt,
       });
-      destroyDrStream(activeObjectStream ?? undefined, stallError);
-      uploadBody.destroy(stallError);
     },
   });
   watchdog.start();
@@ -247,7 +242,17 @@ export const buildAndStoreStreamingDisasterRecoveryZip = async (input: {
         liveObjectStreams += 1;
         maxLiveObjectStreams = Math.max(maxLiveObjectStreams, liveObjectStreams);
         try {
+          console.info("[DR] OBJECT_APPEND_START", {
+            objectKey: archivePath,
+            processedObjectCount,
+            archivePointer: writer.pointer(),
+          });
           await writer.append(stream, { name: archivePath });
+          console.info("[DR] OBJECT_APPEND_COMPLETE", {
+            objectKey: archivePath,
+            processedObjectCount,
+            archivePointer: writer.pointer(),
+          });
         } catch (error) {
           logDrArchiveAppendFailed(
             {

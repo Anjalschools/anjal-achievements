@@ -1,6 +1,6 @@
 import { createHash } from "crypto";
 import { finished } from "stream/promises";
-import { Readable, Transform } from "stream";
+import { Readable, Transform, PassThrough } from "stream";
 import { pipeline } from "stream/promises";
 import {
   DR_STREAM_COMPLETED_TIMEOUT_MS,
@@ -31,17 +31,36 @@ export const finishedWithTimeout = async (
 
 export const pipelineWithTimeout = async (
   source: Readable,
-  destination: NodeJS.WritableStream,
-  timeoutMs: number,
-  operation: string,
+  transformOrDestination: NodeJS.WritableStream | Transform,
+  timeoutMsOrDestination: number | NodeJS.WritableStream,
+  operationOrTimeoutMs?: string | number,
+  metaOrOperation?: { objectKey?: string; provider?: string; objectId?: string; streamName?: string } | string,
   meta?: { objectKey?: string; provider?: string; objectId?: string; streamName?: string }
 ): Promise<void> => {
+  const hasTransform =
+    typeof (transformOrDestination as Transform)._transform === "function" &&
+    timeoutMsOrDestination !== undefined &&
+    typeof timeoutMsOrDestination !== "number";
+
+  const destination = hasTransform
+    ? (timeoutMsOrDestination as NodeJS.WritableStream)
+    : transformOrDestination;
+  const timeoutMs = hasTransform
+    ? (operationOrTimeoutMs as number)
+    : (timeoutMsOrDestination as number);
+  const operation = hasTransform
+    ? (metaOrOperation as string)
+    : (operationOrTimeoutMs as string);
+  const pipelineMeta = hasTransform
+    ? meta
+    : (metaOrOperation as { objectKey?: string; provider?: string; objectId?: string; streamName?: string });
+
   const pipelineContext = {
-    provider: meta?.provider ?? "unknown",
-    archivePath: meta?.objectKey ?? "unknown",
-    objectId: meta?.objectId,
-    streamName: meta?.streamName ?? operation,
-    storageKey: meta?.objectKey,
+    provider: pipelineMeta?.provider ?? "unknown",
+    archivePath: pipelineMeta?.objectKey ?? "unknown",
+    objectId: pipelineMeta?.objectId,
+    streamName: pipelineMeta?.streamName ?? operation,
+    storageKey: pipelineMeta?.objectKey,
   };
 
   source.on("error", (error) => {
@@ -50,9 +69,24 @@ export const pipelineWithTimeout = async (
   destination.on("error", (error) => {
     logDrPipelineStreamError({ ...pipelineContext, streamName: `${operation}:destination` }, error);
   });
+  if (hasTransform) {
+    transformOrDestination.on("error", (error) => {
+      logDrPipelineStreamError({ ...pipelineContext, streamName: `${operation}:transform` }, error);
+    });
+  }
 
   try {
-    await withDrTimeout(pipeline(source, destination), timeoutMs, operation, meta);
+    if (hasTransform) {
+      await withDrTimeout(
+        pipeline(source, transformOrDestination as Transform, destination, { end: true }),
+        timeoutMs,
+        operation,
+        pipelineMeta
+      );
+      return;
+    }
+
+    await withDrTimeout(pipeline(source, destination), timeoutMs, operation, pipelineMeta);
   } catch (error) {
     logDrPipelineStreamError({ ...pipelineContext, streamName: operation }, error);
     throw error;
@@ -84,73 +118,29 @@ export const createHashingObjectStream = (
   const hash = createHash("sha256");
   let byteLength = 0;
 
-  let resolveCompleted!: (entry: StorageManifestEntry) => void;
-  let rejectCompleted!: (error: Error) => void;
-  const completed = new Promise<StorageManifestEntry>((resolve, reject) => {
-    resolveCompleted = resolve;
-    rejectCompleted = reject;
-  });
-
-  let settled = false;
-  const settleCompleted = (finalizedEntry: StorageManifestEntry): void => {
-    if (settled) return;
-    settled = true;
-    resolveCompleted(finalizedEntry);
-  };
-  const rejectWith = (error: Error): void => {
-    if (settled) return;
-    settled = true;
-    rejectCompleted(error);
-  };
-
-  const transform = new Transform({
+  const archiveStream = new PassThrough();
+  const hashTransform = new Transform({
     transform(chunk, _encoding, callback) {
       hash.update(chunk);
       byteLength += chunk.length;
       callback(null, chunk);
     },
-    flush(callback) {
-      try {
-        let errorMessage = entry.errorMessage;
-        if (entry.fileSize && entry.fileSize > 0 && byteLength !== entry.fileSize) {
-          errorMessage = `SIZE_MISMATCH:expected=${entry.fileSize},actual=${byteLength}`;
-        }
-        logDrObjectDiag("Download finished", {
-          objectKey,
-          byteLength,
-          elapsedMs: undefined,
-        });
-        settleCompleted({
-          ...entry,
-          fileSize: byteLength,
-          checksum: hash.digest("hex"),
-          status: "exported",
-          errorMessage,
-        });
-        callback();
-      } catch (error) {
-        callback(error as Error);
-      }
-    },
   });
 
-  monitorDrStream(transform, { objectKey, stage: "hashing-transform" });
-  attachDrObjectStreamErrorLogging(transform, {
+  monitorDrStream(archiveStream, { objectKey, stage: "hashing-transform" });
+  attachDrObjectStreamErrorLogging(archiveStream, {
     ...streamContext,
     streamName: "hashing-transform",
   });
-
-  transform.on("error", (error) => {
-    logDrPipelineStreamError(
-      { ...streamContext, streamName: "hashing-transform" },
-      error
-    );
-    rejectWith(error);
+  attachDrObjectStreamErrorLogging(hashTransform, {
+    ...streamContext,
+    streamName: "hashing-pipeline-transform",
   });
 
-  pipelineWithTimeout(
+  const completed = pipelineWithTimeout(
     monitoredSource,
-    transform,
+    hashTransform,
+    archiveStream,
     DR_STREAM_COMPLETED_TIMEOUT_MS,
     "hashingPipeline",
     {
@@ -159,14 +149,34 @@ export const createHashingObjectStream = (
       objectId: entry.id,
       streamName: "hashingPipeline",
     }
-  ).catch((error) => {
-    logDrPipelineStreamError(
-      { ...streamContext, streamName: "hashingPipeline" },
-      error
-    );
-    destroyDrStream(monitoredSource, error instanceof Error ? error : undefined);
-    rejectWith(error instanceof Error ? error : new Error(String(error)));
-  });
+  )
+    .then((): StorageManifestEntry => {
+      let errorMessage = entry.errorMessage;
+      if (entry.fileSize && entry.fileSize > 0 && byteLength !== entry.fileSize) {
+        errorMessage = `SIZE_MISMATCH:expected=${entry.fileSize},actual=${byteLength}`;
+      }
+      logDrObjectDiag("Download finished", {
+        objectKey,
+        byteLength,
+        elapsedMs: undefined,
+      });
+      return {
+        ...entry,
+        fileSize: byteLength,
+        checksum: hash.digest("hex"),
+        status: "exported",
+        errorMessage,
+      };
+    })
+    .catch((error) => {
+      logDrPipelineStreamError(
+        { ...streamContext, streamName: "hashingPipeline" },
+        error
+      );
+      destroyDrStream(monitoredSource, error instanceof Error ? error : undefined);
+      destroyDrStream(archiveStream, error instanceof Error ? error : undefined);
+      throw error instanceof Error ? error : new Error(String(error));
+    });
 
-  return { stream: transform, completed };
+  return { stream: archiveStream, completed };
 };

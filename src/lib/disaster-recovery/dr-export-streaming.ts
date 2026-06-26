@@ -216,7 +216,6 @@ export const runSequentialObjectStreamExport = async (input: {
         elapsedMs: Date.now() - objectStartedAt,
       });
     } finally {
-      destroyDrStream(activeStream);
       activeStream = null;
     }
 

@@ -10,8 +10,7 @@ import {
   withDrTimeout,
 } from "@/lib/disaster-recovery/dr-async-timeout";
 import { logDrObjectDiag } from "@/lib/disaster-recovery/dr-stream-lifecycle";
-import { logDrArchiveAppendFailed } from "@/lib/disaster-recovery/dr-object-stream-diagnostics";
-import { finishedWithTimeout, isNodeReadableStream } from "@/lib/disaster-recovery/dr-stream-utils";
+import { isNodeReadableStream } from "@/lib/disaster-recovery/dr-stream-utils";
 
 const loadZipArchive = async () => {
   const { ZipArchive } = await import(/* webpackIgnore: true */ "archiver");
@@ -132,6 +131,37 @@ const assertZipAppendSource = (source: Buffer | Readable): void => {
   );
 };
 
+type ZipAppendStreamTrace = {
+  appendId: number;
+  entryName: string;
+};
+
+const attachZipAppendSourceTraceListeners = (
+  source: Readable,
+  trace: ZipAppendStreamTrace
+): void => {
+  source.setMaxListeners(Math.max(source.getMaxListeners(), 20));
+
+  const logStreamEvent = (event: string): void => {
+    console.info("[DR] ZIP_SOURCE_STREAM_EVENT", {
+      event,
+      appendId: trace.appendId,
+      entryName: trace.entryName,
+      at: new Date().toISOString(),
+      destroyed: source.destroyed,
+      readableEnded: source.readableEnded,
+      closed: Boolean((source as { closed?: boolean }).closed),
+    });
+  };
+
+  source.on("close", () => logStreamEvent("close"));
+  source.on("end", () => logStreamEvent("end"));
+  source.on("finish", () => logStreamEvent("finish"));
+  source.on("error", () => logStreamEvent("error"));
+  source.on("destroy", () => logStreamEvent("destroy"));
+  source.on("aborted", () => logStreamEvent("aborted"));
+};
+
 export type ZipArchiveWriter = {
   append: (source: Buffer | Readable, options: { name: string }) => Promise<void>;
   finalize: () => Promise<void>;
@@ -162,6 +192,7 @@ export const createZipArchiveWriter = async (output: PassThrough): Promise<ZipAr
   const ZipArchive = await loadZipArchive();
   const archive = new ZipArchive({ zlib: { level: 6 } }) as unknown as ArchiverWithInternals;
   let appendCount = 0;
+  let appendId = 0;
 
   const listenerNames = ["error", "end", "finish", "close", "data", "drain", "entry", "progress"];
   const countListeners = (emitter: NodeJS.EventEmitter): Record<string, number> =>
@@ -236,58 +267,70 @@ export const createZipArchiveWriter = async (output: PassThrough): Promise<ZipAr
       assertZipAppendSource(source);
 
       appendCount += 1;
+      appendId += 1;
+      const currentAppendId = appendId;
       const entryName = options.name;
+      const isReadable = isNodeReadableStream(source);
       const shouldLog = appendCount % 100 === 0 || appendCount === 1;
-      const appendContext = {
-        provider: "zip" as const,
-        archivePath: entryName,
-        storageKey: entryName,
-        streamName: "zip-append-drain",
-      };
 
       logZipPipelineDiagnostics(archive, output, "append-before", {
         appendCount,
+        appendId: currentAppendId,
         entryName,
         sourceType: Buffer.isBuffer(source) ? "buffer" : "stream",
         sourceBytes: Buffer.isBuffer(source) ? source.byteLength : undefined,
       });
 
+      console.info("[DR] ZIP_APPEND_BEGIN", {
+        appendId: currentAppendId,
+        entryName,
+        objectKey: entryName,
+        sourceType: Buffer.isBuffer(source) ? "buffer" : "stream",
+        isReadable,
+        archivePointer: archive.pointer(),
+      });
+
       if (shouldLog) {
         console.info("[DR] ZIP_APPEND_START", {
           count: appendCount,
+          appendId: currentAppendId,
           pointer: archive.pointer(),
           name: entryName,
         });
       }
 
+      if (isReadable) {
+        attachZipAppendSourceTraceListeners(source as Readable, {
+          appendId: currentAppendId,
+          entryName,
+        });
+      }
+
       archive.append(source, options);
 
-      if (isNodeReadableStream(source)) {
-        try {
-          await finishedWithTimeout(
-            source as Readable,
-            DR_STREAM_DRAIN_TIMEOUT_MS,
-            "zipAppendDrain",
-            { objectKey: entryName }
-          );
-        } catch (error) {
-          logDrArchiveAppendFailed(appendContext, error);
-          throw error;
-        }
-      }
+      console.info("[DR] ZIP_APPEND_ENQUEUED", {
+        appendId: currentAppendId,
+      });
 
       logZipPipelineDiagnostics(archive, output, "append-complete", {
         appendCount,
+        appendId: currentAppendId,
         entryName,
       });
 
       if (shouldLog) {
         console.info("[DR] ZIP_APPEND_END", {
           count: appendCount,
+          appendId: currentAppendId,
           pointer: archive.pointer(),
           name: entryName,
         });
       }
+
+      console.info("[DR] ZIP_APPEND_RETURN", {
+        appendId: currentAppendId,
+        entryName,
+      });
     },
     finalize: async () => {
       logZipPipelineDiagnostics(archive, output, "finalize-before");
