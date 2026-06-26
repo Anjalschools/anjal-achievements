@@ -1,5 +1,6 @@
 import "server-only";
 import { PassThrough, type Readable } from "stream";
+import { finished } from "stream/promises";
 import { serializeManifest, type BackupManifest } from "@/lib/backup/backup-manifest";
 import type { BackupPackageEntry } from "@/lib/backup/backup-zip";
 import { createZipArchiveWriter } from "@/lib/backup/backup-zip";
@@ -373,7 +374,31 @@ export const buildAndStoreStreamingDisasterRecoveryZip = async (input: {
   try {
     console.log("[DR] BEFORE archive.finalize");
     logDrMilestone("ZIP_FINALIZE_STARTED", { pointer: writer.pointer() });
+    console.info("[DR] PRE_FINALIZE_STATE", {
+      archivePointer: writer.pointer(),
+      zipDestroyed: zipOutput.destroyed,
+      zipReadableEnded: zipOutput.readableEnded,
+      zipWritableFinished: zipOutput.writableFinished,
+      uploadDestroyed: uploadBody.destroyed,
+      uploadReadableEnded: uploadBody.readableEnded,
+      uploadWritableFinished: uploadBody.writableFinished,
+    });
+    const finalizeStartedAt = Date.now();
     await writer.finalize();
+    const finalizeElapsedMs = Date.now() - finalizeStartedAt;
+    console.info("[DR] POST_FINALIZE_STATE", {
+      archivePointer: writer.pointer(),
+      zipDestroyed: zipOutput.destroyed,
+      zipReadableEnded: zipOutput.readableEnded,
+      zipWritableFinished: zipOutput.writableFinished,
+      uploadDestroyed: uploadBody.destroyed,
+      uploadReadableEnded: uploadBody.readableEnded,
+      uploadWritableFinished: uploadBody.writableFinished,
+    });
+    console.info("[DR] ZIP_FINALIZE_DURATION", {
+      elapsedMs: finalizeElapsedMs,
+      archivePointer: writer.pointer(),
+    });
     if (writer.getArchiveState) {
       await verifyArchiveLifecycle({
         getArchiveState: writer.getArchiveState,
@@ -386,6 +411,13 @@ export const buildAndStoreStreamingDisasterRecoveryZip = async (input: {
     updateDrVerificationReport({ zipFinalized: true });
     logDrMilestone("ZIP_FINALIZE_COMPLETED", { pointer: writer.pointer() });
     console.log("[DR] AFTER archive.finalize", { pointer: writer.pointer() });
+    console.info("[DR] WAITING_FOR_ZIP_OUTPUT");
+    await finished(zipOutput);
+    console.info("[DR] ZIP_OUTPUT_FINISHED");
+    console.info("[DR] WAITING_FOR_UPLOAD_STREAM");
+    await finished(uploadBody);
+    console.info("[DR] UPLOAD_STREAM_FINISHED");
+    console.info("[DR] STREAM_PIPELINE_COMPLETED");
   } catch (error) {
     logStreamingError("archive.finalize", error);
     logStorageUploadFailed(effectiveProvider, error);
