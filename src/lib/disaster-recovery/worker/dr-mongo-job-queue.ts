@@ -9,6 +9,10 @@ import type {
   BackupJobQueueItem,
   BackupJobQueuePayload,
 } from "@/lib/disaster-recovery/worker/dr-job-queue-types";
+import {
+  formatDrWorkerLockBusyError,
+  parseDrWorkerLockBusyAttempts,
+} from "@/lib/disaster-recovery/worker/dr-worker-lock";
 
 const serializeQueuePayload = (payload: BackupJobQueuePayload): DrBackupQueuePayloadDocument => ({
   recordId: payload.recordId,
@@ -280,5 +284,44 @@ export const createMongoBackupJobQueue = (): BackupJobQueue => ({
         dequeuedAt: undefined,
       }
     );
+  },
+
+  async postponeProcessing(recordId, workerId, delayMs, reason) {
+    await connectDB();
+    const row = await DrBackupQueueEntry.findOne({
+      recordId,
+      workerId,
+      status: "processing",
+    }).lean();
+    if (!row) return 0;
+
+    const lockBusyAttempts = parseDrWorkerLockBusyAttempts(row.lastError) + 1;
+    const nextRetryAt = new Date(Date.now() + delayMs);
+    await DrBackupQueueEntry.findOneAndUpdate(
+      { recordId, workerId, status: "processing" },
+      {
+        status: "queued",
+        workerId: undefined,
+        dequeuedAt: undefined,
+        nextRetryAt,
+        lastError: formatDrWorkerLockBusyError(lockBusyAttempts, reason),
+        $inc: { attempts: -1 },
+      }
+    );
+    console.info("[DR] QUEUE_POSTPONED", {
+      jobId: recordId,
+      workerId,
+      delayMs,
+      lockBusyAttempts,
+      nextRetryAt,
+      reason,
+    });
+    return lockBusyAttempts;
+  },
+
+  async getLockBusyAttempts(recordId) {
+    await connectDB();
+    const row = await DrBackupQueueEntry.findOne({ recordId }).select("lastError").lean();
+    return parseDrWorkerLockBusyAttempts(row?.lastError);
   },
 });

@@ -94,7 +94,7 @@ describe("phase 12.0/12.1 — DR worker architecture", () => {
     });
 
     const processed = await processNextBackupJob("worker-test");
-    expect(processed).toBe(true);
+    expect(processed).toBe("processed");
     expect(executeDrBackupWorkerJob).toHaveBeenCalledWith(
       expect.objectContaining({ payload: expect.objectContaining({ recordId: "worker-job-1" }) }),
       "worker-test"

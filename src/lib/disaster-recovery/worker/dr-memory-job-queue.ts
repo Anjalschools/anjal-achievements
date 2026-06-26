@@ -3,6 +3,10 @@ import type {
   BackupJobQueueItem,
   BackupJobQueuePayload,
 } from "@/lib/disaster-recovery/worker/dr-job-queue-types";
+import {
+  formatDrWorkerLockBusyError,
+  parseDrWorkerLockBusyAttempts,
+} from "@/lib/disaster-recovery/worker/dr-worker-lock";
 
 type MemoryEntry = {
   queueEntryId: string;
@@ -12,6 +16,7 @@ type MemoryEntry = {
   maxAttempts: number;
   workerId?: string;
   nextRetryAt?: number;
+  lastError?: string;
 };
 
 export const createInMemoryBackupJobQueue = (): BackupJobQueue => {
@@ -139,6 +144,33 @@ export const createInMemoryBackupJobQueue = (): BackupJobQueue => {
       if (!entry || entry.workerId !== workerId) return;
       entry.status = "queued";
       entry.workerId = undefined;
+    },
+
+    async postponeProcessing(recordId, workerId, delayMs, reason) {
+      const entry = entries.get(recordId);
+      if (!entry || entry.workerId !== workerId || entry.status !== "processing") {
+        return 0;
+      }
+      const lockBusyAttempts = parseDrWorkerLockBusyAttempts(entry.lastError) + 1;
+      entry.status = "queued";
+      entry.workerId = undefined;
+      entry.attempts = Math.max(0, entry.attempts - 1);
+      entry.nextRetryAt = Date.now() + delayMs;
+      entry.lastError = formatDrWorkerLockBusyError(lockBusyAttempts, reason);
+      console.info("[DR] QUEUE_POSTPONED", {
+        jobId: recordId,
+        workerId,
+        delayMs,
+        lockBusyAttempts,
+        nextRetryAt: entry.nextRetryAt,
+        reason,
+      });
+      return lockBusyAttempts;
+    },
+
+    async getLockBusyAttempts(recordId) {
+      const entry = entries.get(recordId);
+      return parseDrWorkerLockBusyAttempts(entry?.lastError);
     },
   };
 };

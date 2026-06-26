@@ -43,6 +43,7 @@ import { getBackupJobQueue } from "@/lib/disaster-recovery/worker/dr-job-queue";
 import type { BackupJobQueueItem } from "@/lib/disaster-recovery/worker/dr-job-queue-types";
 import {
   acquireDrWorkerJobLock,
+  inspectDrWorkerJobLock,
   releaseDrWorkerJobLock,
 } from "@/lib/disaster-recovery/worker/dr-worker-lock";
 import { DrWorkerLockBusyError } from "@/lib/disaster-recovery/worker/dr-worker-errors";
@@ -77,8 +78,18 @@ export const executeDrBackupWorkerJob = async (
 
   const lockAcquired = await acquireDrWorkerJobLock(recordId, workerId);
   if (!lockAcquired) {
-    console.warn("[DR] WORKER_LOCK_BUSY", { jobId: recordId, workerId });
-    throw new DrWorkerLockBusyError(recordId);
+    const inspection = await inspectDrWorkerJobLock(recordId, workerId);
+    console.warn("[DR] WORKER_LOCK_BUSY", {
+      jobId: recordId,
+      workerId,
+      existingWorkerId: inspection?.workerId,
+      heartbeatAt: inspection?.heartbeatAt,
+      leaseExpiresAt: inspection?.leaseExpiresAt,
+      jobPhase: inspection?.jobPhase,
+      status: inspection?.status,
+      reason: inspection?.rejectionReason,
+    });
+    throw new DrWorkerLockBusyError(recordId, inspection ?? undefined);
   }
 
   bindDrWorkerProgress(recordId);

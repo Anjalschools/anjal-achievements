@@ -32,4 +32,11 @@ export interface BackupJobQueue {
   size(): Promise<number>;
   list(): Promise<string[]>;
   releaseProcessing(recordId: string, workerId: string): Promise<void>;
+  postponeProcessing(
+    recordId: string,
+    workerId: string,
+    delayMs: number,
+    reason: string
+  ): Promise<number>;
+  getLockBusyAttempts(recordId: string): Promise<number>;
 }

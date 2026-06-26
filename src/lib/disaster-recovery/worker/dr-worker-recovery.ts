@@ -9,16 +9,12 @@ import {
   getBackupJobQueue,
   type BackupJobQueuePayload,
 } from "@/lib/disaster-recovery/worker/dr-job-queue";
-import { resolveDrWorkerLeaseMs } from "@/lib/disaster-recovery/worker/dr-worker-lock";
+import {
+  resolveDrWorkerLeaseMs,
+  resolveDrWorkerHeartbeatStaleMs,
+} from "@/lib/disaster-recovery/worker/dr-worker-lock";
 
-const DEFAULT_HEARTBEAT_STALE_MS = 2 * 60 * 1000;
-
-export const resolveDrWorkerHeartbeatStaleMs = (): number => {
-  const raw = process.env.DR_WORKER_HEARTBEAT_STALE_MS;
-  if (!raw) return DEFAULT_HEARTBEAT_STALE_MS;
-  const parsed = Number(raw);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_HEARTBEAT_STALE_MS;
-};
+export { resolveDrWorkerHeartbeatStaleMs };
 
 const RECOVERABLE_PHASES = [
   "queued",
