@@ -1,5 +1,6 @@
 import type { AuditActor } from "@/lib/audit-log-service";
 import type { StartDisasterRecoveryJobInput } from "@/lib/disaster-recovery/dr-backup-job-types";
+import type { DrQueueIntegrityAudit } from "@/lib/disaster-recovery/worker/dr-worker-diagnostics";
 
 export type BackupJobQueueAuditContext = {
   actor: AuditActor;
@@ -39,4 +40,6 @@ export interface BackupJobQueue {
     reason: string
   ): Promise<number>;
   getLockBusyAttempts(recordId: string): Promise<number>;
+  failTerminal(recordId: string, workerId: string, error: string): Promise<void>;
+  getStatusCounts(): Promise<DrQueueIntegrityAudit>;
 }

@@ -58,6 +58,7 @@ import {
   transitionDrWorkerJobPhase,
 } from "@/lib/disaster-recovery/worker/dr-worker-progress";
 import { isBackupExpired } from "@/lib/disaster-recovery/retention-policy";
+import { assertDrWorkerJobPreflight } from "@/lib/disaster-recovery/worker/dr-worker-preflight";
 
 export const executeDrBackupWorkerJob = async (
   item: BackupJobQueueItem,
@@ -76,17 +77,19 @@ export const executeDrBackupWorkerJob = async (
   }
   initDrLeakDetection();
 
+  const preflight = await assertDrWorkerJobPreflight(item);
+
   const lockAcquired = await acquireDrWorkerJobLock(recordId, workerId);
   if (!lockAcquired) {
     const inspection = await inspectDrWorkerJobLock(recordId, workerId);
     console.warn("[DR] WORKER_LOCK_BUSY", {
       jobId: recordId,
       workerId,
-      existingWorkerId: inspection?.workerId,
-      heartbeatAt: inspection?.heartbeatAt,
-      leaseExpiresAt: inspection?.leaseExpiresAt,
-      jobPhase: inspection?.jobPhase,
-      status: inspection?.status,
+      existingWorkerId: inspection?.workerId ?? preflight.lockOwner,
+      heartbeatAt: inspection?.heartbeatAt ?? preflight.heartbeatAt,
+      leaseExpiresAt: inspection?.leaseExpiresAt ?? preflight.leaseExpiresAt,
+      jobPhase: inspection?.jobPhase ?? preflight.jobPhase,
+      status: inspection?.status ?? preflight.status,
       reason: inspection?.rejectionReason,
     });
     throw new DrWorkerLockBusyError(recordId, inspection ?? undefined);

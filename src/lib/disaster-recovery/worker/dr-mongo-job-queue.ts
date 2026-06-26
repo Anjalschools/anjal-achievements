@@ -13,6 +13,11 @@ import {
   formatDrWorkerLockBusyError,
   parseDrWorkerLockBusyAttempts,
 } from "@/lib/disaster-recovery/worker/dr-worker-lock";
+import {
+  computeDrRetryBackoffMs,
+  resolveDrWorkerMaxRetryAttempts,
+} from "@/lib/disaster-recovery/worker/dr-worker-retry-classification";
+import { createEmptyDrQueueIntegrityAudit } from "@/lib/disaster-recovery/worker/dr-worker-diagnostics";
 
 const serializeQueuePayload = (payload: BackupJobQueuePayload): DrBackupQueuePayloadDocument => ({
   recordId: payload.recordId,
@@ -174,14 +179,17 @@ export const createMongoBackupJobQueue = (): BackupJobQueue => ({
 
   async fail(recordId, workerId, error, retryable = false) {
     await connectDB();
-    const row = await DrBackupQueueEntry.findOne({ recordId, workerId }).lean();
+    const row =
+      (await DrBackupQueueEntry.findOne({ recordId, workerId, status: "processing" }).lean()) ??
+      (await DrBackupQueueEntry.findOne({ recordId, status: "processing" }).lean());
     if (!row) return;
 
-    const shouldRetry = retryable && row.attempts < row.maxAttempts;
+    const maxAttempts = resolveDrWorkerMaxRetryAttempts();
+    const shouldRetry = retryable && row.attempts < maxAttempts;
     if (shouldRetry) {
-      const nextRetryAt = new Date(Date.now() + 30_000);
+      const nextRetryAt = new Date(Date.now() + computeDrRetryBackoffMs(row.attempts));
       await DrBackupQueueEntry.findOneAndUpdate(
-        { recordId, workerId },
+        { _id: row._id },
         {
           status: "queued",
           lastError: error,
@@ -190,15 +198,22 @@ export const createMongoBackupJobQueue = (): BackupJobQueue => ({
           dequeuedAt: undefined,
         }
       );
-      console.info("[DR] QUEUE_RETRY", { jobId: recordId, workerId, error, nextRetryAt });
+      console.info("[DR] QUEUE_RETRY", {
+        jobId: recordId,
+        workerId,
+        error,
+        nextRetryAt,
+        attempts: row.attempts,
+        maxAttempts,
+      });
       return;
     }
 
     await DrBackupQueueEntry.findOneAndUpdate(
-      { recordId, workerId },
-      { status: "failed", failedAt: new Date(), lastError: error }
+      { _id: row._id },
+      { status: "failed", failedAt: new Date(), lastError: error, workerId: undefined, dequeuedAt: undefined }
     );
-    console.info("[DR] QUEUE_FAILED", { jobId: recordId, workerId, error });
+    console.info("[DR] QUEUE_FAILED", { jobId: recordId, workerId, error, retryable });
   },
 
   async retry(recordId) {
@@ -323,5 +338,42 @@ export const createMongoBackupJobQueue = (): BackupJobQueue => ({
     await connectDB();
     const row = await DrBackupQueueEntry.findOne({ recordId }).select("lastError").lean();
     return parseDrWorkerLockBusyAttempts(row?.lastError);
+  },
+
+  async failTerminal(recordId, workerId, error) {
+    await connectDB();
+    await DrBackupQueueEntry.findOneAndUpdate(
+      {
+        recordId,
+        status: { $in: ["queued", "processing"] },
+        $or: [{ workerId }, { workerId: { $exists: false } }, { workerId: null }],
+      },
+      {
+        status: "failed",
+        failedAt: new Date(),
+        lastError: error,
+        workerId: undefined,
+        dequeuedAt: undefined,
+      }
+    );
+    console.info("[DR] QUEUE_FAILED_TERMINAL", { jobId: recordId, workerId, error });
+  },
+
+  async getStatusCounts() {
+    await connectDB();
+    const audit = createEmptyDrQueueIntegrityAudit();
+    const [queued, processing, completed, failed, cancelled] = await Promise.all([
+      DrBackupQueueEntry.countDocuments({ status: "queued" }),
+      DrBackupQueueEntry.countDocuments({ status: "processing" }),
+      DrBackupQueueEntry.countDocuments({ status: "completed" }),
+      DrBackupQueueEntry.countDocuments({ status: "failed" }),
+      DrBackupQueueEntry.countDocuments({ status: "cancelled" }),
+    ]);
+    audit.queued = queued;
+    audit.processing = processing;
+    audit.completed = completed;
+    audit.failed = failed;
+    audit.cancelled = cancelled;
+    return audit;
   },
 });

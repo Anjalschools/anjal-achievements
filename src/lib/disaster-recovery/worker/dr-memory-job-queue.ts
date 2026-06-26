@@ -7,6 +7,11 @@ import {
   formatDrWorkerLockBusyError,
   parseDrWorkerLockBusyAttempts,
 } from "@/lib/disaster-recovery/worker/dr-worker-lock";
+import {
+  computeDrRetryBackoffMs,
+  resolveDrWorkerMaxRetryAttempts,
+} from "@/lib/disaster-recovery/worker/dr-worker-retry-classification";
+import { createEmptyDrQueueIntegrityAudit } from "@/lib/disaster-recovery/worker/dr-worker-diagnostics";
 
 type MemoryEntry = {
   queueEntryId: string;
@@ -79,16 +84,22 @@ export const createInMemoryBackupJobQueue = (): BackupJobQueue => {
 
     async fail(recordId, workerId, error, retryable = false) {
       const entry = entries.get(recordId);
-      if (!entry || entry.workerId !== workerId) return;
-      if (retryable && entry.attempts < entry.maxAttempts) {
+      if (!entry || (entry.status !== "processing" && entry.status !== "queued")) return;
+      if (entry.workerId && entry.workerId !== workerId) return;
+
+      const maxAttempts = resolveDrWorkerMaxRetryAttempts();
+      if (retryable && entry.attempts < maxAttempts) {
         entry.status = "queued";
         entry.workerId = undefined;
-        entry.nextRetryAt = Date.now() + 30_000;
-        console.info("[DR] QUEUE_RETRY", { jobId: recordId, workerId, error });
+        entry.nextRetryAt = Date.now() + computeDrRetryBackoffMs(entry.attempts);
+        entry.lastError = error;
+        console.info("[DR] QUEUE_RETRY", { jobId: recordId, workerId, error, attempts: entry.attempts });
         return;
       }
       entry.status = "failed";
-      console.info("[DR] QUEUE_FAILED", { jobId: recordId, workerId, error });
+      entry.workerId = undefined;
+      entry.lastError = error;
+      console.info("[DR] QUEUE_FAILED", { jobId: recordId, workerId, error, retryable });
     },
 
     async retry(recordId) {
@@ -171,6 +182,27 @@ export const createInMemoryBackupJobQueue = (): BackupJobQueue => {
     async getLockBusyAttempts(recordId) {
       const entry = entries.get(recordId);
       return parseDrWorkerLockBusyAttempts(entry?.lastError);
+    },
+
+    async failTerminal(recordId, workerId, error) {
+      const entry = entries.get(recordId);
+      if (!entry || (entry.status !== "queued" && entry.status !== "processing")) return;
+      entry.status = "failed";
+      entry.workerId = undefined;
+      entry.lastError = error;
+      console.info("[DR] QUEUE_FAILED_TERMINAL", { jobId: recordId, workerId, error });
+    },
+
+    async getStatusCounts() {
+      const audit = createEmptyDrQueueIntegrityAudit();
+      for (const entry of entries.values()) {
+        if (entry.status === "queued") audit.queued += 1;
+        if (entry.status === "processing") audit.processing += 1;
+        if (entry.status === "completed") audit.completed += 1;
+        if (entry.status === "failed") audit.failed += 1;
+        if (entry.status === "cancelled") audit.cancelled += 1;
+      }
+      return audit;
     },
   };
 };
