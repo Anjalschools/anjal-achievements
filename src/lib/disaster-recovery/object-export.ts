@@ -109,10 +109,24 @@ const parseCloudinaryReference = (
 ): { resourceType: string; publicId: string } => {
   if (storageKey.startsWith("cloudinary://")) {
     const [, resourceType = "image", ...rest] = storageKey.replace("cloudinary://", "").split("/");
-    return { resourceType, publicId: rest.join("/") };
+    const parsed = {
+      resourceType,
+      publicId: rest.join("/"),
+    };
+
+    console.info("[DR] CLOUDINARY_REFERENCE", parsed);
+
+    return parsed;
   }
   if (/^https?:\/\//i.test(storageKey)) {
-    return { resourceType: "image", publicId: storageKey };
+    const parsed = {
+      resourceType: "image",
+      publicId: storageKey,
+    };
+
+    console.info("[DR] CLOUDINARY_REFERENCE", parsed);
+
+    return parsed;
   }
   return { resourceType: "image", publicId: storageKey };
 };
@@ -123,14 +137,39 @@ const resolveCloudinaryDownloadUrl = (storageKey: string): string => {
   const { resourceType, publicId } = parseCloudinaryReference(storageKey);
 
   if (/^https?:\/\//i.test(publicId)) {
+    console.info("[DR] CLOUDINARY_STORAGEKEY_IS_URL", {
+      storageKey,
+      publicId,
+    });
+
+    console.info("[DR] CLOUDINARY_URL_RESOLVED", {
+      storageKey,
+      publicId,
+      resourceType,
+      downloadUrl: publicId,
+    });
+
     return publicId;
   }
 
-  return cloudinary.url(publicId, {
+  const downloadUrl = cloudinary.url(publicId, {
     resource_type: resolveCloudinaryResourceType(resourceType),
     secure: true,
     flags: "attachment",
   });
+
+  console.info("[DR] CLOUDINARY_STORAGEKEY_IS_PUBLIC_ID", {
+    storageKey,
+  });
+
+  console.info("[DR] CLOUDINARY_URL_RESOLVED", {
+    storageKey,
+    publicId,
+    resourceType,
+    downloadUrl,
+  });
+
+  return downloadUrl;
 };
 
 const openHttpObjectStream = async (url: string, objectKey: string): Promise<Readable> => {
@@ -179,18 +218,65 @@ const openCloudinaryObjectStream = async (
       DR_OBJECT_DOWNLOAD_TIMEOUT_MS,
       async (signal) => {
         logDrObjectDiag("Download started", { objectKey, provider: "cloudinary", storageKey });
+        console.info("[DR] CLOUDINARY_FETCH_BEGIN", {
+          storageKey,
+          objectKey,
+          downloadUrl,
+        });
         const response = await fetch(downloadUrl, { signal });
+        console.info("[DR] CLOUDINARY_FETCH_RESPONSE", {
+          status: response.status,
+          ok: response.ok,
+          redirected: response.redirected,
+          url: response.url,
+          contentType: response.headers.get("content-type"),
+          contentLength: response.headers.get("content-length"),
+          cacheControl: response.headers.get("cache-control"),
+          server: response.headers.get("server"),
+          cloudinaryError: response.headers.get("x-cld-error"),
+          requestId: response.headers.get("x-request-id"),
+        });
         if (!response.ok) {
+          const responseBody = await response.text().catch(() => "<body unavailable>");
+
+          console.error("[DR] CLOUDINARY_FETCH_FAILURE", {
+            storageKey,
+            objectKey,
+            downloadUrl,
+            status: response.status,
+            headers: Object.fromEntries(response.headers.entries()),
+            body: responseBody.substring(0, 2000),
+          });
+
           throw new Error(`CLOUDINARY_DOWNLOAD_FAILED:${response.status}`);
         }
         if (!response.body) {
+          console.error("[DR] CLOUDINARY_BODY_EMPTY", {
+            storageKey,
+            objectKey,
+            downloadUrl,
+          });
+
           throw new Error("CLOUDINARY_BODY_EMPTY");
         }
+        console.info("[DR] CLOUDINARY_STREAM_OPENED", {
+          storageKey,
+          objectKey,
+          downloadUrl,
+        });
         return webBodyToNodeStream(response.body);
       },
       { objectKey }
     );
   } catch (error) {
+    console.error("[DR] CLOUDINARY_EXCEPTION", {
+      storageKey,
+      objectKey,
+      downloadUrl,
+      name: error instanceof Error ? error.name : undefined,
+      message: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+    });
     logDrDownloadProviderFailed(
       {
         provider: "cloudinary",
@@ -244,8 +330,15 @@ const downloadR2Object = async (key: string): Promise<Buffer> => {
 
 const downloadCloudinaryAsset = async (storageKey: string): Promise<Buffer> => {
   logDrBufferFallbackEnter("object-export.downloadCloudinaryAsset");
+  console.info("[DR] CLOUDINARY_BUFFER_DOWNLOAD", {
+    storageKey,
+  });
   const buffer = await streamToBuffer(await openCloudinaryObjectStream(storageKey, storageKey));
   logDrBufferFallbackExit("object-export.downloadCloudinaryAsset", buffer.byteLength);
+  console.info("[DR] CLOUDINARY_BUFFER_COMPLETE", {
+    storageKey,
+    size: buffer.byteLength,
+  });
   return buffer;
 };
 
@@ -281,6 +374,14 @@ export const exportStorageObject = async (
   if (entry.provider === "r2") {
     content = await downloadR2Object(entry.storageKey);
   } else if (entry.provider === "cloudinary") {
+    console.info("[DR] CLOUDINARY_MANIFEST_ENTRY", {
+      archivePath: entry.archivePath,
+      provider: entry.provider,
+      storageKey: entry.storageKey,
+      fileSize: entry.fileSize,
+      checksum: entry.checksum,
+      fileName: (entry as StorageManifestEntry & { fileName?: string }).fileName,
+    });
     content = await downloadCloudinaryAsset(entry.storageKey);
   } else if (entry.provider === "http") {
     content = await downloadHttpAsset(entry.storageKey);
