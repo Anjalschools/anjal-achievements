@@ -19,6 +19,7 @@ const buildResponse = (input: {
   return {
     ok: input.status === undefined || input.status === 200,
     status: input.status ?? 200,
+    statusText: "OK",
     redirected: false,
     url: "https://res.cloudinary.com/demo/image/upload/v1/sample.jpg",
     headers,
@@ -95,7 +96,7 @@ describe("phase DR.ZIP.16 — robust cloudinary download", () => {
     await expect(finished(stream)).rejects.toThrow(/DOWNLOAD_INCOMPLETE/);
   });
 
-  it("fails with DOWNLOAD_STREAM_STALLED when no data arrives", async () => {
+  it("fails with DOWNLOAD_NO_FIRST_BYTE when no data arrives", async () => {
     const stalledBody = new ReadableStream<Uint8Array>({
       start() {
         // Never enqueue or close.
@@ -117,7 +118,64 @@ describe("phase DR.ZIP.16 — robust cloudinary download", () => {
 
     const stream = await streamPromise;
     const finishedPromise = finished(stream);
-    const rejection = expect(finishedPromise).rejects.toThrow(/DOWNLOAD_STREAM_STALLED/);
+    const rejection = expect(finishedPromise).rejects.toThrow(/DOWNLOAD_NO_FIRST_BYTE/);
+
+    await vi.advanceTimersByTimeAsync(DR_EXPORT_WATCHDOG_STALL_MS + 1);
+    await rejection;
+  });
+
+  it("fails with DOWNLOAD_DATA_STALLED when bytes stop mid-transfer", async () => {
+    const partialBody = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new Uint8Array([1, 2, 3]));
+      },
+    });
+    const fetchImpl = vi.fn(async () =>
+      buildResponse({
+        contentLength: "100",
+        body: partialBody,
+      })
+    );
+
+    const stream = await createRobustCloudinaryDownloadStream({
+      downloadUrl: "https://res.cloudinary.com/demo/image/upload/v1/sample.jpg",
+      objectKey: "objects/cloudinary/sample.jpg",
+      storageKey: "cloudinary://image/sample",
+      signal: new AbortController().signal,
+      fetchImpl,
+    });
+
+    const finishedPromise = finished(stream);
+    const rejection = expect(finishedPromise).rejects.toThrow(/DOWNLOAD_DATA_STALLED/);
+
+    await vi.advanceTimersByTimeAsync(DR_EXPORT_WATCHDOG_STALL_MS + 1);
+    await rejection;
+  });
+
+  it("fails with DOWNLOAD_EOF_MISSING when full content-length received without EOF", async () => {
+    const payload = Buffer.from("abc");
+    const eofMissingBody = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new Uint8Array(payload));
+      },
+    });
+    const fetchImpl = vi.fn(async () =>
+      buildResponse({
+        contentLength: String(payload.byteLength),
+        body: eofMissingBody,
+      })
+    );
+
+    const stream = await createRobustCloudinaryDownloadStream({
+      downloadUrl: "https://res.cloudinary.com/demo/image/upload/v1/sample.jpg",
+      objectKey: "objects/cloudinary/sample.jpg",
+      storageKey: "cloudinary://image/sample",
+      signal: new AbortController().signal,
+      fetchImpl,
+    });
+
+    const finishedPromise = finished(stream);
+    const rejection = expect(finishedPromise).rejects.toThrow(/DOWNLOAD_EOF_MISSING/);
 
     await vi.advanceTimersByTimeAsync(DR_EXPORT_WATCHDOG_STALL_MS + 1);
     await rejection;
