@@ -25,6 +25,8 @@ import {
 } from "@/lib/disaster-recovery/dr-object-stream-diagnostics";
 import { sendR2GetObject } from "@/lib/disaster-recovery/dr-r2-sdk";
 import { logDrObjectDiag } from "@/lib/disaster-recovery/dr-stream-lifecycle";
+import { createRobustCloudinaryDownloadStream } from "@/lib/disaster-recovery/dr-cloudinary-download";
+import { getDrJobContext } from "@/lib/disaster-recovery/dr-job-context";
 import {
   createHashingObjectStream,
   webBodyToNodeStream,
@@ -212,6 +214,15 @@ const openCloudinaryObjectStream = async (
   objectKey: string
 ): Promise<Readable> => {
   const downloadUrl = resolveCloudinaryDownloadUrl(storageKey);
+  const { workerId } = getDrJobContext();
+  console.info("[DR] OPEN_CLOUDINARY_OBJECT_STREAM", {
+    storageKey,
+    objectKey,
+    downloadUrl,
+    workerId: workerId ?? null,
+    pid: process.pid,
+    timestamp: new Date().toISOString(),
+  });
   try {
     return await withDrAbortTimeout(
       "cloudinaryObjectDownload",
@@ -223,48 +234,26 @@ const openCloudinaryObjectStream = async (
           objectKey,
           downloadUrl,
         });
-        const response = await fetch(downloadUrl, { signal });
-        console.info("[DR] CLOUDINARY_FETCH_RESPONSE", {
-          status: response.status,
-          ok: response.ok,
-          redirected: response.redirected,
-          url: response.url,
-          contentType: response.headers.get("content-type"),
-          contentLength: response.headers.get("content-length"),
-          cacheControl: response.headers.get("cache-control"),
-          server: response.headers.get("server"),
-          cloudinaryError: response.headers.get("x-cld-error"),
-          requestId: response.headers.get("x-request-id"),
+        const downloadImplementation = "robust" as const;
+        console.info("[DR] OPEN_CLOUDINARY_OBJECT_STREAM", {
+          downloadImplementation,
+          storageKey,
+          objectKey,
+          downloadUrl,
         });
-        if (!response.ok) {
-          const responseBody = await response.text().catch(() => "<body unavailable>");
-
-          console.error("[DR] CLOUDINARY_FETCH_FAILURE", {
-            storageKey,
-            objectKey,
-            downloadUrl,
-            status: response.status,
-            headers: Object.fromEntries(response.headers.entries()),
-            body: responseBody.substring(0, 2000),
-          });
-
-          throw new Error(`CLOUDINARY_DOWNLOAD_FAILED:${response.status}`);
-        }
-        if (!response.body) {
-          console.error("[DR] CLOUDINARY_BODY_EMPTY", {
-            storageKey,
-            objectKey,
-            downloadUrl,
-          });
-
-          throw new Error("CLOUDINARY_BODY_EMPTY");
-        }
+        const stream = await createRobustCloudinaryDownloadStream({
+          downloadUrl,
+          objectKey,
+          storageKey,
+          signal,
+          workerId,
+        });
         console.info("[DR] CLOUDINARY_STREAM_OPENED", {
           storageKey,
           objectKey,
           downloadUrl,
         });
-        return webBodyToNodeStream(response.body);
+        return stream;
       },
       { objectKey }
     );
