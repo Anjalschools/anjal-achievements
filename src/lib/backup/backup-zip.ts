@@ -158,10 +158,10 @@ type LastEntryForensics = {
 };
 
 const readModuleForensics = (
-  module: ArchiverWithInternals["_module"]
+  zipModule: ArchiverWithInternals["_module"]
 ): Record<string, unknown> | null => {
-  if (!module) return null;
-  const record = module as EventEmitter & {
+  if (!zipModule) return null;
+  const record = zipModule as EventEmitter & {
     destroyed?: boolean;
     readableEnded?: boolean;
     writableEnded?: boolean;
@@ -170,14 +170,14 @@ const readModuleForensics = (
     finished?: boolean;
   };
   return {
-    constructorName: module.constructor?.name,
+    constructorName: zipModule.constructor?.name,
     ended: record.ended,
     finished: record.finished,
     destroyed: Boolean(record.destroyed),
     readableEnded: Boolean(record.readableEnded),
     writableFinished: Boolean(record.writableFinished),
     writableEnded: Boolean(record.writableEnded),
-    ...readStreamLifecycleFlags(module),
+    ...readStreamLifecycleFlags(zipModule),
   };
 };
 
@@ -361,8 +361,8 @@ const createArchiverForensicsContext = (
   let moduleForensicsAttached = false;
   const attachModuleForensics = (): void => {
     if (moduleForensicsAttached) return;
-    const module = archive._module;
-    if (!module) {
+    const zipModule = archive._module;
+    if (!zipModule) {
       console.info("[DR] ARCHIVER_FORENSICS MODULE_EVENT", {
         event: "module-unavailable",
         timestamp: new Date().toISOString(),
@@ -373,12 +373,12 @@ const createArchiverForensicsContext = (
     moduleForensicsAttached = true;
 
     (["finish", "end", "close", "drain", "pipe", "unpipe", "error"] as const).forEach((event) => {
-      module.on(event, (...args: unknown[]) => {
+      zipModule.on(event, (...args: unknown[]) => {
         console.info("[DR] ARCHIVER_FORENSICS MODULE_EVENT", {
           event,
           timestamp: new Date().toISOString(),
           pointer: archive.pointer(),
-          moduleInfo: readModuleForensics(module),
+          moduleInfo: readModuleForensics(zipModule),
           ...(event === "error"
             ? {
                 message: args[0] instanceof Error ? args[0].message : String(args[0]),
