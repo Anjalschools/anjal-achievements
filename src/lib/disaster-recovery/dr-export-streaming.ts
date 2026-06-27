@@ -10,6 +10,9 @@ import {
   handleCloudinaryHashingPipelineTimeoutSkip,
   isCloudinaryHashingPipelineTimeout,
 } from "@/lib/disaster-recovery/dr-cloudinary-hashing-timeout-skip";
+import {
+  PIPELINE_PROGRESS_STALL_CODE,
+} from "@/lib/disaster-recovery/dr-pipeline-progress-watchdog";
 import type { DrExportWatchdog } from "@/lib/disaster-recovery/dr-export-watchdog";
 import {
   buildDrObjectStreamContext,
@@ -46,6 +49,7 @@ export type DrStreamExportGuards = {
   downloadTimeoutMs?: number;
   appendDrainTimeoutMs?: number;
   completedTimeoutMs?: number;
+  pipelineWatchdogTimeoutMs?: number;
   watchdog?: DrExportWatchdog;
   streamRegistry?: DrArchiveStreamRegistry;
 };
@@ -241,15 +245,28 @@ export const runSequentialObjectStreamExport = async (input: {
 
       if (finalizedEntry) {
         streamRegistry?.markProducerCompleted(exported.stream);
-        manifestEntries.push(finalizedEntry);
-        bytesExported += finalizedEntry.fileSize || 0;
+        if (
+          finalizedEntry.status === "missing" &&
+          finalizedEntry.errorMessage === PIPELINE_PROGRESS_STALL_CODE
+        ) {
+          failures.push(finalizedEntry);
+          logDrObjectDiag("Object skipped pipeline progress stall", {
+            objectKey,
+            entryId: source.id,
+            message: finalizedEntry.errorMessage,
+            elapsedMs: Date.now() - objectStartedAt,
+          });
+        } else {
+          manifestEntries.push(finalizedEntry);
+          bytesExported += finalizedEntry.fileSize || 0;
 
-        logDrObjectDiag("Object finished", {
-          objectKey,
-          entryId: source.id,
-          fileSize: finalizedEntry.fileSize,
-          elapsedMs: Date.now() - objectStartedAt,
-        });
+          logDrObjectDiag("Object finished", {
+            objectKey,
+            entryId: source.id,
+            fileSize: finalizedEntry.fileSize,
+            elapsedMs: Date.now() - objectStartedAt,
+          });
+        }
       }
     } catch (error) {
       logDrDownloadProviderFailed(streamContext, error);

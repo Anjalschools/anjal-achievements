@@ -29,9 +29,11 @@ import { createResilientCloudinaryDownloadStream } from "@/lib/disaster-recovery
 import { isCloudinaryMissingAssetError } from "@/lib/disaster-recovery/dr-cloudinary-export-policy";
 import { resetMissingAssetRegistry } from "@/lib/disaster-recovery/dr-cloudinary-missing-asset-registry";
 import { getDrJobContext } from "@/lib/disaster-recovery/dr-job-context";
+import { attachPipelineProgressWatchdog } from "@/lib/disaster-recovery/dr-pipeline-progress-watchdog";
 import {
   createHashingObjectStream,
   webBodyToNodeStream,
+  type DrArchiveStreamRegistry,
 } from "@/lib/disaster-recovery/dr-stream-utils";
 import {
   logDrBufferFallbackEnter,
@@ -343,18 +345,36 @@ const downloadHttpAsset = async (url: string): Promise<Buffer> => {
 };
 
 export const exportStorageObjectStream = async (
-  entry: StorageManifestEntry
+  entry: StorageManifestEntry,
+  options: {
+    streamRegistry?: DrArchiveStreamRegistry;
+    pipelineWatchdogTimeoutMs?: number;
+  } = {}
 ): Promise<ExportedObjectStream> => {
   const sourceStream = await openObjectSourceStream(entry);
-  const { stream, completed } = createHashingObjectStream(entry, sourceStream);
+  const { stream, completed: rawCompleted } = createHashingObjectStream(entry, sourceStream);
   attachDrObjectStreamErrorLogging(stream, buildDrObjectStreamContext({
     entry,
     streamName: "hashing-output",
   }));
 
-  const resolvedCompleted =
+  const { completed: watchedCompleted, stop: stopPipelineWatchdog } = attachPipelineProgressWatchdog({
+    entry,
+    sourceStream,
+    archiveStream: stream,
+    rawCompleted,
+    streamRegistry: options.streamRegistry,
+    getArchivePointer: () => getDrJobContext().archivePointer,
+    timeoutMs: options.pipelineWatchdogTimeoutMs,
+  });
+
+  const resolvedCompleted = watchedCompleted.finally(() => {
+    stopPipelineWatchdog();
+  });
+
+  const cloudinaryResolvedCompleted =
     entry.provider === "cloudinary"
-      ? completed.catch((error) => {
+      ? resolvedCompleted.catch((error) => {
           if (isCloudinaryMissingAssetError(error)) {
             return {
               ...entry,
@@ -365,12 +385,12 @@ export const exportStorageObjectStream = async (
           }
           throw error;
         })
-      : completed;
+      : resolvedCompleted;
 
   return {
     entry,
     stream,
-    completed: resolvedCompleted,
+    completed: cloudinaryResolvedCompleted,
   };
 };
 
@@ -437,7 +457,10 @@ export const exportStorageObjectsStreamExport = async (input: {
   return runSequentialObjectStreamExport({
     entries: input.entries,
     exportObjectStream: async (entry) => {
-      const exported = await exportStorageObjectStream(entry);
+      const exported = await exportStorageObjectStream(entry, {
+        streamRegistry: input.guards?.streamRegistry,
+        pipelineWatchdogTimeoutMs: input.guards?.pipelineWatchdogTimeoutMs,
+      });
       return {
         stream: exported.stream,
         completed: exported.completed,
