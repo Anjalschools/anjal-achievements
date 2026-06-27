@@ -70,27 +70,54 @@ type HashingPipelineForensicsContext = {
   getArchiveSnapshot: (stream: PassThrough) => Record<string, unknown>;
 };
 
+type ReadableLike = {
+  readable?: boolean;
+  readableEnded?: boolean;
+  readableFlowing?: boolean | null;
+  bytesRead?: number;
+  closed?: boolean;
+  destroyed?: boolean;
+  writableHighWaterMark?: number;
+};
+
+type WritableLike = {
+  writable?: boolean;
+  writableFinished?: boolean;
+  writableEnded?: boolean;
+};
+
+const asReadableLike = (stream: unknown): ReadableLike => stream as unknown as ReadableLike;
+
+const asWritableLike = (stream: unknown): WritableLike => stream as unknown as WritableLike;
+
 const readReadableStreamFlags = (
   stream: Readable
-): Record<string, unknown> => ({
-  readable: stream.readable,
-  destroyed: Boolean(stream.destroyed),
-  closed: Boolean((stream as { closed?: boolean }).closed),
-  readableEnded: Boolean(stream.readableEnded),
-  readableFlowing: stream.readableFlowing,
-  bytesRead: (stream as Readable & { bytesRead?: number }).bytesRead ?? null,
-});
+): Record<string, unknown> => {
+  const readable = asReadableLike(stream);
+  return {
+    readable: stream.readable,
+    destroyed: Boolean(stream.destroyed),
+    closed: Boolean(readable.closed),
+    readableEnded: Boolean(stream.readableEnded),
+    readableFlowing: stream.readableFlowing,
+    bytesRead: readable.bytesRead ?? null,
+  };
+};
 
 const readWritableStreamFlags = (
   stream: NodeJS.ReadWriteStream
-): Record<string, unknown> => ({
-  writable: (stream as { writable?: boolean }).writable,
-  readable: (stream as Readable).readable,
-  destroyed: Boolean(stream.destroyed),
-  writableFinished: Boolean((stream as { writableFinished?: boolean }).writableFinished),
-  readableEnded: Boolean((stream as Readable).readableEnded),
-  writableEnded: Boolean((stream as { writableEnded?: boolean }).writableEnded),
-});
+): Record<string, unknown> => {
+  const readable = asReadableLike(stream);
+  const writable = asWritableLike(stream);
+  return {
+    writable: writable.writable,
+    readable: readable.readable,
+    destroyed: Boolean(readable.destroyed),
+    writableFinished: Boolean(writable.writableFinished),
+    readableEnded: Boolean(readable.readableEnded),
+    writableEnded: Boolean(writable.writableEnded),
+  };
+};
 
 const createHashingPipelineForensics = (
   entry: StorageManifestEntry,
@@ -253,7 +280,7 @@ const createHashingPipelineForensics = (
     heartbeatTimer = setInterval(() => {
       log("PIPELINE_IN_PROGRESS", {
         elapsedMs: Date.now() - startedAt,
-        bytesRead: (source as Readable & { bytesRead?: number }).bytesRead ?? null,
+        bytesRead: asReadableLike(source).bytesRead ?? null,
         bytesWritten,
         totalBytes,
         sourceDestroyed: source.destroyed,
@@ -307,7 +334,7 @@ const createHashingPipelineForensics = (
     entryName: entry.archivePath,
     streamType: sourceStream.constructor?.name ?? typeof sourceStream,
     readableHighWaterMark: sourceStream.readableHighWaterMark,
-    writableHighWaterMark: (sourceStream as { writableHighWaterMark?: number }).writableHighWaterMark ?? null,
+    writableHighWaterMark: asReadableLike(sourceStream).writableHighWaterMark ?? null,
   });
   pipelineState.pipelineCreated = true;
 
@@ -513,7 +540,7 @@ const readStreamRegistryFlags = (
   "readableEnded" | "readableClosed" | "destroyed"
 > => ({
   readableEnded: Boolean(stream.readableEnded),
-  readableClosed: Boolean((stream as { closed?: boolean }).closed),
+  readableClosed: Boolean(asReadableLike(stream).closed),
   destroyed: Boolean(stream.destroyed),
 });
 
