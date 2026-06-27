@@ -146,6 +146,8 @@ const ARCHIVER_FORENSIC_EVENTS = [
   "unpipe",
 ] as const;
 
+let zipWriterFinalizeIdCounter = 0;
+
 type LastEntryForensics = {
   entryName?: string;
   entrySize?: number;
@@ -221,6 +223,27 @@ const readArchiverForensicsSnapshot = (
   };
 };
 
+const readFinalizeTracePayload = (
+  finalizeId: number,
+  archive: ArchiverWithInternals,
+  output: PassThrough
+): Record<string, unknown> => {
+  const snapshot = readArchiverForensicsSnapshot(archive, output);
+  return {
+    finalizeId,
+    pointer: snapshot.pointer,
+    queueLength: snapshot.queueLength,
+    pending: snapshot.pending,
+    remainingEntries: snapshot.remainingEntries,
+    moduleEnded: snapshot.moduleEnded,
+    moduleFinished: snapshot.moduleFinished,
+    archiveEnded: snapshot.archiveEnded,
+    archiveFinished: snapshot.archiveFinished,
+    outputDestroyed: snapshot.outputDestroyed,
+    outputNeedDrain: snapshot.outputNeedDrain,
+  };
+};
+
 const readListenerCounts = (emitter: NodeJS.EventEmitter): Record<string, number> => {
   if (typeof emitter.listenerCount !== "function") {
     return Object.fromEntries(ARCHIVER_FORENSIC_EVENTS.map((event) => [event, -1]));
@@ -257,6 +280,37 @@ const createArchiverForensicsContext = (
   let previousFinalizePointer = -1;
   let internalIdleLogged = false;
   let lastLifecycleEvent: LifecycleEventRecord | null = null;
+  let activeFinalizeId: number | null = null;
+
+  const withActiveFinalizeTrace = (
+    payload: Record<string, unknown>
+  ): Record<string, unknown> => {
+    if (activeFinalizeId === null) return payload;
+    return {
+      ...readFinalizeTracePayload(activeFinalizeId, archive, output),
+      ...payload,
+    };
+  };
+
+  const setActiveFinalizeId = (finalizeId: number): void => {
+    activeFinalizeId = finalizeId;
+  };
+
+  const clearActiveFinalizeId = (): void => {
+    activeFinalizeId = null;
+  };
+
+  const logFinalizeTrace = (
+    label: string,
+    extra: Record<string, unknown> = {}
+  ): void => {
+    if (activeFinalizeId === null) return;
+    recordLifecycleEvent("finalize-trace", label, { finalizeId: activeFinalizeId });
+    console.info(`[DR] ARCHIVER_FORENSICS ${label}`, {
+      ...readFinalizeTracePayload(activeFinalizeId, archive, output),
+      ...extra,
+    });
+  };
 
   const recordLifecycleEvent = (
     source: string,
@@ -291,7 +345,7 @@ const createArchiverForensicsContext = (
     }
 
     recordLifecycleEvent("forensics", label);
-    console.info(`[DR] ARCHIVER_FORENSICS ${label}`, payload);
+    console.info(`[DR] ARCHIVER_FORENSICS ${label}`, withActiveFinalizeTrace(payload));
 
     const queueLength = snapshot.queueLength as number;
     const pending = snapshot.pending as number;
@@ -322,13 +376,13 @@ const createArchiverForensicsContext = (
 
   const logOutputEvent = (event: string, meta: Record<string, unknown> = {}): void => {
     recordLifecycleEvent("output", event);
-    console.info("[DR] ARCHIVER_FORENSICS OUTPUT_EVENT", {
+    console.info("[DR] ARCHIVER_FORENSICS OUTPUT_EVENT", withActiveFinalizeTrace({
       event,
       timestamp: new Date().toISOString(),
       pointer: archive.pointer(),
       outputWritableState: readOutputWritableState(),
       ...meta,
-    });
+    }));
   };
 
   const attachOutputForensics = (): void => {
@@ -355,7 +409,7 @@ const createArchiverForensicsContext = (
       (event) => {
         archive.on(event, (...args: unknown[]) => {
           recordLifecycleEvent("archive", event);
-          console.info("[DR] ARCHIVER_FORENSICS ARCHIVE_EVENT", {
+          console.info("[DR] ARCHIVER_FORENSICS ARCHIVE_EVENT", withActiveFinalizeTrace({
             event,
             timestamp: new Date().toISOString(),
             pointer: archive.pointer(),
@@ -367,7 +421,7 @@ const createArchiverForensicsContext = (
                     ? args[0].message
                     : String(args[0])
                   : undefined,
-          });
+          }));
 
           if (event === "entry") {
             const entryData = args[0] as { name?: string };
@@ -400,11 +454,11 @@ const createArchiverForensicsContext = (
     const zipModule = archive._module;
     if (!zipModule) {
       recordLifecycleEvent("module", "module-unavailable");
-      console.info("[DR] ARCHIVER_FORENSICS MODULE_EVENT", {
+      console.info("[DR] ARCHIVER_FORENSICS MODULE_EVENT", withActiveFinalizeTrace({
         event: "module-unavailable",
         timestamp: new Date().toISOString(),
         pointer: archive.pointer(),
-      });
+      }));
       return;
     }
     moduleForensicsAttached = true;
@@ -413,7 +467,7 @@ const createArchiverForensicsContext = (
       (event) => {
         zipModule.on(event, (...args: unknown[]) => {
           recordLifecycleEvent("module", event);
-          console.info("[DR] ARCHIVER_FORENSICS MODULE_EVENT", {
+          console.info("[DR] ARCHIVER_FORENSICS MODULE_EVENT", withActiveFinalizeTrace({
             event,
             timestamp: new Date().toISOString(),
             pointer: archive.pointer(),
@@ -425,7 +479,7 @@ const createArchiverForensicsContext = (
               : event === "pipe" || event === "unpipe"
                 ? { peerType: (args[0] as { constructor?: { name?: string } })?.constructor?.name }
                 : {}),
-          });
+          }));
         });
       }
     );
@@ -451,7 +505,7 @@ const createArchiverForensicsContext = (
     logForensics("FINALIZE_IN_PROGRESS", { reason: "timeout-dump" });
     const snapshot = readArchiverForensicsSnapshot(archive, output);
     const rawArchive = archive as ArchiverWithInternals & Record<string, unknown>;
-    console.error("[DR] ARCHIVER_FORENSICS TIMEOUT_DUMP", {
+    console.error("[DR] ARCHIVER_FORENSICS TIMEOUT_DUMP", withActiveFinalizeTrace({
       at: new Date().toISOString(),
       finalizeElapsedMs: finalizeElapsedMs ?? null,
       pointer: archive.pointer(),
@@ -481,7 +535,7 @@ const createArchiverForensicsContext = (
       archiveListenerCounts: readListenerCounts(archive as unknown as NodeJS.EventEmitter),
       moduleListenerCounts: archive._module ? readListenerCounts(archive._module) : null,
       outputListenerCounts: readListenerCounts(output),
-    });
+    }));
   };
 
   const logVersionsOnce = (): void => {
@@ -497,6 +551,9 @@ const createArchiverForensicsContext = (
     attachArchiveForensics,
     attachModuleForensics,
     logForensics,
+    logFinalizeTrace,
+    setActiveFinalizeId,
+    clearActiveFinalizeId,
     dumpTimeout,
     logVersionsOnce,
     recordAppendStart,
@@ -764,82 +821,95 @@ export const createZipArchiveWriter = async (output: PassThrough): Promise<ZipAr
       });
     },
     finalize: async () => {
-      logZipPipelineDiagnostics(archive, output, "finalize-before");
-      forensics.attachModuleForensics();
-      const finalizeStartedAt = Date.now();
-      forensics.logForensics("PRE_FINALIZE");
-      forensics.logForensics("FINALIZE_IN_PROGRESS", { reason: "finalize-start" });
-      console.log("[DR] BEFORE archive.finalize (writer)");
-      logDrObjectDiag("Finalize started", { pointer: archive.pointer() });
-
-      let moduleEndSeen = false;
-      const zipModule = archive._module;
-      const onModuleEnd = (): void => {
-        moduleEndSeen = true;
-      };
-      if (zipModule) {
-        zipModule.on("end", onModuleEnd);
-      }
-
-      const finalizeSnapshotTimer = setInterval(() => {
-        forensics.logForensics("FINALIZE_IN_PROGRESS");
-      }, 5_000);
-
-      const moduleFinalize = archive.finalize();
-
-      const outputDestroyedGuard = new Promise<void>((_, reject) => {
-        const cleanup = (): void => {
-          output.off("close", onClose);
-          output.off("error", onError);
-          if (zipModule) {
-            zipModule.off("end", onModuleEnd);
-          }
-        };
-        const onClose = (): void => {
-          if (output.destroyed && !moduleEndSeen) {
-            cleanup();
-            reject(new Error("ARCHIVE_OUTPUT_DESTROYED_DURING_FINALIZE"));
-          }
-        };
-        const onError = (err: Error): void => {
-          if (!moduleEndSeen) {
-            cleanup();
-            reject(err);
-          }
-        };
-        output.on("close", onClose);
-        output.on("error", onError);
-        void moduleFinalize.finally(cleanup);
-      });
+      const finalizeId = ++zipWriterFinalizeIdCounter;
+      forensics.setActiveFinalizeId(finalizeId);
 
       try {
-        await withDrTimeout(
-          Promise.race([moduleFinalize, outputDestroyedGuard]),
-          DR_ARCHIVE_FINALIZE_TIMEOUT_MS,
-          "archiveFinalize"
-        );
-      } catch (error) {
-        if (
-          error instanceof DrOperationTimeoutError &&
-          error.operation === "archiveFinalize"
-        ) {
-          const finalizeElapsedMs = Date.now() - finalizeStartedAt;
-          console.info("[DR] ZIP_FINALIZE_DURATION", {
-            elapsedMs: finalizeElapsedMs,
-            archivePointer: archive.pointer(),
-            timedOut: true,
-          });
-          forensics.dumpTimeout(finalizeElapsedMs);
-        }
-        throw error;
-      } finally {
-        clearInterval(finalizeSnapshotTimer);
-      }
+        logZipPipelineDiagnostics(archive, output, "finalize-before", { finalizeId });
+        forensics.attachModuleForensics();
+        const finalizeStartedAt = Date.now();
+        forensics.logForensics("PRE_FINALIZE");
+        forensics.logForensics("FINALIZE_IN_PROGRESS", { reason: "finalize-start" });
+        console.log("[DR] BEFORE archive.finalize (writer)", { finalizeId });
+        logDrObjectDiag("Finalize started", { pointer: archive.pointer(), finalizeId });
 
-      logZipPipelineDiagnostics(archive, output, "finalize-after");
-      forensics.logForensics("POST_FINALIZE");
-      logDrObjectDiag("Finalize finished", { pointer: archive.pointer() });
-      console.log("[DR] AFTER archive.finalize (writer)", { pointer: archive.pointer() });
+        let moduleEndSeen = false;
+        const zipModule = archive._module;
+        const onModuleEnd = (): void => {
+          moduleEndSeen = true;
+        };
+        if (zipModule) {
+          zipModule.on("end", onModuleEnd);
+        }
+
+        const finalizeSnapshotTimer = setInterval(() => {
+          forensics.logForensics("FINALIZE_IN_PROGRESS");
+        }, 5_000);
+
+        forensics.logFinalizeTrace("FINALIZE_CALL_BEGIN");
+        const moduleFinalize = archive.finalize();
+        forensics.logFinalizeTrace("FINALIZE_PROMISE_CREATED");
+
+        const outputDestroyedGuard = new Promise<void>((_, reject) => {
+          const cleanup = (): void => {
+            output.off("close", onClose);
+            output.off("error", onError);
+            if (zipModule) {
+              zipModule.off("end", onModuleEnd);
+            }
+          };
+          const onClose = (): void => {
+            if (output.destroyed && !moduleEndSeen) {
+              cleanup();
+              reject(new Error("ARCHIVE_OUTPUT_DESTROYED_DURING_FINALIZE"));
+            }
+          };
+          const onError = (err: Error): void => {
+            if (!moduleEndSeen) {
+              cleanup();
+              reject(err);
+            }
+          };
+          output.on("close", onClose);
+          output.on("error", onError);
+          void moduleFinalize.finally(cleanup);
+        });
+
+        try {
+          forensics.logFinalizeTrace("FINALIZE_WAIT_BEGIN");
+          await withDrTimeout(
+            Promise.race([moduleFinalize, outputDestroyedGuard]),
+            DR_ARCHIVE_FINALIZE_TIMEOUT_MS,
+            "archiveFinalize"
+          );
+          forensics.logFinalizeTrace("FINALIZE_WAIT_END");
+        } catch (error) {
+          if (
+            error instanceof DrOperationTimeoutError &&
+            error.operation === "archiveFinalize"
+          ) {
+            forensics.logFinalizeTrace("FINALIZE_WAIT_TIMEOUT");
+            const finalizeElapsedMs = Date.now() - finalizeStartedAt;
+            console.info("[DR] ZIP_FINALIZE_DURATION", {
+              finalizeId,
+              elapsedMs: finalizeElapsedMs,
+              archivePointer: archive.pointer(),
+              timedOut: true,
+            });
+            forensics.dumpTimeout(finalizeElapsedMs);
+          }
+          throw error;
+        } finally {
+          clearInterval(finalizeSnapshotTimer);
+        }
+
+        logZipPipelineDiagnostics(archive, output, "finalize-after", { finalizeId });
+        forensics.logForensics("POST_FINALIZE");
+        logDrObjectDiag("Finalize finished", { pointer: archive.pointer(), finalizeId });
+        console.log("[DR] AFTER archive.finalize (writer)", { pointer: archive.pointer(), finalizeId });
+      } finally {
+        forensics.clearActiveFinalizeId();
+      }
     },
     pointer: () => archive.pointer(),
     getArchiveState: () => ({
