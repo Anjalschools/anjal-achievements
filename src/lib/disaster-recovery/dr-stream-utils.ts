@@ -4,6 +4,7 @@ import { Readable, Transform, PassThrough } from "stream";
 import { pipeline } from "stream/promises";
 import {
   DR_STREAM_COMPLETED_TIMEOUT_MS,
+  DrOperationTimeoutError,
   withDrTimeout,
 } from "@/lib/disaster-recovery/dr-async-timeout";
 import { destroyDrStream, logDrObjectDiag, monitorDrStream } from "@/lib/disaster-recovery/dr-stream-lifecycle";
@@ -20,6 +21,340 @@ export const isNodeReadableStream = (source: Buffer | Readable): source is Reada
 export const webBodyToNodeStream = (body: ReadableStream<Uint8Array>): Readable =>
   Readable.fromWeb(body as import("stream/web").ReadableStream);
 
+let hashingPipelineIdCounter = 0;
+
+type HashingPipelineLifecycleEvent = {
+  stage: string;
+  event: string;
+  at: string;
+  [key: string]: unknown;
+};
+
+type HashingPipelineStateFlags = {
+  pipelineCreated: boolean;
+  pipelinePromiseCreated: boolean;
+  pipelineWaiting: boolean;
+  pipelineResolved: boolean;
+  pipelineRejected: boolean;
+  finishedWaitBegin: boolean;
+  finishedWaitEnd: boolean;
+  finishedWaitError: boolean;
+};
+
+type HashingPipelineForensicsContext = {
+  pipelineId: number;
+  objectKey: string;
+  startedAt: number;
+  log: (label: string, extra?: Record<string, unknown>) => void;
+  recordLifecycle: (stage: string, event: string, extra?: Record<string, unknown>) => void;
+  attachSourceStream: (stream: Readable) => void;
+  attachHashTransform: (stream: Transform) => void;
+  attachArchiveStream: (stream: PassThrough) => void;
+  markPipelineCreated: () => void;
+  markPipelinePromiseCreated: () => void;
+  markPipelineWaiting: () => void;
+  markPipelineResolved: () => void;
+  markPipelineRejected: () => void;
+  markFinishedWaitBegin: () => void;
+  markFinishedWaitEnd: () => void;
+  markFinishedWaitError: () => void;
+  startHeartbeat: (
+    source: Readable,
+    hashTransform: Transform,
+    archiveStream: PassThrough
+  ) => void;
+  stopHeartbeat: () => void;
+  dumpTimeout: (extra?: { durationMs?: number; error?: unknown }) => void;
+  getSourceSnapshot: (stream: Readable) => Record<string, unknown>;
+  getTransformSnapshot: (stream: Transform) => Record<string, unknown>;
+  getArchiveSnapshot: (stream: PassThrough) => Record<string, unknown>;
+};
+
+const readReadableStreamFlags = (
+  stream: Readable
+): Record<string, unknown> => ({
+  readable: stream.readable,
+  destroyed: Boolean(stream.destroyed),
+  closed: Boolean((stream as { closed?: boolean }).closed),
+  readableEnded: Boolean(stream.readableEnded),
+  readableFlowing: stream.readableFlowing,
+  bytesRead: (stream as Readable & { bytesRead?: number }).bytesRead ?? null,
+});
+
+const readWritableStreamFlags = (
+  stream: NodeJS.ReadWriteStream
+): Record<string, unknown> => ({
+  writable: (stream as { writable?: boolean }).writable,
+  readable: (stream as Readable).readable,
+  destroyed: Boolean(stream.destroyed),
+  writableFinished: Boolean((stream as { writableFinished?: boolean }).writableFinished),
+  readableEnded: Boolean((stream as Readable).readableEnded),
+  writableEnded: Boolean((stream as { writableEnded?: boolean }).writableEnded),
+});
+
+const createHashingPipelineForensics = (
+  entry: StorageManifestEntry,
+  sourceStream: Readable
+): HashingPipelineForensicsContext => {
+  const pipelineId = ++hashingPipelineIdCounter;
+  const objectKey = entry.archivePath;
+  const startedAt = Date.now();
+  let lastLifecycleEvent: HashingPipelineLifecycleEvent | null = null;
+  let lastChunkSize = 0;
+  let lastChunkTimestamp: string | null = null;
+  let totalBytes = 0;
+  let bytesWritten = 0;
+  let heartbeatTimer: ReturnType<typeof setInterval> | undefined;
+  let sourceRef: Readable | null = null;
+  let transformRef: Transform | null = null;
+  let archiveRef: PassThrough | null = null;
+  const pipelineState: HashingPipelineStateFlags = {
+    pipelineCreated: false,
+    pipelinePromiseCreated: false,
+    pipelineWaiting: false,
+    pipelineResolved: false,
+    pipelineRejected: false,
+    finishedWaitBegin: false,
+    finishedWaitEnd: false,
+    finishedWaitError: false,
+  };
+
+  const log = (label: string, extra: Record<string, unknown> = {}): void => {
+    console.info(`[DR] HASHING_PIPELINE_FORENSICS ${label}`, {
+      pipelineId,
+      objectKey,
+      objectId: entry.id,
+      timestamp: new Date().toISOString(),
+      ...extra,
+    });
+  };
+
+  const recordLifecycle = (
+    stage: string,
+    event: string,
+    extra: Record<string, unknown> = {}
+  ): void => {
+    lastLifecycleEvent = {
+      stage,
+      event,
+      at: new Date().toISOString(),
+      pipelineId,
+      ...extra,
+    };
+  };
+
+  const attachPassiveStreamEvents = (
+    stream: NodeJS.EventEmitter,
+    stage: string,
+    events: readonly string[],
+    snapshot: () => Record<string, unknown>
+  ): void => {
+    stream.setMaxListeners(Math.max(stream.getMaxListeners(), events.length + 20));
+    events.forEach((event) => {
+      stream.on(event, (...args: unknown[]) => {
+        recordLifecycle(stage, event, snapshot());
+        const payload: Record<string, unknown> = {
+          pipelineId,
+          event,
+          timestamp: new Date().toISOString(),
+          ...snapshot(),
+        };
+        if (event === "error") {
+          payload.message =
+            args[0] instanceof Error ? args[0].message : String(args[0]);
+        }
+        if (event === "pipe" || event === "unpipe") {
+          payload.peerType = (args[0] as { constructor?: { name?: string } })?.constructor?.name;
+        }
+        console.info(`[DR] HASHING_PIPELINE_FORENSICS ${stage}_EVENT`, payload);
+      });
+    });
+  };
+
+  const attachSourceStream = (stream: Readable): void => {
+    sourceRef = stream;
+    log("SOURCE_STREAM_CREATED", readReadableStreamFlags(stream));
+    attachPassiveStreamEvents(
+      stream,
+      "SOURCE",
+      ["data", "resume", "pause", "end", "close", "finish", "error", "destroy"] as const,
+      () => readReadableStreamFlags(stream)
+    );
+    stream.on("data", (chunk: Buffer | string) => {
+      const size = Buffer.isBuffer(chunk) ? chunk.byteLength : Buffer.byteLength(chunk);
+      lastChunkSize = size;
+      lastChunkTimestamp = new Date().toISOString();
+      totalBytes += size;
+    });
+    stream.on("aborted", () => {
+      recordLifecycle("SOURCE", "aborted", readReadableStreamFlags(stream));
+      console.info("[DR] HASHING_PIPELINE_FORENSICS SOURCE_EVENT", {
+        pipelineId,
+        event: "aborted",
+        timestamp: new Date().toISOString(),
+        ...readReadableStreamFlags(stream),
+      });
+    });
+  };
+
+  const attachHashTransform = (stream: Transform): void => {
+    transformRef = stream;
+    log("HASH_TRANSFORM_CREATED", readWritableStreamFlags(stream));
+    attachPassiveStreamEvents(
+      stream,
+      "HASH",
+      ["pipe", "unpipe", "drain", "finish", "end", "close", "error"] as const,
+      () => readWritableStreamFlags(stream)
+    );
+    stream.on("data", (chunk: Buffer | string) => {
+      const size = Buffer.isBuffer(chunk) ? chunk.byteLength : Buffer.byteLength(chunk);
+      bytesWritten += size;
+    });
+  };
+
+  const attachArchiveStream = (stream: PassThrough): void => {
+    archiveRef = stream;
+    log("ARCHIVE_STREAM_CREATED", {
+      ...readWritableStreamFlags(stream),
+      readableHighWaterMark: stream.readableHighWaterMark,
+      writableHighWaterMark: stream.writableHighWaterMark,
+    });
+    attachPassiveStreamEvents(
+      stream,
+      "ARCHIVE",
+      ["pipe", "unpipe", "drain", "finish", "end", "close", "error"] as const,
+      () => ({
+        ...readWritableStreamFlags(stream),
+        destroyed: stream.destroyed,
+        writableFinished: stream.writableFinished,
+        readableEnded: stream.readableEnded,
+      })
+    );
+  };
+
+  const getSourceSnapshot = (stream: Readable): Record<string, unknown> =>
+    readReadableStreamFlags(stream);
+
+  const getTransformSnapshot = (stream: Transform): Record<string, unknown> =>
+    readWritableStreamFlags(stream);
+
+  const getArchiveSnapshot = (stream: PassThrough): Record<string, unknown> => ({
+    ...readWritableStreamFlags(stream),
+    destroyed: stream.destroyed,
+    writableFinished: stream.writableFinished,
+    readableEnded: stream.readableEnded,
+  });
+
+  const startHeartbeat = (
+    source: Readable,
+    hashTransform: Transform,
+    archiveStream: PassThrough
+  ): void => {
+    heartbeatTimer = setInterval(() => {
+      log("PIPELINE_IN_PROGRESS", {
+        elapsedMs: Date.now() - startedAt,
+        bytesRead: (source as Readable & { bytesRead?: number }).bytesRead ?? null,
+        bytesWritten,
+        totalBytes,
+        sourceDestroyed: source.destroyed,
+        sourceEnded: source.readableEnded,
+        transformFinished: hashTransform.writableFinished,
+        transformEnded: hashTransform.readableEnded,
+        archiveFinished: archiveStream.writableFinished,
+        archiveEnded: archiveStream.readableEnded,
+        lastLifecycleEvent,
+        lastChunkSize,
+        lastChunkTimestamp,
+      });
+    }, 5_000);
+  };
+
+  const stopHeartbeat = (): void => {
+    if (heartbeatTimer) {
+      clearInterval(heartbeatTimer);
+      heartbeatTimer = undefined;
+    }
+  };
+
+  const dumpTimeout = (extra: { durationMs?: number; error?: unknown } = {}): void => {
+    stopHeartbeat();
+    const error = extra.error;
+    console.error("[DR] HASHING_PIPELINE_FORENSICS PIPELINE_TIMEOUT_DUMP", {
+      pipelineId,
+      objectKey,
+      objectId: entry.id,
+      provider: entry.provider,
+      storageKey: entry.storageKey,
+      durationMs: extra.durationMs ?? Date.now() - startedAt,
+      error: error instanceof Error ? error.message : error ? String(error) : undefined,
+      stack: error instanceof Error ? error.stack : undefined,
+      source: sourceRef ? getSourceSnapshot(sourceRef) : null,
+      hashTransform: transformRef ? getTransformSnapshot(transformRef) : null,
+      archiveStream: archiveRef ? getArchiveSnapshot(archiveRef) : null,
+      lastLifecycleEvent,
+      lastChunkSize,
+      lastChunkTimestamp,
+      totalBytes,
+      bytesWritten,
+      pipelineState: { ...pipelineState },
+    });
+  };
+
+  log("PIPELINE_CREATE", {
+    objectId: entry.id,
+    storageKey: entry.storageKey,
+    provider: entry.provider,
+    entryName: entry.archivePath,
+    streamType: sourceStream.constructor?.name ?? typeof sourceStream,
+    readableHighWaterMark: sourceStream.readableHighWaterMark,
+    writableHighWaterMark: (sourceStream as { writableHighWaterMark?: number }).writableHighWaterMark ?? null,
+  });
+  pipelineState.pipelineCreated = true;
+
+  return {
+    pipelineId,
+    objectKey,
+    startedAt,
+    log,
+    recordLifecycle,
+    attachSourceStream,
+    attachHashTransform,
+    attachArchiveStream,
+    markPipelineCreated: () => {
+      pipelineState.pipelineCreated = true;
+    },
+    markPipelinePromiseCreated: () => {
+      pipelineState.pipelinePromiseCreated = true;
+    },
+    markPipelineWaiting: () => {
+      pipelineState.pipelineWaiting = true;
+    },
+    markPipelineResolved: () => {
+      pipelineState.pipelineResolved = true;
+      pipelineState.pipelineWaiting = false;
+    },
+    markPipelineRejected: () => {
+      pipelineState.pipelineRejected = true;
+      pipelineState.pipelineWaiting = false;
+    },
+    markFinishedWaitBegin: () => {
+      pipelineState.finishedWaitBegin = true;
+    },
+    markFinishedWaitEnd: () => {
+      pipelineState.finishedWaitEnd = true;
+    },
+    markFinishedWaitError: () => {
+      pipelineState.finishedWaitError = true;
+    },
+    startHeartbeat,
+    stopHeartbeat,
+    dumpTimeout,
+    getSourceSnapshot,
+    getTransformSnapshot,
+    getArchiveSnapshot,
+  };
+};
+
 export const finishedWithTimeout = async (
   stream: Readable,
   timeoutMs: number,
@@ -35,7 +370,8 @@ export const pipelineWithTimeout = async (
   timeoutMsOrDestination: number | NodeJS.WritableStream,
   operationOrTimeoutMs?: string | number,
   metaOrOperation?: { objectKey?: string; provider?: string; objectId?: string; streamName?: string } | string,
-  meta?: { objectKey?: string; provider?: string; objectId?: string; streamName?: string }
+  meta?: { objectKey?: string; provider?: string; objectId?: string; streamName?: string },
+  hashingForensics?: HashingPipelineForensicsContext
 ): Promise<void> => {
   const hasTransform =
     typeof (transformOrDestination as Transform)._transform === "function" &&
@@ -76,18 +412,61 @@ export const pipelineWithTimeout = async (
   }
 
   try {
-    if (hasTransform) {
-      await withDrTimeout(
-        pipeline(source, transformOrDestination as Transform, destination, { end: true }),
-        timeoutMs,
-        operation,
-        pipelineMeta
-      );
-      return;
-    }
+    const runPipeline = async (): Promise<void> => {
+      hashingForensics?.log("PIPELINE_BEGIN");
+      hashingForensics?.markPipelineCreated();
+      if (hasTransform) {
+        const pipelinePromise = pipeline(source, transformOrDestination as Transform, destination, {
+          end: true,
+        });
+        hashingForensics?.log("PIPELINE_PROMISE_CREATED");
+        hashingForensics?.markPipelinePromiseCreated();
+        hashingForensics?.log("PIPELINE_WAIT_BEGIN");
+        hashingForensics?.markPipelineWaiting();
+        hashingForensics?.startHeartbeat(
+          source,
+          transformOrDestination as Transform,
+          destination as PassThrough
+        );
+        await pipelinePromise;
+        return;
+      }
 
-    await withDrTimeout(pipeline(source, destination), timeoutMs, operation, pipelineMeta);
+      const pipelinePromise = pipeline(source, destination);
+      hashingForensics?.log("PIPELINE_PROMISE_CREATED");
+      hashingForensics?.markPipelinePromiseCreated();
+      hashingForensics?.log("PIPELINE_WAIT_BEGIN");
+      hashingForensics?.markPipelineWaiting();
+      await pipelinePromise;
+    };
+
+    const pipelineStartedAt = Date.now();
+    await withDrTimeout(runPipeline(), timeoutMs, operation, pipelineMeta);
+    hashingForensics?.stopHeartbeat();
+    hashingForensics?.markPipelineResolved();
+    hashingForensics?.log("PIPELINE_WAIT_END", {
+      durationMs: Date.now() - pipelineStartedAt,
+    });
   } catch (error) {
+    hashingForensics?.stopHeartbeat();
+    if (
+      hashingForensics &&
+      error instanceof DrOperationTimeoutError &&
+      error.operation === operation
+    ) {
+      hashingForensics.dumpTimeout({
+        durationMs: Date.now() - hashingForensics.startedAt,
+        error,
+      });
+      hashingForensics.markPipelineRejected();
+    } else if (hashingForensics) {
+      hashingForensics.markPipelineRejected();
+      hashingForensics.log("PIPELINE_WAIT_ERROR", {
+        durationMs: Date.now() - hashingForensics.startedAt,
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      });
+    }
     logDrPipelineStreamError({ ...pipelineContext, streamName: operation }, error);
     throw error;
   }
@@ -246,9 +625,33 @@ export const createDrArchiveStreamRegistry = (): DrArchiveStreamRegistry => {
   };
 };
 
-const waitForArchiveProducerWritableFinish = async (stream: PassThrough): Promise<void> => {
+const waitForArchiveProducerWritableFinish = async (
+  stream: PassThrough,
+  hashingForensics?: HashingPipelineForensicsContext
+): Promise<void> => {
   if (stream.writableFinished) return;
-  await finished(stream, { readable: false });
+  hashingForensics?.log("FINISHED_WAIT_BEGIN", {
+    stream: "archive",
+    ...hashingForensics.getArchiveSnapshot(stream),
+  });
+  hashingForensics?.markFinishedWaitBegin();
+  try {
+    await finished(stream, { readable: false });
+    hashingForensics?.markFinishedWaitEnd();
+    hashingForensics?.log("FINISHED_WAIT_END", {
+      stream: "archive",
+      ...hashingForensics.getArchiveSnapshot(stream),
+    });
+  } catch (error) {
+    hashingForensics?.markFinishedWaitError();
+    hashingForensics?.log("FINISHED_WAIT_ERROR", {
+      stream: "archive",
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+      ...hashingForensics.getArchiveSnapshot(stream),
+    });
+    throw error;
+  }
 };
 
 export const createHashingObjectStream = (
@@ -257,6 +660,7 @@ export const createHashingObjectStream = (
 ): HashingObjectStream => {
   const objectKey = entry.archivePath;
   const streamContext = buildDrObjectStreamContext({ entry });
+  const hashingForensics = createHashingPipelineForensics(entry, sourceStream);
 
   attachDrObjectStreamErrorLogging(sourceStream, {
     ...streamContext,
@@ -267,6 +671,7 @@ export const createHashingObjectStream = (
     objectKey,
     stage: "object-source",
   });
+  hashingForensics.attachSourceStream(monitoredSource);
 
   const hash = createHash("sha256");
   let byteLength = 0;
@@ -279,6 +684,9 @@ export const createHashingObjectStream = (
       callback(null, chunk);
     },
   });
+
+  hashingForensics.attachHashTransform(hashTransform);
+  hashingForensics.attachArchiveStream(archiveStream);
 
   monitorDrStream(archiveStream, { objectKey, stage: "hashing-transform" });
   attachDrObjectStreamErrorLogging(archiveStream, {
@@ -301,10 +709,11 @@ export const createHashingObjectStream = (
       provider: entry.provider,
       objectId: entry.id,
       streamName: "hashingPipeline",
-    }
+    },
+    hashingForensics
   )
     .then(async (): Promise<StorageManifestEntry> => {
-      await waitForArchiveProducerWritableFinish(archiveStream);
+      await waitForArchiveProducerWritableFinish(archiveStream, hashingForensics);
       let errorMessage = entry.errorMessage;
       if (entry.fileSize && entry.fileSize > 0 && byteLength !== entry.fileSize) {
         errorMessage = `SIZE_MISMATCH:expected=${entry.fileSize},actual=${byteLength}`;
@@ -313,6 +722,7 @@ export const createHashingObjectStream = (
         objectKey,
         byteLength,
         elapsedMs: undefined,
+        pipelineId: hashingForensics.pipelineId,
       });
       return {
         ...entry,
@@ -323,6 +733,19 @@ export const createHashingObjectStream = (
       };
     })
     .catch((error) => {
+      hashingForensics.stopHeartbeat();
+      if (
+        !(error instanceof DrOperationTimeoutError && error.operation === "hashingPipeline")
+      ) {
+        hashingForensics.log("PIPELINE_WAIT_ERROR", {
+          durationMs: Date.now() - hashingForensics.startedAt,
+          error: error instanceof Error ? error.message : String(error),
+          stack: error instanceof Error ? error.stack : undefined,
+          source: hashingForensics.getSourceSnapshot(monitoredSource),
+          hashTransform: hashingForensics.getTransformSnapshot(hashTransform),
+          archiveStream: hashingForensics.getArchiveSnapshot(archiveStream),
+        });
+      }
       logDrPipelineStreamError(
         { ...streamContext, streamName: "hashingPipeline" },
         error
