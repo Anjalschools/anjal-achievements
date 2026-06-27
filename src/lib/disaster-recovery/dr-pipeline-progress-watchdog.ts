@@ -71,6 +71,16 @@ const asReadableLike = (stream: Readable) =>
     bytesRead?: number | null;
   };
 
+type WritableLike = {
+  writableFinished?: boolean;
+  writableEnded?: boolean;
+  writable?: boolean;
+  destroyed?: boolean;
+};
+
+const asWritableLike = (stream: unknown): WritableLike =>
+  stream as unknown as WritableLike;
+
 const parseCloudinaryPublicId = (storageKey: string): string => {
   if (storageKey.startsWith("cloudinary://")) {
     const [, ...rest] = storageKey.replace("cloudinary://", "").split("/");
@@ -294,7 +304,7 @@ export const attachPipelineProgressWatchdog = (
       state === "SKIPPED" ||
       state === "COMPLETED" ||
       input.sourceStream.readableEnded ||
-      input.archiveStream.writableFinished
+      asWritableLike(input.archiveStream).writableFinished
     ) {
       return false;
     }
