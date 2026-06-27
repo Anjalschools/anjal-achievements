@@ -1,12 +1,13 @@
 import { PassThrough, Readable } from "stream";
 import { EventEmitter } from "events";
-import { finished } from "stream/promises";
+import { readFileSync } from "fs";
+import { join } from "path";
 import unzipper from "unzipper";
 import { hashContent, serializeManifest, type BackupManifest } from "@/lib/backup/backup-manifest";
 import { resolveCollectionFileName } from "@/lib/backup/backup-constants";
 import {
   DR_ARCHIVE_FINALIZE_TIMEOUT_MS,
-  DR_STREAM_DRAIN_TIMEOUT_MS,
+  DrOperationTimeoutError,
   withDrTimeout,
 } from "@/lib/disaster-recovery/dr-async-timeout";
 import { logDrObjectDiag } from "@/lib/disaster-recovery/dr-stream-lifecycle";
@@ -68,19 +69,384 @@ type ArchiverWithInternals = EventEmitter & {
   finalize: () => Promise<void>;
   resume?: () => void;
   isPaused?: () => boolean;
+  readableEnded?: boolean;
+  writableEnded?: boolean;
+  writableFinished?: boolean;
+  destroyed?: boolean;
   _queue?: {
     idle: () => boolean;
     length: () => number;
     drain: (callback: () => void) => void;
   };
+  _statQueue?: {
+    idle: () => boolean;
+    length: () => number;
+  };
   _entriesCount?: number;
   _entriesProcessedCount?: number;
   _pending?: number;
+  _task?: unknown;
+  _module?: EventEmitter & {
+    destroyed?: boolean;
+    readableEnded?: boolean;
+    writableEnded?: boolean;
+    writableFinished?: boolean;
+    readableFlowing?: boolean | null;
+  };
   _state?: {
     finalize?: boolean;
     finalizing?: boolean;
     finalized?: boolean;
     aborted?: boolean;
+    modulePiped?: boolean;
+  };
+};
+
+const readStreamLifecycleFlags = (
+  stream: NodeJS.EventEmitter & {
+    destroyed?: boolean;
+    readableEnded?: boolean;
+    writableEnded?: boolean;
+    writableFinished?: boolean;
+    readableFlowing?: boolean | null;
+    closed?: boolean;
+  }
+): Record<string, unknown> => ({
+  destroyed: Boolean(stream.destroyed),
+  readableEnded: Boolean(stream.readableEnded),
+  writableEnded: Boolean(stream.writableEnded),
+  writableFinished: Boolean(stream.writableFinished),
+  readableFlowing: stream.readableFlowing,
+  closed: Boolean(stream.closed),
+});
+
+const readInstalledPackageVersion = (packageName: string): string => {
+  try {
+    const raw = readFileSync(
+      join(process.cwd(), "node_modules", packageName, "package.json"),
+      "utf8"
+    );
+    return (JSON.parse(raw) as { version?: string }).version ?? "unknown";
+  } catch {
+    return "unknown";
+  }
+};
+
+const ARCHIVER_FORENSIC_EVENTS = [
+  "entry",
+  "progress",
+  "warning",
+  "error",
+  "finish",
+  "end",
+  "close",
+  "prefinish",
+  "drain",
+  "pipe",
+  "unpipe",
+] as const;
+
+type LastEntryForensics = {
+  entryName?: string;
+  entrySize?: number;
+  appendStartedAt?: string;
+  appendReturnedAt?: string;
+  entryEventReceived?: boolean;
+  lastProgress?: unknown;
+  pointerBefore?: number;
+  pointerAfter?: number;
+};
+
+const readModuleForensics = (
+  module: ArchiverWithInternals["_module"]
+): Record<string, unknown> | null => {
+  if (!module) return null;
+  const record = module as EventEmitter & {
+    destroyed?: boolean;
+    readableEnded?: boolean;
+    writableEnded?: boolean;
+    writableFinished?: boolean;
+    ended?: boolean;
+    finished?: boolean;
+  };
+  return {
+    constructorName: module.constructor?.name,
+    ended: record.ended,
+    finished: record.finished,
+    destroyed: Boolean(record.destroyed),
+    readableEnded: Boolean(record.readableEnded),
+    writableFinished: Boolean(record.writableFinished),
+    writableEnded: Boolean(record.writableEnded),
+    ...readStreamLifecycleFlags(module),
+  };
+};
+
+const readArchiverForensicsSnapshot = (
+  archive: ArchiverWithInternals,
+  output: PassThrough
+): Record<string, unknown> => {
+  const entriesQueued = archive._entriesCount ?? -1;
+  const entriesProcessed = archive._entriesProcessedCount ?? -1;
+  const remainingEntries =
+    entriesQueued >= 0 && entriesProcessed >= 0 ? entriesQueued - entriesProcessed : -1;
+  const archiveRecord = archive as ArchiverWithInternals & { closed?: boolean };
+
+  return {
+    at: new Date().toISOString(),
+    pointer: archive.pointer(),
+    pending: archive._pending ?? -1,
+    queueLength: archive._queue?.length() ?? -1,
+    queueIdle: archive._queue?.idle() ?? false,
+    statQueueLength: archive._statQueue?.length() ?? -1,
+    statQueueIdle: archive._statQueue?.idle() ?? false,
+    entriesQueued,
+    entriesProcessed,
+    remainingEntries,
+    archiveState: archive._state ?? null,
+    moduleState: readModuleForensics(archive._module),
+    archiveReadableEnded: Boolean(archive.readableEnded),
+    archiveReadableFinished: Boolean(archive.writableFinished),
+    archiveDestroyed: Boolean(archive.destroyed),
+    archiveClosed: Boolean(archiveRecord.closed),
+    outputDestroyed: output.destroyed,
+    outputClosed: Boolean((output as { closed?: boolean }).closed),
+    outputWritableFinished: output.writableFinished,
+    outputNeedDrain: output.writableNeedDrain,
+    outputWritableLength: output.writableLength,
+    outputHighWaterMark: output.writableHighWaterMark,
+    moduleEnded: Boolean(archive._module?.readableEnded),
+    moduleFinished: Boolean(archive._module?.writableFinished),
+    archiveEnded: Boolean(archive.readableEnded),
+    archiveFinished: Boolean(archive.writableFinished),
+  };
+};
+
+const readListenerCounts = (emitter: NodeJS.EventEmitter): Record<string, number> => {
+  if (typeof emitter.listenerCount !== "function") {
+    return Object.fromEntries(ARCHIVER_FORENSIC_EVENTS.map((event) => [event, -1]));
+  }
+  return Object.fromEntries(ARCHIVER_FORENSIC_EVENTS.map((event) => [event, emitter.listenerCount(event)]));
+};
+
+const logArchiverInternalIdle = (
+  archive: ArchiverWithInternals,
+  output: PassThrough
+): void => {
+  console.info("[DR] ARCHIVER_FORENSICS ARCHIVER_INTERNAL_IDLE", {
+    at: new Date().toISOString(),
+    ...readArchiverForensicsSnapshot(archive, output),
+    archiveListenerCounts: readListenerCounts(archive as unknown as NodeJS.EventEmitter),
+    moduleListenerCounts: archive._module ? readListenerCounts(archive._module) : null,
+    outputListenerCounts: readListenerCounts(output),
+  });
+};
+
+const createArchiverForensicsContext = (
+  archive: ArchiverWithInternals,
+  output: PassThrough
+) => {
+  const lastEntry: LastEntryForensics = {};
+  let previousFinalizePointer = -1;
+  let internalIdleLogged = false;
+
+  const logForensics = (
+    label: string,
+    extra: Record<string, unknown> = {}
+  ): void => {
+    const snapshot = readArchiverForensicsSnapshot(archive, output);
+    const payload: Record<string, unknown> = { ...snapshot, ...extra };
+
+    if (label === "FINALIZE_IN_PROGRESS") {
+      const currentPointer = archive.pointer();
+      payload.previousPointer = previousFinalizePointer;
+      payload.currentPointer = currentPointer;
+      payload.pointerAdvanced =
+        previousFinalizePointer >= 0 ? currentPointer > previousFinalizePointer : null;
+      payload.bytesAdvanced =
+        previousFinalizePointer >= 0 ? currentPointer - previousFinalizePointer : null;
+      previousFinalizePointer = currentPointer;
+    }
+
+    console.info(`[DR] ARCHIVER_FORENSICS ${label}`, payload);
+
+    const queueLength = snapshot.queueLength as number;
+    const pending = snapshot.pending as number;
+    const remainingEntries = snapshot.remainingEntries as number;
+    if (
+      queueLength === 0 &&
+      pending === 0 &&
+      remainingEntries === 0 &&
+      !internalIdleLogged
+    ) {
+      internalIdleLogged = true;
+      logArchiverInternalIdle(archive, output);
+    }
+  };
+
+  const logOutputEvent = (event: string, meta: Record<string, unknown> = {}): void => {
+    console.info("[DR] ARCHIVER_FORENSICS OUTPUT_EVENT", {
+      event,
+      timestamp: new Date().toISOString(),
+      pointer: archive.pointer(),
+      needDrain: output.writableNeedDrain,
+      writableLength: output.writableLength,
+      destroyed: output.destroyed,
+      closed: Boolean((output as { closed?: boolean }).closed),
+      ...meta,
+    });
+  };
+
+  const attachOutputForensics = (): void => {
+    (["drain", "finish", "prefinish", "close", "error", "pipe", "unpipe"] as const).forEach(
+      (event) => {
+        output.on(event, (...args: unknown[]) => {
+          logOutputEvent(
+            event,
+            event === "error"
+              ? {
+                  message: args[0] instanceof Error ? args[0].message : String(args[0]),
+                }
+              : event === "pipe" || event === "unpipe"
+                ? { peerType: (args[0] as { constructor?: { name?: string } })?.constructor?.name }
+                : {}
+          );
+        });
+      }
+    );
+  };
+
+  const attachArchiveForensics = (): void => {
+    (["entry", "progress", "finish", "end", "close", "warning", "error"] as const).forEach(
+      (event) => {
+        archive.on(event, (...args: unknown[]) => {
+          console.info("[DR] ARCHIVER_FORENSICS ARCHIVE_EVENT", {
+            event,
+            timestamp: new Date().toISOString(),
+            pointer: archive.pointer(),
+            payload:
+              event === "entry" || event === "progress"
+                ? args[0]
+                : event === "error" || event === "warning"
+                  ? args[0] instanceof Error
+                    ? args[0].message
+                    : String(args[0])
+                  : undefined,
+          });
+
+          if (event === "entry") {
+            const entryData = args[0] as { name?: string };
+            if (entryData?.name === lastEntry.entryName) {
+              lastEntry.entryEventReceived = true;
+            }
+          }
+          if (event === "progress") {
+            lastEntry.lastProgress = args[0];
+          }
+        });
+      }
+    );
+
+    (["prefinish", "finish", "end", "close"] as const).forEach((event) => {
+      archive.on(event, () => {
+        console.info("[DR] ARCHIVER_FORENSICS TRANSFORM_EVENT", {
+          event,
+          timestamp: new Date().toISOString(),
+          pointer: archive.pointer(),
+          ...readStreamLifecycleFlags(archive as ArchiverWithInternals),
+        });
+      });
+    });
+  };
+
+  let moduleForensicsAttached = false;
+  const attachModuleForensics = (): void => {
+    if (moduleForensicsAttached) return;
+    const module = archive._module;
+    if (!module) {
+      console.info("[DR] ARCHIVER_FORENSICS MODULE_EVENT", {
+        event: "module-unavailable",
+        timestamp: new Date().toISOString(),
+        pointer: archive.pointer(),
+      });
+      return;
+    }
+    moduleForensicsAttached = true;
+
+    (["finish", "end", "close", "drain", "pipe", "unpipe", "error"] as const).forEach((event) => {
+      module.on(event, (...args: unknown[]) => {
+        console.info("[DR] ARCHIVER_FORENSICS MODULE_EVENT", {
+          event,
+          timestamp: new Date().toISOString(),
+          pointer: archive.pointer(),
+          moduleInfo: readModuleForensics(module),
+          ...(event === "error"
+            ? {
+                message: args[0] instanceof Error ? args[0].message : String(args[0]),
+              }
+            : event === "pipe" || event === "unpipe"
+              ? { peerType: (args[0] as { constructor?: { name?: string } })?.constructor?.name }
+              : {}),
+        });
+      });
+    });
+  };
+
+  const recordAppendStart = (entryName: string, entrySize?: number): void => {
+    lastEntry.entryName = entryName;
+    lastEntry.entrySize = entrySize;
+    lastEntry.appendStartedAt = new Date().toISOString();
+    lastEntry.appendReturnedAt = undefined;
+    lastEntry.entryEventReceived = false;
+    lastEntry.lastProgress = undefined;
+    lastEntry.pointerBefore = archive.pointer();
+    lastEntry.pointerAfter = undefined;
+  };
+
+  const recordAppendReturn = (): void => {
+    lastEntry.appendReturnedAt = new Date().toISOString();
+    lastEntry.pointerAfter = archive.pointer();
+  };
+
+  const dumpTimeout = (): void => {
+    const rawArchive = archive as ArchiverWithInternals & Record<string, unknown>;
+    console.error("[DR] ARCHIVER_FORENSICS TIMEOUT_DUMP", {
+      snapshot: readArchiverForensicsSnapshot(archive, output),
+      lastEntry: { ...lastEntry },
+      privateFields: {
+        _queue: archive._queue ?? null,
+        _statQueue: archive._statQueue ?? null,
+        _state: archive._state ?? null,
+        _pending: archive._pending ?? null,
+        _task: archive._task ?? null,
+        _module: archive._module ?? null,
+        _entriesCount: archive._entriesCount ?? null,
+        _entriesProcessedCount: archive._entriesProcessedCount ?? null,
+      },
+      archivePrivateKeys: Object.keys(rawArchive).filter((key) => key.startsWith("_")),
+      moduleInfo: readModuleForensics(archive._module),
+      archiveListenerCounts: readListenerCounts(archive as unknown as NodeJS.EventEmitter),
+      moduleListenerCounts: archive._module ? readListenerCounts(archive._module) : null,
+      outputListenerCounts: readListenerCounts(output),
+    });
+  };
+
+  const logVersionsOnce = (): void => {
+    console.info("[DR] ARCHIVER_FORENSICS VERSIONS", {
+      archiver: readInstalledPackageVersion("archiver"),
+      zipStream: readInstalledPackageVersion("zip-stream"),
+      node: process.version,
+    });
+  };
+
+  return {
+    attachOutputForensics,
+    attachArchiveForensics,
+    attachModuleForensics,
+    logForensics,
+    dumpTimeout,
+    logVersionsOnce,
+    recordAppendStart,
+    recordAppendReturn,
   };
 };
 
@@ -260,6 +626,10 @@ export const createZipArchiveWriter = async (output: PassThrough): Promise<ZipAr
   });
 
   logZipPipelineDiagnostics(archive, output, "archive-created");
+  const forensics = createArchiverForensicsContext(archive, output);
+  forensics.logVersionsOnce();
+  forensics.attachOutputForensics();
+  forensics.attachArchiveForensics();
 
   return {
     logPipelineDiagnostics: (phase, extra = {}) => logZipPipelineDiagnostics(archive, output, phase, extra),
@@ -306,7 +676,14 @@ export const createZipArchiveWriter = async (output: PassThrough): Promise<ZipAr
         });
       }
 
+      forensics.recordAppendStart(
+        entryName,
+        Buffer.isBuffer(source) ? source.byteLength : undefined
+      );
+
       archive.append(source, options);
+
+      forensics.recordAppendReturn();
 
       console.info("[DR] ZIP_APPEND_ENQUEUED", {
         appendId: currentAppendId,
@@ -334,27 +711,42 @@ export const createZipArchiveWriter = async (output: PassThrough): Promise<ZipAr
     },
     finalize: async () => {
       logZipPipelineDiagnostics(archive, output, "finalize-before");
+      forensics.attachModuleForensics();
+      forensics.logForensics("PRE_FINALIZE");
       console.log("[DR] BEFORE archive.finalize (writer)");
       logDrObjectDiag("Finalize started", { pointer: archive.pointer() });
 
-      let moduleSettled = false;
-      const moduleFinalize = archive.finalize().then(() => {
-        moduleSettled = true;
-      });
+      let moduleEndSeen = false;
+      const zipModule = archive._module;
+      const onModuleEnd = (): void => {
+        moduleEndSeen = true;
+      };
+      if (zipModule) {
+        zipModule.on("end", onModuleEnd);
+      }
+
+      const finalizeSnapshotTimer = setInterval(() => {
+        forensics.logForensics("FINALIZE_IN_PROGRESS");
+      }, 5_000);
+
+      const moduleFinalize = archive.finalize();
 
       const outputDestroyedGuard = new Promise<void>((_, reject) => {
         const cleanup = (): void => {
           output.off("close", onClose);
           output.off("error", onError);
+          if (zipModule) {
+            zipModule.off("end", onModuleEnd);
+          }
         };
         const onClose = (): void => {
-          if (output.destroyed && !moduleSettled) {
+          if (output.destroyed && !moduleEndSeen) {
             cleanup();
             reject(new Error("ARCHIVE_OUTPUT_DESTROYED_DURING_FINALIZE"));
           }
         };
         const onError = (err: Error): void => {
-          if (!moduleSettled) {
+          if (!moduleEndSeen) {
             cleanup();
             reject(err);
           }
@@ -364,12 +756,26 @@ export const createZipArchiveWriter = async (output: PassThrough): Promise<ZipAr
         void moduleFinalize.finally(cleanup);
       });
 
-      await withDrTimeout(
-        Promise.race([moduleFinalize, outputDestroyedGuard]),
-        DR_ARCHIVE_FINALIZE_TIMEOUT_MS,
-        "archiveFinalize"
-      );
+      try {
+        await withDrTimeout(
+          Promise.race([moduleFinalize, outputDestroyedGuard]),
+          DR_ARCHIVE_FINALIZE_TIMEOUT_MS,
+          "archiveFinalize"
+        );
+      } catch (error) {
+        if (
+          error instanceof DrOperationTimeoutError &&
+          error.operation === "archiveFinalize"
+        ) {
+          forensics.dumpTimeout();
+        }
+        throw error;
+      } finally {
+        clearInterval(finalizeSnapshotTimer);
+      }
+
       logZipPipelineDiagnostics(archive, output, "finalize-after");
+      forensics.logForensics("POST_FINALIZE");
       logDrObjectDiag("Finalize finished", { pointer: archive.pointer() });
       console.log("[DR] AFTER archive.finalize (writer)", { pointer: archive.pointer() });
     },
