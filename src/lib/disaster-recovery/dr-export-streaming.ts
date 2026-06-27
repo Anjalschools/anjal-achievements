@@ -12,6 +12,7 @@ import {
   logDrArchiveAppendFailed,
   logDrDownloadProviderFailed,
 } from "@/lib/disaster-recovery/dr-object-stream-diagnostics";
+import type { DrArchiveStreamRegistry } from "@/lib/disaster-recovery/dr-stream-utils";
 import { destroyDrStream, logDrObjectDiag } from "@/lib/disaster-recovery/dr-stream-lifecycle";
 
 export type StreamingObjectExportProgress = {
@@ -42,6 +43,7 @@ export type DrStreamExportGuards = {
   appendDrainTimeoutMs?: number;
   completedTimeoutMs?: number;
   watchdog?: DrExportWatchdog;
+  streamRegistry?: DrArchiveStreamRegistry;
 };
 
 export const runSequentialObjectExport = async (input: {
@@ -98,6 +100,7 @@ export const runSequentialObjectStreamExport = async (input: {
   const downloadTimeoutMs = input.guards?.downloadTimeoutMs ?? DR_OBJECT_DOWNLOAD_TIMEOUT_MS;
   const appendDrainTimeoutMs = input.guards?.appendDrainTimeoutMs ?? DR_STREAM_DRAIN_TIMEOUT_MS;
   const completedTimeoutMs = input.guards?.completedTimeoutMs ?? DR_STREAM_COMPLETED_TIMEOUT_MS;
+  const streamRegistry = input.guards?.streamRegistry;
 
   for (let index = 0; index < input.entries.length; index += 1) {
     const source = input.entries[index];
@@ -106,6 +109,7 @@ export const runSequentialObjectStreamExport = async (input: {
     const objectKey = source.archivePath;
     const streamContext = buildDrObjectStreamContext({ entry: source });
     let activeStream: Readable | null = null;
+    let appendSucceeded = false;
     const objectStartedAt = Date.now();
 
     try {
@@ -147,31 +151,44 @@ export const runSequentialObjectStreamExport = async (input: {
 
       logDrObjectDiag("Archive append started", { objectKey, entryId: source.id });
       const appendStartedAt = Date.now();
-      const appendPromise = Promise.resolve(
-        input.onObjectReady({
-          stream: exported.stream,
-          completed: exported.completed,
-          archivePath: source.archivePath,
-        })
-      );
+      streamRegistry?.registerArchiveStream(exported.stream, objectKey);
+      appendSucceeded = false;
       try {
-        await withDrTimeout(appendPromise, appendDrainTimeoutMs, "archiveAppendDrain", { objectKey });
+        await withDrTimeout(
+          Promise.resolve(
+            input.onObjectReady({
+              stream: exported.stream,
+              completed: exported.completed,
+              archivePath: source.archivePath,
+            })
+          ),
+          appendDrainTimeoutMs,
+          "archiveAppendDrain",
+          { objectKey }
+        );
+        appendSucceeded = true;
       } catch (error) {
         logDrArchiveAppendFailed(streamContext, error);
-        destroyDrStream(activeStream, error instanceof Error ? error : undefined);
-        void appendPromise.catch(() => undefined);
-        failures.push({
-          ...source,
-          status: "failed",
-          errorMessage: error instanceof Error ? error.message : "EXPORT_FAILED",
-        });
-        logDrObjectDiag("Object failed", {
-          objectKey,
-          entryId: source.id,
-          message: error instanceof Error ? error.message : String(error),
-          elapsedMs: Date.now() - objectStartedAt,
-        });
-        continue;
+        if (!appendSucceeded) {
+          destroyDrStream(activeStream, error instanceof Error ? error : undefined);
+          streamRegistry?.markProducerError(
+            exported.stream,
+            error instanceof Error ? error : String(error)
+          );
+          failures.push({
+            ...source,
+            status: "failed",
+            errorMessage: error instanceof Error ? error.message : "EXPORT_FAILED",
+          });
+          logDrObjectDiag("Object failed", {
+            objectKey,
+            entryId: source.id,
+            message: error instanceof Error ? error.message : String(error),
+            elapsedMs: Date.now() - objectStartedAt,
+          });
+          continue;
+        }
+        throw error;
       }
       logDrObjectDiag("Archive append finished", {
         objectKey,
@@ -186,12 +203,22 @@ export const runSequentialObjectStreamExport = async (input: {
         processedObjects: index,
       });
 
-      const finalizedEntry = await withDrTimeout(
-        exported.completed,
-        completedTimeoutMs,
-        "streamHashCompleted",
-        { objectKey }
-      );
+      let finalizedEntry: StorageManifestEntry;
+      try {
+        finalizedEntry = await withDrTimeout(
+          exported.completed,
+          completedTimeoutMs,
+          "streamHashCompleted",
+          { objectKey }
+        );
+      } catch (error) {
+        streamRegistry?.markProducerError(
+          exported.stream,
+          error instanceof Error ? error : String(error)
+        );
+        throw error;
+      }
+      streamRegistry?.markProducerCompleted(exported.stream);
       manifestEntries.push(finalizedEntry);
       bytesExported += finalizedEntry.fileSize || 0;
 
@@ -203,18 +230,22 @@ export const runSequentialObjectStreamExport = async (input: {
       });
     } catch (error) {
       logDrDownloadProviderFailed(streamContext, error);
-      destroyDrStream(activeStream, error instanceof Error ? error : undefined);
-      failures.push({
-        ...source,
-        status: "failed",
-        errorMessage: error instanceof Error ? error.message : "EXPORT_FAILED",
-      });
-      logDrObjectDiag("Object failed", {
-        objectKey,
-        entryId: source.id,
-        message: error instanceof Error ? error.message : String(error),
-        elapsedMs: Date.now() - objectStartedAt,
-      });
+      if (!appendSucceeded) {
+        destroyDrStream(activeStream, error instanceof Error ? error : undefined);
+        failures.push({
+          ...source,
+          status: "failed",
+          errorMessage: error instanceof Error ? error.message : "EXPORT_FAILED",
+        });
+        logDrObjectDiag("Object failed", {
+          objectKey,
+          entryId: source.id,
+          message: error instanceof Error ? error.message : String(error),
+          elapsedMs: Date.now() - objectStartedAt,
+        });
+        continue;
+      }
+      throw error;
     } finally {
       activeStream = null;
     }

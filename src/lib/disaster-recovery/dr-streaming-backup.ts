@@ -20,10 +20,10 @@ import { updateDrJobContext, getDrJobContext } from "@/lib/disaster-recovery/dr-
 import { logDrJobHeartbeat } from "@/lib/disaster-recovery/dr-job-heartbeat-diagnostics";
 import { emitDrWorkerObjectHeartbeat, assertDrJobNotCancelled } from "@/lib/disaster-recovery/worker/dr-worker-heartbeat";
 import {
-  destroyDrStream,
   logDrObjectDiag,
   monitorDrStream,
 } from "@/lib/disaster-recovery/dr-stream-lifecycle";
+import { createDrArchiveStreamRegistry } from "@/lib/disaster-recovery/dr-stream-utils";
 import { exportStorageObjectsStreamExport } from "@/lib/disaster-recovery/object-export";
 import {
   serializeStorageManifest,
@@ -174,7 +174,9 @@ export const buildAndStoreStreamingDisasterRecoveryZip = async (input: {
   let liveObjectStreams = 0;
   let processedObjectCount = 0;
   let activeObjectStream: Readable | null = null;
+  const streamRegistry = createDrArchiveStreamRegistry();
 
+  try {
   const watchdog = new DrExportWatchdog({
     onStall: (snapshot) => {
       logDrObjectDiag("Watchdog stall detected", {
@@ -196,7 +198,7 @@ export const buildAndStoreStreamingDisasterRecoveryZip = async (input: {
     });
     const exportResult = await exportStorageObjectsStreamExport({
       entries: input.inventory,
-      guards: { watchdog },
+      guards: { watchdog, streamRegistry },
       onObjectReady: async ({ stream, archivePath }) => {
         processedObjectCount += 1;
         activeObjectStream = stream;
@@ -331,7 +333,6 @@ export const buildAndStoreStreamingDisasterRecoveryZip = async (input: {
     throw error;
   } finally {
     watchdog.stop();
-    destroyDrStream(activeObjectStream ?? undefined);
     activeObjectStream = null;
   }
 
@@ -401,6 +402,8 @@ export const buildAndStoreStreamingDisasterRecoveryZip = async (input: {
     console.log("[DR] BEFORE archive.finalize");
     logDrMilestone("ZIP_FINALIZE_STARTED", { pointer: writer.pointer() });
     writer.logPipelineDiagnostics("ZIP_PRE_FINALIZE");
+    streamRegistry.logStreamRegistrySummary();
+    streamRegistry.assertAllProducersCompleted();
     console.info("[DR] PRE_FINALIZE_STATE", {
       archivePointer: writer.pointer(),
       uploadDestroyed: uploadBody.destroyed,
@@ -499,4 +502,7 @@ export const buildAndStoreStreamingDisasterRecoveryZip = async (input: {
     exportedCount: summary.exportedCount,
     failedCount: summary.failedCount,
   };
+  } finally {
+    streamRegistry.dispose();
+  }
 };

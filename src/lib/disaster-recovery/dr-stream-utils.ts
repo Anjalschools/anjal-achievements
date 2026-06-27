@@ -98,6 +98,159 @@ export type HashingObjectStream = {
   completed: Promise<StorageManifestEntry>;
 };
 
+export type DrArchiveStreamRegistryEntry = {
+  streamId: number;
+  entryName: string;
+  createdAt: string;
+  producerCompleted: boolean;
+  readableEnded: boolean;
+  readableClosed: boolean;
+  destroyed: boolean;
+  error?: string;
+  completedAt?: string;
+};
+
+export type DrArchiveStreamRegistry = {
+  registerArchiveStream: (stream: Readable, entryName: string) => number;
+  markProducerCompleted: (stream: Readable) => void;
+  markProducerError: (stream: Readable, error: Error | string) => void;
+  logStreamRegistrySummary: () => void;
+  assertAllProducersCompleted: () => void;
+  dispose: () => void;
+  getSummary: () => {
+    total: number;
+    completed: number;
+    incomplete: number;
+    lastIncompleteEntry: DrArchiveStreamRegistryEntry | null;
+  };
+};
+
+let drArchiveStreamIdCounter = 0;
+
+const readStreamRegistryFlags = (
+  stream: Readable
+): Pick<
+  DrArchiveStreamRegistryEntry,
+  "readableEnded" | "readableClosed" | "destroyed"
+> => ({
+  readableEnded: Boolean(stream.readableEnded),
+  readableClosed: Boolean((stream as { closed?: boolean }).closed),
+  destroyed: Boolean(stream.destroyed),
+});
+
+export const createDrArchiveStreamRegistry = (): DrArchiveStreamRegistry => {
+  const entries = new Map<number, DrArchiveStreamRegistryEntry>();
+  const streamToId = new WeakMap<Readable, number>();
+
+  const syncStreamFlags = (streamId: number, stream: Readable): void => {
+    const entry = entries.get(streamId);
+    if (!entry) return;
+    Object.assign(entry, readStreamRegistryFlags(stream));
+  };
+
+  const registerArchiveStream = (stream: Readable, entryName: string): number => {
+    const streamId = ++drArchiveStreamIdCounter;
+    const entry: DrArchiveStreamRegistryEntry = {
+      streamId,
+      entryName,
+      createdAt: new Date().toISOString(),
+      producerCompleted: false,
+      ...readStreamRegistryFlags(stream),
+    };
+    entries.set(streamId, entry);
+    streamToId.set(stream, streamId);
+
+    const refresh = (): void => {
+      syncStreamFlags(streamId, stream);
+    };
+
+    stream.on("end", refresh);
+    stream.on("close", refresh);
+    stream.on("error", (error) => {
+      syncStreamFlags(streamId, stream);
+      markProducerError(stream, error);
+    });
+
+    return streamId;
+  };
+
+  const resolveStreamId = (stream: Readable): number | undefined => streamToId.get(stream);
+
+  const markProducerCompleted = (stream: Readable): void => {
+    const streamId = resolveStreamId(stream);
+    if (streamId === undefined) return;
+    const entry = entries.get(streamId);
+    if (!entry) return;
+    entry.producerCompleted = true;
+    entry.completedAt = new Date().toISOString();
+    syncStreamFlags(streamId, stream);
+  };
+
+  const markProducerError = (stream: Readable, error: Error | string): void => {
+    const streamId = resolveStreamId(stream);
+    if (streamId === undefined) return;
+    const entry = entries.get(streamId);
+    if (!entry) return;
+    entry.error = error instanceof Error ? error.message : error;
+    syncStreamFlags(streamId, stream);
+  };
+
+  const getIncompleteEntries = (): DrArchiveStreamRegistryEntry[] =>
+    [...entries.values()].filter((entry) => !entry.producerCompleted);
+
+  const getSummary = () => {
+    const all = [...entries.values()];
+    const incomplete = getIncompleteEntries();
+    return {
+      total: all.length,
+      completed: all.length - incomplete.length,
+      incomplete: incomplete.length,
+      lastIncompleteEntry: incomplete[incomplete.length - 1] ?? null,
+    };
+  };
+
+  const logStreamRegistrySummary = (): void => {
+    const summary = getSummary();
+    console.info("[DR] STREAM_REGISTRY_SUMMARY", summary);
+    for (const entry of getIncompleteEntries()) {
+      console.error("[DR] STREAM_REGISTRY_ENTRY", entry);
+    }
+  };
+
+  const assertAllProducersCompleted = (): void => {
+    const incomplete = getIncompleteEntries();
+    if (incomplete.length === 0) return;
+
+    logStreamRegistrySummary();
+    const details = incomplete
+      .map(
+        (entry) =>
+          `entry=${entry.entryName};producerCompleted=${entry.producerCompleted};readableEnded=${entry.readableEnded};readableClosed=${entry.readableClosed};destroyed=${entry.destroyed};error=${entry.error ?? "none"}`
+      )
+      .join("|");
+    throw new Error(`STREAM_NOT_COMPLETED_BEFORE_FINALIZE:${details}`);
+  };
+
+  const dispose = (): void => {
+    entries.clear();
+  };
+
+  return {
+    registerArchiveStream,
+    markProducerCompleted,
+    markProducerError,
+    logStreamRegistrySummary,
+    assertAllProducersCompleted,
+    dispose,
+    getSummary,
+  };
+};
+
+const waitForArchiveProducerWritableFinish = async (stream: PassThrough): Promise<void> => {
+  if (stream.writableFinished) return;
+  await finished(stream, { readable: false });
+};
+
 export const createHashingObjectStream = (
   entry: StorageManifestEntry,
   sourceStream: Readable
@@ -150,7 +303,8 @@ export const createHashingObjectStream = (
       streamName: "hashingPipeline",
     }
   )
-    .then((): StorageManifestEntry => {
+    .then(async (): Promise<StorageManifestEntry> => {
+      await waitForArchiveProducerWritableFinish(archiveStream);
       let errorMessage = entry.errorMessage;
       if (entry.fileSize && entry.fileSize > 0 && byteLength !== entry.fileSize) {
         errorMessage = `SIZE_MISMATCH:expected=${entry.fileSize},actual=${byteLength}`;
@@ -174,7 +328,6 @@ export const createHashingObjectStream = (
         error
       );
       destroyDrStream(monitoredSource, error instanceof Error ? error : undefined);
-      destroyDrStream(archiveStream, error instanceof Error ? error : undefined);
       throw error instanceof Error ? error : new Error(String(error));
     });
 

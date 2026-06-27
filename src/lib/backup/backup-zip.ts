@@ -251,6 +251,28 @@ const readListenerCounts = (emitter: NodeJS.EventEmitter): Record<string, number
   return Object.fromEntries(ARCHIVER_FORENSIC_EVENTS.map((event) => [event, emitter.listenerCount(event)]));
 };
 
+const sumListenerCounts = (counts: Record<string, number>): number =>
+  Object.values(counts).reduce((total, count) => total + (count >= 0 ? count : 0), 0);
+
+export const removeDrEventListener = (
+  emitter: NodeJS.EventEmitter | null | undefined,
+  event: string,
+  listener: (...args: unknown[]) => void
+): void => {
+  if (!emitter) return;
+  try {
+    if (typeof emitter.off === "function") {
+      emitter.off(event, listener);
+      return;
+    }
+    if (typeof emitter.removeListener === "function") {
+      emitter.removeListener(event, listener);
+    }
+  } catch {
+    // Cleanup must never throw.
+  }
+};
+
 const logArchiverInternalIdle = (
   archive: ArchiverWithInternals,
   output: PassThrough
@@ -834,6 +856,7 @@ export const createZipArchiveWriter = async (output: PassThrough): Promise<ZipAr
         logDrObjectDiag("Finalize started", { pointer: archive.pointer(), finalizeId });
 
         let moduleEndSeen = false;
+        let finalizeGuardCleanupDone = false;
         const zipModule = archive._module;
         const onModuleEnd = (): void => {
           moduleEndSeen = true;
@@ -850,29 +873,47 @@ export const createZipArchiveWriter = async (output: PassThrough): Promise<ZipAr
         const moduleFinalize = archive.finalize();
         forensics.logFinalizeTrace("FINALIZE_PROMISE_CREATED");
 
+        let outputDestroyedGuardReject: (error: Error) => void = () => undefined;
+        const runFinalizeGuardCleanup = (): void => {
+          if (finalizeGuardCleanupDone) return;
+          finalizeGuardCleanupDone = true;
+          try {
+            removeDrEventListener(output, "close", onClose);
+            removeDrEventListener(output, "error", onError);
+            removeDrEventListener(zipModule, "end", onModuleEnd);
+            console.info("[DR] LISTENER_CLEANUP_COMPLETE", {
+              finalizeId,
+              archiveListenersRemaining: sumListenerCounts(
+                readListenerCounts(archive as unknown as NodeJS.EventEmitter)
+              ),
+              moduleListenersRemaining: zipModule
+                ? sumListenerCounts(readListenerCounts(zipModule))
+                : null,
+              outputListenersRemaining: sumListenerCounts(readListenerCounts(output)),
+            });
+          } catch {
+            // Cleanup must never throw.
+          }
+        };
+        const onClose = (): void => {
+          if (output.destroyed && !moduleEndSeen) {
+            runFinalizeGuardCleanup();
+            outputDestroyedGuardReject(new Error("ARCHIVE_OUTPUT_DESTROYED_DURING_FINALIZE"));
+          }
+        };
+        const onError = (...args: unknown[]): void => {
+          if (!moduleEndSeen) {
+            runFinalizeGuardCleanup();
+            const err = args[0] instanceof Error ? args[0] : new Error(String(args[0]));
+            outputDestroyedGuardReject(err);
+          }
+        };
+
         const outputDestroyedGuard = new Promise<void>((_, reject) => {
-          const cleanup = (): void => {
-            output.off("close", onClose);
-            output.off("error", onError);
-            if (zipModule) {
-              zipModule.off("end", onModuleEnd);
-            }
-          };
-          const onClose = (): void => {
-            if (output.destroyed && !moduleEndSeen) {
-              cleanup();
-              reject(new Error("ARCHIVE_OUTPUT_DESTROYED_DURING_FINALIZE"));
-            }
-          };
-          const onError = (err: Error): void => {
-            if (!moduleEndSeen) {
-              cleanup();
-              reject(err);
-            }
-          };
+          outputDestroyedGuardReject = reject;
           output.on("close", onClose);
           output.on("error", onError);
-          void moduleFinalize.finally(cleanup);
+          void moduleFinalize.finally(runFinalizeGuardCleanup);
         });
 
         try {
@@ -901,6 +942,7 @@ export const createZipArchiveWriter = async (output: PassThrough): Promise<ZipAr
           throw error;
         } finally {
           clearInterval(finalizeSnapshotTimer);
+          runFinalizeGuardCleanup();
         }
 
         logZipPipelineDiagnostics(archive, output, "finalize-after", { finalizeId });
