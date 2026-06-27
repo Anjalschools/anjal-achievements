@@ -342,13 +342,32 @@ export const printDrFinalReport = (): void => {
   console.info(`Peak Heap: ${session.peakHeap}`);
   console.info(`Last Milestone: ${session.lastMilestone ?? "NONE"}`);
   const missingAssets = getMissingAssetRecords();
-  if (missingAssets.length > 0) {
+  const downloadMissingAssets = missingAssets.filter(
+    (asset) => asset.stage !== "hashingPipeline"
+  );
+  const hashingPipelineFailures = missingAssets.filter(
+    (asset) => asset.stage === "hashingPipeline"
+  );
+
+  if (downloadMissingAssets.length > 0) {
     console.info("Missing Assets");
-    console.info(`Count: ${missingAssets.length}`);
-    missingAssets.forEach((asset, index) => {
+    console.info(`Count: ${downloadMissingAssets.length}`);
+    downloadMissingAssets.forEach((asset, index) => {
       console.info(`${index + 1}.`);
       console.info(`objectKey: ${asset.objectKey}`);
       console.info(`Reason: ${asset.errorCode}`);
+      console.info(`Attempts: ${asset.attempts}`);
+    });
+  }
+
+  if (hashingPipelineFailures.length > 0) {
+    console.info("HASHING PIPELINE FAILURES");
+    console.info(`Count: ${hashingPipelineFailures.length}`);
+    hashingPipelineFailures.forEach((asset, index) => {
+      console.info(`${index + 1}.`);
+      console.info(`objectKey: ${asset.objectKey}`);
+      console.info(`Reason: ${asset.errorCode}`);
+      console.info(`stage: ${asset.stage ?? "hashingPipeline"}`);
       console.info(`Attempts: ${asset.attempts}`);
     });
   }

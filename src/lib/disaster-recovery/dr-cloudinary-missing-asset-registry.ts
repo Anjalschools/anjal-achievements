@@ -4,7 +4,8 @@ export type MissingAssetReason =
   | "download_stalled"
   | "network_failure"
   | "download_timeout"
-  | "not_found";
+  | "not_found"
+  | "hashing_pipeline_timeout";
 
 export type MissingAssetRecord = {
   objectKey: string;
@@ -18,6 +19,7 @@ export type MissingAssetRecord = {
   contentLength: number | null;
   firstFailureAt: string;
   finalFailureAt: string;
+  stage?: "download" | "hashingPipeline";
 };
 
 export type SerializedMissingAsset = {
@@ -30,6 +32,7 @@ export type SerializedMissingAsset = {
   errorCode?: string;
   bytesReceived?: number;
   contentLength?: number | null;
+  stage?: "download" | "hashingPipeline";
 };
 
 const missingAssets: MissingAssetRecord[] = [];
@@ -66,4 +69,5 @@ export const serializeMissingAssets = (): SerializedMissingAsset[] =>
     errorCode: record.errorCode,
     bytesReceived: record.bytesReceived,
     contentLength: record.contentLength,
+    stage: record.stage,
   }));

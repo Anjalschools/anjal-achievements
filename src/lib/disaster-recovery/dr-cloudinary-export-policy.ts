@@ -63,6 +63,8 @@ export const toCloudinaryMissingAssetError = (error: unknown): Error => {
   return missingError;
 };
 
+export const HASHING_PIPELINE_TIMEOUT_CODE = "HASHING_PIPELINE_TIMEOUT";
+
 export const isCloudinaryMissingAssetError = (error: unknown): boolean => {
   const message = error instanceof Error ? error.message : String(error);
   return message.startsWith("CLOUDINARY_MISSING_ASSET:");

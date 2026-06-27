@@ -6,6 +6,10 @@ import {
   DR_STREAM_DRAIN_TIMEOUT_MS,
   withDrTimeout,
 } from "@/lib/disaster-recovery/dr-async-timeout";
+import {
+  handleCloudinaryHashingPipelineTimeoutSkip,
+  isCloudinaryHashingPipelineTimeout,
+} from "@/lib/disaster-recovery/dr-cloudinary-hashing-timeout-skip";
 import type { DrExportWatchdog } from "@/lib/disaster-recovery/dr-export-watchdog";
 import {
   buildDrObjectStreamContext,
@@ -203,7 +207,7 @@ export const runSequentialObjectStreamExport = async (input: {
         processedObjects: index,
       });
 
-      let finalizedEntry: StorageManifestEntry;
+      let finalizedEntry: StorageManifestEntry | undefined;
       try {
         finalizedEntry = await withDrTimeout(
           exported.completed,
@@ -212,22 +216,41 @@ export const runSequentialObjectStreamExport = async (input: {
           { objectKey }
         );
       } catch (error) {
-        streamRegistry?.markProducerError(
-          exported.stream,
-          error instanceof Error ? error : String(error)
-        );
-        throw error;
+        if (isCloudinaryHashingPipelineTimeout(error, source.provider)) {
+          const missingEntry = handleCloudinaryHashingPipelineTimeoutSkip({
+            entry: source,
+            error,
+            stream: exported.stream,
+            streamRegistry,
+          });
+          failures.push(missingEntry);
+          logDrObjectDiag("Object skipped hashing timeout", {
+            objectKey,
+            entryId: source.id,
+            message: error instanceof Error ? error.message : String(error),
+            elapsedMs: Date.now() - objectStartedAt,
+          });
+        } else {
+          streamRegistry?.markProducerError(
+            exported.stream,
+            error instanceof Error ? error : String(error)
+          );
+          throw error;
+        }
       }
-      streamRegistry?.markProducerCompleted(exported.stream);
-      manifestEntries.push(finalizedEntry);
-      bytesExported += finalizedEntry.fileSize || 0;
 
-      logDrObjectDiag("Object finished", {
-        objectKey,
-        entryId: source.id,
-        fileSize: finalizedEntry.fileSize,
-        elapsedMs: Date.now() - objectStartedAt,
-      });
+      if (finalizedEntry) {
+        streamRegistry?.markProducerCompleted(exported.stream);
+        manifestEntries.push(finalizedEntry);
+        bytesExported += finalizedEntry.fileSize || 0;
+
+        logDrObjectDiag("Object finished", {
+          objectKey,
+          entryId: source.id,
+          fileSize: finalizedEntry.fileSize,
+          elapsedMs: Date.now() - objectStartedAt,
+        });
+      }
     } catch (error) {
       logDrDownloadProviderFailed(streamContext, error);
       if (!appendSucceeded) {

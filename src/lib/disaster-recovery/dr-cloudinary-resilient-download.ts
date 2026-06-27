@@ -202,6 +202,7 @@ export const createResilientCloudinaryDownloadStream = async (input: {
           contentLength,
           firstFailureAt: firstFailureAt ?? failureAt,
           finalFailureAt: failureAt,
+          stage: "download",
         });
 
         output.destroy(toCloudinaryMissingAssetError(failure));
