@@ -50,6 +50,7 @@ describe("phase DR.ZIP.19 — cloudinary export policy", () => {
     expect(isPermanentCloudinaryFailure(new Error("DOWNLOAD_DATA_STALLED"))).toBe(false);
     expect(classifyMissingAssetReason(new Error("DOWNLOAD_DATA_STALLED"))).toBe("download_stalled");
     expect(classifyMissingAssetReason(new Error("CLOUDINARY_DOWNLOAD_FAILED:404"))).toBe("not_found");
+    expect(classifyMissingAssetReason(new Error("PIPELINE_DEADLOCK"))).toBe("pipeline_deadlock");
   });
 
   it("retries transient stalls and succeeds on attempt 2", async () => {

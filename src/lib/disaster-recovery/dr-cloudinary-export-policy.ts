@@ -40,10 +40,23 @@ export const isTransientCloudinaryFailure = (error: unknown): boolean => {
   return TRANSIENT_FAILURE_PATTERNS.some((pattern) => pattern.test(message));
 };
 
+export const PIPELINE_DEADLOCK_CODE = "PIPELINE_DEADLOCK";
+
+export const isPipelineDeadlockFailure = (error: unknown): boolean => {
+  const message = error instanceof Error ? error.message : String(error);
+  return (
+    message === PIPELINE_DEADLOCK_CODE ||
+    message.includes(`CLOUDINARY_MISSING_ASSET:${PIPELINE_DEADLOCK_CODE}`)
+  );
+};
+
 export const classifyMissingAssetReason = (error: unknown): import("@/lib/disaster-recovery/dr-cloudinary-missing-asset-registry").MissingAssetReason => {
   const message = error instanceof Error ? error.message : String(error);
   if (isPermanentCloudinaryFailure(error)) {
     return "not_found";
+  }
+  if (isPipelineDeadlockFailure(error)) {
+    return "pipeline_deadlock";
   }
   if (/DOWNLOAD_DATA_STALLED|DOWNLOAD_STREAM_STALLED|DOWNLOAD_NO_FIRST_BYTE|DOWNLOAD_EOF_MISSING/i.test(message)) {
     return "download_stalled";

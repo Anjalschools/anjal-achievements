@@ -1,6 +1,6 @@
-import { once } from "events";
 import { PassThrough, type Readable } from "stream";
 import { DR_EXPORT_WATCHDOG_STALL_MS } from "@/lib/disaster-recovery/dr-async-timeout";
+import { PIPELINE_DEADLOCK_CODE } from "@/lib/disaster-recovery/dr-cloudinary-export-policy";
 
 const DOWNLOAD_IDLE_INTERVAL_MS = 5_000;
 
@@ -76,6 +76,32 @@ const classifyStallError = (input: {
     return "DOWNLOAD_EOF_MISSING";
   }
   return "DOWNLOAD_DATA_STALLED";
+};
+
+const isPipelineDeadlockError = (error: Error): boolean =>
+  error.message === PIPELINE_DEADLOCK_CODE;
+
+const isPipelineDeadlocked = (input: {
+  failed: boolean;
+  bodyEnded: boolean;
+  outputTerminalized: boolean;
+  readerPending: boolean;
+  bodyLocked: boolean;
+  bodyUsed: boolean;
+  lastChunkAge: number | null;
+  readerDone: boolean;
+  bytesReceived: number;
+}): boolean => {
+  if (input.failed || input.bodyEnded || input.outputTerminalized) return false;
+  if (input.readerPending) return false;
+  if (!input.bodyLocked) return false;
+  if (!input.bodyUsed) return false;
+  if (input.lastChunkAge === null || input.lastChunkAge < DR_EXPORT_WATCHDOG_STALL_MS) {
+    return false;
+  }
+  if (input.readerDone) return false;
+  if (input.bytesReceived === 0) return false;
+  return true;
 };
 
 const toAbortError = (signal: AbortSignal, fallback: Error): Error => {
@@ -183,7 +209,7 @@ export const createRobustCloudinaryDownloadStream = async (input: {
 
   const webBody = response.body;
   const reader = webBody.getReader();
-  const output = new PassThrough();
+  const output = new PassThrough({ highWaterMark: 4096 });
 
   let bytesReceived = 0;
   let chunkCount = 0;
@@ -372,10 +398,16 @@ export const createRobustCloudinaryDownloadStream = async (input: {
     output.end();
   };
 
-  const destroyOutput = (error: Error): void => {
+  const destroyOutput = (error: Error, pipelineDeadlock = false): void => {
     if (outputTerminalized) return;
     outputTerminalized = true;
     setLifecycle("output-destroy");
+    if (pipelineDeadlock) {
+      logCloudinaryDownload("PIPELINE_OUTPUT_DESTROY", diagnostics, {
+        message: error.message,
+        ...buildForensicSnapshot(),
+      });
+    }
     logCloudinaryDownload("DOWNLOAD_OUTPUT_DESTROY", diagnostics, {
       message: error.message,
       ...buildForensicSnapshot(),
@@ -435,6 +467,7 @@ export const createRobustCloudinaryDownloadStream = async (input: {
       sharedFailureError = error;
       clearTimers();
 
+      const pipelineDeadlock = isPipelineDeadlockError(error);
       const isStallFamily =
         error.message === "DOWNLOAD_NO_FIRST_BYTE" ||
         error.message === "DOWNLOAD_DATA_STALLED" ||
@@ -442,14 +475,24 @@ export const createRobustCloudinaryDownloadStream = async (input: {
 
       const stallCase = fromStall ? classifyStallCase() : null;
       const shouldCancelReader =
-        fromStall &&
-        stallCase === "A" &&
-        readerPending &&
-        !readerReleased &&
-        !readerCancelled &&
-        !readerClosed;
+        pipelineDeadlock ||
+        (fromStall &&
+          stallCase === "A" &&
+          readerPending &&
+          !readerReleased &&
+          !readerCancelled &&
+          !readerClosed);
 
-      if (isStallFamily) {
+      if (pipelineDeadlock) {
+        logCloudinaryDownload("PIPELINE_DEADLOCK_DETECTED", diagnostics, {
+          ...buildForensicSnapshot(),
+        });
+        logCloudinaryDownload("PIPELINE_DEADLOCK_ABORT_BEGIN", diagnostics, {
+          message: error.message,
+          stallCase,
+          ...buildForensicSnapshot(),
+        });
+      } else if (isStallFamily) {
         logTimeoutForensics(error.message);
         logCloudinaryDownload("DOWNLOAD_STALLED", diagnostics, {
           code: error.message,
@@ -477,10 +520,18 @@ export const createRobustCloudinaryDownloadStream = async (input: {
       }
 
       if (shouldCancelReader) {
+        if (pipelineDeadlock) {
+          logCloudinaryDownload("PIPELINE_SOURCE_DESTROY", diagnostics, {
+            message: error.message,
+            ...buildForensicSnapshot(),
+          });
+        }
+
         readerCancelRequested = true;
         logCloudinaryDownload("DOWNLOAD_READER_CANCEL_BEGIN", diagnostics, {
           message: error.message,
           stallCase,
+          pipelineDeadlock,
           ...buildForensicSnapshot(),
         });
 
@@ -494,11 +545,13 @@ export const createRobustCloudinaryDownloadStream = async (input: {
             message: error.message,
             readerPending,
             stallCase,
+            pipelineDeadlock,
           });
         } catch (cancelError) {
           logCloudinaryDownload("DOWNLOAD_READER_CANCEL_ERROR", diagnostics, {
             message: error.message,
             stallCase,
+            pipelineDeadlock,
             cancelError:
               cancelError instanceof Error ? cancelError.message : String(cancelError),
             readerPending,
@@ -511,6 +564,7 @@ export const createRobustCloudinaryDownloadStream = async (input: {
           message: error.message,
           abortSignalAborted: downloadAbort.signal.aborted,
           stallCase,
+          pipelineDeadlock,
         });
 
         if (!downloadAbort.signal.aborted) {
@@ -523,6 +577,7 @@ export const createRobustCloudinaryDownloadStream = async (input: {
           elapsed: Date.now() - startedAt,
           bytesReceived,
           stallCase,
+          pipelineDeadlock,
         });
       }
 
@@ -536,18 +591,74 @@ export const createRobustCloudinaryDownloadStream = async (input: {
         lastChunkTimestamp,
         stallCase,
         readerCancelApplied: shouldCancelReader,
+        pipelineDeadlock,
       });
 
-      destroyOutput(error);
+      if (pipelineDeadlock) {
+        logCloudinaryDownload("PIPELINE_TRANSFORM_DESTROY", diagnostics, {
+          message: error.message,
+          delegated: "via-source-destroy",
+        });
+      }
+
+      destroyOutput(error, pipelineDeadlock);
+
+      if (pipelineDeadlock) {
+        logCloudinaryDownload("PIPELINE_REJECTED", diagnostics, {
+          message: error.message,
+          ...buildForensicSnapshot(),
+        });
+        logCloudinaryDownload("PIPELINE_DEADLOCK_ABORT_END", diagnostics, {
+          message: error.message,
+          ...buildForensicSnapshot(),
+        });
+      }
     })();
 
     await terminateInFlight;
+  };
+
+  const resolvePipelineDeadlock = (): Error => new Error(PIPELINE_DEADLOCK_CODE);
+
+  const maybeTerminatePipelineDeadlock = (): void => {
+    if (
+      !isPipelineDeadlocked({
+        failed,
+        bodyEnded,
+        outputTerminalized,
+        readerPending,
+        bodyLocked: webBody.locked,
+        bodyUsed: (response as Response & { bodyUsed?: boolean }).bodyUsed ?? true,
+        lastChunkAge: timeSinceLastChunk(),
+        readerDone,
+        bytesReceived,
+      })
+    ) {
+      return;
+    }
+    void terminateDownload(resolvePipelineDeadlock(), true);
   };
 
   const resetStallTimer = (): void => {
     clearStallTimer();
     stallTimer = setTimeout(() => {
       if (!bodyEnded && !failed) {
+        if (
+          isPipelineDeadlocked({
+            failed,
+            bodyEnded,
+            outputTerminalized,
+            readerPending,
+            bodyLocked: webBody.locked,
+            bodyUsed: (response as Response & { bodyUsed?: boolean }).bodyUsed ?? true,
+            lastChunkAge: timeSinceLastChunk(),
+            readerDone,
+            bytesReceived,
+          })
+        ) {
+          void terminateDownload(resolvePipelineDeadlock(), true);
+          return;
+        }
         const code = classifyStallError({
           bytesReceived,
           contentLength,
@@ -558,6 +669,47 @@ export const createRobustCloudinaryDownloadStream = async (input: {
       }
     }, DR_EXPORT_WATCHDOG_STALL_MS);
   };
+
+  const waitForOutputDrain = (): Promise<void> =>
+    new Promise((resolve, reject) => {
+      if (failed || output.destroyed || outputTerminalized) {
+        if (sharedFailureError) {
+          reject(sharedFailureError);
+          return;
+        }
+        resolve();
+        return;
+      }
+
+      const cleanup = (): void => {
+        output.off("drain", onDrain);
+        output.off("close", onClose);
+        output.off("error", onError);
+      };
+
+      const onDrain = (): void => {
+        cleanup();
+        resolve();
+      };
+
+      const onClose = (): void => {
+        cleanup();
+        if (sharedFailureError) {
+          reject(sharedFailureError);
+          return;
+        }
+        resolve();
+      };
+
+      const onError = (drainError: Error): void => {
+        cleanup();
+        reject(drainError);
+      };
+
+      output.once("drain", onDrain);
+      output.once("close", onClose);
+      output.once("error", onError);
+    });
 
   const recordChunk = (chunk: Buffer): void => {
     const now = Date.now();
@@ -660,7 +812,15 @@ export const createRobustCloudinaryDownloadStream = async (input: {
         phase: "push-backpressure",
         bytesReceived,
       });
-      await once(output, "drain");
+      try {
+        await waitForOutputDrain();
+      } catch (drainError) {
+        if (failed) return;
+        const failure =
+          drainError instanceof Error ? drainError : new Error(String(drainError));
+        await terminateDownload(sharedFailureError ?? failure);
+        return;
+      }
       outputNeedDrain = false;
       logCloudinaryDownload("DOWNLOAD_OUTPUT_DRAIN", diagnostics, {
         bytesReceived,
@@ -685,8 +845,9 @@ export const createRobustCloudinaryDownloadStream = async (input: {
       timeSinceLastChunk: timeSinceLastChunk(),
       readerPending,
       bodyLocked: webBody.locked,
-      bodyUsed: (response as Response & { bodyUsed?: boolean }).bodyUsed ?? null,
+      bodyUsed: (response as Response & { bodyUsed?: boolean }).bodyUsed ?? true,
     });
+    maybeTerminatePipelineDeadlock();
   };
 
   logCloudinaryDownload("DOWNLOAD_WEB_STREAM_BRIDGE", diagnostics, {

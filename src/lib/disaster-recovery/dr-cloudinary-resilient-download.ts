@@ -4,6 +4,7 @@ import {
   CLOUDINARY_DOWNLOAD_MAX_ATTEMPTS,
   classifyMissingAssetReason,
   isPermanentCloudinaryFailure,
+  isPipelineDeadlockFailure,
   isTransientCloudinaryFailure,
   toCloudinaryMissingAssetError,
 } from "@/lib/disaster-recovery/dr-cloudinary-export-policy";
@@ -22,13 +23,35 @@ const pipeAttemptStream = (
   onBytes: (count: number) => void
 ): Promise<void> =>
   new Promise((resolve, reject) => {
+    let failureError: Error | null = null;
+
     const handleData = (chunk: Buffer | string): void => {
       const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
       onBytes(buffer.byteLength);
       const canContinue = output.write(buffer);
       if (!canContinue) {
         source.pause();
-        output.once("drain", () => source.resume());
+        const onDrain = (): void => {
+          output.off("close", onOutputClose);
+          output.off("error", onOutputError);
+          source.resume();
+        };
+        const onOutputClose = (): void => {
+          output.off("drain", onDrain);
+          output.off("error", onOutputError);
+          cleanup();
+          reject(failureError ?? new Error("DOWNLOAD_SOCKET_CLOSED"));
+        };
+        const onOutputError = (error: Error): void => {
+          output.off("drain", onDrain);
+          output.off("close", onOutputClose);
+          failureError = error;
+          cleanup();
+          reject(error);
+        };
+        output.once("drain", onDrain);
+        output.once("close", onOutputClose);
+        output.once("error", onOutputError);
       }
     };
 
@@ -159,8 +182,10 @@ export const createResilientCloudinaryDownloadStream = async (input: {
 
         const permanent = isPermanentCloudinaryFailure(failure);
         const transient = isTransientCloudinaryFailure(failure);
+        const pipelineDeadlock = isPipelineDeadlockFailure(failure);
         const canRetry =
           !permanent &&
+          !pipelineDeadlock &&
           transient &&
           attempt < CLOUDINARY_DOWNLOAD_MAX_ATTEMPTS &&
           attemptBytes === 0 &&
@@ -178,8 +203,8 @@ export const createResilientCloudinaryDownloadStream = async (input: {
           continue;
         }
 
-        const finalAttempts = permanent ? attempt : CLOUDINARY_DOWNLOAD_MAX_ATTEMPTS;
-        if (!permanent && attempt >= CLOUDINARY_DOWNLOAD_MAX_ATTEMPTS) {
+        const finalAttempts = permanent || pipelineDeadlock ? attempt : CLOUDINARY_DOWNLOAD_MAX_ATTEMPTS;
+        if (!permanent && !pipelineDeadlock && attempt >= CLOUDINARY_DOWNLOAD_MAX_ATTEMPTS) {
           logRetry("DOWNLOAD_RETRY_EXHAUSTED", {
             objectKey: input.objectKey,
             attempt,
@@ -189,6 +214,8 @@ export const createResilientCloudinaryDownloadStream = async (input: {
             attemptBytes,
           });
         }
+
+        const missingStage = pipelineDeadlock ? "stream_pipeline" : "download";
 
         recordMissingAsset({
           objectKey: input.objectKey,
@@ -202,8 +229,17 @@ export const createResilientCloudinaryDownloadStream = async (input: {
           contentLength,
           firstFailureAt: firstFailureAt ?? failureAt,
           finalFailureAt: failureAt,
-          stage: "download",
+          stage: missingStage,
         });
+
+        if (pipelineDeadlock) {
+          logRetry("PIPELINE_DEADLOCK_SKIPPED", {
+            objectKey: input.objectKey,
+            reason: failure.message,
+            bytesWritten,
+            stage: missingStage,
+          });
+        }
 
         output.destroy(toCloudinaryMissingAssetError(failure));
         return;
