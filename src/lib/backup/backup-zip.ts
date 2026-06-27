@@ -241,6 +241,14 @@ const logArchiverInternalIdle = (
   });
 };
 
+type LifecycleEventRecord = {
+  source: string;
+  event: string;
+  at: string;
+  pointer?: number;
+  [key: string]: unknown;
+};
+
 const createArchiverForensicsContext = (
   archive: ArchiverWithInternals,
   output: PassThrough
@@ -248,6 +256,21 @@ const createArchiverForensicsContext = (
   const lastEntry: LastEntryForensics = {};
   let previousFinalizePointer = -1;
   let internalIdleLogged = false;
+  let lastLifecycleEvent: LifecycleEventRecord | null = null;
+
+  const recordLifecycleEvent = (
+    source: string,
+    event: string,
+    extra: Record<string, unknown> = {}
+  ): void => {
+    lastLifecycleEvent = {
+      source,
+      event,
+      at: new Date().toISOString(),
+      pointer: archive.pointer(),
+      ...extra,
+    };
+  };
 
   const logForensics = (
     label: string,
@@ -267,6 +290,7 @@ const createArchiverForensicsContext = (
       previousFinalizePointer = currentPointer;
     }
 
+    recordLifecycleEvent("forensics", label);
     console.info(`[DR] ARCHIVER_FORENSICS ${label}`, payload);
 
     const queueLength = snapshot.queueLength as number;
@@ -283,21 +307,32 @@ const createArchiverForensicsContext = (
     }
   };
 
+  const readOutputWritableState = (): Record<string, unknown> => ({
+    destroyed: output.destroyed,
+    closed: Boolean((output as { closed?: boolean }).closed),
+    writableNeedDrain: output.writableNeedDrain,
+    writableLength: output.writableLength,
+    writableHighWaterMark: output.writableHighWaterMark,
+    writableEnded: output.writableEnded,
+    writableFinished: output.writableFinished,
+    readableEnded: output.readableEnded,
+    readableLength: output.readableLength,
+    readableFlowing: output.readableFlowing,
+  });
+
   const logOutputEvent = (event: string, meta: Record<string, unknown> = {}): void => {
+    recordLifecycleEvent("output", event);
     console.info("[DR] ARCHIVER_FORENSICS OUTPUT_EVENT", {
       event,
       timestamp: new Date().toISOString(),
       pointer: archive.pointer(),
-      needDrain: output.writableNeedDrain,
-      writableLength: output.writableLength,
-      destroyed: output.destroyed,
-      closed: Boolean((output as { closed?: boolean }).closed),
+      outputWritableState: readOutputWritableState(),
       ...meta,
     });
   };
 
   const attachOutputForensics = (): void => {
-    (["drain", "finish", "prefinish", "close", "error", "pipe", "unpipe"] as const).forEach(
+    (["drain", "finish", "prefinish", "end", "close", "error", "pipe", "unpipe"] as const).forEach(
       (event) => {
         output.on(event, (...args: unknown[]) => {
           logOutputEvent(
@@ -319,6 +354,7 @@ const createArchiverForensicsContext = (
     (["entry", "progress", "finish", "end", "close", "warning", "error"] as const).forEach(
       (event) => {
         archive.on(event, (...args: unknown[]) => {
+          recordLifecycleEvent("archive", event);
           console.info("[DR] ARCHIVER_FORENSICS ARCHIVE_EVENT", {
             event,
             timestamp: new Date().toISOString(),
@@ -363,6 +399,7 @@ const createArchiverForensicsContext = (
     if (moduleForensicsAttached) return;
     const zipModule = archive._module;
     if (!zipModule) {
+      recordLifecycleEvent("module", "module-unavailable");
       console.info("[DR] ARCHIVER_FORENSICS MODULE_EVENT", {
         event: "module-unavailable",
         timestamp: new Date().toISOString(),
@@ -372,23 +409,26 @@ const createArchiverForensicsContext = (
     }
     moduleForensicsAttached = true;
 
-    (["finish", "end", "close", "drain", "pipe", "unpipe", "error"] as const).forEach((event) => {
-      zipModule.on(event, (...args: unknown[]) => {
-        console.info("[DR] ARCHIVER_FORENSICS MODULE_EVENT", {
-          event,
-          timestamp: new Date().toISOString(),
-          pointer: archive.pointer(),
-          moduleInfo: readModuleForensics(zipModule),
-          ...(event === "error"
-            ? {
-                message: args[0] instanceof Error ? args[0].message : String(args[0]),
-              }
-            : event === "pipe" || event === "unpipe"
-              ? { peerType: (args[0] as { constructor?: { name?: string } })?.constructor?.name }
-              : {}),
+    (["prefinish", "finish", "end", "close", "drain", "pipe", "unpipe", "error"] as const).forEach(
+      (event) => {
+        zipModule.on(event, (...args: unknown[]) => {
+          recordLifecycleEvent("module", event);
+          console.info("[DR] ARCHIVER_FORENSICS MODULE_EVENT", {
+            event,
+            timestamp: new Date().toISOString(),
+            pointer: archive.pointer(),
+            moduleInfo: readModuleForensics(zipModule),
+            ...(event === "error"
+              ? {
+                  message: args[0] instanceof Error ? args[0].message : String(args[0]),
+                }
+              : event === "pipe" || event === "unpipe"
+                ? { peerType: (args[0] as { constructor?: { name?: string } })?.constructor?.name }
+                : {}),
+          });
         });
-      });
-    });
+      }
+    );
   };
 
   const recordAppendStart = (entryName: string, entrySize?: number): void => {
@@ -407,10 +447,24 @@ const createArchiverForensicsContext = (
     lastEntry.pointerAfter = archive.pointer();
   };
 
-  const dumpTimeout = (): void => {
+  const dumpTimeout = (finalizeElapsedMs?: number): void => {
+    logForensics("FINALIZE_IN_PROGRESS", { reason: "timeout-dump" });
+    const snapshot = readArchiverForensicsSnapshot(archive, output);
     const rawArchive = archive as ArchiverWithInternals & Record<string, unknown>;
     console.error("[DR] ARCHIVER_FORENSICS TIMEOUT_DUMP", {
-      snapshot: readArchiverForensicsSnapshot(archive, output),
+      at: new Date().toISOString(),
+      finalizeElapsedMs: finalizeElapsedMs ?? null,
+      pointer: archive.pointer(),
+      queueLength: snapshot.queueLength,
+      pending: snapshot.pending,
+      remainingEntries: snapshot.remainingEntries,
+      entriesQueued: snapshot.entriesQueued,
+      entriesProcessed: snapshot.entriesProcessed,
+      archiveState: snapshot.archiveState,
+      moduleState: snapshot.moduleState,
+      outputWritableState: readOutputWritableState(),
+      lastLifecycleEvent,
+      snapshot,
       lastEntry: { ...lastEntry },
       privateFields: {
         _queue: archive._queue ?? null,
@@ -712,7 +766,9 @@ export const createZipArchiveWriter = async (output: PassThrough): Promise<ZipAr
     finalize: async () => {
       logZipPipelineDiagnostics(archive, output, "finalize-before");
       forensics.attachModuleForensics();
+      const finalizeStartedAt = Date.now();
       forensics.logForensics("PRE_FINALIZE");
+      forensics.logForensics("FINALIZE_IN_PROGRESS", { reason: "finalize-start" });
       console.log("[DR] BEFORE archive.finalize (writer)");
       logDrObjectDiag("Finalize started", { pointer: archive.pointer() });
 
@@ -767,7 +823,13 @@ export const createZipArchiveWriter = async (output: PassThrough): Promise<ZipAr
           error instanceof DrOperationTimeoutError &&
           error.operation === "archiveFinalize"
         ) {
-          forensics.dumpTimeout();
+          const finalizeElapsedMs = Date.now() - finalizeStartedAt;
+          console.info("[DR] ZIP_FINALIZE_DURATION", {
+            elapsedMs: finalizeElapsedMs,
+            archivePointer: archive.pointer(),
+            timedOut: true,
+          });
+          forensics.dumpTimeout(finalizeElapsedMs);
         }
         throw error;
       } finally {
