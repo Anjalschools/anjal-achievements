@@ -92,6 +92,7 @@ export const createRobustCloudinaryDownloadStream = async (input: {
   signal: AbortSignal;
   pipelineId?: number | null;
   workerId?: string | null;
+  attempt?: number;
   fetchImpl?: typeof fetch;
 }): Promise<Readable> => {
   const downloadId = ++cloudinaryDownloadIdCounter;
@@ -117,6 +118,7 @@ export const createRobustCloudinaryDownloadStream = async (input: {
 
   logCloudinaryDownload("DOWNLOAD_BEGIN", diagnostics, {
     durationMs: 0,
+    attempt: input.attempt ?? 1,
   });
 
   let response: Response;

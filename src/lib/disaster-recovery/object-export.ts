@@ -25,7 +25,9 @@ import {
 } from "@/lib/disaster-recovery/dr-object-stream-diagnostics";
 import { sendR2GetObject } from "@/lib/disaster-recovery/dr-r2-sdk";
 import { logDrObjectDiag } from "@/lib/disaster-recovery/dr-stream-lifecycle";
-import { createRobustCloudinaryDownloadStream } from "@/lib/disaster-recovery/dr-cloudinary-download";
+import { createResilientCloudinaryDownloadStream } from "@/lib/disaster-recovery/dr-cloudinary-resilient-download";
+import { isCloudinaryMissingAssetError } from "@/lib/disaster-recovery/dr-cloudinary-export-policy";
+import { resetMissingAssetRegistry } from "@/lib/disaster-recovery/dr-cloudinary-missing-asset-registry";
 import { getDrJobContext } from "@/lib/disaster-recovery/dr-job-context";
 import {
   createHashingObjectStream,
@@ -234,19 +236,21 @@ const openCloudinaryObjectStream = async (
           objectKey,
           downloadUrl,
         });
-        const downloadImplementation = "robust" as const;
+        const downloadImplementation = "resilient" as const;
         console.info("[DR] OPEN_CLOUDINARY_OBJECT_STREAM", {
           downloadImplementation,
           storageKey,
           objectKey,
           downloadUrl,
         });
-        const stream = await createRobustCloudinaryDownloadStream({
+        const { publicId } = parseCloudinaryReference(storageKey);
+        const stream = await createResilientCloudinaryDownloadStream({
           downloadUrl,
           objectKey,
           storageKey,
           signal,
           workerId,
+          publicId,
         });
         console.info("[DR] CLOUDINARY_STREAM_OPENED", {
           storageKey,
@@ -348,10 +352,25 @@ export const exportStorageObjectStream = async (
     streamName: "hashing-output",
   }));
 
+  const resolvedCompleted =
+    entry.provider === "cloudinary"
+      ? completed.catch((error) => {
+          if (isCloudinaryMissingAssetError(error)) {
+            return {
+              ...entry,
+              status: "missing" as const,
+              fileSize: 0,
+              errorMessage: error instanceof Error ? error.message : String(error),
+            };
+          }
+          throw error;
+        })
+      : completed;
+
   return {
     entry,
     stream,
-    completed,
+    completed: resolvedCompleted,
   };
 };
 
@@ -413,8 +432,9 @@ export const exportStorageObjectsStreamExport = async (input: {
   onObjectReady: (payload: ExportedObjectStreamPayload) => Promise<void> | void;
   onProgress?: (progress: StreamingObjectExportProgress) => void;
   guards?: DrStreamExportGuards;
-}): Promise<StreamingObjectExportResult> =>
-  runSequentialObjectStreamExport({
+}): Promise<StreamingObjectExportResult> => {
+  resetMissingAssetRegistry();
+  return runSequentialObjectStreamExport({
     entries: input.entries,
     exportObjectStream: async (entry) => {
       const exported = await exportStorageObjectStream(entry);
@@ -428,6 +448,7 @@ export const exportStorageObjectsStreamExport = async (input: {
     onProgress: input.onProgress,
     guards: input.guards,
   });
+};
 
 export const exportStorageObjects = async (
   entries: StorageManifestEntry[],

@@ -4,6 +4,7 @@ import {
   BACKUP_PLATFORM_VERSION,
   type BackupModuleId,
 } from "@/lib/backup/backup-constants";
+import { serializeMissingAssets } from "@/lib/disaster-recovery/dr-cloudinary-missing-asset-registry";
 
 export type BackupManifest = {
   version: string;
@@ -17,6 +18,12 @@ export type BackupManifest = {
   includesObjectStorage?: boolean;
   objectCount?: number;
   objectSizeBytes?: number;
+  missingAssets?: Array<{
+    objectKey: string;
+    provider: string;
+    reason: string;
+    attempts: number;
+  }>;
 };
 
 export const buildBackupManifest = (input: {
@@ -42,8 +49,12 @@ export const buildBackupManifest = (input: {
   objectSizeBytes: input.objectSizeBytes,
 });
 
-export const serializeManifest = (manifest: BackupManifest): string =>
-  `${JSON.stringify(manifest, null, 2)}\n`;
+export const serializeManifest = (manifest: BackupManifest): string => {
+  const missingAssets = serializeMissingAssets();
+  const payload =
+    missingAssets.length > 0 ? { ...manifest, missingAssets } : manifest;
+  return `${JSON.stringify(payload, null, 2)}\n`;
+};
 
 export const parseManifest = (raw: string): BackupManifest => {
   const parsed = JSON.parse(raw) as BackupManifest;

@@ -1,3 +1,5 @@
+import { serializeMissingAssets } from "@/lib/disaster-recovery/dr-cloudinary-missing-asset-registry";
+
 export const STORAGE_MANIFEST_VERSION = "11.2";
 
 export type StorageProviderKind = "r2" | "cloudinary" | "http" | "inline";
@@ -33,10 +35,25 @@ export type StorageManifest = {
   failedCount: number;
   totalBytes: number;
   entries: StorageManifestEntry[];
+  missingAssets?: Array<{
+    objectKey: string;
+    provider: StorageProviderKind;
+    reason: string;
+    attempts: number;
+    publicId?: string;
+    originalUrl?: string;
+    errorCode?: string;
+    bytesReceived?: number;
+    contentLength?: number | null;
+  }>;
 };
 
-export const serializeStorageManifest = (manifest: StorageManifest): string =>
-  `${JSON.stringify(manifest, null, 2)}\n`;
+export const serializeStorageManifest = (manifest: StorageManifest): string => {
+  const missingAssets = serializeMissingAssets();
+  const payload =
+    missingAssets.length > 0 ? { ...manifest, missingAssets } : manifest;
+  return `${JSON.stringify(payload, null, 2)}\n`;
+};
 
 export const parseStorageManifest = (raw: string): StorageManifest => {
   const parsed = JSON.parse(raw) as StorageManifest;

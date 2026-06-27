@@ -8,6 +8,7 @@ import {
   truncateDrErrorStack,
 } from "@/lib/disaster-recovery/dr-diag-policy";
 import { readProcessMemorySnapshot } from "@/lib/disaster-recovery/dr-memory-metrics";
+import { getMissingAssetRecords } from "@/lib/disaster-recovery/dr-cloudinary-missing-asset-registry";
 
 export type DrMilestone =
   | "OBJECT_EXPORT_COMPLETED"
@@ -340,6 +341,17 @@ export const printDrFinalReport = (): void => {
   console.info(`Peak RSS: ${session.peakRss}`);
   console.info(`Peak Heap: ${session.peakHeap}`);
   console.info(`Last Milestone: ${session.lastMilestone ?? "NONE"}`);
+  const missingAssets = getMissingAssetRecords();
+  if (missingAssets.length > 0) {
+    console.info("Missing Assets");
+    console.info(`Count: ${missingAssets.length}`);
+    missingAssets.forEach((asset, index) => {
+      console.info(`${index + 1}.`);
+      console.info(`objectKey: ${asset.objectKey}`);
+      console.info(`Reason: ${asset.errorCode}`);
+      console.info(`Attempts: ${asset.attempts}`);
+    });
+  }
   console.info("=====================================");
 
   if (!jobCompleted) {
