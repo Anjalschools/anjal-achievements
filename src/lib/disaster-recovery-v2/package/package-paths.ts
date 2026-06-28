@@ -14,6 +14,9 @@ export const resolveBackupZipTempPath = (workspaceDir: string): string =>
 export const resolvePackageManifestPath = (workspaceDir: string): string =>
   join(workspaceDir, "metadata", "manifest.json");
 
+export const resolveEmbeddedPackageManifestPath = (workspaceDir: string): string =>
+  join(workspaceDir, "metadata", "manifest.embedded.json");
+
 export const toMetadataZipPath = (fileName: string): string => `metadata/${fileName}`;
 
 export const toDatabaseZipPath = (relativePath: string): string => `database/${relativePath}`;

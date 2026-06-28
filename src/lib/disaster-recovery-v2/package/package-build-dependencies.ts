@@ -22,7 +22,7 @@ import {
   resolveMissingAssetsPath,
 } from "@/lib/disaster-recovery-v2/storage/asset-download/asset-download-paths";
 import { resolveStorageManifestPath } from "@/lib/disaster-recovery-v2/storage/storage-paths";
-import { resolvePackageManifestPath } from "@/lib/disaster-recovery-v2/package/package-paths";
+import { resolvePackageManifestPath, resolveEmbeddedPackageManifestPath } from "@/lib/disaster-recovery-v2/package/package-paths";
 
 export type PackageBuildDependencies = {
   ensureDirectory: (directoryPath: string) => Promise<void>;
@@ -100,5 +100,6 @@ export const resolvePackageBuildPaths = (workspaceDir: string) => ({
   databaseCollectionsDir: resolveDatabaseCollectionsDir(workspaceDir),
   assetsRootDir: resolveAssetsRootDir(workspaceDir),
   packageManifestPath: resolvePackageManifestPath(workspaceDir),
+  embeddedPackageManifestPath: resolveEmbeddedPackageManifestPath(workspaceDir),
   metadataRootDir: resolveMetadataRootDir(workspaceDir),
 });

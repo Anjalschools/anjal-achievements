@@ -1,4 +1,4 @@
-import { buildPackageManifest } from "@/lib/disaster-recovery-v2/package/build-package-manifest";
+import { buildEmbeddedPackageManifest, buildPackageManifest } from "@/lib/disaster-recovery-v2/package/build-package-manifest";
 import { collectPackageZipEntries, sortPackageZipEntries } from "@/lib/disaster-recovery-v2/package/collect-package-entries";
 import { createBackupZip } from "@/lib/disaster-recovery-v2/package/create-backup-zip";
 import type { PackageBuildDependencies } from "@/lib/disaster-recovery-v2/package/package-build-dependencies";
@@ -7,6 +7,7 @@ import type { PackageManifest } from "@/lib/disaster-recovery-v2/package/package
 import {
   resolveBackupZipPath,
   resolveBackupZipTempPath,
+  resolveEmbeddedPackageManifestPath,
   resolvePackageManifestPath,
   resolvePackageRootDir,
 } from "@/lib/disaster-recovery-v2/package/package-paths";
@@ -24,6 +25,17 @@ import { logDrV2 } from "@/lib/disaster-recovery-v2/utils/logging";
 
 const toErrorMessage = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
+
+const writeEmbeddedPackageManifest = async (
+  deps: PackageBuildDependencies,
+  workspaceDir: string,
+  manifest: PackageManifest
+): Promise<void> => {
+  await deps.writeJsonFile(
+    resolveEmbeddedPackageManifestPath(workspaceDir),
+    buildEmbeddedPackageManifest(manifest)
+  );
+};
 
 const validateEntriesReadable = async (
   entries: Awaited<ReturnType<typeof collectPackageZipEntries>>,
@@ -97,6 +109,7 @@ export const executePackageBuildStage = async (
   });
 
   await deps.writeJsonFile(manifestPath, packageManifest);
+  await writeEmbeddedPackageManifest(deps, workspaceDir, packageManifest);
 
   const finalEntries = sortPackageZipEntries(
     await deps.collectEntries({
@@ -142,6 +155,7 @@ export const executePackageBuildStage = async (
     });
 
     await deps.writeJsonFile(manifestPath, packageManifest);
+    await writeEmbeddedPackageManifest(deps, workspaceDir, packageManifest);
 
     const verifiedEntries = sortPackageZipEntries(
       await deps.collectEntries({
@@ -152,6 +166,7 @@ export const executePackageBuildStage = async (
       })
     );
 
+    await validateEntriesReadable(verifiedEntries, deps.validateSourceReadable);
     await deps.removeFile(zipTempPath).catch(() => undefined);
     await createBackupZip({
       outputPath: zipTempPath,

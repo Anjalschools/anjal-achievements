@@ -23,6 +23,12 @@ const ACTIVE_JOB_PHASES = new Set([
   "zip",
   "verifying",
   "backup-record",
+  "DATABASE_EXPORT",
+  "STORAGE_DISCOVERY",
+  "ASSET_DOWNLOAD",
+  "PACKAGE_BUILD",
+  "UPLOAD",
+  "COMPLETED",
 ]);
 
 export type DrWorkerPreflightResult = {

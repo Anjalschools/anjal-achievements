@@ -79,6 +79,7 @@ export const collectPackageZipEntries = async (input: {
     databaseCollectionsDir: string;
     assetsRootDir: string;
     packageManifestPath: string;
+    embeddedPackageManifestPath?: string;
   };
   includePackageManifest?: boolean;
 }): Promise<PackageZipEntry[]> => {
@@ -105,12 +106,16 @@ export const collectPackageZipEntries = async (input: {
     });
   }
 
-  if (input.includePackageManifest && (await input.collector.pathExists(resolvePaths.packageManifestPath))) {
-    entries.push({
-      section: "metadata",
-      zipPath: "metadata/manifest.json",
-      sourcePath: resolvePaths.packageManifestPath,
-    });
+  if (input.includePackageManifest) {
+    const manifestSourcePath =
+      input.resolvePaths.embeddedPackageManifestPath ?? input.resolvePaths.packageManifestPath;
+    if (await input.collector.pathExists(manifestSourcePath)) {
+      entries.push({
+        section: "metadata",
+        zipPath: "metadata/manifest.json",
+        sourcePath: manifestSourcePath,
+      });
+    }
   }
 
   await collectFilesRecursively(

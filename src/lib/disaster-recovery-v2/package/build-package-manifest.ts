@@ -4,6 +4,21 @@ import type { PackageManifest } from "@/lib/disaster-recovery-v2/package/package
 import { BACKUP_ZIP_FILE_NAME, PACKAGE_MANIFEST_VERSION } from "@/lib/disaster-recovery-v2/package/package-manifest-types";
 import type { StorageManifest } from "@/lib/disaster-recovery-v2/storage/storage-manifest-types";
 
+/** Manifest embedded in backup.zip must not include the zip's own digest (self-referential checksum). */
+export const buildEmbeddedPackageManifest = (manifest: PackageManifest): PackageManifest => ({
+  ...manifest,
+  package: {
+    ...manifest.package,
+    size: 0,
+    sha256: "",
+  },
+  verification: {
+    ...manifest.verification,
+    sha256: "",
+    verified: manifest.verification.verified,
+  },
+});
+
 export const buildPackageManifest = (input: {
   databaseManifest?: DatabaseManifest | null;
   storageManifest?: StorageManifest | null;

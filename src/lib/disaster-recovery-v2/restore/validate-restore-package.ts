@@ -41,12 +41,14 @@ export const validateRestorePackage = async (input: {
   }
 
   const manifest = authoritativeManifest ?? zipManifest;
+  const expectedSha256 = manifest.package.sha256.trim();
+  const expectedSize = manifest.package.size;
 
-  if (sha256 !== manifest.package.sha256) {
+  if (expectedSha256 && sha256 !== expectedSha256) {
     throw new Error("RESTORE_PACKAGE_CHECKSUM_MISMATCH");
   }
 
-  if (fileStat.size !== manifest.package.size) {
+  if (expectedSize > 0 && fileStat.size !== expectedSize) {
     throw new Error("RESTORE_PACKAGE_SIZE_MISMATCH");
   }
 

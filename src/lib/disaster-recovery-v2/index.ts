@@ -64,3 +64,7 @@ export type { RestoreConfig, RestoreMode } from "@/lib/disaster-recovery-v2/rest
 export type { RestoreEngineDependencies } from "@/lib/disaster-recovery-v2/restore/restore-dependencies";
 export type { RestoreEngineResult, RestoreReport } from "@/lib/disaster-recovery-v2/restore/restore-report-types";
 export { RESTORE_STAGE_ID } from "@/lib/disaster-recovery-v2/restore/restore-stage";
+export { createProductionIntegratedV2BackupEngine } from "@/lib/disaster-recovery-v2/production/create-production-integrated-backup-engine";
+export { executeProductionV2Backup } from "@/lib/disaster-recovery-v2/production/execute-production-v2-backup";
+export { runProductionV2Backup } from "@/lib/disaster-recovery-v2/production/run-production-v2-backup";
+export { V2_PRODUCTION_JOB_PHASES } from "@/lib/disaster-recovery-v2/production/v2-production-stage-mapping";

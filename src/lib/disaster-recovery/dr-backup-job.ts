@@ -96,5 +96,3 @@ export const startDisasterRecoveryBackupJob = async (
     fileName,
   };
 };
-
-export { executeDrBackupWorkerJob as executeDisasterRecoveryBackupJob } from "@/lib/disaster-recovery/worker/dr-worker";
