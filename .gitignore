@@ -33,3 +33,13 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# disaster recovery generated outputs (DR.REPO cleanup)
+tmp/
+dr-v2-workspaces/
+validation/
+*.bson
+backup.zip
+worker.log
+upload-report.json
+restore-report.json
