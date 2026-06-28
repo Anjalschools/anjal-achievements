@@ -1,6 +1,7 @@
 declare module "unzipper" {
   export type UnzipperFile = {
     path: string;
+    type?: string;
     buffer: () => Promise<Buffer>;
   };
 
@@ -10,5 +11,6 @@ declare module "unzipper" {
 
   export const Open: {
     buffer: (data: Buffer) => Promise<UnzipperDirectory>;
+    file: (filePath: string) => Promise<UnzipperDirectory>;
   };
 }

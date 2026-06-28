@@ -62,10 +62,11 @@ export const createDefaultPackageBuildDependencies = (): PackageBuildDependencie
   ensureDirectory: async (directoryPath) => {
     await mkdir(directoryPath, { recursive: true });
   },
-  readJsonFile: async (filePath) => {
+  readJsonFile: async <T>(filePath: string): Promise<T | null> => {
     try {
       const raw = await readFile(filePath, "utf8");
-      return JSON.parse(raw) as unknown as ReturnType<PackageBuildDependencies["readJsonFile"]>;
+      const parsed = JSON.parse(raw);
+      return parsed as T;
     } catch {
       return null;
     }
