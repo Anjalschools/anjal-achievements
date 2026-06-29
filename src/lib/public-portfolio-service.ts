@@ -11,25 +11,16 @@ import {
 import { ensureStudentPublicPortfolioReady } from "@/lib/public-portfolio-bootstrap";
 import { getGradeLabel } from "@/constants/grades";
 import { getStageByGrade, reportStageLabel } from "@/lib/report-stage-mapping";
-import {
-  formatLocalizedResultLine,
-  getAchievementDisplayName,
-  getAchievementLevelLabel,
-  labelAchievementCategory,
-  labelLegacyAchievementType,
-} from "@/lib/achievementDisplay";
-import {
-  getSpecialAchievementHighlightBadge,
-  resolveStoredAchievementReportCategory,
-  stripEntrepreneurshipMetaFromDescription,
-} from "@/lib/achievement-report-category";
-import { resolveCertificateUiStatus } from "@/lib/certificate-eligibility";
 import { tokenPreviewForLogs } from "@/lib/get-base-url";
 import { buildPublicPortfolioProfileExtras,
   type PublicPortfolioProfileExtras,
 } from "@/lib/student-portfolio-content";
-import { buildPublicPortfolioEvidenceItems } from "@/lib/portfolio/portfolio-evidence-policy";
 import type { PublicPortfolioEvidenceItem } from "@/lib/portfolio/portfolio-evidence-types";
+import { buildPublicPortfolioAchievementItemsResilient } from "@/lib/portfolio/public-portfolio-achievement-item";
+import {
+  createPortfolioDiagnosticsIfEnabled,
+  runPortfolioDiagnosticStage,
+} from "@/lib/portfolio/portfolio-request-diagnostics";
 
 const MAX_ACHIEVEMENTS = 60;
 
@@ -104,29 +95,6 @@ export type PublicPortfolioFailure =
 
 export type PublicPortfolioResult = PublicPortfolioSuccess | PublicPortfolioFailure;
 
-const participationLabels = (pt: string | undefined) => {
-  const p = String(pt || "").toLowerCase();
-  if (p === "team") return { ar: "فريق", en: "Team" };
-  return { ar: "فردي", en: "Individual" };
-};
-
-const levelColorKey = (
-  level: string | undefined
-): PublicPortfolioAchievementItem["colorKey"] => {
-  const k = String(level || "").toLowerCase();
-  if (k === "school") return "school";
-  if (k === "province") return "province";
-  if (k === "kingdom") return "kingdom";
-  if (k === "international") return "international";
-  return "other";
-};
-
-const truncate = (s: string, max: number) => {
-  const t = s.trim();
-  if (t.length <= max) return t;
-  return `${t.slice(0, max - 1)}…`;
-};
-
 const USER_PUBLIC_SELECT =
   "+publicPortfolioToken publicPortfolioEnabled publicPortfolioSlug publicPortfolioPublishedAt fullName fullNameAr fullNameEn profilePhoto gender section grade updatedAt createdAt email phone studentPortfolioContent";
 
@@ -175,50 +143,67 @@ const defaultBranding = (): PublicPortfolioBranding => ({
 export const loadPublicPortfolioPayload = async (
   slug: string,
   requestToken: string,
-  options?: { baseUrl?: string }
+  options?: { baseUrl?: string; correlationId?: string }
 ): Promise<PublicPortfolioResult> => {
   const requestSlug = String(slug || "").trim().toLowerCase();
-  const token = String(requestToken || "").trim();
-  if (!token) {
-    logPublicPortfolioResolve({
-      inputSlug: requestSlug || "(empty)",
-      hasToken: false,
-      tokenPreview: null,
-      matchedBySlug: false,
-      matchedByToken: false,
-      userFound: false,
-      outcome: "not_found",
-      reason: "missing_token",
+  const diagnostics = createPortfolioDiagnosticsIfEnabled({
+    correlationId: options?.correlationId,
+    portfolioSlug: requestSlug,
+  });
+
+  try {
+    diagnostics?.startStage("PORTFOLIO_REQUEST_START");
+    diagnostics?.successStage("PORTFOLIO_REQUEST_START");
+
+    const token = String(requestToken || "").trim();
+    if (!token) {
+      logPublicPortfolioResolve({
+        inputSlug: requestSlug || "(empty)",
+        hasToken: false,
+        tokenPreview: null,
+        matchedBySlug: false,
+        matchedByToken: false,
+        userFound: false,
+        outcome: "not_found",
+        reason: "missing_token",
+      });
+      return { ok: false, error: "not_found" };
+    }
+
+    await connectDB();
+
+    let matchedBySlug = false;
+    let matchedByToken = false;
+    const user = await runPortfolioDiagnosticStage(diagnostics, "LOAD_STUDENT", async () => {
+      let resolved =
+        requestSlug.length > 0 ? await findStudentByPortfolioSlug(requestSlug) : null;
+      if (resolved) {
+        matchedBySlug = true;
+        return resolved;
+      }
+      resolved = await findStudentByPublicToken(token);
+      if (resolved) {
+        matchedByToken = true;
+      }
+      return resolved;
     });
-    return { ok: false, error: "not_found" };
-  }
 
-  await connectDB();
+    if (!user) {
+      logPublicPortfolioResolve({
+        inputSlug: requestSlug || "(empty)",
+        hasToken: true,
+        tokenPreview: tokenPreviewForLogs(token),
+        matchedBySlug: false,
+        matchedByToken: false,
+        userFound: false,
+        outcome: "not_found",
+        reason: "no_student_for_slug_or_token",
+      });
+      return { ok: false, error: "not_found" };
+    }
 
-  let user =
-    requestSlug.length > 0 ? await findStudentByPortfolioSlug(requestSlug) : null;
-  const matchedBySlug = Boolean(user);
-  let matchedByToken = false;
-  if (!user) {
-    user = await findStudentByPublicToken(token);
-    matchedByToken = Boolean(user);
-  }
-
-  if (!user) {
-    logPublicPortfolioResolve({
-      inputSlug: requestSlug || "(empty)",
-      hasToken: true,
-      tokenPreview: tokenPreviewForLogs(token),
-      matchedBySlug: false,
-      matchedByToken: false,
-      userFound: false,
-      outcome: "not_found",
-      reason: "no_student_for_slug_or_token",
-    });
-    return { ok: false, error: "not_found" };
-  }
-
-  const userIdStr = String((user as { _id?: unknown })._id ?? "");
+    const userIdStr = String((user as { _id?: unknown })._id ?? "");
+  diagnostics?.setStudentId(userIdStr);
   await ensureStudentPublicPortfolioReady(userIdStr);
 
   const refreshed = await User.findById(userIdStr).select(USER_PUBLIC_SELECT).lean();
@@ -237,6 +222,7 @@ export const loadPublicPortfolioPayload = async (
   }
 
   const u = refreshed as unknown as Record<string, unknown>;
+  diagnostics?.startStage("VALIDATE_TOKEN");
   const storedToken = typeof u.publicPortfolioToken === "string" ? u.publicPortfolioToken.trim() : "";
   const storedSlug = typeof u.publicPortfolioSlug === "string" ? u.publicPortfolioSlug.trim().toLowerCase() : "";
   const enabledFlag = u.publicPortfolioEnabled;
@@ -327,8 +313,12 @@ export const loadPublicPortfolioPayload = async (
     return { ok: false, error: "moved", canonicalSlug: storedSlug, token };
   }
 
+  diagnostics?.successStage("VALIDATE_TOKEN");
+
   const userId = u._id as mongoose.Types.ObjectId;
   const match = publicPortfolioAchievementMatch(userId);
+  diagnostics?.startStage("FILTER_PUBLIC_ACHIEVEMENTS");
+  diagnostics?.successStage("FILTER_PUBLIC_ACHIEVEMENTS");
 
   const settingsDoc = await PlatformSettings.findOne({ singletonKey: "default" })
     .select("branding")
@@ -360,39 +350,41 @@ export const loadPublicPortfolioPayload = async (
   const achFields =
     "achievementType achievementCategory achievementName nameAr nameEn customAchievementName title description achievementLevel participationType resultType medalType rank score date achievementYear isFeatured featured certificateIssued certificateVerificationToken certificateRevokedAt certificateIssuedAt pendingReReview status certificateApprovedByRole certificateApprovedAt createdAt attachments";
 
-  const [achRows, agg] = await Promise.all([
-    Achievement.find(match)
-      .select(achFields)
-      .sort({ date: -1, createdAt: -1 })
-      .limit(MAX_ACHIEVEMENTS)
-      .lean(),
-    Achievement.aggregate([
-      { $match: match as Record<string, unknown> },
-      {
-        $group: {
-          _id: null,
-          n: { $sum: 1 },
-          featured: {
-            $sum: {
-              $cond: [
-                {
-                  $or: [{ $eq: ["$isFeatured", true] }, { $eq: ["$featured", true] }],
-                },
-                1,
-                0,
-              ],
+  const [achRows, agg] = await runPortfolioDiagnosticStage(diagnostics, "LOAD_ACHIEVEMENTS", () =>
+    Promise.all([
+      Achievement.find(match)
+        .select(achFields)
+        .sort({ date: -1, createdAt: -1 })
+        .limit(MAX_ACHIEVEMENTS)
+        .lean(),
+      Achievement.aggregate([
+        { $match: match as Record<string, unknown> },
+        {
+          $group: {
+            _id: null,
+            n: { $sum: 1 },
+            featured: {
+              $sum: {
+                $cond: [
+                  {
+                    $or: [{ $eq: ["$isFeatured", true] }, { $eq: ["$featured", true] }],
+                  },
+                  1,
+                  0,
+                ],
+              },
             },
-          },
-          certs: {
-            $sum: {
-              $cond: [{ $eq: ["$certificateIssued", true] }, 1, 0],
+            certs: {
+              $sum: {
+                $cond: [{ $eq: ["$certificateIssued", true] }, 1, 0],
+              },
             },
+            points: { $sum: { $ifNull: ["$score", 0] } },
           },
-          points: { $sum: { $ifNull: ["$score", 0] } },
         },
-      },
-    ]).exec(),
-  ]);
+      ]).exec(),
+    ])
+  );
 
   const aggRow = agg[0] as { n?: number; featured?: number; certs?: number; points?: number } | undefined;
   const stats = {
@@ -402,92 +394,12 @@ export const loadPublicPortfolioPayload = async (
     totalPoints: typeof aggRow?.points === "number" ? Math.round(aggRow.points) : 0,
   };
 
-  const achievements: PublicPortfolioAchievementItem[] = (achRows as unknown as Record<string, unknown>[]).map(
-    (row) => {
-      const id = String(row._id);
-      const titleAr = getAchievementDisplayName(row, "ar");
-      const titleEn = getAchievementDisplayName(row, "en");
-      const reportCat = resolveStoredAchievementReportCategory({
-        achievementType: String(row.achievementType || ""),
-        achievementCategory: String(row.achievementCategory || ""),
-        achievementName: String(row.achievementName || ""),
-        description: String(row.description || ""),
-      });
-      const catAr = labelAchievementCategory(reportCat, "ar");
-      const catEn = labelAchievementCategory(reportCat, "en");
-      const highlight = getSpecialAchievementHighlightBadge({
-        achievementType: String(row.achievementType || ""),
-        achievementCategory: String(row.achievementCategory || ""),
-        achievementName: String(row.achievementName || ""),
-        description: String(row.description || ""),
-      });
-      const levelRaw = row.achievementLevel || row.level;
-      const levelAr = getAchievementLevelLabel(levelRaw, "ar");
-      const levelEn = getAchievementLevelLabel(levelRaw, "en");
-      const scoreNum =
-        typeof row.score === "number" && Number.isFinite(row.score) ? row.score : undefined;
-      const resAr = formatLocalizedResultLine(
-        String(row.resultType || ""),
-        row.medalType ? String(row.medalType) : undefined,
-        row.rank ? String(row.rank) : undefined,
-        "ar",
-        scoreNum
-      );
-      const resEn = formatLocalizedResultLine(
-        String(row.resultType || ""),
-        row.medalType ? String(row.medalType) : undefined,
-        row.rank ? String(row.rank) : undefined,
-        "en",
-        scoreNum
-      );
-      const part = participationLabels(String(row.participationType || ""));
-      const d = row.date instanceof Date ? row.date : null;
-      const descSource = stripEntrepreneurshipMetaFromDescription(
-        String(row.description || row.title || "")
-      );
-      const certUi = resolveCertificateUiStatus(
-        row as Parameters<typeof resolveCertificateUiStatus>[0]
-      );
-      const vTok =
-        typeof row.certificateVerificationToken === "string"
-          ? row.certificateVerificationToken.trim()
-          : "";
-      const hasCert = certUi === "issued" && Boolean(vTok);
-      const certPath = hasCert ? `/verify/certificate/${encodeURIComponent(vTok)}` : null;
-
-      return {
-        id,
-        titleAr,
-        titleEn,
-        highlightBadgeAr: highlight?.labelAr ?? null,
-        highlightBadgeEn: highlight?.labelEn ?? null,
-        categoryLabelAr: catAr,
-        categoryLabelEn: catEn,
-        levelLabelAr: levelAr,
-        levelLabelEn: levelEn,
-        resultLabelAr: resAr,
-        resultLabelEn: resEn,
-        participationLabelAr: part.ar,
-        participationLabelEn: part.en,
-        achievementDate: d ? d.toISOString() : null,
-        academicYear: typeof row.achievementYear === "number" ? row.achievementYear : 0,
-        descriptionShortAr: truncate(descSource, 220) || (titleAr ? truncate(titleAr, 120) : "—"),
-        descriptionShortEn:
-          (titleEn ? truncate(titleEn, 220) : "") ||
-          truncate(descSource, 220) ||
-          (titleAr ? truncate(titleAr, 120) : "—"),
-        isFeatured: row.isFeatured === true || row.featured === true,
-        hasCertificate: Boolean(hasCert),
-        certificateVerificationPath: certPath,
-        colorKey: levelColorKey(String(levelRaw || "")),
-        evidence: buildPublicPortfolioEvidenceItems({
-          achievementId: id,
-          attachmentsRaw: row.attachments,
-        }),
-      };
-    }
+  const achievements = buildPublicPortfolioAchievementItemsResilient(
+    achRows as unknown as Record<string, unknown>[],
+    { studentId: userIdStr, portfolioSlug: storedSlug, diagnostics }
   );
 
+  diagnostics?.startStage("BUILD_VIEW_MODEL");
   const gradeVal = String(u.grade || "");
   const section = u.section === "international" ? "international" : "arabic";
   const gender = u.gender === "female" ? "female" : "male";
@@ -513,6 +425,7 @@ export const loadPublicPortfolioPayload = async (
     typeof ur.email === "string" ? ur.email : null,
     typeof ur.phone === "string" ? ur.phone : null
   );
+  diagnostics?.successStage("BUILD_VIEW_MODEL");
 
   logPublicPortfolioResolve({
     inputSlug: requestSlug || "(empty)",
@@ -537,6 +450,9 @@ export const loadPublicPortfolioPayload = async (
   } catch {
     careerExtension = undefined;
   }
+
+  diagnostics?.startStage("RENDER_COMPLETE");
+  diagnostics?.successStage("RENDER_COMPLETE");
 
   return {
     ok: true,
@@ -564,4 +480,7 @@ export const loadPublicPortfolioPayload = async (
     portfolioUrl,
     ...(careerExtension ? { careerExtension } : {}),
   };
+  } finally {
+    diagnostics?.emitSummary();
+  }
 };

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { headers } from "next/headers";
 import QRCode from "qrcode";
 import { getBaseUrlFromHeaders } from "@/lib/get-base-url-from-headers";
 import { PUBLIC_IMG } from "@/lib/publicImages";
@@ -21,7 +22,8 @@ import {
 } from "@/lib/public-portfolio-page-locale";
 import { PublicPortfolioLangSwitch } from "@/components/portfolio/PublicPortfolioLangSwitch";
 import PublicPortfolioProfileBlocks from "@/components/portfolio/PublicPortfolioProfileBlocks";
-import PublicPortfolioEvidenceGallery from "@/components/portfolio/PublicPortfolioEvidenceGallery";
+import PublicPortfolioAchievementEvidence from "@/components/portfolio/PublicPortfolioAchievementEvidence";
+import { resolveCorrelationIdFromHeaders } from "@/lib/portfolio/portfolio-request-diagnostics";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -188,7 +190,8 @@ export default async function PublicPortfolioPage({ params, searchParams }: Page
   }
 
   const baseUrl = getBaseUrlFromHeaders();
-  const data = await loadPublicPortfolioPayload(slug, token, { baseUrl });
+  const correlationId = resolveCorrelationIdFromHeaders(headers());
+  const data = await loadPublicPortfolioPayload(slug, token, { baseUrl, correlationId });
 
   if (!data.ok && data.error === "moved") {
     redirect(
@@ -560,11 +563,12 @@ export default async function PublicPortfolioPage({ params, searchParams }: Page
                       {desc}
                     </p>
                     {a.evidence.length > 0 ? (
-                      <PublicPortfolioEvidenceGallery
+                      <PublicPortfolioAchievementEvidence
                         items={a.evidence}
                         slug={slug}
                         token={token}
                         isAr={lang === "ar"}
+                        achievementId={a.id}
                       />
                     ) : null}
                     <div className="mt-4 flex flex-wrap gap-2 border-t border-slate-200/80 pt-4">

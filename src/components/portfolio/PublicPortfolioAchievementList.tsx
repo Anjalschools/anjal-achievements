@@ -4,7 +4,7 @@ import Link from "next/link";
 
 import type { PublicPortfolioAchievementItem } from "@/lib/public-portfolio-service";
 import type { PublicPortfolioPageCopy } from "@/lib/public-portfolio-page-dictionary";
-import PublicPortfolioEvidenceGallery from "@/components/portfolio/PublicPortfolioEvidenceGallery";
+import PublicPortfolioAchievementEvidence from "@/components/portfolio/PublicPortfolioAchievementEvidence";
 
 type PublicPortfolioAchievementListProps = {
   achievements: PublicPortfolioAchievementItem[];
@@ -71,11 +71,12 @@ const PublicPortfolioAchievementList = ({
             </dl>
             <p className={`mt-3 flex-1 text-sm leading-relaxed text-slate-600 ${textMain}`}>{desc}</p>
 
-            <PublicPortfolioEvidenceGallery
+            <PublicPortfolioAchievementEvidence
               items={achievement.evidence}
               slug={slug}
               token={token}
               isAr={isAr}
+              achievementId={achievement.id}
             />
 
             <div className="mt-4 flex flex-wrap gap-2 border-t border-slate-200/80 pt-4">

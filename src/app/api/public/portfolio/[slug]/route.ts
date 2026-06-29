@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { loadPublicPortfolioPayload } from "@/lib/public-portfolio-service";
 import { getBaseUrlForRequest } from "@/lib/get-base-url";
+import { resolveCorrelationIdFromHeaders } from "@/lib/portfolio/portfolio-request-diagnostics";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -16,7 +17,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     return NextResponse.json({ ok: false, error: "not_found" }, { status: 404 });
   }
 
-  const data = await loadPublicPortfolioPayload(slug, token, { baseUrl });
+  const data = await loadPublicPortfolioPayload(slug, token, {
+    baseUrl,
+    correlationId: resolveCorrelationIdFromHeaders(request.headers),
+  });
 
   if (!data.ok) {
     if (data.error === "moved") {
