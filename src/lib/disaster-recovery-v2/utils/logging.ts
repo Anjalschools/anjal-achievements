@@ -26,6 +26,14 @@ export const logDrV2 = (
   });
 };
 
+export const logDrV2Debug = (
+  event: string,
+  meta: Record<string, unknown> = {}
+): void => {
+  if (process.env.DR_DEBUG !== "1") return;
+  logDrV2(event, meta);
+};
+
 export const logDrV2StageStarted = (
   stageId: string,
   meta: Record<string, unknown> = {}

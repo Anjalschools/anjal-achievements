@@ -486,4 +486,95 @@ describe("DR.BACKUP.V2.3 — storage discovery stage", () => {
       tags: ["a", "b"],
     });
   });
+
+  it("excludes Cloudinary sample assets before manifest creation", async () => {
+    const provider = createCloudinaryStorageProvider({
+      listResources: async ({ resourceType, nextCursor }) => {
+        if (resourceType === "image" && !nextCursor) {
+          return {
+            resources: [
+              {
+                public_id: "achievements/logo",
+                resource_type: "image",
+                secure_url: "https://res.cloudinary.com/demo/image/upload/achievements/logo.jpg",
+              },
+              {
+                public_id: "samples/paper",
+                resource_type: "image",
+                secure_url: "https://res.cloudinary.com/demo/image/upload/samples/paper.jpg",
+              },
+              {
+                public_id: "samples/cloudinary-logo-vector",
+                resource_type: "image",
+                secure_url:
+                  "https://res.cloudinary.com/demo/image/upload/samples/cloudinary-logo-vector.svg",
+              },
+              {
+                public_id: "samples/ecommerce/accessories-bag",
+                resource_type: "image",
+                secure_url:
+                  "https://res.cloudinary.com/demo/image/upload/samples/ecommerce/accessories-bag.jpg",
+              },
+            ],
+          };
+        }
+
+        if (resourceType === "video" && !nextCursor) {
+          return {
+            resources: [
+              {
+                public_id: "samples/video/sea-turtle",
+                resource_type: "video",
+                secure_url: "https://res.cloudinary.com/demo/video/upload/samples/video/sea-turtle.mp4",
+              },
+            ],
+          };
+        }
+
+        return { resources: [] };
+      },
+    });
+
+    const result = await provider.discover(
+      createBackupContext(createBackupConfig({ jobId: "job-cloudinary-samples", workspaceDir: "/tmp/x" }))
+    );
+
+    expect(result.assets).toHaveLength(1);
+    expect(result.assets[0]?.publicId).toBe("achievements/logo");
+    expect(result.assets.every((asset) => !asset.publicId.startsWith("samples/"))).toBe(true);
+    expect(result.assets.every((asset) => !asset.storageKey.includes("/samples/"))).toBe(true);
+  });
+
+  it("emits STORAGE_SKIP_SAMPLE_ASSET debug logs when DR_DEBUG is enabled", async () => {
+    vi.stubEnv("DR_DEBUG", "1");
+    const { events, restore } = collectLogEvents();
+
+    try {
+      const provider = createCloudinaryStorageProvider({
+        listResources: async ({ resourceType, nextCursor }) => {
+          if (resourceType === "image" && !nextCursor) {
+            return {
+              resources: [
+                {
+                  public_id: "samples/radial",
+                  resource_type: "image",
+                  secure_url: "https://res.cloudinary.com/demo/image/upload/samples/radial.jpg",
+                },
+              ],
+            };
+          }
+          return { resources: [] };
+        },
+      });
+
+      await provider.discover(
+        createBackupContext(createBackupConfig({ jobId: "job-cloudinary-debug", workspaceDir: "/tmp/x" }))
+      );
+
+      expect(events.some((line) => line.includes("[DR.V2] STORAGE_SKIP_SAMPLE_ASSET"))).toBe(true);
+    } finally {
+      restore();
+      vi.unstubAllEnvs();
+    }
+  });
 });

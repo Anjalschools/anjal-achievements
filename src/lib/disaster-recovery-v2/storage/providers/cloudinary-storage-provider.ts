@@ -8,6 +8,7 @@ import {
   listAllCloudinaryResources,
   type CloudinaryListResources,
 } from "@/lib/disaster-recovery-v2/storage/providers/cloudinary-list-resources";
+import { filterCloudinaryListedResources } from "@/lib/disaster-recovery-v2/storage/providers/cloudinary-sample-filter";
 import { sortStorageDiscoveryAssets } from "@/lib/disaster-recovery-v2/storage/sort-storage-assets";
 
 export type CloudinaryStorageProviderOptions = {
@@ -22,7 +23,8 @@ export const createCloudinaryStorageProvider = (
   required: options.required ?? true,
   discover: async (_context: BackupContext): Promise<StorageDiscoveryResult> => {
     const resources = await listAllCloudinaryResources(options.listResources);
-    const assets = sortStorageDiscoveryAssets(resources.map(mapCloudinaryResourceToAsset));
+    const applicationResources = filterCloudinaryListedResources(resources);
+    const assets = sortStorageDiscoveryAssets(applicationResources.map(mapCloudinaryResourceToAsset));
 
     return {
       provider: CLOUDINARY_PROVIDER_ID,
