@@ -30,6 +30,7 @@ import { validateRestorePackage } from "@/lib/disaster-recovery-v2/restore/valid
 import { restoreDatabaseCollections } from "@/lib/disaster-recovery-v2/restore/restore-database-collections";
 import { restoreAssets } from "@/lib/disaster-recovery-v2/restore/restore-assets";
 import { createCloudinaryAssetRestoreProvider } from "@/lib/disaster-recovery-v2/restore/providers/cloudinary-asset-restore-provider";
+import type { DatabaseCollectionRestorer } from "@/lib/disaster-recovery-v2/restore/restore-database-collections";
 import {
   resolveAssetDownloadReportPath,
   resolveAssetsRootDir,
@@ -41,6 +42,16 @@ import { createBackupContext } from "@/lib/disaster-recovery-v2/types/backup-con
 import { createBackupConfig } from "@/lib/disaster-recovery-v2/types/backup-config";
 
 const createWorkspaceDir = (): string => mkdtempSync(join(tmpdir(), "dr-v2-restore-"));
+
+type InMemoryDatabaseRestorer = DatabaseCollectionRestorer & {
+  getRestored: () => Map<string, Record<string, unknown>[]>;
+};
+
+const createTestInMemoryDatabaseRestorer = (): InMemoryDatabaseRestorer =>
+  createInMemoryDatabaseRestorer() as InMemoryDatabaseRestorer;
+
+const buildCloudinaryStorageKey = (resourceType: string, publicId: string): string =>
+  `cloudinary://${resourceType}/${publicId}`;
 
 const buildAsset = (
   overrides: Partial<StorageDiscoveryAsset> & Pick<StorageDiscoveryAsset, "objectId" | "publicId" | "storageKey">
@@ -157,9 +168,9 @@ const buildValidPackageFixture = async (input: {
 };
 
 const createMockRestoreDeps = (input?: {
-  restorer?: ReturnType<typeof createInMemoryDatabaseRestorer>;
+  restorer?: DatabaseCollectionRestorer;
 }): RestoreEngineDependencies => {
-  const restorer = input?.restorer ?? createInMemoryDatabaseRestorer();
+  const restorer = input?.restorer ?? createTestInMemoryDatabaseRestorer();
 
   return {
     validation: {
@@ -267,12 +278,12 @@ describe("DR.BACKUP.V2.7 — restore engine", () => {
       assets: [{ asset, content: Buffer.from("image") }],
     });
 
-    const restorer = createInMemoryDatabaseRestorer();
+    const restorer = createTestInMemoryDatabaseRestorer();
     const provider = createCloudinaryAssetRestoreProvider({
-      restoreAsset: async ({ publicId, storageKey }) => ({
+      restoreAsset: async ({ publicId, resourceType }) => ({
         provider: "cloudinary",
         publicId,
-        storageKey,
+        storageKey: buildCloudinaryStorageKey(resourceType, publicId),
       }),
     });
 
@@ -329,10 +340,10 @@ describe("DR.BACKUP.V2.7 — restore engine", () => {
       executeRestore(
         createRestoreConfig({ jobId: "job-checksum", workspaceDir }),
         createCloudinaryAssetRestoreProvider({
-          restoreAsset: async ({ publicId, storageKey }) => ({
+          restoreAsset: async ({ publicId, resourceType }) => ({
             provider: "cloudinary",
             publicId,
-            storageKey,
+            storageKey: buildCloudinaryStorageKey(resourceType, publicId),
           }),
         }),
         createMockRestoreDeps()
@@ -378,7 +389,7 @@ describe("DR.BACKUP.V2.7 — restore engine", () => {
     );
     writeFileSync(join(extractedRootDir, "database", "collections", "broken.bson"), Buffer.from("bad"));
 
-    const restorer = createInMemoryDatabaseRestorer();
+    const restorer = createTestInMemoryDatabaseRestorer();
     const context = createRestoreContext(createRestoreConfig({ jobId: "job-db", workspaceDir }));
 
     const results = await restoreDatabaseCollections({
@@ -436,11 +447,15 @@ describe("DR.BACKUP.V2.7 — restore engine", () => {
     );
 
     const provider = createCloudinaryAssetRestoreProvider({
-      restoreAsset: async ({ publicId, storageKey }) => {
+      restoreAsset: async ({ publicId, resourceType }) => {
         if (publicId === "fail") {
           throw new Error("UPLOAD_FAILED");
         }
-        return { provider: "cloudinary", publicId, storageKey };
+        return {
+          provider: "cloudinary",
+          publicId,
+          storageKey: buildCloudinaryStorageKey(resourceType, publicId),
+        };
       },
     });
 
@@ -486,7 +501,7 @@ describe("DR.BACKUP.V2.7 — restore engine", () => {
           storageKey: "cloudinary://image/x",
         }),
       }),
-      createMockRestoreDeps({ restorer: restorer as never })
+      createMockRestoreDeps({ restorer: restorer as DatabaseCollectionRestorer })
     );
 
     expect(result.success).toBe(false);
@@ -499,10 +514,10 @@ describe("DR.BACKUP.V2.7 — restore engine", () => {
 
   it("uses the provider abstraction for Cloudinary asset restore", async () => {
     const provider = createCloudinaryAssetRestoreProvider({
-      restoreAsset: async ({ publicId, storageKey }) => ({
+      restoreAsset: async ({ publicId, resourceType }) => ({
         provider: "cloudinary",
         publicId,
-        storageKey,
+        storageKey: buildCloudinaryStorageKey(resourceType, publicId),
       }),
     });
 
@@ -534,13 +549,13 @@ describe("DR.BACKUP.V2.7 — restore engine", () => {
 
     await createRestoreEngine(
       createCloudinaryAssetRestoreProvider({
-        restoreAsset: async ({ publicId, storageKey }) => ({
+        restoreAsset: async ({ publicId, resourceType }) => ({
           provider: "cloudinary",
           publicId,
-          storageKey,
+          storageKey: buildCloudinaryStorageKey(resourceType, publicId),
         }),
       }),
-      createMockRestoreDeps({ restorer: createInMemoryDatabaseRestorer() })
+      createMockRestoreDeps({ restorer: createTestInMemoryDatabaseRestorer() })
     ).run(createRestoreConfig({ jobId: "job-logs", workspaceDir }));
 
     restore();

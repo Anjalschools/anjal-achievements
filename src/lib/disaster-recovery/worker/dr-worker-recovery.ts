@@ -28,6 +28,11 @@ const RECOVERABLE_PHASES = [
   "zip",
   "verifying",
   "backup-record",
+  "DATABASE_EXPORT",
+  "STORAGE_DISCOVERY",
+  "ASSET_DOWNLOAD",
+  "PACKAGE_BUILD",
+  "UPLOAD",
 ] as const;
 
 const buildPayloadFromRecord = (row: {

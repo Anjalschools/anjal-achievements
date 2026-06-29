@@ -72,7 +72,13 @@ describe("phase 11.2.B — true end-to-end streaming export", () => {
 
     const result = await runSequentialObjectStreamExport({
       entries,
-      exportObjectStream: exportStorageObjectStream,
+      exportObjectStream: async (entry) => {
+        const payload = await exportStorageObjectStream(entry);
+        return {
+          ...payload,
+          archivePath: entry.archivePath,
+        };
+      },
       onObjectReady: async ({ stream }) => {
         liveStreams += 1;
         maxLiveStreams = Math.max(maxLiveStreams, liveStreams);

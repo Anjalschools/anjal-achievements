@@ -5,10 +5,10 @@ import { removeDrEventListener } from "@/lib/backup/backup-zip";
 
 describe("backup-zip cleanup helpers", () => {
   it("removeDrEventListener uses removeListener when off is unavailable", () => {
-    const emitter = new EventEmitter() as EventEmitter & { off?: undefined };
+    const emitter = new EventEmitter();
     const listener = vi.fn();
     emitter.on("end", listener);
-    delete emitter.off;
+    Reflect.deleteProperty(emitter as object, "off");
 
     removeDrEventListener(emitter, "end", listener);
 

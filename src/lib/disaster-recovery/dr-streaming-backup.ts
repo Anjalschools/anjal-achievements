@@ -70,6 +70,10 @@ export type StreamingDisasterRecoveryZipResult = {
   failedCount: number;
 };
 
+const isLegacyDrStreamingBackupRuntimeEnabled = (): boolean =>
+  process.env.LEGACY_DR_BACKUP_ENABLED === "1";
+
+/** @deprecated Rollback-only. Production uses executeProductionV2Backup (DR.BACKUP.V2). */
 export const buildAndStoreStreamingDisasterRecoveryZip = async (input: {
   manifest: BackupManifest;
   entries: BackupPackageEntry[];
@@ -77,6 +81,12 @@ export const buildAndStoreStreamingDisasterRecoveryZip = async (input: {
   fileName: string;
   storageProvider: BackupStorageProviderId;
 }): Promise<StreamingDisasterRecoveryZipResult> => {
+  if (!isLegacyDrStreamingBackupRuntimeEnabled()) {
+    throw new Error(
+      "LEGACY_DR_STREAMING_BACKUP_DISABLED: use executeProductionV2Backup via the DR worker queue"
+    );
+  }
+
   logDrStartupMilestone("STREAMING_BACKUP_ENTER", {
     inventoryCount: input.inventory.length,
     fileName: input.fileName,

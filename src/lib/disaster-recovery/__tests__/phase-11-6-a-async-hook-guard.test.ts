@@ -63,10 +63,15 @@ describe("phase 11.6.A — async_hooks recursive logging guard", () => {
     initDrLeakDetection();
     let promiseConstructed = false;
     const OriginalPromise = global.Promise;
-    class TrackingPromise extends OriginalPromise {
-      constructor(...args: ConstructorParameters<typeof Promise>) {
+    class TrackingPromise extends OriginalPromise<unknown> {
+      constructor(
+        executor: (
+          resolve: (value: unknown) => void,
+          reject: (reason?: unknown) => void
+        ) => void
+      ) {
         promiseConstructed = true;
-        super(...args);
+        super(executor);
       }
     }
     vi.stubGlobal("Promise", TrackingPromise);

@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  type InstitutionReportValidationResult,
+} from "@/lib/partnerships/institution-final-report-constants";
+import {
   buildInstitutionReportValidationDiagnostics,
 } from "@/lib/partnerships/institution-final-report-validation-diagnostics";
 import {
@@ -11,6 +14,30 @@ import {
   getAllowedCompletionTransitions,
 } from "@/lib/partnerships/partnerships-state-machine";
 import { attachmentDisplayUrl } from "@/lib/partnerships/training-completion-upload";
+
+const sampleValidation = (
+  overrides: Partial<InstitutionReportValidationResult> = {}
+): InstitutionReportValidationResult => ({
+  ratingsDetected: 10,
+  expectedRatings: 10,
+  missingRatings: 0,
+  missingRatingKeys: [],
+  invalidRatingRows: [],
+  stampDetected: true,
+  signatureDetected: false,
+  recommendationDetected: false,
+  approvalFieldsDetected: { supervisorName: false, positionTitle: false, signature: false },
+  approvalComplete: false,
+  confidence: 91,
+  ocrConfidence: 85,
+  visionConfidence: 92,
+  overallConfidence: 91,
+  ratingRowDetails: [],
+  reviewStatus: "APPROVED",
+  riskFlags: [],
+  warnings: [],
+  ...overrides,
+});
 
 describe("phase T.2.5.A — final report review workflow fixes", () => {
   it("allows submitted → needs_revision", () => {
@@ -101,20 +128,7 @@ describe("phase T.2.5.A — final report review workflow fixes", () => {
 
   it("keeps visual evidence builder compatible with validation result", () => {
     const evidence = buildInstitutionReportVisualEvidence({
-      validationResult: {
-        reviewStatus: "APPROVED",
-        ratingsDetected: 10,
-        expectedRatings: 10,
-        stampDetected: true,
-        signatureDetected: false,
-        confidence: 91,
-        overallConfidence: 91,
-        ocrConfidence: 85,
-        visionConfidence: 92,
-        ratingRowDetails: [],
-        riskFlags: [],
-        warnings: [],
-      },
+      validationResult: sampleValidation(),
       reportFileKey: "file.pdf",
     });
     expect(evidence.regions.some((row) => row.id === "stamp")).toBe(true);

@@ -76,12 +76,11 @@ describe("school-intelligence-query-source-trace", () => {
 
     const merged = mergeQuerySourceIntoMongoContext(
       {
+        ...failure,
         mongoCollection: "users",
         mongoOperation: "find_students",
         timeoutMs: 8000,
-        durationMs: 10,
         documentsReturned: 0,
-        ...failure,
       },
       trace
     );

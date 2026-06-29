@@ -422,7 +422,11 @@ describe("DR.BACKUP.V2.4 — asset download stage", () => {
     expect(report.downloaded).toBe(1);
     expect(report.skipped).toBe(1);
     expect(report.missing).toBe(1);
-    expect(report.assets.every((entry) => entry.status !== "pending")).toBe(true);
+    expect(
+      report.assets.every((entry) =>
+        entry.status === "downloaded" || entry.status === "failed" || entry.status === "skipped"
+      )
+    ).toBe(true);
     expect(existsSync(resolveStorageManifestPath(workspaceDir))).toBe(true);
     expect(
       JSON.parse(readFileSync(resolveStorageManifestPath(workspaceDir), "utf8")).objectCount

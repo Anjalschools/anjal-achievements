@@ -1,4 +1,9 @@
 import "server-only";
+
+/**
+ * DR production job enqueue (DR.BACKUP.V2).
+ * Creates a BackupRecord and enqueues work for executeProductionV2Backup in dr-worker.
+ */
 import connectDB from "@/lib/mongodb";
 import BackupRecord from "@/models/BackupRecord";
 import { type BackupModuleId } from "@/lib/backup/backup-constants";
@@ -36,7 +41,7 @@ export const startDisasterRecoveryBackupJob = async (
   audit?: JobAuditContext,
   options?: { source?: BackupJobQueuePayload["source"]; pruneExpiredOnComplete?: boolean }
 ): Promise<DisasterRecoveryJobAccepted> => {
-  console.log("[DR-JOB] startDisasterRecoveryBackupJob");
+  console.log("[DR-JOB] startDisasterRecoveryBackupJob engine=disaster-recovery-v2");
   markDrJobQueued();
   await connectDB();
 

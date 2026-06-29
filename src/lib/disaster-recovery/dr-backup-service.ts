@@ -87,9 +87,19 @@ const verifyExportProviderConfiguration = (inventory: StorageManifestEntry[]): v
   }
 };
 
+const isLegacyDrBackupRuntimeEnabled = (): boolean =>
+  process.env.LEGACY_DR_BACKUP_ENABLED === "1";
+
+/** @deprecated Rollback-only. Production uses executeProductionV2Backup (DR.BACKUP.V2). */
 export const createDisasterRecoveryBackup = async (
   input: CreateDisasterRecoveryBackupInput
 ): Promise<CreateBackupResult & { objectCount?: number; recoveryReadinessScore?: number }> => {
+  if (!isLegacyDrBackupRuntimeEnabled()) {
+    throw new Error(
+      "LEGACY_DR_BACKUP_DISABLED: use executeProductionV2Backup via the DR worker queue"
+    );
+  }
+
   console.log("[DR] SERVICE ENTER");
   logDr("START", {
     moduleId: input.moduleId,

@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { type InstitutionReportValidationResult } from "@/lib/partnerships/institution-final-report-constants";
 import { computeFinalReportReviewEmptyStateStats } from "@/lib/partnerships/final-report-review-empty-state-stats";
 import {
   getConsistencyClassification,
@@ -9,6 +10,26 @@ import {
   validateSupervisorReviewNote,
 } from "@/lib/partnerships/final-report-review-ux-constants";
 import { attachmentDisplayUrl } from "@/lib/partnerships/training-completion-upload";
+
+const sampleValidation = (
+  overrides: Partial<InstitutionReportValidationResult> = {}
+): InstitutionReportValidationResult => ({
+  ratingsDetected: 10,
+  expectedRatings: 10,
+  missingRatings: 0,
+  missingRatingKeys: [],
+  invalidRatingRows: [],
+  stampDetected: false,
+  signatureDetected: false,
+  recommendationDetected: false,
+  approvalFieldsDetected: { supervisorName: false, positionTitle: false, signature: false },
+  approvalComplete: false,
+  confidence: 0,
+  reviewStatus: "APPROVED",
+  riskFlags: [],
+  warnings: [],
+  ...overrides,
+});
 
 describe("phase T.2.5.B — final report review UX hardening", () => {
   it("requires review note for request revision", () => {
@@ -57,14 +78,20 @@ describe("phase T.2.5.B — final report review UX hardening", () => {
   it("derives diagnostics summary status cards", () => {
     expect(
       getDiagnosticsSummaryStatus(
-        { validationResult: { reviewStatus: "APPROVED", ratingsDetected: 10, expectedRatings: 10 } },
+        { validationResult: sampleValidation({ reviewStatus: "APPROVED", ratingsDetected: 10, expectedRatings: 10 }) },
         { ocrExecuted: true, visionExecuted: true }
       )
     ).toBe("valid");
 
     expect(
       getDiagnosticsSummaryStatus(
-        { validationResult: { reviewStatus: "REQUIRES_REVIEW", ratingsDetected: 8, expectedRatings: 10 } },
+        {
+          validationResult: sampleValidation({
+            reviewStatus: "REQUIRES_REVIEW",
+            ratingsDetected: 8,
+            expectedRatings: 10,
+          }),
+        },
         { ocrExecuted: true, visionExecuted: true }
       )
     ).toBe("requires_review");
