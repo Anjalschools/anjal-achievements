@@ -1,0 +1,555 @@
+{
+  "startedAt": "2026-04-18T01:27:09.035Z",
+  "finishedAt": "2026-04-18T01:28:00.541Z",
+  "dryRun": false,
+  "mode": "attachments",
+  "summary": {
+    "scanned": 67,
+    "docsWithLegacyImage": 0,
+    "docsWithLegacyAttachments": 26,
+    "migratedImages": 0,
+    "migratedAttachmentItems": 26,
+    "skippedNoLegacy": 41,
+    "failedImageDocs": 0,
+    "failedAttachmentDocs": 0,
+    "mongoUpdates": 26
+  },
+  "rows": [
+    {
+      "achievementId": "69cfd56def073bec78ea7c34",
+      "hadLegacyImage": false,
+      "hadLegacyAttachments": false,
+      "imageMigrated": false,
+      "attachmentsMigratedCount": 0,
+      "mongoUpdated": false
+    },
+    {
+      "achievementId": "69d0fe89e2b6d941553af47b",
+      "hadLegacyImage": false,
+      "hadLegacyAttachments": true,
+      "imageMigrated": false,
+      "attachmentsMigratedCount": 1,
+      "mongoUpdated": true
+    },
+    {
+      "achievementId": "69d10089e2b6d941553af4d0",
+      "hadLegacyImage": false,
+      "hadLegacyAttachments": false,
+      "imageMigrated": false,
+      "attachmentsMigratedCount": 0,
+      "mongoUpdated": false
+    },
+    {
+      "achievementId": "69d100ffe2b6d941553af4f1",
+      "hadLegacyImage": false,
+      "hadLegacyAttachments": false,
+      "imageMigrated": false,
+      "attachmentsMigratedCount": 0,
+      "mongoUpdated": false
+    },
+    {
+      "achievementId": "69d1024fe2b6d941553af529",
+      "hadLegacyImage": false,
+      "hadLegacyAttachments": false,
+      "imageMigrated": false,
+      "attachmentsMigratedCount": 0,
+      "mongoUpdated": false
+    },
+    {
+      "achievementId": "69d10315e2b6d941553af552",
+      "hadLegacyImage": false,
+      "hadLegacyAttachments": false,
+      "imageMigrated": false,
+      "attachmentsMigratedCount": 0,
+      "mongoUpdated": false
+    },
+    {
+      "achievementId": "69d103dee2b6d941553af57b",
+      "hadLegacyImage": false,
+      "hadLegacyAttachments": false,
+      "imageMigrated": false,
+      "attachmentsMigratedCount": 0,
+      "mongoUpdated": false
+    },
+    {
+      "achievementId": "69d10482e2b6d941553af59c",
+      "hadLegacyImage": false,
+      "hadLegacyAttachments": false,
+      "imageMigrated": false,
+      "attachmentsMigratedCount": 0,
+      "mongoUpdated": false
+    },
+    {
+      "achievementId": "69d10540e2b6d941553af5d2",
+      "hadLegacyImage": false,
+      "hadLegacyAttachments": false,
+      "imageMigrated": false,
+      "attachmentsMigratedCount": 0,
+      "mongoUpdated": false
+    },
+    {
+      "achievementId": "69d10594e2b6d941553af5f5",
+      "hadLegacyImage": false,
+      "hadLegacyAttachments": true,
+      "imageMigrated": false,
+      "attachmentsMigratedCount": 1,
+      "mongoUpdated": true
+    },
+    {
+      "achievementId": "69d11817e2b6d941553af711",
+      "hadLegacyImage": false,
+      "hadLegacyAttachments": false,
+      "imageMigrated": false,
+      "attachmentsMigratedCount": 0,
+      "mongoUpdated": false
+    },
+    {
+      "achievementId": "69d11994e2b6d941553af742",
+      "hadLegacyImage": false,
+      "hadLegacyAttachments": false,
+      "imageMigrated": false,
+      "attachmentsMigratedCount": 0,
+      "mongoUpdated": false
+    },
+    {
+      "achievementId": "69d11b36e2b6d941553af779",
+      "hadLegacyImage": false,
+      "hadLegacyAttachments": false,
+      "imageMigrated": false,
+      "attachmentsMigratedCount": 0,
+      "mongoUpdated": false
+    },
+    {
+      "achievementId": "69d11d6fcfb1be4ec9e4477a",
+      "hadLegacyImage": false,
+      "hadLegacyAttachments": false,
+      "imageMigrated": false,
+      "attachmentsMigratedCount": 0,
+      "mongoUpdated": false
+    },
+    {
+      "achievementId": "69d13059cfb1be4ec9e4486b",
+      "hadLegacyImage": false,
+      "hadLegacyAttachments": false,
+      "imageMigrated": false,
+      "attachmentsMigratedCount": 0,
+      "mongoUpdated": false
+    },
+    {
+      "achievementId": "69d13091cfb1be4ec9e44888",
+      "hadLegacyImage": false,
+      "hadLegacyAttachments": false,
+      "imageMigrated": false,
+      "attachmentsMigratedCount": 0,
+      "mongoUpdated": false
+    },
+    {
+      "achievementId": "69d130facfb1be4ec9e448b5",
+      "hadLegacyImage": false,
+      "hadLegacyAttachments": false,
+      "imageMigrated": false,
+      "attachmentsMigratedCount": 0,
+      "mongoUpdated": false
+    },
+    {
+      "achievementId": "69d1314ecfb1be4ec9e448f2",
+      "hadLegacyImage": false,
+      "hadLegacyAttachments": false,
+      "imageMigrated": false,
+      "attachmentsMigratedCount": 0,
+      "mongoUpdated": false
+    },
+    {
+      "achievementId": "69d29552cfb1be4ec9e44e57",
+      "hadLegacyImage": false,
+      "hadLegacyAttachments": true,
+      "imageMigrated": false,
+      "attachmentsMigratedCount": 1,
+      "mongoUpdated": true
+    },
+    {
+      "achievementId": "69d29978cfb1be4ec9e44ec5",
+      "hadLegacyImage": false,
+      "hadLegacyAttachments": true,
+      "imageMigrated": false,
+      "attachmentsMigratedCount": 1,
+      "mongoUpdated": true
+    },
+    {
+      "achievementId": "69daba397fef7d872c9761b4",
+      "hadLegacyImage": false,
+      "hadLegacyAttachments": true,
+      "imageMigrated": false,
+      "attachmentsMigratedCount": 1,
+      "mongoUpdated": true
+    },
+    {
+      "achievementId": "69dabaa67fef7d872c9761d4",
+      "hadLegacyImage": false,
+      "hadLegacyAttachments": true,
+      "imageMigrated": false,
+      "attachmentsMigratedCount": 1,
+      "mongoUpdated": true
+    },
+    {
+      "achievementId": "69dabb337fef7d872c9761f6",
+      "hadLegacyImage": false,
+      "hadLegacyAttachments": true,
+      "imageMigrated": false,
+      "attachmentsMigratedCount": 1,
+      "mongoUpdated": true
+    },
+    {
+      "achievementId": "69dabbe97fef7d872c97621e",
+      "hadLegacyImage": false,
+      "hadLegacyAttachments": false,
+      "imageMigrated": false,
+      "attachmentsMigratedCount": 0,
+      "mongoUpdated": false
+    },
+    {
+      "achievementId": "69dabc537fef7d872c97623c",
+      "hadLegacyImage": false,
+      "hadLegacyAttachments": true,
+      "imageMigrated": false,
+      "attachmentsMigratedCount": 1,
+      "mongoUpdated": true
+    },
+    {
+      "achievementId": "69dabda37fef7d872c976283",
+      "hadLegacyImage": false,
+      "hadLegacyAttachments": true,
+      "imageMigrated": false,
+      "attachmentsMigratedCount": 1,
+      "mongoUpdated": true
+    },
+    {
+      "achievementId": "69dabe247fef7d872c9762ad",
+      "hadLegacyImage": false,
+      "hadLegacyAttachments": true,
+      "imageMigrated": false,
+      "attachmentsMigratedCount": 1,
+      "mongoUpdated": true
+    },
+    {
+      "achievementId": "69dabfb77fef7d872c9762e5",
+      "hadLegacyImage": false,
+      "hadLegacyAttachments": true,
+      "imageMigrated": false,
+      "attachmentsMigratedCount": 1,
+      "mongoUpdated": true
+    },
+    {
+      "achievementId": "69dabff57fef7d872c976305",
+      "hadLegacyImage": false,
+      "hadLegacyAttachments": true,
+      "imageMigrated": false,
+      "attachmentsMigratedCount": 1,
+      "mongoUpdated": true
+    },
+    {
+      "achievementId": "69dac03d7fef7d872c976323",
+      "hadLegacyImage": false,
+      "hadLegacyAttachments": true,
+      "imageMigrated": false,
+      "attachmentsMigratedCount": 1,
+      "mongoUpdated": true
+    },
+    {
+      "achievementId": "69dac0bf7fef7d872c976346",
+      "hadLegacyImage": false,
+      "hadLegacyAttachments": false,
+      "imageMigrated": false,
+      "attachmentsMigratedCount": 0,
+      "mongoUpdated": false
+    },
+    {
+      "achievementId": "69dac1077fef7d872c976362",
+      "hadLegacyImage": false,
+      "hadLegacyAttachments": false,
+      "imageMigrated": false,
+      "attachmentsMigratedCount": 0,
+      "mongoUpdated": false
+    },
+    {
+      "achievementId": "69dac1e97fef7d872c976386",
+      "hadLegacyImage": false,
+      "hadLegacyAttachments": true,
+      "imageMigrated": false,
+      "attachmentsMigratedCount": 1,
+      "mongoUpdated": true
+    },
+    {
+      "achievementId": "69dac2167fef7d872c9763a4",
+      "hadLegacyImage": false,
+      "hadLegacyAttachments": true,
+      "imageMigrated": false,
+      "attachmentsMigratedCount": 1,
+      "mongoUpdated": true
+    },
+    {
+      "achievementId": "69dac2447fef7d872c9763c4",
+      "hadLegacyImage": false,
+      "hadLegacyAttachments": true,
+      "imageMigrated": false,
+      "attachmentsMigratedCount": 1,
+      "mongoUpdated": true
+    },
+    {
+      "achievementId": "69dac2e07fef7d872c9763f1",
+      "hadLegacyImage": false,
+      "hadLegacyAttachments": false,
+      "imageMigrated": false,
+      "attachmentsMigratedCount": 0,
+      "mongoUpdated": false
+    },
+    {
+      "achievementId": "69dac3107fef7d872c97640b",
+      "hadLegacyImage": false,
+      "hadLegacyAttachments": false,
+      "imageMigrated": false,
+      "attachmentsMigratedCount": 0,
+      "mongoUpdated": false
+    },
+    {
+      "achievementId": "69dac3507fef7d872c976425",
+      "hadLegacyImage": false,
+      "hadLegacyAttachments": true,
+      "imageMigrated": false,
+      "attachmentsMigratedCount": 1,
+      "mongoUpdated": true
+    },
+    {
+      "achievementId": "69dac3817fef7d872c976445",
+      "hadLegacyImage": false,
+      "hadLegacyAttachments": true,
+      "imageMigrated": false,
+      "attachmentsMigratedCount": 1,
+      "mongoUpdated": true
+    },
+    {
+      "achievementId": "69dac3b27fef7d872c976465",
+      "hadLegacyImage": false,
+      "hadLegacyAttachments": true,
+      "imageMigrated": false,
+      "attachmentsMigratedCount": 1,
+      "mongoUpdated": true
+    },
+    {
+      "achievementId": "69dac3ee7fef7d872c976486",
+      "hadLegacyImage": false,
+      "hadLegacyAttachments": true,
+      "imageMigrated": false,
+      "attachmentsMigratedCount": 1,
+      "mongoUpdated": true
+    },
+    {
+      "achievementId": "69dac42a7fef7d872c9764a4",
+      "hadLegacyImage": false,
+      "hadLegacyAttachments": true,
+      "imageMigrated": false,
+      "attachmentsMigratedCount": 1,
+      "mongoUpdated": true
+    },
+    {
+      "achievementId": "69dac4777fef7d872c9764c4",
+      "hadLegacyImage": false,
+      "hadLegacyAttachments": true,
+      "imageMigrated": false,
+      "attachmentsMigratedCount": 1,
+      "mongoUpdated": true
+    },
+    {
+      "achievementId": "69dac4df7fef7d872c9764e4",
+      "hadLegacyImage": false,
+      "hadLegacyAttachments": true,
+      "imageMigrated": false,
+      "attachmentsMigratedCount": 1,
+      "mongoUpdated": true
+    },
+    {
+      "achievementId": "69dac5567fef7d872c97650a",
+      "hadLegacyImage": false,
+      "hadLegacyAttachments": false,
+      "imageMigrated": false,
+      "attachmentsMigratedCount": 0,
+      "mongoUpdated": false
+    },
+    {
+      "achievementId": "69dac5a37fef7d872c976525",
+      "hadLegacyImage": false,
+      "hadLegacyAttachments": false,
+      "imageMigrated": false,
+      "attachmentsMigratedCount": 0,
+      "mongoUpdated": false
+    },
+    {
+      "achievementId": "69dac6f67fef7d872c97654d",
+      "hadLegacyImage": false,
+      "hadLegacyAttachments": true,
+      "imageMigrated": false,
+      "attachmentsMigratedCount": 1,
+      "mongoUpdated": true
+    },
+    {
+      "achievementId": "69e15a7fb605fd8fd1f0d914",
+      "hadLegacyImage": false,
+      "hadLegacyAttachments": true,
+      "imageMigrated": false,
+      "attachmentsMigratedCount": 1,
+      "mongoUpdated": true
+    },
+    {
+      "achievementId": "69e15d1db605fd8fd1f0d945",
+      "hadLegacyImage": false,
+      "hadLegacyAttachments": false,
+      "imageMigrated": false,
+      "attachmentsMigratedCount": 0,
+      "mongoUpdated": false
+    },
+    {
+      "achievementId": "69e15e42b605fd8fd1f0d980",
+      "hadLegacyImage": false,
+      "hadLegacyAttachments": false,
+      "imageMigrated": false,
+      "attachmentsMigratedCount": 0,
+      "mongoUpdated": false
+    },
+    {
+      "achievementId": "69e160d3b605fd8fd1f0d9e8",
+      "hadLegacyImage": false,
+      "hadLegacyAttachments": false,
+      "imageMigrated": false,
+      "attachmentsMigratedCount": 0,
+      "mongoUpdated": false
+    },
+    {
+      "achievementId": "69e161d8b605fd8fd1f0da10",
+      "hadLegacyImage": false,
+      "hadLegacyAttachments": true,
+      "imageMigrated": false,
+      "attachmentsMigratedCount": 1,
+      "mongoUpdated": true
+    },
+    {
+      "achievementId": "69e1643db605fd8fd1f0dab8",
+      "hadLegacyImage": false,
+      "hadLegacyAttachments": false,
+      "imageMigrated": false,
+      "attachmentsMigratedCount": 0,
+      "mongoUpdated": false
+    },
+    {
+      "achievementId": "69e1f87d751eb63463cb8984",
+      "hadLegacyImage": false,
+      "hadLegacyAttachments": false,
+      "imageMigrated": false,
+      "attachmentsMigratedCount": 0,
+      "mongoUpdated": false
+    },
+    {
+      "achievementId": "69e1fb63751eb63463cb89cc",
+      "hadLegacyImage": false,
+      "hadLegacyAttachments": false,
+      "imageMigrated": false,
+      "attachmentsMigratedCount": 0,
+      "mongoUpdated": false
+    },
+    {
+      "achievementId": "69e1fd99751eb63463cb8a08",
+      "hadLegacyImage": false,
+      "hadLegacyAttachments": false,
+      "imageMigrated": false,
+      "attachmentsMigratedCount": 0,
+      "mongoUpdated": false
+    },
+    {
+      "achievementId": "69e2979fcb7ad07238a798d8",
+      "hadLegacyImage": false,
+      "hadLegacyAttachments": false,
+      "imageMigrated": false,
+      "attachmentsMigratedCount": 0,
+      "mongoUpdated": false
+    },
+    {
+      "achievementId": "69e29a53cb7ad07238a79932",
+      "hadLegacyImage": false,
+      "hadLegacyAttachments": false,
+      "imageMigrated": false,
+      "attachmentsMigratedCount": 0,
+      "mongoUpdated": false
+    },
+    {
+      "achievementId": "69e2adfdcb7ad07238a799b3",
+      "hadLegacyImage": false,
+      "hadLegacyAttachments": false,
+      "imageMigrated": false,
+      "attachmentsMigratedCount": 0,
+      "mongoUpdated": false
+    },
+    {
+      "achievementId": "69e2b008cb7ad07238a79a04",
+      "hadLegacyImage": false,
+      "hadLegacyAttachments": false,
+      "imageMigrated": false,
+      "attachmentsMigratedCount": 0,
+      "mongoUpdated": false
+    },
+    {
+      "achievementId": "69e2b12bcb7ad07238a79a44",
+      "hadLegacyImage": false,
+      "hadLegacyAttachments": false,
+      "imageMigrated": false,
+      "attachmentsMigratedCount": 0,
+      "mongoUpdated": false
+    },
+    {
+      "achievementId": "69e2b1b3cb7ad07238a79a6f",
+      "hadLegacyImage": false,
+      "hadLegacyAttachments": false,
+      "imageMigrated": false,
+      "attachmentsMigratedCount": 0,
+      "mongoUpdated": false
+    },
+    {
+      "achievementId": "69e2b2c0cb7ad07238a79ab2",
+      "hadLegacyImage": false,
+      "hadLegacyAttachments": false,
+      "imageMigrated": false,
+      "attachmentsMigratedCount": 0,
+      "mongoUpdated": false
+    },
+    {
+      "achievementId": "69e2b33dcb7ad07238a79adc",
+      "hadLegacyImage": false,
+      "hadLegacyAttachments": false,
+      "imageMigrated": false,
+      "attachmentsMigratedCount": 0,
+      "mongoUpdated": false
+    },
+    {
+      "achievementId": "69e2b622439d23faa407a4cc",
+      "hadLegacyImage": false,
+      "hadLegacyAttachments": false,
+      "imageMigrated": false,
+      "attachmentsMigratedCount": 0,
+      "mongoUpdated": false
+    },
+    {
+      "achievementId": "69e2b6bc439d23faa407a526",
+      "hadLegacyImage": false,
+      "hadLegacyAttachments": false,
+      "imageMigrated": false,
+      "attachmentsMigratedCount": 0,
+      "mongoUpdated": false
+    },
+    {
+      "achievementId": "69e2b786439d23faa407a5a2",
+      "hadLegacyImage": false,
+      "hadLegacyAttachments": false,
+      "imageMigrated": false,
+      "attachmentsMigratedCount": 0,
+      "mongoUpdated": false
+    }
+  ]
+}
