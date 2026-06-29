@@ -3,6 +3,7 @@ import "server-only";
 import connectDB from "@/lib/mongodb";
 import BackupRecord from "@/models/BackupRecord";
 import { readProcessMemorySnapshot } from "@/lib/disaster-recovery/dr-memory-metrics";
+import { getV2MemoryDiagnosticsSnapshot } from "@/lib/disaster-recovery-v2/diagnostics/v2-memory-diagnostics";
 import { registerDrProcessDiagnostics } from "@/lib/disaster-recovery/dr-process-diagnostics";
 import {
   dequeueBackupJob,
@@ -285,6 +286,10 @@ const releaseCurrentJobForShutdown = async (workerId: string): Promise<void> => 
 const logWorkerHealth = async (workerId: string): Promise<void> => {
   const memory = readProcessMemorySnapshot();
   const counts = await getBackupJobQueue().getStatusCounts();
+  const diagnostics = getV2MemoryDiagnosticsSnapshot();
+  const elapsedTimeMs =
+    diagnostics.jobStartedAt !== undefined ? Date.now() - diagnostics.jobStartedAt : undefined;
+
   logDrWorkerHealth({
     workerId,
     pid: process.pid,
@@ -299,6 +304,11 @@ const logWorkerHealth = async (workerId: string): Promise<void> => {
     completedCount: counts.completed,
     failedCount: counts.failed,
     retryCount: workerRetryCount,
+    currentStage: diagnostics.currentStage,
+    jobId: diagnostics.jobId,
+    peakRSS: diagnostics.peaks.peakRSS,
+    peakHeap: diagnostics.peaks.peakHeap,
+    elapsedTimeMs,
   });
 };
 

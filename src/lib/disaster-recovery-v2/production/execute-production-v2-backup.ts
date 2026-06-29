@@ -16,6 +16,9 @@ import { resolveBackupWorkspaceDir } from "@/lib/disaster-recovery-v2/production
 import { runProductionV2Backup } from "@/lib/disaster-recovery-v2/production/run-production-v2-backup";
 import { V2_PRODUCTION_JOB_PHASES } from "@/lib/disaster-recovery-v2/production/v2-production-stage-mapping";
 import { persistV2ProductionProgress } from "@/lib/disaster-recovery-v2/production/v2-production-progress";
+import {
+  logMemoryAtFailure,
+} from "@/lib/disaster-recovery-v2/diagnostics/v2-memory-diagnostics";
 
 export type ExecuteProductionV2BackupInput = {
   recordId: string;
@@ -185,6 +188,8 @@ export const executeProductionV2Backup = async (
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
+    const stage = error instanceof ProductionV2BackupError ? error.stage : "unknown";
+    logMemoryAtFailure(stage, error, { recordId: input.recordId });
     await persistV2ProductionProgress(input.recordId, {
       jobPhase: V2_PRODUCTION_JOB_PHASES.FAILED,
       workerId: input.workerId,

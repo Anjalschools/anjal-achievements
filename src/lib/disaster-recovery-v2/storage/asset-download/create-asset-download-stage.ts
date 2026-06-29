@@ -17,6 +17,10 @@ import {
 } from "@/lib/disaster-recovery-v2/storage/asset-download/missing-assets-types";
 import { sortAssetsForDownload } from "@/lib/disaster-recovery-v2/storage/asset-download/resolve-asset-file-path";
 import {
+  logMemorySnapshot,
+  logV2StreamRegistryCounts,
+} from "@/lib/disaster-recovery-v2/diagnostics/v2-memory-diagnostics";
+import {
   ASSET_DOWNLOAD_STAGE_ID,
   type AssetDownloadStage,
 } from "@/lib/disaster-recovery-v2/storage/asset-download-stage";
@@ -55,6 +59,7 @@ export const executeAssetDownloadStage = async (
   const missingAssets: MissingAssetsManifest = createEmptyMissingAssetsManifest();
   const stageWarnings: string[] = [];
   const stageFailures: string[] = [];
+  let processedAssets = 0;
 
   for (const asset of assets) {
     const result = await downloadSingleAsset(asset, {
@@ -89,6 +94,23 @@ export const executeAssetDownloadStage = async (
     } else if (result.reportEntry.status === "failed") {
       report.failed += 1;
       stageFailures.push(`${asset.objectId}:${result.reportEntry.failure ?? "FAILED"}`);
+    }
+
+    processedAssets += 1;
+    if (processedAssets % 100 === 0 || processedAssets === assets.length) {
+      logMemorySnapshot("ASSET_DOWNLOAD_PROGRESS", {
+        jobId,
+        processed: processedAssets,
+        remaining: Math.max(assets.length - processedAssets, 0),
+        downloaded: report.downloaded,
+        skipped: report.skipped,
+        missing: report.missing,
+        failed: report.failed,
+      });
+      logV2StreamRegistryCounts("ASSET_DOWNLOAD_PROGRESS", {
+        jobId,
+        processed: processedAssets,
+      });
     }
   }
 

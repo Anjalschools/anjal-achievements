@@ -76,6 +76,11 @@ export type DrWorkerHealthSnapshot = {
   completedCount: number;
   failedCount: number;
   retryCount: number;
+  currentStage?: string;
+  jobId?: string;
+  peakRSS?: number;
+  peakHeap?: number;
+  elapsedTimeMs?: number;
 };
 
 export const logDrWorkerHealth = (snapshot: DrWorkerHealthSnapshot): void => {

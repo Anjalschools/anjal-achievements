@@ -424,7 +424,10 @@ describe("DR.BACKUP.V2.4 — asset download stage", () => {
     expect(report.missing).toBe(1);
     expect(
       report.assets.every((entry) =>
-        entry.status === "downloaded" || entry.status === "failed" || entry.status === "skipped"
+        entry.status === "downloaded" ||
+        entry.status === "failed" ||
+        entry.status === "skipped" ||
+        entry.status === "missing"
       )
     ).toBe(true);
     expect(existsSync(resolveStorageManifestPath(workspaceDir))).toBe(true);

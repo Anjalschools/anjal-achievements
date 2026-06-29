@@ -6,6 +6,12 @@ import type { BackupContext } from "@/lib/disaster-recovery-v2/types/backup-cont
 import type { BackupUploadProvider } from "@/lib/disaster-recovery-v2/upload/upload-provider";
 import type { UploadArtifact, UploadResult } from "@/lib/disaster-recovery-v2/upload/upload-artifact-types";
 import { UploadProviderError } from "@/lib/disaster-recovery-v2/upload/upload-retry-policy";
+import {
+  attachV2UploadProgressMonitor,
+  logMemorySnapshot,
+} from "@/lib/disaster-recovery-v2/diagnostics/v2-memory-diagnostics";
+import { trackV2Stream } from "@/lib/disaster-recovery-v2/diagnostics/v2-stream-registry";
+import { logDrV2 } from "@/lib/disaster-recovery-v2/utils/logging";
 
 export const R2_UPLOAD_PROVIDER_ID = "r2" as const;
 
@@ -59,15 +65,91 @@ export const createR2BackupUploadProvider = (
 
     try {
       const { client, settings } = createOrGetR2S3Client();
+      const readStream = trackV2Stream(createReadStream(artifact.path), {
+        kind: "read",
+        label: `upload-source:${artifact.path}`,
+      });
+
+      logDrV2("UPLOAD_STREAM_CREATED", {
+        jobId: context.config.jobId,
+        objectKey,
+        bytes: artifact.size,
+      });
+      logMemorySnapshot("UPLOAD_STREAM_CREATED", {
+        jobId: context.config.jobId,
+        objectKey,
+        totalBytes: artifact.size,
+      });
+
+      readStream.once("open", () => {
+        logDrV2("UPLOAD_STREAM_OPEN", {
+          jobId: context.config.jobId,
+          objectKey,
+        });
+        logMemorySnapshot("UPLOAD_STREAM_OPEN", {
+          jobId: context.config.jobId,
+          objectKey,
+        });
+      });
+
+      readStream.once("close", () => {
+        logDrV2("UPLOAD_STREAM_CLOSE", {
+          jobId: context.config.jobId,
+          objectKey,
+        });
+        logMemorySnapshot("UPLOAD_STREAM_CLOSE", {
+          jobId: context.config.jobId,
+          objectKey,
+        });
+      });
+
+      readStream.once("end", () => {
+        logDrV2("UPLOAD_STREAM_FINISH", {
+          jobId: context.config.jobId,
+          objectKey,
+        });
+        logMemorySnapshot("UPLOAD_STREAM_FINISH", {
+          jobId: context.config.jobId,
+          objectKey,
+        });
+      });
+
+      attachV2UploadProgressMonitor(readStream, {
+        totalBytes: artifact.size,
+        jobId: context.config.jobId,
+      });
+
       const response = await client.send(
         new PutObjectCommand({
           Bucket: settings.bucket,
           Key: objectKey,
-          Body: createReadStream(artifact.path),
+          Body: readStream,
           ContentLength: artifact.size,
           ContentType: "application/zip",
         })
       );
+
+      logDrV2("UPLOAD_RESPONSE_RECEIVED", {
+        jobId: context.config.jobId,
+        objectKey,
+        etag: response.ETag,
+      });
+      logMemorySnapshot("UPLOAD_RESPONSE_RECEIVED", {
+        jobId: context.config.jobId,
+        objectKey,
+        uploadedBytes: artifact.size,
+      });
+
+      logDrV2("UPLOAD_SUCCESS", {
+        jobId: context.config.jobId,
+        objectKey,
+        uploadedBytes: artifact.size,
+      });
+      logMemorySnapshot("UPLOAD_SUCCESS", {
+        jobId: context.config.jobId,
+        objectKey,
+        uploadedBytes: artifact.size,
+      });
 
       return {
         provider: R2_UPLOAD_PROVIDER_ID,
@@ -77,6 +159,15 @@ export const createR2BackupUploadProvider = (
         completedAt: new Date(),
       };
     } catch (error) {
+      logDrV2("UPLOAD_FAILED", {
+        jobId: context.config.jobId,
+        objectKey,
+        message: error instanceof Error ? error.message : String(error),
+      });
+      logMemorySnapshot("UPLOAD_FAILED", {
+        jobId: context.config.jobId,
+        objectKey,
+      });
       throw mapPutObjectError(error);
     }
   },
