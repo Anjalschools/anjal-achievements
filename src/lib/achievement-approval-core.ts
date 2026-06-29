@@ -1,6 +1,6 @@
 import mongoose from "mongoose";
 import type { ReviewerUser } from "@/lib/review-auth";
-import { applyDefaultShowInPublicPortfolioWhenPublished } from "@/lib/achievement-public-portfolio-policy";
+import { applyDefaultPublicEvidenceVisibility, applyDefaultShowInPublicPortfolioWhenPublished } from "@/lib/achievement-public-portfolio-policy";
 import { calculateAchievementScore } from "@/lib/achievement-scoring";
 import type { ScoringConfig } from "@/constants/default-scoring";
 
@@ -128,6 +128,7 @@ export const applyAchievementPlatformApproval = (
   }
 
   applyDefaultShowInPublicPortfolioWhenPublished(doc);
+  applyDefaultPublicEvidenceVisibility(doc);
 };
 
 export type CertificateIssuerKind = "admin" | "principal" | "activitySupervisor" | "judge";

@@ -4,10 +4,14 @@ const REF_SEPARATOR = ".";
 const PAYLOAD_SEPARATOR = "|";
 
 const resolveEvidenceRefSecret = (): string => {
-  const secret = process.env.NEXTAUTH_SECRET?.trim() || process.env.PORTFOLIO_EVIDENCE_SECRET?.trim();
+  const secret = process.env.PORTFOLIO_EVIDENCE_SECRET?.trim();
+
   if (!secret) {
-    throw new Error("PORTFOLIO_EVIDENCE_SECRET_UNAVAILABLE");
+    throw new Error(
+      "PORTFOLIO_EVIDENCE_SECRET_UNAVAILABLE: Missing PORTFOLIO_EVIDENCE_SECRET environment variable."
+    );
   }
+
   return secret;
 };
 
