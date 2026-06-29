@@ -9,7 +9,8 @@ import {
 } from "@/lib/backup/backup-constants";
 import { buildBackupManifest } from "@/lib/backup/backup-manifest";
 import { buildBackupZipPackage, countCollectionDocuments } from "@/lib/backup/backup-package";
-import { resolveBackupStorageProvider } from "@/lib/backup/backup-storage";
+import { resolveBackupStorageProvider, bufferToDownloadStream } from "@/lib/backup/backup-storage";
+import type { BackupZipStreamResult } from "@/lib/backup/backup-download-types";
 import { normalizeWorkerPhaseForRead } from "@/lib/disaster-recovery/worker/dr-worker-state";
 
 export type CreateBackupInput = {
@@ -215,6 +216,41 @@ export const loadBackupZipByRecordId = async (id: string): Promise<Buffer> => {
     const storage = resolveBackupStorageProvider("r2");
     return storage.retrieve(row.storageKey);
   }
+  throw new Error("BACKUP_FILE_NOT_AVAILABLE");
+};
+
+export const loadBackupZipStreamByRecordId = async (
+  id: string,
+  abortSignal?: AbortSignal
+): Promise<BackupZipStreamResult> => {
+  await connectDB();
+  const row = await BackupRecord.findById(id).lean();
+  if (!row) throw new Error("BACKUP_NOT_FOUND");
+
+  if (row.storageProvider === "local") {
+    const cached = readCachedLocalBackupZip(id);
+    if (!cached) throw new Error("BACKUP_FILE_NOT_AVAILABLE");
+    return {
+      stream: bufferToDownloadStream(cached),
+      fileName: row.fileName,
+      contentLength: cached.byteLength,
+      storageProvider: "local",
+    };
+  }
+
+  if (row.storageProvider === "r2" && row.storageKey) {
+    const storage = resolveBackupStorageProvider("r2");
+    const retrieved = await storage.retrieveStream(row.storageKey, abortSignal);
+    return {
+      stream: retrieved.stream,
+      fileName: row.fileName,
+      contentLength: retrieved.contentLength ?? row.sizeBytes ?? undefined,
+      storageProvider: "r2",
+      storageKey: row.storageKey,
+      etag: retrieved.etag,
+    };
+  }
+
   throw new Error("BACKUP_FILE_NOT_AVAILABLE");
 };
 

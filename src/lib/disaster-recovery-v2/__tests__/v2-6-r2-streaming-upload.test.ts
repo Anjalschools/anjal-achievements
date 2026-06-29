@@ -2,6 +2,7 @@ import { createHash } from "crypto";
 import { createReadStream, mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
+import type { ReadStream } from "fs";
 import { Readable } from "stream";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PutObjectCommand, type S3Client } from "@aws-sdk/client-s3";
@@ -120,10 +121,10 @@ describe("DR.BACKUP.V2.10.C — R2 streaming upload memory fix", () => {
     workspaces.push(dir);
 
     const sha256 = createHash("sha256").update(readFileSync(filePath)).digest("hex");
-    let capturedBody: Readable | undefined;
+    let capturedBody: ReadStream | undefined;
 
     sendMock.mockImplementation(async (command: PutObjectCommand) => {
-      capturedBody = command.input.Body as Readable;
+      capturedBody = command.input.Body as ReadStream;
       expect(capturedBody.readableFlowing).not.toBe(true);
       expect(capturedBody.bytesRead).toBe(0);
       await drainStream(capturedBody);

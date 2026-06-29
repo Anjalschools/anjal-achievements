@@ -1,7 +1,9 @@
 import "server-only";
 import { PassThrough, Readable } from "stream";
 import { getR2BucketName, isR2Configured } from "@/lib/r2";
-import { sendR2GetObject, sendR2PutObject } from "@/lib/disaster-recovery/dr-r2-sdk";
+import { sendR2PutObject } from "@/lib/disaster-recovery/dr-r2-sdk";
+import type { BackupRetrieveStreamResult } from "@/lib/backup/backup-download-types";
+import { openR2BackupObjectReadStream } from "@/lib/backup/r2-backup-download-client";
 import type { BackupStorageProviderId } from "@/lib/backup/backup-constants";
 
 export type StoredBackupArtifact = {
@@ -26,6 +28,7 @@ export type BackupStorageProvider = {
     body: Readable;
     contentType?: string;
   }) => Promise<StoredBackupArtifact>;
+  retrieveStream: (storageKey: string, abortSignal?: AbortSignal) => Promise<BackupRetrieveStreamResult>;
   retrieve: (storageKey: string) => Promise<Buffer>;
 };
 
@@ -44,6 +47,9 @@ export const createLocalBackupStorageProvider = (): BackupStorageProvider => ({
     fileName,
     sizeBytes: body.byteLength,
   }),
+  retrieveStream: async () => {
+    throw new Error("LOCAL_STORAGE_RETRIEVE_UNSUPPORTED");
+  },
   retrieve: async () => {
     throw new Error("LOCAL_STORAGE_RETRIEVE_UNSUPPORTED");
   },
@@ -108,13 +114,24 @@ export const createR2BackupStorageProvider = (): BackupStorageProvider => ({
     };
   },
 
-  retrieve: async (storageKey: string) => {
+  retrieveStream: async (storageKey: string, abortSignal?: AbortSignal) => {
     if (!isR2Configured()) {
       throw new Error("R2_NOT_CONFIGURED");
     }
-    const response = await sendR2GetObject({ key: storageKey });
-    if (!response.Body) throw new Error("R2_OBJECT_EMPTY");
-    return streamToBuffer(response.Body as Readable);
+    const opened = await openR2BackupObjectReadStream({
+      key: storageKey,
+      abortSignal,
+    });
+    return {
+      stream: opened.body,
+      contentLength: opened.contentLength,
+      etag: opened.etag,
+    };
+  },
+
+  retrieve: async (storageKey: string) => {
+    const opened = await openR2BackupObjectReadStream({ key: storageKey });
+    return streamToBuffer(opened.body);
   },
 });
 
