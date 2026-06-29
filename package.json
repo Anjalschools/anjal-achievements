@@ -26,6 +26,7 @@
     "cron:executive-snapshots": "CRON_ENDPOINT=/api/cron/executive-analytics-snapshots tsx scripts/run-cron-endpoint.ts",
     "verify:achievement-media-migration": "tsx scripts/verify-achievement-media-migration.ts",
     "backfill:achievement-categories": "tsx scripts/backfill-achievement-categories.ts",
+    "backfill:legacy-portfolio-evidence": "tsx scripts/backfill-legacy-portfolio-evidence.ts",
     "rollback:achievement-categories": "tsx scripts/rollback-achievement-category-backfill.ts",
     "test": "vitest run",
     "test:watch": "vitest"

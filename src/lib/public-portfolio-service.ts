@@ -25,10 +25,11 @@ import {
 } from "@/lib/achievement-report-category";
 import { resolveCertificateUiStatus } from "@/lib/certificate-eligibility";
 import { tokenPreviewForLogs } from "@/lib/get-base-url";
-import {
-  buildPublicPortfolioProfileExtras,
+import { buildPublicPortfolioProfileExtras,
   type PublicPortfolioProfileExtras,
 } from "@/lib/student-portfolio-content";
+import { buildPublicPortfolioEvidenceItems } from "@/lib/portfolio/portfolio-evidence-policy";
+import type { PublicPortfolioEvidenceItem } from "@/lib/portfolio/portfolio-evidence-types";
 
 const MAX_ACHIEVEMENTS = 60;
 
@@ -62,6 +63,7 @@ export type PublicPortfolioAchievementItem = {
   hasCertificate: boolean;
   certificateVerificationPath: string | null;
   colorKey: "school" | "province" | "kingdom" | "international" | "other";
+  evidence: PublicPortfolioEvidenceItem[];
 };
 
 export type PublicPortfolioSuccess = {
@@ -356,7 +358,7 @@ export const loadPublicPortfolioPayload = async (
   };
 
   const achFields =
-    "achievementType achievementCategory achievementName nameAr nameEn customAchievementName title description achievementLevel participationType resultType medalType rank score date achievementYear isFeatured featured certificateIssued certificateVerificationToken certificateRevokedAt certificateIssuedAt pendingReReview status certificateApprovedByRole certificateApprovedAt createdAt";
+    "achievementType achievementCategory achievementName nameAr nameEn customAchievementName title description achievementLevel participationType resultType medalType rank score date achievementYear isFeatured featured certificateIssued certificateVerificationToken certificateRevokedAt certificateIssuedAt pendingReReview status certificateApprovedByRole certificateApprovedAt createdAt attachments";
 
   const [achRows, agg] = await Promise.all([
     Achievement.find(match)
@@ -478,6 +480,10 @@ export const loadPublicPortfolioPayload = async (
         hasCertificate: Boolean(hasCert),
         certificateVerificationPath: certPath,
         colorKey: levelColorKey(String(levelRaw || "")),
+        evidence: buildPublicPortfolioEvidenceItems({
+          achievementId: id,
+          attachmentsRaw: row.attachments,
+        }),
       };
     }
   );

@@ -21,6 +21,7 @@ import {
 } from "@/lib/public-portfolio-page-locale";
 import { PublicPortfolioLangSwitch } from "@/components/portfolio/PublicPortfolioLangSwitch";
 import PublicPortfolioProfileBlocks from "@/components/portfolio/PublicPortfolioProfileBlocks";
+import PublicPortfolioEvidenceGallery from "@/components/portfolio/PublicPortfolioEvidenceGallery";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -558,6 +559,14 @@ export default async function PublicPortfolioPage({ params, searchParams }: Page
                     <p className={`mt-3 flex-1 text-sm leading-relaxed text-slate-600 ${textMain}`}>
                       {desc}
                     </p>
+                    {a.evidence.length > 0 ? (
+                      <PublicPortfolioEvidenceGallery
+                        items={a.evidence}
+                        slug={slug}
+                        token={token}
+                        isAr={lang === "ar"}
+                      />
+                    ) : null}
                     <div className="mt-4 flex flex-wrap gap-2 border-t border-slate-200/80 pt-4">
                       {a.certificateVerificationPath ? (
                         <>

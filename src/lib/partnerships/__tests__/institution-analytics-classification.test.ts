@@ -7,6 +7,7 @@ import {
 import { INSTITUTION_REVIEW_KINDS } from "@/lib/partnerships/institution-experience-constants";
 import { INSTITUTION_DECISION_STATUSES } from "@/lib/partnerships/partnerships-messaging-constants";
 
+vi.mock("server-only", () => ({}));
 vi.mock("@/lib/mongodb", () => ({ default: vi.fn(async () => undefined) }));
 
 describe("institution classification", () => {

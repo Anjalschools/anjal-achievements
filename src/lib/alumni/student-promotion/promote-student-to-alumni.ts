@@ -46,6 +46,7 @@ export const promoteOneStudentToAlumni = async (
     {
       $set: {
         accountType: "alumni",
+        studentLifecycleStatus: "alumni",
         needsAlumniOnboarding: true,
         "alumniProfile.alumniActivationStatus": "promoted_from_student",
         "alumniProfile.graduationYear": gradYear,

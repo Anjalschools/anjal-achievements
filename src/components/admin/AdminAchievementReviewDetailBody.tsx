@@ -35,6 +35,8 @@ import {
   getTriStateMatchLabel,
 } from "@/lib/achievement-display-labels";
 import { ExternalLink, FileText, Loader2, Sparkles } from "lucide-react";
+import { normalizeAttachmentsArray } from "@/lib/achievement-attachments";
+import AdminAchievementEvidenceVisibilityCard from "@/components/admin/AdminAchievementEvidenceVisibilityCard";
 
 const fieldLabelAr = (key: string): string => {
   const m: Record<string, string> = {
@@ -110,6 +112,15 @@ export const AdminAchievementReviewDetailBody = ({
       .map((item, i) => buildAttachmentRow(item, i, loc, originArg))
       .filter((x): x is NonNullable<typeof x> => Boolean(x));
   }, [a.attachmentItems, a.attachments, a.description, a.evidenceUrl, loc, originArg]);
+
+  const portfolioAttachmentItems = useMemo(() => {
+    if (Array.isArray(a.attachmentItems) && (a.attachmentItems as unknown[]).length > 0) {
+      return normalizeAttachmentsArray(a.attachmentItems);
+    }
+    return normalizeAttachmentsArray(a.attachments);
+  }, [a.attachmentItems, a.attachments]);
+
+  const achievementId = String(detail.id || a._id || a.id || "").trim();
 
   const [attachOpenError, setAttachOpenError] = useState<string | null>(null);
 
@@ -747,6 +758,14 @@ export const AdminAchievementReviewDetailBody = ({
           </ul>
         )}
       </section>
+
+      {achievementId && portfolioAttachmentItems.length > 0 ? (
+        <AdminAchievementEvidenceVisibilityCard
+          achievementId={achievementId}
+          attachmentItems={portfolioAttachmentItems}
+          isAr={isAr}
+        />
+      ) : null}
 
       {snap && changed.length > 0 ? (
         <section>

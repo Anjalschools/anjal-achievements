@@ -6,6 +6,7 @@ import {
 } from "@/lib/partnerships/institution-organization-resolver";
 import { INSTITUTION_FINAL_RECOMMENDATIONS } from "@/lib/partnerships/institution-experience-constants";
 
+vi.mock("server-only", () => ({}));
 vi.mock("@/lib/mongodb", () => ({ default: vi.fn(async () => undefined) }));
 
 describe("institution account governance", () => {

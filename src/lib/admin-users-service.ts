@@ -21,6 +21,10 @@ import {
   generatePublicPortfolioToken,
 } from "@/lib/public-portfolio";
 import { getBaseUrl } from "@/lib/get-base-url";
+import {
+  isInstitutionalRecordProtectedStudent,
+  INSTITUTIONAL_RECORD_DELETE_FORBIDDEN,
+} from "@/lib/portfolio/portfolio-alumni-protection";
 import { ensureStudentPublicPortfolioReady } from "@/lib/public-portfolio-bootstrap";
 import { queueHomeStatsRefresh } from "@/lib/home-stats-service";
 import { linkInstitutionUserToOrganization } from "@/lib/partnerships/institution-experience-service";
@@ -464,6 +468,24 @@ export const adminDeleteUser = async (id: string, actorId: string): Promise<void
   if (!mongoose.Types.ObjectId.isValid(id)) throw new Error("Invalid user id");
   if (id === actorId) throw new Error("You cannot delete your own account");
   await connectDB();
+  const target = await User.findById(id)
+    .select("accountType studentLifecycleStatus role")
+    .lean();
+  if (!target) throw new Error("User not found");
+  if (
+    String((target as { role?: string }).role || "") === "student" &&
+    isInstitutionalRecordProtectedStudent({
+      accountType: (target as { accountType?: string }).accountType,
+      studentLifecycleStatus: (target as { studentLifecycleStatus?: string }).studentLifecycleStatus,
+      role: (target as { role?: string }).role,
+    })
+  ) {
+    const err = new Error(
+      "Institutional records for graduated or transferred students cannot be deleted."
+    );
+    (err as Error & { code?: string }).code = INSTITUTIONAL_RECORD_DELETE_FORBIDDEN;
+    throw err;
+  }
   const ach = await Achievement.countDocuments({ userId: new mongoose.Types.ObjectId(id) });
   if (ach > 0) {
     const err = new Error("User has achievements; suspend the account instead of deleting.");

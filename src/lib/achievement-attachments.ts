@@ -13,6 +13,12 @@ export type AchievementAttachmentObject = {
   key?: string;
   size?: number;
   provider?: string;
+  /** Admin-approved attachment for public portfolio evidence; default false when omitted. */
+  approved?: boolean;
+  /** Admin-approved public portfolio visibility; default false when omitted. */
+  showInPublicPortfolio?: boolean;
+  /** Optional gallery grouping for public portfolio filters. */
+  evidenceCategory?: "certificate" | "photo" | "document";
 };
 
 const DATA_URL_MIME = /^data:([^;]+);/i;
@@ -113,6 +119,12 @@ export const coerceAttachmentForStorage = (raw: unknown): AchievementAttachmentO
           ? Number(sizeRaw.trim())
           : undefined;
     if (size !== undefined) out.size = size;
+    if (o.approved === true) out.approved = true;
+    if (o.showInPublicPortfolio === true) out.showInPublicPortfolio = true;
+    const categoryRaw = o.evidenceCategory;
+    if (categoryRaw === "certificate" || categoryRaw === "photo" || categoryRaw === "document") {
+      out.evidenceCategory = categoryRaw;
+    }
     return out;
   }
   return null;

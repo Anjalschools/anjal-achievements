@@ -526,11 +526,22 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     if (!existingDel) {
       return NextResponse.json({ error: "Achievement not found" }, { status: 404 });
     }
-    if (isStudentDeleteLocked(existingDel as unknown as Record<string, unknown>)) {
+    const deleteLockInput = {
+      ...(existingDel.toObject() as unknown as Record<string, unknown>),
+      ownerAccountType: currentUser.accountType,
+      ownerStudentLifecycleStatus: currentUser.studentLifecycleStatus,
+    };
+    if (isStudentDeleteLocked(deleteLockInput)) {
       return NextResponse.json(
         {
           error: "Forbidden",
-          message: "Approved achievements cannot be deleted.",
+          message:
+            currentUser.accountType === "alumni" ||
+            currentUser.studentLifecycleStatus === "graduated" ||
+            currentUser.studentLifecycleStatus === "transferred" ||
+            currentUser.studentLifecycleStatus === "alumni"
+              ? "Institutional records cannot be deleted after graduation or transfer."
+              : "Approved achievements cannot be deleted.",
         },
         { status: 403 }
       );

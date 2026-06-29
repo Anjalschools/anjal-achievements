@@ -61,6 +61,6 @@ describe("Phase T.1.2.E message actions production validation", () => {
     expect(serviceSrc).toContain("canEdit:");
     expect(serviceSrc).toContain("canDelete:");
     expect(serviceSrc).toContain("canRestore:");
-    expect(serviceSrc).toContain("row.isMine");
+    expect(serviceSrc).toContain("isMine:");
   });
 });

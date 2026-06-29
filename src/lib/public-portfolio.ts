@@ -3,35 +3,12 @@ import mongoose from "mongoose";
 import connectDB from "@/lib/mongodb";
 import { getBaseUrl } from "@/lib/get-base-url";
 import User from "@/models/User";
+import { publicPortfolioPublishedAchievementFilter } from "@/lib/public-portfolio-filters";
+
+export { publicPortfolioPublishedAchievementFilter } from "@/lib/public-portfolio-filters";
 
 const SLUG_MAX_BASE = 48;
 const TOKEN_BYTES = 24;
-
-/** Approved / legacy-approved achievements visible in public portfolio (independent of Hall of Fame flag). */
-export const publicPortfolioPublishedAchievementFilter = (): Record<string, unknown> => ({
-  $and: [
-    {
-      $or: [{ pendingReReview: { $ne: true } }, { pendingReReview: { $exists: false } }],
-    },
-    {
-      $or: [
-        { status: "approved" },
-        {
-          $and: [
-            { approved: true },
-            {
-              $or: [{ status: { $exists: false } }, { status: null }, { status: "" }],
-            },
-          ],
-        },
-      ],
-    },
-    { status: { $ne: "rejected" } },
-    {
-      $or: [{ showInPublicPortfolio: { $ne: false } }, { showInPublicPortfolio: { $exists: false } }],
-    },
-  ],
-});
 
 /** Achievements allowed on the public student portfolio for a given user. */
 export const publicPortfolioAchievementMatch = (

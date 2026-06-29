@@ -173,6 +173,7 @@ export interface IUser extends Document {
   };
   /** Student vs alumni classification; omitted → student (see {@link getAccountType}). */
   accountType?: "student" | "alumni";
+  studentLifecycleStatus?: "active" | "graduated" | "transferred" | "alumni";
   /** Optional alumni résumé / visibility fields (Phase 1). */
   alumniProfile?: AlumniProfile;
   /** After g12 promotion: user must complete post-grad alumni onboarding (optional; legacy rows omit). */
@@ -508,6 +509,13 @@ const UserSchema: Schema = new Schema(
       type: String,
       enum: ["student", "alumni"],
       required: false,
+    },
+    /** Additive lifecycle marker for institutional record protection (Phase P.1). */
+    studentLifecycleStatus: {
+      type: String,
+      enum: ["active", "graduated", "transferred", "alumni"],
+      required: false,
+      default: "active",
     },
     alumniProfile: {
       type: AlumniProfileSchema,

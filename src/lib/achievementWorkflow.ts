@@ -3,6 +3,8 @@
  * Keeps compatibility with legacy `approved` / `featured` booleans when `status` / `isFeatured` are absent.
  */
 
+import { isInstitutionalRecordProtectedStudent } from "@/lib/portfolio/portfolio-alumni-protection";
+
 export type WorkflowDisplayStatus =
   | "pending"
   | "needs_revision"
@@ -135,8 +137,20 @@ export const isStudentEditLocked = (raw: AchievementWorkflowLike): boolean => {
   return raw.approved === true && !st;
 };
 
-/** Deletes only allowed while not finally approved. */
+/** Deletes only allowed while not finally approved (and never for institutional alumni records). */
 export const isStudentDeleteLocked = (raw: AchievementWorkflowLike): boolean => {
+  const institutional = raw as AchievementWorkflowLike & {
+    ownerAccountType?: string;
+    ownerStudentLifecycleStatus?: string;
+  };
+  if (
+    isInstitutionalRecordProtectedStudent({
+      accountType: institutional.ownerAccountType,
+      studentLifecycleStatus: institutional.ownerStudentLifecycleStatus,
+    })
+  ) {
+    return true;
+  }
   const st = String(raw.status ?? "");
   if (st === "approved") return true;
   if (st === "pending" || st === "pending_review" || st === "needs_revision" || st === "rejected")
