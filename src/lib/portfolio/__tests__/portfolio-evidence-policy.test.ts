@@ -12,11 +12,11 @@ const ACHIEVEMENT_ID = "507f1f77bcf86cd799439011";
 
 describe("portfolio evidence policy", () => {
   beforeEach(() => {
-    process.env.NEXTAUTH_SECRET = "test-portfolio-evidence-secret";
+    process.env.PORTFOLIO_EVIDENCE_SECRET = "test-portfolio-evidence-secret";
   });
 
   afterEach(() => {
-    delete process.env.NEXTAUTH_SECRET;
+    delete process.env.PORTFOLIO_EVIDENCE_SECRET;
   });
 
   it("requires both approved and showInPublicPortfolio", () => {
@@ -118,5 +118,58 @@ describe("portfolio evidence policy", () => {
     expect(
       inferPortfolioEvidenceCategory({ mimeType: "image/jpeg", name: "trophy-photo.jpg" })
     ).toBe("photo");
+  });
+
+  it("includes achievement cover image when attachments are empty", () => {
+    const items = buildPublicPortfolioEvidenceItems({
+      achievementId: ACHIEVEMENT_ID,
+      attachmentsRaw: [],
+      coverImageUrl: "https://example.com/cover.jpg",
+    });
+
+    expect(items).toHaveLength(1);
+    expect(items[0]?.kind).toBe("image");
+    expect(items[0]?.category).toBe("photo");
+    expect(items[0]?.mimeType).toBe("image/jpeg");
+  });
+
+  it("includes cover image alongside pdf attachments", () => {
+    const items = buildPublicPortfolioEvidenceItems({
+      achievementId: ACHIEVEMENT_ID,
+      attachmentsRaw: [
+        {
+          url: "https://example.com/public.pdf",
+          mimeType: "application/pdf",
+          name: "certificate.pdf",
+          approved: true,
+          showInPublicPortfolio: true,
+        },
+      ],
+      coverImageUrl: "https://example.com/cover.png",
+    });
+
+    expect(items).toHaveLength(2);
+    expect(items.some((item) => item.kind === "pdf")).toBe(true);
+    expect(items.some((item) => item.kind === "image")).toBe(true);
+    expect(filterPublicPortfolioEvidenceItems(items, "photo")).toHaveLength(1);
+    expect(filterPublicPortfolioEvidenceItems(items, "pdf")).toHaveLength(1);
+  });
+
+  it("does not duplicate cover image when already present in attachments", () => {
+    const items = buildPublicPortfolioEvidenceItems({
+      achievementId: ACHIEVEMENT_ID,
+      attachmentsRaw: [
+        {
+          url: "https://example.com/cover.jpg",
+          mimeType: "image/jpeg",
+          name: "cover.jpg",
+          approved: true,
+          showInPublicPortfolio: true,
+        },
+      ],
+      coverImageUrl: "https://example.com/cover.jpg",
+    });
+
+    expect(items).toHaveLength(1);
   });
 });

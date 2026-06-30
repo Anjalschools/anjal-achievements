@@ -7,7 +7,11 @@ import Achievement from "@/models/Achievement";
 import User from "@/models/User";
 import { publicPortfolioAchievementMatch, publicPortfolioTokensEqual } from "@/lib/public-portfolio";
 import { parsePortfolioEvidenceRef } from "@/lib/portfolio/portfolio-evidence-ref";
-import { resolvePublicAttachmentByIndex } from "@/lib/portfolio/portfolio-evidence-policy";
+import {
+  parsePortfolioCoverEvidenceRef,
+  resolvePublicAttachmentByIndex,
+  resolveVirtualCoverEvidenceStreamSource,
+} from "@/lib/portfolio/portfolio-evidence-policy";
 import { openPortfolioEvidenceStream } from "@/lib/portfolio/portfolio-evidence-storage";
 
 export type PortfolioEvidenceAccessResult =
@@ -29,8 +33,9 @@ export const authorizePortfolioEvidenceAccess = async (input: {
 }): Promise<PortfolioEvidenceAccessResult> => {
   const slug = String(input.slug || "").trim().toLowerCase();
   const token = String(input.token || "").trim();
-  const parsedRef = parsePortfolioEvidenceRef(input.ref);
-  if (!slug || !token || !parsedRef) {
+  const parsedAttachmentRef = parsePortfolioEvidenceRef(input.ref);
+  const parsedCoverRef = parsedAttachmentRef ? null : parsePortfolioCoverEvidenceRef(input.ref);
+  if (!slug || !token || (!parsedAttachmentRef && !parsedCoverRef)) {
     return { ok: false, error: "not_found" };
   }
 
@@ -52,19 +57,43 @@ export const authorizePortfolioEvidenceAccess = async (input: {
     return { ok: false, error: "forbidden" };
   }
 
+  const achievementId = parsedAttachmentRef?.achievementId ?? parsedCoverRef?.achievementId;
+  if (!achievementId) return { ok: false, error: "not_found" };
+
   const userId = (user as { _id: mongoose.Types.ObjectId })._id;
   const achievement = await Achievement.findOne({
-    _id: new mongoose.Types.ObjectId(parsedRef.achievementId),
+    _id: new mongoose.Types.ObjectId(achievementId),
     ...publicPortfolioAchievementMatch(userId),
   })
-    .select("attachments userId status approved")
+    .select("attachments image userId status approved")
     .lean();
 
   if (!achievement) return { ok: false, error: "not_found" };
 
+  if (parsedCoverRef) {
+    const coverSource = resolveVirtualCoverEvidenceStreamSource({
+      attachmentsRaw: (achievement as { attachments?: unknown }).attachments,
+      coverImageUrl: (achievement as { image?: string }).image,
+    });
+    if (!coverSource) return { ok: false, error: "forbidden" };
+
+    const opened = await openPortfolioEvidenceStream({
+      url: coverSource.url,
+      mimeType: coverSource.mimeType,
+      name: coverSource.fileName,
+    });
+    return {
+      ok: true,
+      stream: opened.stream,
+      contentType: opened.contentType,
+      contentLength: opened.contentLength,
+      fileName: opened.fileName,
+    };
+  }
+
   const attachment = resolvePublicAttachmentByIndex(
     (achievement as { attachments?: unknown }).attachments,
-    parsedRef.attachmentIndex
+    parsedAttachmentRef!.attachmentIndex
   );
   if (!attachment) return { ok: false, error: "forbidden" };
 

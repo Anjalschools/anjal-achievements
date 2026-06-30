@@ -101,6 +101,7 @@ export const buildPublicPortfolioAchievementItemFromRow = (
   let evidence = buildPublicPortfolioEvidenceItems({
     achievementId: id,
     attachmentsRaw: row.attachments,
+    coverImageUrl: row.image as string | undefined,
     faultCtx,
     achievementTitle: titleAr || titleEn || null,
   });

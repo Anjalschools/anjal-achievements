@@ -44,11 +44,11 @@ const approvedRow = (id: string, attachments: unknown[] = [visibleAttachment()])
 
 describe("portfolio fault isolation", () => {
   beforeEach(() => {
-    process.env.NEXTAUTH_SECRET = "test-portfolio-evidence-secret";
+    process.env.PORTFOLIO_EVIDENCE_SECRET = "test-portfolio-evidence-secret";
   });
 
   afterEach(() => {
-    delete process.env.NEXTAUTH_SECRET;
+    delete process.env.PORTFOLIO_EVIDENCE_SECRET;
     vi.restoreAllMocks();
   });
 

@@ -9,11 +9,11 @@ const ACHIEVEMENT_ID = "507f1f77bcf86cd799439011";
 
 describe("portfolio evidence ref signing", () => {
   beforeEach(() => {
-    process.env.NEXTAUTH_SECRET = "test-portfolio-evidence-secret";
+    process.env.PORTFOLIO_EVIDENCE_SECRET = "test-portfolio-evidence-secret";
   });
 
   afterEach(() => {
-    delete process.env.NEXTAUTH_SECRET;
+    delete process.env.PORTFOLIO_EVIDENCE_SECRET;
   });
 
   it("round-trips achievement id and attachment index", () => {

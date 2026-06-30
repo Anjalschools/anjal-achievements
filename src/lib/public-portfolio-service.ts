@@ -348,7 +348,7 @@ export const loadPublicPortfolioPayload = async (
   };
 
   const achFields =
-    "achievementType achievementCategory achievementName nameAr nameEn customAchievementName title description achievementLevel participationType resultType medalType rank score date achievementYear isFeatured featured certificateIssued certificateVerificationToken certificateRevokedAt certificateIssuedAt pendingReReview status certificateApprovedByRole certificateApprovedAt createdAt attachments";
+    "achievementType achievementCategory achievementName nameAr nameEn customAchievementName title description achievementLevel participationType resultType medalType rank score date achievementYear isFeatured featured certificateIssued certificateVerificationToken certificateRevokedAt certificateIssuedAt pendingReReview status certificateApprovedByRole certificateApprovedAt createdAt attachments image";
 
   const [achRows, agg] = await runPortfolioDiagnosticStage(diagnostics, "LOAD_ACHIEVEMENTS", () =>
     Promise.all([
