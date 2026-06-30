@@ -8,7 +8,7 @@ import {
   createDefaultStorageDiscoveryDependencies,
   createDefaultStorageProviders,
 } from "@/lib/disaster-recovery-v2/storage/storage-discovery-dependencies";
-import { createPackageBuildStage } from "@/lib/disaster-recovery-v2/package/create-package-build-stage";
+import { createPackageBuildStageWithR2Export } from "@/lib/disaster-recovery-v2/package/dr-streaming-backup";
 import { createDefaultPackageBuildDependencies } from "@/lib/disaster-recovery-v2/package/package-build-dependencies";
 import { createUploadStage } from "@/lib/disaster-recovery-v2/upload/create-upload-stage";
 import {
@@ -36,7 +36,7 @@ export const createProductionIntegratedV2BackupEngine = (
       createAssetDownloadStage(options.assetDownloadDeps ?? createDefaultAssetDownloadDependencies())
     )
     .registerStage(
-      createPackageBuildStage(options.packageBuildDeps ?? createDefaultPackageBuildDependencies())
+      createPackageBuildStageWithR2Export(options.packageBuildDeps ?? createDefaultPackageBuildDependencies())
     )
     .registerStage(
       createUploadStage(

@@ -1,5 +1,5 @@
 import { mkdir, readFile, stat, writeFile } from "fs/promises";
-import { dirname } from "path";
+import { dirname, join } from "path";
 
 import { computeFileSha256 } from "@/lib/disaster-recovery-v2/database/hash-file";
 import type { DatabaseManifest } from "@/lib/disaster-recovery-v2/database/database-manifest-types";
@@ -12,6 +12,7 @@ import {
 } from "@/lib/disaster-recovery-v2/restore/extract-restore-package";
 import { createCloudinaryAssetRestoreProvider } from "@/lib/disaster-recovery-v2/restore/providers/cloudinary-asset-restore-provider";
 import type { DatabaseCollectionRestorer } from "@/lib/disaster-recovery-v2/restore/restore-database-collections";
+import type { R2RestoreResult } from "@/lib/disaster-recovery-v2/object-storage/r2-restore";
 import type { RestoreAssetsDependencies } from "@/lib/disaster-recovery-v2/restore/restore-assets";
 import type { RestoreDatabaseDependencies } from "@/lib/disaster-recovery-v2/restore/restore-database-collections";
 import {
@@ -29,6 +30,10 @@ export type RestoreEngineDependencies = {
   writeRestoreReport: (reportPath: string, report: unknown) => Promise<void>;
   database: RestoreDatabaseDependencies;
   assets: RestoreAssetsDependencies;
+  restoreR2Objects: (input: {
+    extractedRootDir: string;
+    jobId: string;
+  }) => Promise<R2RestoreResult>;
 };
 
 const createDefaultPathExists = async (filePath: string): Promise<boolean> => {
@@ -96,6 +101,23 @@ export const createDefaultRestoreEngineDependencies = (input?: {
     readStorageManifest: async (manifestPath) =>
       JSON.parse(await readFile(manifestPath, "utf8")) as StorageManifest,
     pathExists: createDefaultPathExists,
+  },
+  restoreR2Objects: async ({ extractedRootDir, jobId }) => {
+    const r2ManifestPath = join(extractedRootDir, "metadata", "r2-manifest.json");
+    if (!(await createDefaultPathExists(r2ManifestPath))) {
+      return {
+        skipped: true,
+        restored: 0,
+        failed: 0,
+        skippedCount: 0,
+        entries: [],
+      };
+    }
+
+    const { executeR2ObjectRestoreStage } = await import(
+      "@/lib/disaster-recovery-v2/package/dr-streaming-restore"
+    );
+    return executeR2ObjectRestoreStage({ extractedRootDir, jobId });
   },
 });
 

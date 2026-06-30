@@ -34,12 +34,19 @@ export type PackageManifestVerificationSummary = {
   sha256: string;
 };
 
+export type PackageManifestObjectStorageSummary = {
+  providers: string[];
+  objects: number;
+  bytes: number;
+};
+
 export type PackageManifest = {
   version: 2;
   createdAt: string;
   database: PackageManifestDatabaseSummary;
   storage: PackageManifestStorageSummary;
   assets: PackageManifestAssetsSummary;
+  objectStorage?: PackageManifestObjectStorageSummary;
   package: PackageManifestPackageSummary;
   verification: PackageManifestVerificationSummary;
 };

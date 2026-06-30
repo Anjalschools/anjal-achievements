@@ -98,9 +98,15 @@ export const executeRestore = async (
       deps: deps.assets,
     });
 
+    const r2RestoreResult = await deps.restoreR2Objects({
+      extractedRootDir,
+      jobId: config.jobId,
+    });
+
     const verification = verifyRestoreOutcome({
       collectionResults,
       assetResults,
+      r2RestoreResult,
     });
 
     logDrV2("RESTORE_VERIFIED", {

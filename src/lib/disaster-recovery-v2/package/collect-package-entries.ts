@@ -78,6 +78,7 @@ export const collectPackageZipEntries = async (input: {
     missingAssetsPath: string;
     databaseCollectionsDir: string;
     assetsRootDir: string;
+    r2ManifestPath: string;
     packageManifestPath: string;
     embeddedPackageManifestPath?: string;
   };
@@ -91,6 +92,7 @@ export const collectPackageZipEntries = async (input: {
     { sourcePath: resolvePaths.storageManifestPath, zipFileName: "storage-manifest.json" },
     { sourcePath: resolvePaths.assetDownloadReportPath, zipFileName: "asset-download-report.json", optional: true },
     { sourcePath: resolvePaths.missingAssetsPath, zipFileName: "missing-assets.json", optional: true },
+    { sourcePath: resolvePaths.r2ManifestPath, zipFileName: "r2-manifest.json", optional: true },
   ];
 
   for (const copy of metadataCopies) {

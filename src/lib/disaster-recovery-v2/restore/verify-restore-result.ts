@@ -5,15 +5,20 @@ import type {
   RestoreVerificationSummary,
 } from "@/lib/disaster-recovery-v2/restore/restore-report-types";
 
+import type { R2RestoreResult } from "@/lib/disaster-recovery-v2/object-storage/r2-restore";
+
 export const buildRestoreVerificationSummary = (input: {
   collectionResults: RestoreCollectionResult[];
   assetResults: RestoreAssetResult[];
+  r2RestoreResult?: R2RestoreResult;
 }): RestoreVerificationSummary => {
   const restoredCollections = input.collectionResults.filter((entry) => entry.status === "restored").length;
   const failedCollections = input.collectionResults.filter((entry) => entry.status === "failed").length;
   const restoredAssets = input.assetResults.filter((entry) => entry.status === "restored").length;
   const skippedAssets = input.assetResults.filter((entry) => entry.status === "skipped").length;
   const failedAssets = input.assetResults.filter((entry) => entry.status === "failed").length;
+  const restoredR2Objects = input.r2RestoreResult?.restored ?? 0;
+  const failedR2Objects = input.r2RestoreResult?.failed ?? 0;
 
   return {
     expectedCollections: input.collectionResults.length,
@@ -23,13 +28,16 @@ export const buildRestoreVerificationSummary = (input: {
     restoredAssets,
     skippedAssets,
     failedAssets,
-    verified: failedCollections === 0 && failedAssets === 0,
+    restoredR2Objects,
+    failedR2Objects,
+    verified: failedCollections === 0 && failedAssets === 0 && failedR2Objects === 0,
   };
 };
 
 export const verifyRestoreOutcome = (input: {
   collectionResults: RestoreCollectionResult[];
   assetResults: RestoreAssetResult[];
+  r2RestoreResult?: R2RestoreResult;
 }): RestoreVerificationSummary => {
   const summary = buildRestoreVerificationSummary(input);
 

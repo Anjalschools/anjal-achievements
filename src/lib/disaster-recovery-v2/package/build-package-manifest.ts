@@ -1,6 +1,9 @@
 import type { AssetDownloadReport } from "@/lib/disaster-recovery-v2/storage/asset-download/asset-download-report-types";
 import type { DatabaseManifest } from "@/lib/disaster-recovery-v2/database/database-manifest-types";
-import type { PackageManifest } from "@/lib/disaster-recovery-v2/package/package-manifest-types";
+import type {
+  PackageManifest,
+  PackageManifestObjectStorageSummary,
+} from "@/lib/disaster-recovery-v2/package/package-manifest-types";
 import { BACKUP_ZIP_FILE_NAME, PACKAGE_MANIFEST_VERSION } from "@/lib/disaster-recovery-v2/package/package-manifest-types";
 import type { StorageManifest } from "@/lib/disaster-recovery-v2/storage/storage-manifest-types";
 
@@ -33,6 +36,7 @@ export const buildPackageManifest = (input: {
     entryCount: number;
     sha256: string;
   };
+  objectStorage?: PackageManifestObjectStorageSummary | null;
 }): PackageManifest => ({
   version: PACKAGE_MANIFEST_VERSION,
   createdAt: new Date().toISOString(),
@@ -55,6 +59,7 @@ export const buildPackageManifest = (input: {
     failed: input.assetDownloadReport?.failed ?? 0,
     totalBytes: input.assetDownloadReport?.totalBytes ?? 0,
   },
+  ...(input.objectStorage ? { objectStorage: input.objectStorage } : {}),
   package: {
     zipFile: BACKUP_ZIP_FILE_NAME,
     size: input.packageSummary.size,

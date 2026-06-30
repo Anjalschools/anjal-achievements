@@ -26,6 +26,8 @@ export type RestoreVerificationSummary = {
   restoredAssets: number;
   skippedAssets: number;
   failedAssets: number;
+  restoredR2Objects?: number;
+  failedR2Objects?: number;
   verified: boolean;
 };
 

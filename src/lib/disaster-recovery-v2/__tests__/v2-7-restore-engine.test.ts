@@ -240,6 +240,13 @@ const createMockRestoreDeps = (input?: {
         }
       },
     },
+    restoreR2Objects: async () => ({
+      skipped: true,
+      restored: 0,
+      failed: 0,
+      skippedCount: 0,
+      entries: [],
+    }),
   };
 };
 

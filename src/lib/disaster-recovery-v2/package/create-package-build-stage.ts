@@ -5,6 +5,11 @@ import type { PackageBuildDependencies } from "@/lib/disaster-recovery-v2/packag
 import { resolvePackageBuildPaths } from "@/lib/disaster-recovery-v2/package/package-build-dependencies";
 import type { PackageManifest } from "@/lib/disaster-recovery-v2/package/package-manifest-types";
 import {
+  parseR2Manifest,
+  summarizeR2ManifestForPackage,
+  type R2Manifest,
+} from "@/lib/disaster-recovery-v2/object-storage/r2-manifest";
+import {
   resolveBackupZipPath,
   resolveBackupZipTempPath,
   resolveEmbeddedPackageManifestPath,
@@ -35,6 +40,14 @@ const writeEmbeddedPackageManifest = async (
     resolveEmbeddedPackageManifestPath(workspaceDir),
     buildEmbeddedPackageManifest(manifest)
   );
+};
+
+const loadObjectStorageSummary = async (
+  deps: PackageBuildDependencies,
+  r2ManifestPath: string
+) => {
+  const raw = await deps.readJsonFile<R2Manifest>(r2ManifestPath);
+  return summarizeR2ManifestForPackage(parseR2Manifest(raw));
 };
 
 const validateEntriesReadable = async (
@@ -91,11 +104,13 @@ export const executePackageBuildStage = async (
   const assetDownloadReport = await deps.readJsonFile<AssetDownloadReport>(
     resolvedPaths.assetDownloadReportPath
   );
+  const objectStorage = await loadObjectStorageSummary(deps, resolvedPaths.r2ManifestPath);
 
   let packageManifest = buildPackageManifest({
     databaseManifest,
     storageManifest,
     assetDownloadReport,
+    objectStorage,
     packageSummary: {
       size: 0,
       sha256: "",
@@ -142,6 +157,7 @@ export const executePackageBuildStage = async (
       databaseManifest,
       storageManifest,
       assetDownloadReport,
+      objectStorage,
       packageSummary: {
         size: verification.sizeBytes,
         sha256: verification.sha256,
@@ -187,6 +203,7 @@ export const executePackageBuildStage = async (
       databaseManifest,
       storageManifest,
       assetDownloadReport,
+      objectStorage,
       packageSummary: {
         size: finalVerification.sizeBytes,
         sha256: finalVerification.sha256,

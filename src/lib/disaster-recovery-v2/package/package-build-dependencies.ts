@@ -102,4 +102,5 @@ export const resolvePackageBuildPaths = (workspaceDir: string) => ({
   packageManifestPath: resolvePackageManifestPath(workspaceDir),
   embeddedPackageManifestPath: resolveEmbeddedPackageManifestPath(workspaceDir),
   metadataRootDir: resolveMetadataRootDir(workspaceDir),
+  r2ManifestPath: join(workspaceDir, "metadata", "r2-manifest.json"),
 });
