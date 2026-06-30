@@ -3,25 +3,7 @@ import { readdir, readFile } from "fs/promises";
 import { join } from "path";
 
 import { parseBsonCollectionFile } from "@/lib/disaster-recovery-v2/restore/parse-bson-collection";
-
-const isBareR2Key = (value: string): boolean => {
-  const key = value.trim().replace(/^\/+/, "");
-  if (!key || /^https?:\/\//i.test(key)) return false;
-  return (
-    key.startsWith("achievements/attachments/") ||
-    key.startsWith("partnerships/") ||
-    key.startsWith("training/") ||
-    key.startsWith("backups/")
-  );
-};
-
-const classifyR2StringReference = (raw: string): string | null => {
-  const value = raw.trim();
-  if (!value || /^data:/i.test(value)) return null;
-  if (/^https?:\/\//i.test(value)) return null;
-  if (!isBareR2Key(value)) return null;
-  return value.replace(/^\/+/, "");
-};
+import { logDrV2, logDrV2Debug } from "@/lib/disaster-recovery-v2/utils/logging";
 
 export type DiscoveredR2Object = {
   key: string;
@@ -33,7 +15,21 @@ export type DiscoveredR2Object = {
   documentId: string;
 };
 
+export type R2DiscoveryMethod =
+  | "provider-r2"
+  | "bucket-key"
+  | "storage-key"
+  | "storage-object"
+  | "legacy-field";
+
 const DEFAULT_MIME_TYPE = "application/octet-stream";
+
+const LEGACY_R2_KEY_FIELD_NAMES = new Set([
+  "imageKey",
+  "storageKey",
+  "objectKey",
+  "attachmentKey",
+]);
 
 const normalizeObjectId = (value: unknown): string => {
   if (typeof value === "string") return value.trim();
@@ -53,22 +49,79 @@ const resolveMimeType = (record: Record<string, unknown>): string => {
   return DEFAULT_MIME_TYPE;
 };
 
-const resolveR2Key = (record: Record<string, unknown>): string | null => {
+const normalizeR2KeyString = (raw: string): string | null => {
+  const value = raw.trim();
+  if (!value || /^https?:\/\//i.test(value) || /^data:/i.test(value)) {
+    return null;
+  }
+  return value.replace(/^\/+/, "");
+};
+
+export const resolveR2Key = (record: Record<string, unknown>): string | null => {
   const key =
     typeof record.key === "string"
       ? record.key.trim()
       : typeof record.storageKey === "string"
         ? record.storageKey.trim()
-        : "";
+        : typeof record.objectKey === "string"
+          ? record.objectKey.trim()
+          : typeof record.attachmentKey === "string"
+            ? record.attachmentKey.trim()
+            : "";
   if (!key) return null;
-  if (/^https?:\/\//i.test(key)) return null;
-  return key.replace(/^\/+/, "");
+  return normalizeR2KeyString(key);
 };
 
-const isR2ObjectRecord = (record: Record<string, unknown>): boolean => {
-  if (String(record.provider || "").trim().toLowerCase() === "r2") return true;
-  if (typeof record.bucket === "string" && record.bucket.trim()) return true;
-  return Boolean(resolveR2Key(record));
+const hasStorageObjectSignals = (record: Record<string, unknown>): boolean => {
+  const signals = [
+    record.provider,
+    record.bucket,
+    record.mimeType,
+    record.contentType,
+    record.url,
+    record.publicId,
+    record.sha256,
+    record.size,
+    record.relativePath,
+    record.uploadedAt,
+  ];
+
+  return signals.some((signal) => {
+    if (signal === undefined || signal === null) return false;
+    if (typeof signal === "string") return signal.trim().length > 0;
+    if (typeof signal === "number") return Number.isFinite(signal);
+    return true;
+  });
+};
+
+export const detectR2StorageReference = (
+  record: Record<string, unknown>
+): R2DiscoveryMethod | null => {
+  const provider = String(record.provider ?? "")
+    .trim()
+    .toLowerCase();
+  const hasBucket = typeof record.bucket === "string" && record.bucket.trim().length > 0;
+  const key = resolveR2Key(record);
+  const hasDedicatedStorageKey =
+    typeof record.storageKey === "string" && record.storageKey.trim().length > 0;
+
+  if (provider === "r2" && key) {
+    return "provider-r2";
+  }
+
+  if (hasBucket && key) {
+    return "bucket-key";
+  }
+
+  if (hasDedicatedStorageKey && key) {
+    return "storage-key";
+  }
+
+  if (key && hasStorageObjectSignals(record)) {
+    return "storage-object";
+  }
+
+  return null;
 };
 
 const buildDiscoveryKey = (bucket: string, key: string): string => `${bucket}::${key}`;
@@ -109,6 +162,36 @@ export const mapDiscoveredR2Object = (input: {
   };
 };
 
+const registerDiscoveredObject = (
+  input: {
+    collection: string;
+    documentId: string;
+    defaultBucket: string;
+    discovered: Map<string, DiscoveredR2Object>;
+  },
+  record: Record<string, unknown>,
+  detectionMethod: R2DiscoveryMethod
+): void => {
+  const object = mapDiscoveredR2Object({
+    record,
+    collection: input.collection,
+    documentId: input.documentId,
+    defaultBucket: input.defaultBucket,
+  });
+  if (!object) return;
+
+  input.discovered.set(buildDiscoveryKey(object.bucket, object.key), object);
+
+  logDrV2("R2_DISCOVERY_REFERENCE_FOUND", {
+    collection: input.collection,
+    documentId: input.documentId,
+    provider: String(record.provider ?? "r2"),
+    bucket: object.bucket,
+    key: object.key,
+    detectionMethod,
+  });
+};
+
 const visitValue = (
   value: unknown,
   input: {
@@ -118,22 +201,7 @@ const visitValue = (
     discovered: Map<string, DiscoveredR2Object>;
   }
 ): void => {
-  if (typeof value === "string") {
-    const storageKey = classifyR2StringReference(value);
-    if (!storageKey) return;
-
-    const object = mapDiscoveredR2Object({
-      record: { key: storageKey, provider: "r2" },
-      collection: input.collection,
-      documentId: input.documentId,
-      defaultBucket: input.defaultBucket,
-    });
-    if (!object) return;
-    input.discovered.set(buildDiscoveryKey(object.bucket, object.key), object);
-    return;
-  }
-
-  if (!value || typeof value !== "object") return;
+  if (value === null || value === undefined) return;
 
   if (Array.isArray(value)) {
     for (const item of value) {
@@ -142,23 +210,46 @@ const visitValue = (
     return;
   }
 
-  const record = value as Record<string, unknown>;
-  if (isR2ObjectRecord(record)) {
-    const object = mapDiscoveredR2Object({
-      record,
-      collection: input.collection,
-      documentId: input.documentId,
-      defaultBucket: input.defaultBucket,
-    });
-    if (object) {
-      input.discovered.set(buildDiscoveryKey(object.bucket, object.key), object);
-    }
+  if (typeof value === "string") {
     return;
   }
 
-  for (const nested of Object.values(record)) {
+  if (typeof value !== "object") return;
+
+  const record = value as Record<string, unknown>;
+  const detectionMethod = detectR2StorageReference(record);
+  if (detectionMethod) {
+    registerDiscoveredObject(input, record, detectionMethod);
+    return;
+  }
+
+  for (const [fieldName, nested] of Object.entries(record)) {
+    if (LEGACY_R2_KEY_FIELD_NAMES.has(fieldName) && typeof nested === "string") {
+      const legacyKey = normalizeR2KeyString(nested);
+      if (legacyKey) {
+        registerDiscoveredObject(
+          input,
+          { key: legacyKey, provider: "r2" },
+          "legacy-field"
+        );
+      }
+      continue;
+    }
+
     visitValue(nested, input);
   }
+};
+
+const logSkippedPathLikeString = (value: string, input: { collection: string; documentId: string }): void => {
+  const trimmed = value.trim();
+  if (!trimmed.includes("/")) return;
+  if (/^https?:\/\//i.test(trimmed) || /^data:/i.test(trimmed)) return;
+
+  logDrV2Debug("R2_DISCOVERY_SKIPPED_STRING", {
+    collection: input.collection,
+    documentId: input.documentId,
+    value: trimmed,
+  });
 };
 
 export const discoverR2ObjectsInDocument = (input: {
@@ -175,6 +266,24 @@ export const discoverR2ObjectsInDocument = (input: {
     defaultBucket: input.defaultBucket,
     discovered,
   });
+
+  if (process.env.DR_DEBUG === "1") {
+    const collectStrings = (value: unknown): void => {
+      if (typeof value === "string") {
+        logSkippedPathLikeString(value, { collection: input.collection, documentId });
+        return;
+      }
+      if (!value || typeof value !== "object") return;
+      if (Array.isArray(value)) {
+        for (const item of value) collectStrings(item);
+        return;
+      }
+      for (const nested of Object.values(value as Record<string, unknown>)) {
+        collectStrings(nested);
+      }
+    };
+    collectStrings(input.document);
+  }
 
   return [...discovered.values()].sort((left, right) =>
     `${left.collection}:${left.key}`.localeCompare(`${right.collection}:${right.key}`)

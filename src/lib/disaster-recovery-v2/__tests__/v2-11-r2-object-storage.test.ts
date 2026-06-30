@@ -66,7 +66,7 @@ describe("DR.BACKUP.V2.11 — Cloudflare R2 object storage", () => {
     }
   });
 
-  it("discovers R2 references from nested documents without collection-specific logic", async () => {
+  it("discovers R2 references from nested storage objects only", () => {
     const objects = discoverR2ObjectsInDocument({
       collection: "achievements",
       defaultBucket: "test-bucket",
@@ -76,13 +76,52 @@ describe("DR.BACKUP.V2.11 — Cloudflare R2 object storage", () => {
           { provider: "r2", key: "achievements/attachments/file.pdf", mimeType: "application/pdf" },
         ],
         image: "training/cover.png",
+        metadata: {
+          key: "query/trainingcompletionrecords:student_success_training_by_student",
+        },
       },
     });
 
-    expect(objects).toHaveLength(2);
-    expect(objects.map((entry) => entry.key).sort()).toEqual([
+    expect(objects).toHaveLength(1);
+    expect(objects[0]?.key).toBe("achievements/attachments/file.pdf");
+  });
+
+  it("discovers valid storage references and ignores false-positive strings (V2.11.B)", () => {
+    const discovered = discoverR2ObjectsInDocument({
+      collection: "training",
+      defaultBucket: "anjal-achievements-files",
+      document: {
+        _id: "doc-refs",
+        providerObject: {
+          provider: "r2",
+          key: "achievements/attachments/file.pdf",
+        },
+        bucketObject: {
+          bucket: "anjal-achievements-files",
+          key: "training/video.mp4",
+        },
+        storageKeyObject: {
+          storageKey: "partnerships/logo.png",
+        },
+        legacyImageKey: {
+          imageKey: "achievements/attachments/legacy-cover.jpg",
+        },
+        ignoredValues: {
+          queryKey: "query/trainingcompletionrecords:student_success_training_by_student",
+          trainingPath: "training/student_success",
+          httpUrl: "https://example.com/file.pdf",
+          dataUrl: "data:image/png;base64,abc",
+          random: "random/string/value",
+          bareKey: { key: "training/student_success" },
+        },
+      },
+    });
+
+    expect(discovered.map((entry) => entry.key).sort()).toEqual([
       "achievements/attachments/file.pdf",
-      "training/cover.png",
+      "achievements/attachments/legacy-cover.jpg",
+      "partnerships/logo.png",
+      "training/video.mp4",
     ]);
   });
 
