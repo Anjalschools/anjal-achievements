@@ -44,6 +44,100 @@ const createSha256Transform = (): { transform: Transform; digest: () => string }
   };
 };
 
+type AwsLikeExportError = {
+  name?: unknown;
+  message?: unknown;
+  code?: unknown;
+  stack?: unknown;
+  $metadata?: {
+    httpStatusCode?: unknown;
+    requestId?: unknown;
+    extendedRequestId?: unknown;
+    cfId?: unknown;
+  };
+};
+
+export type R2ExportErrorDetails = {
+  errorName: string;
+  errorMessage: string;
+  errorCode?: string;
+  httpStatusCode?: number;
+  requestId?: string;
+  extendedRequestId?: string;
+  cfId?: string;
+  stack?: string;
+  diagnosticMessage: string;
+};
+
+const readNonEmptyString = (value: unknown): string | undefined => {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+};
+
+const readHttpStatusCode = (value: unknown): number | undefined => {
+  if (typeof value !== "number" || !Number.isFinite(value)) return undefined;
+  return value;
+};
+
+export const extractR2ExportErrorDetails = (error: unknown): R2ExportErrorDetails => {
+  if (error instanceof Error) {
+    return parseAwsLikeExportError(error as Error & AwsLikeExportError);
+  }
+
+  if (error && typeof error === "object") {
+    return parseAwsLikeExportError(error as AwsLikeExportError);
+  }
+
+  const fallbackMessage =
+    typeof error === "string" && error.trim() ? error.trim() : "R2_EXPORT_FAILED";
+
+  return {
+    errorName: "Error",
+    errorMessage: fallbackMessage,
+    diagnosticMessage: fallbackMessage,
+  };
+};
+
+const parseAwsLikeExportError = (record: AwsLikeExportError): R2ExportErrorDetails => {
+  const errorName = readNonEmptyString(record.name) ?? "Error";
+  const errorMessage = readNonEmptyString(record.message) ?? "R2_EXPORT_FAILED";
+  const errorCode = readNonEmptyString(record.code);
+  const httpStatusCode = readHttpStatusCode(record.$metadata?.httpStatusCode);
+  const requestId = readNonEmptyString(record.$metadata?.requestId);
+  const extendedRequestId = readNonEmptyString(record.$metadata?.extendedRequestId);
+  const cfId = readNonEmptyString(record.$metadata?.cfId);
+  const stack = readNonEmptyString(record.stack);
+  const label = errorCode ?? errorName;
+
+  const diagnosticMessage = httpStatusCode
+    ? `${label} (${httpStatusCode}): ${errorMessage}`
+    : `${label}: ${errorMessage}`;
+
+  return {
+    errorName,
+    errorMessage,
+    errorCode,
+    httpStatusCode,
+    requestId,
+    extendedRequestId,
+    cfId,
+    stack,
+    diagnosticMessage,
+  };
+};
+
+const buildR2ExportVerificationError = (failed: R2ManifestEntry[]): Error => {
+  const firstFailed = failed[0];
+  const key = firstFailed?.key ?? "unknown";
+  const bucket = firstFailed?.bucket ?? "unknown";
+  const errorMessage = firstFailed?.errorMessage ?? "UNKNOWN";
+
+  return new Error(
+    `R2_EXPORT_VERIFICATION_FAILED:${failed.length}\nkey=${key}\nbucket=${bucket}\nerror=${errorMessage}`
+  );
+};
+
 const exportSingleR2Object = async (
   entry: R2ManifestEntry,
   deps: R2ExportDependencies
@@ -98,19 +192,31 @@ const exportSingleR2Object = async (
     };
   } catch (error) {
     await removeFile(tempPath).catch(() => undefined);
-    const message = error instanceof Error ? error.message : "R2_EXPORT_FAILED";
+    const durationMs = Date.now() - startedAt;
+    const details = extractR2ExportErrorDetails(error);
 
     logDrV2("R2_OBJECT_EXPORT_FAILED", {
       jobId: deps.jobId,
+      provider: "r2",
+      bucket: entry.bucket,
       key: entry.key,
       relativePath: entry.relativePath,
-      message,
+      errorName: details.errorName,
+      errorMessage: details.errorMessage,
+      errorCode: details.errorCode,
+      httpStatusCode: details.httpStatusCode,
+      requestId: details.requestId,
+      extendedRequestId: details.extendedRequestId,
+      cfId: details.cfId,
+      durationMs,
+      message: details.diagnosticMessage,
+      ...(details.stack ? { stack: details.stack } : {}),
     });
 
     return {
       ...entry,
       status: "failed",
-      errorMessage: message,
+      errorMessage: details.diagnosticMessage,
     };
   }
 };
@@ -155,6 +261,6 @@ export const exportR2ObjectsFromManifest = async (
 export const verifyR2ManifestExport = (manifest: R2Manifest): void => {
   const failed = manifest.objects.filter((entry) => entry.status === "failed");
   if (failed.length > 0) {
-    throw new Error(`R2_EXPORT_VERIFICATION_FAILED:${failed.length}`);
+    throw buildR2ExportVerificationError(failed);
   }
 };
