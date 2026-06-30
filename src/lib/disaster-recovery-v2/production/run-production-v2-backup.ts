@@ -29,6 +29,7 @@ import { resetV2StreamRegistry } from "@/lib/disaster-recovery-v2/diagnostics/v2
 import { resolveV2StageMemoryCheckpoints } from "@/lib/disaster-recovery-v2/diagnostics/v2-stage-memory-checkpoints";
 import {
   mapV2StageIdToProductionJobPhase,
+  resolvePackageBuildRunningJobPhase,
   V2_PRODUCTION_JOB_PHASES,
 } from "@/lib/disaster-recovery-v2/production/v2-production-stage-mapping";
 import { persistV2ProductionProgress } from "@/lib/disaster-recovery-v2/production/v2-production-progress";
@@ -126,7 +127,10 @@ export const runProductionV2Backup = async (input: {
         await input.assertNotCancelled();
       }
 
-      const runningPhase = mapV2StageIdToProductionJobPhase(stageId);
+      const runningPhase =
+        stageId === "package-build"
+          ? resolvePackageBuildRunningJobPhase()
+          : mapV2StageIdToProductionJobPhase(stageId);
       await persistV2ProductionProgress(input.recordId, {
         jobPhase: runningPhase,
         workerId: input.workerId,

@@ -24,6 +24,15 @@ export type R2DiscoveryMethod =
 
 const DEFAULT_MIME_TYPE = "application/octet-stream";
 
+/** R2 key prefixes reserved for system backup artifacts — not application data. */
+const BACKUP_ARTIFACT_KEY_PREFIXES = ["dr-v2/backups/", "backups/"] as const;
+
+export const isBackupArtifactKey = (key: string): boolean => {
+  const normalized = key.trim().replace(/^\/+/, "");
+  if (!normalized) return false;
+  return BACKUP_ARTIFACT_KEY_PREFIXES.some((prefix) => normalized.startsWith(prefix));
+};
+
 const LEGACY_R2_KEY_FIELD_NAMES = new Set([
   "imageKey",
   "storageKey",
@@ -179,6 +188,15 @@ const registerDiscoveredObject = (
     defaultBucket: input.defaultBucket,
   });
   if (!object) return;
+
+  if (isBackupArtifactKey(object.key)) {
+    logDrV2("R2_DISCOVERY_SKIPPED_BACKUP_ARTIFACT", {
+      key: object.key,
+      bucket: object.bucket,
+      reason: "BACKUP_ARTIFACT",
+    });
+    return;
+  }
 
   input.discovered.set(buildDiscoveryKey(object.bucket, object.key), object);
 

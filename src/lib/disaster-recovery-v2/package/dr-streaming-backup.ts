@@ -17,9 +17,38 @@ import type { BackupContext } from "@/lib/disaster-recovery-v2/types/backup-cont
 import { createStageResult } from "@/lib/disaster-recovery-v2/types/stage-result";
 import { logDrV2 } from "@/lib/disaster-recovery-v2/utils/logging";
 import { getR2BucketName } from "@/lib/r2";
+import { persistV2ProductionProgress } from "@/lib/disaster-recovery-v2/production/v2-production-progress";
+import {
+  V2_PRODUCTION_JOB_PHASES,
+  type V2ProductionJobPhase,
+} from "@/lib/disaster-recovery-v2/production/v2-production-stage-mapping";
+import {
+  logMemorySnapshot,
+  setV2MemoryDiagnosticsCurrentStage,
+} from "@/lib/disaster-recovery-v2/diagnostics/v2-memory-diagnostics";
 
 const toErrorMessage = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
+
+const persistPackageBuildProgress = async (
+  recordId: string,
+  jobPhase: V2ProductionJobPhase,
+  extra?: {
+    processedObjects?: number;
+    totalObjects?: number;
+    bytesExported?: number;
+  }
+): Promise<void> => {
+  await persistV2ProductionProgress(recordId, {
+    jobPhase,
+    ...extra,
+  });
+};
+
+const trackPackageBuildSubPhase = (checkpoint: string, jobPhase: V2ProductionJobPhase): void => {
+  setV2MemoryDiagnosticsCurrentStage(checkpoint);
+  logMemorySnapshot(checkpoint, { jobPhase });
+};
 
 const augmentPackageBuildDependenciesForR2 = (
   deps: PackageBuildDependencies
@@ -54,6 +83,10 @@ export const executeR2ObjectExportStage = async (
 ): Promise<void> => {
   const { workspaceDir, jobId } = context.config;
   const resolvedPaths = resolvePackageBuildPaths(workspaceDir);
+  const recordId = jobId;
+
+  trackPackageBuildSubPhase("R2_DISCOVERY_START", V2_PRODUCTION_JOB_PHASES.R2_DISCOVERY);
+  await persistPackageBuildProgress(recordId, V2_PRODUCTION_JOB_PHASES.R2_DISCOVERY);
 
   logDrV2("R2_EXPORT_STARTED", { jobId });
 
@@ -79,12 +112,26 @@ export const executeR2ObjectExportStage = async (
   await deps.ensureDirectory(resolvedPaths.metadataRootDir);
   await deps.writeJsonFile(manifestPath, initialManifest);
 
+  trackPackageBuildSubPhase("R2_EXPORT_START", V2_PRODUCTION_JOB_PHASES.R2_EXPORT);
+  await persistPackageBuildProgress(recordId, V2_PRODUCTION_JOB_PHASES.R2_EXPORT, {
+    totalObjects: initialManifest.objectCount,
+    processedObjects: 0,
+  });
+
   const exportResult = await exportR2ObjectsFromManifest(initialManifest, {
     workspaceDir,
     jobId,
   });
 
   await deps.writeJsonFile(manifestPath, exportResult.manifest);
+
+  trackPackageBuildSubPhase("R2_VERIFICATION_START", V2_PRODUCTION_JOB_PHASES.R2_VERIFICATION);
+  await persistPackageBuildProgress(recordId, V2_PRODUCTION_JOB_PHASES.R2_VERIFICATION, {
+    totalObjects: exportResult.manifest.objectCount,
+    processedObjects: exportResult.exported,
+    bytesExported: exportResult.totalBytes,
+  });
+
   verifyR2ManifestExport(exportResult.manifest);
 
   context.artifacts.r2Export = {
@@ -119,6 +166,13 @@ export const createPackageBuildStageWithR2Export = (
 
       try {
         await executeR2ObjectExportStage(context, deps);
+
+        trackPackageBuildSubPhase("PACKAGE_BUILD_START", V2_PRODUCTION_JOB_PHASES.PACKAGE_BUILD);
+        await persistPackageBuildProgress(
+          context.config.jobId,
+          V2_PRODUCTION_JOB_PHASES.PACKAGE_BUILD
+        );
+
         return await innerStage.execute(context);
       } catch (error) {
         const message = toErrorMessage(error);

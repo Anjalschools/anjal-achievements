@@ -9,6 +9,7 @@ import { describe, expect, it, vi, afterEach } from "vitest";
 import {
   discoverR2ObjectsFromBsonFile,
   discoverR2ObjectsInDocument,
+  isBackupArtifactKey,
 } from "@/lib/disaster-recovery-v2/object-storage/r2-discovery";
 import {
   buildR2Manifest,
@@ -26,6 +27,10 @@ import { resolveStorageManifestPath } from "@/lib/disaster-recovery-v2/storage/s
 import { serializeDocumentsToBsonFile } from "@/lib/disaster-recovery-v2/restore/parse-bson-collection";
 import { createBackupContext } from "@/lib/disaster-recovery-v2/types/backup-context";
 import { createBackupConfig } from "@/lib/disaster-recovery-v2/types/backup-config";
+
+vi.mock("@/lib/disaster-recovery-v2/production/v2-production-progress", () => ({
+  persistV2ProductionProgress: vi.fn().mockResolvedValue(undefined),
+}));
 
 vi.mock("@/lib/r2", () => ({
   getR2BucketName: () => "test-bucket",
@@ -123,6 +128,39 @@ describe("DR.BACKUP.V2.11 — Cloudflare R2 object storage", () => {
       "partnerships/logo.png",
       "training/video.mp4",
     ]);
+  });
+
+  it("excludes backup artifact keys from R2 discovery (V2.11.E)", () => {
+    expect(isBackupArtifactKey("dr-v2/backups/job-1/backup.zip")).toBe(true);
+    expect(isBackupArtifactKey("/dr-v2/backups/job-1/backup.zip")).toBe(true);
+    expect(isBackupArtifactKey("backups/2026-06-18/123-backup.zip")).toBe(true);
+    expect(isBackupArtifactKey("achievements/attachments/file.pdf")).toBe(false);
+    expect(isBackupArtifactKey("training/video.mp4")).toBe(false);
+    expect(isBackupArtifactKey("partnerships/logo.png")).toBe(false);
+
+    const discovered = discoverR2ObjectsInDocument({
+      collection: "backuprecords",
+      defaultBucket: "test-bucket",
+      document: {
+        _id: "rec-1",
+        drArtifact: {
+          provider: "r2",
+          key: "dr-v2/backups/job-upload/backup.zip",
+          mimeType: "application/zip",
+        },
+        operational: {
+          provider: "r2",
+          key: "achievements/attachments/evidence.pdf",
+          mimeType: "application/pdf",
+        },
+        legacyBackup: {
+          storageKey: "backups/2026-06-18/manual.zip",
+        },
+      },
+    });
+
+    expect(discovered).toHaveLength(1);
+    expect(discovered[0]?.key).toBe("achievements/attachments/evidence.pdf");
   });
 
   it("discovers R2 references from exported BSON collections", async () => {

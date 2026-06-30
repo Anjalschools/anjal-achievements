@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { BACKUP_MODULES } from "@/lib/backup/backup-constants";
 import { readDrPollingResponseBody } from "@/lib/disaster-recovery/dr-polling-diagnostics";
+import { formatV2ProductionJobPhaseLabelAr } from "@/lib/disaster-recovery-v2/production/v2-production-stage-mapping";
 
 type BackupRow = {
   id: string;
@@ -271,8 +272,9 @@ export default function AdminBackupRestorePage() {
             statusJson.data;
           lastJobPhase = jobPhase || lastJobPhase;
           if (status === "pending") {
+            const phaseLabel = formatV2ProductionJobPhaseLabelAr(jobPhase || lastJobPhase);
             setSuccess(
-              `جاري النسخ… المرحلة: ${jobPhase || "queued"} — ${processedObjects ?? 0} كائن`
+              `جاري النسخ… ${phaseLabel} — ${processedObjects ?? 0} كائن`
             );
             continue;
           }

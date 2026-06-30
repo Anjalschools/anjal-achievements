@@ -21,7 +21,7 @@ export const resolveV2StageMemoryCheckpoints = (
       };
     case "package-build":
       return {
-        start: ["PACKAGE_BUILD_START"],
+        start: ["R2_DISCOVERY_START"],
         complete: ["PACKAGE_BUILD_COMPLETE"],
       };
     case "upload":
