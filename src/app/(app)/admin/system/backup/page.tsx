@@ -160,6 +160,54 @@ export default function AdminBackupRestorePage() {
     }
   };
 
+  const handleCreateLocalBackup = async () => {
+    setBusy(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const res = await fetch("/api/admin/backup", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ module: moduleId, mode: "local" }),
+      });
+
+      if (!res.ok) {
+        let message = "BACKUP_FAILED";
+        try {
+          const json = (await res.json()) as { error?: string };
+          message = json.error || message;
+        } catch {
+          message = "BACKUP_FAILED";
+        }
+        throw new Error(message);
+      }
+
+      const blob = await res.blob();
+      const disposition = res.headers.get("Content-Disposition") || "";
+      const encodedName = disposition.match(/filename\*=UTF-8''([^;]+)|filename="([^"]+)"/i);
+      const fileName = decodeURIComponent(
+        encodedName?.[1] || encodedName?.[2] || `anjal-backup-${moduleId}.zip`
+      );
+
+      const objectUrl = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = objectUrl;
+      anchor.download = fileName;
+      anchor.rel = "noopener";
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(objectUrl);
+
+      setSuccess("تم إنشاء النسخة المحلية وبدأ التنزيل.");
+    } catch (createError) {
+      setError(createError instanceof Error ? createError.message : "BACKUP_FAILED");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const handleCreateDrBackup = async () => {
     setBusy(true);
     setError(null);
@@ -512,7 +560,7 @@ export default function AdminBackupRestorePage() {
               onChange={(e) => setStorageProvider(e.target.value as "local" | "r2")}
               className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2"
             >
-              <option value="local">تنزيل محلي فوري</option>
+              <option value="local">ذاكرة مؤقتة للتنزيل لاحقاً</option>
               <option value="r2">تخزين R2 (للتاريخ والتنزيل لاحقاً)</option>
             </select>
           </label>
@@ -520,12 +568,21 @@ export default function AdminBackupRestorePage() {
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
+            onClick={() => void handleCreateLocalBackup()}
+            disabled={busy}
+            className="inline-flex items-center gap-2 rounded-xl bg-slate-800 px-4 py-2 text-sm font-bold text-white"
+          >
+            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+            إنشاء نسخة محلية
+          </button>
+          <button
+            type="button"
             onClick={() => void handleCreateBackup()}
             disabled={busy}
             className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-bold text-white"
           >
-            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-            إنشاء نسخة قاعدة بيانات
+            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Archive className="h-4 w-4" />}
+            إنشاء نسخة سحابية
           </button>
           <button
             type="button"

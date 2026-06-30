@@ -9,15 +9,19 @@ import {
 } from "@/lib/backup/backup-constants";
 import { buildBackupManifest } from "@/lib/backup/backup-manifest";
 import { buildBackupZipPackage, countCollectionDocuments } from "@/lib/backup/backup-package";
+import { Readable } from "stream";
 import { resolveBackupStorageProvider, bufferToDownloadStream } from "@/lib/backup/backup-storage";
 import type { BackupZipStreamResult } from "@/lib/backup/backup-download-types";
 import { normalizeWorkerPhaseForRead } from "@/lib/disaster-recovery/worker/dr-worker-state";
+
+export type BackupDeliveryMode = "remote" | "local";
 
 export type CreateBackupInput = {
   moduleId: BackupModuleId;
   storageProvider: BackupStorageProviderId;
   createdByUserId: string;
   note?: string;
+  deliveryMode?: BackupDeliveryMode;
 };
 
 export type CreateBackupResult = {
@@ -30,6 +34,7 @@ export type CreateBackupResult = {
   storageKey?: string;
   downloadReady: boolean;
   zipBuffer?: Buffer;
+  localOnly?: boolean;
 };
 
 const resolveCurrentAcademicYearLabel = async (): Promise<string | null> => {
@@ -64,8 +69,17 @@ export const readCachedLocalBackupZip = (recordId: string): Buffer | null => {
   return row.buffer;
 };
 
-export const createBackup = async (input: CreateBackupInput): Promise<CreateBackupResult> => {
-  await connectDB();
+type PreparedBackupZipArtifact = {
+  zipBuffer: Buffer;
+  fileName: string;
+  manifestVersion: string;
+  recordCounts: Record<string, number>;
+  academicYear: string | null;
+};
+
+const prepareBackupZipArtifact = async (
+  input: Pick<CreateBackupInput, "moduleId">
+): Promise<PreparedBackupZipArtifact> => {
   const mod = getBackupModule(input.moduleId);
   const recordCounts: Record<string, number> = {};
 
@@ -86,11 +100,40 @@ export const createBackup = async (input: CreateBackupInput): Promise<CreateBack
     collectionKeys: mod.collectionKeys,
   });
 
-  const fileName = buildBackupFileName(input.moduleId);
+  return {
+    zipBuffer,
+    fileName: buildBackupFileName(input.moduleId),
+    manifestVersion: manifest.version,
+    recordCounts,
+    academicYear,
+  };
+};
+
+export const openPreparedBackupZipStream = (zipBuffer: Buffer): Readable =>
+  bufferToDownloadStream(zipBuffer);
+
+export const createBackup = async (input: CreateBackupInput): Promise<CreateBackupResult> => {
+  await connectDB();
+  const prepared = await prepareBackupZipArtifact({ moduleId: input.moduleId });
+
+  if (input.deliveryMode === "local") {
+    return {
+      recordId: "",
+      fileName: prepared.fileName,
+      sizeBytes: prepared.zipBuffer.byteLength,
+      manifestVersion: prepared.manifestVersion,
+      recordCounts: prepared.recordCounts,
+      storageProvider: "local",
+      downloadReady: true,
+      zipBuffer: prepared.zipBuffer,
+      localOnly: true,
+    };
+  }
+
   const storage = resolveBackupStorageProvider(input.storageProvider);
   const stored = await storage.store({
-    fileName,
-    body: zipBuffer,
+    fileName: prepared.fileName,
+    body: prepared.zipBuffer,
     contentType: "application/zip",
   });
 
@@ -100,30 +143,30 @@ export const createBackup = async (input: CreateBackupInput): Promise<CreateBack
     backupModule: input.moduleId,
     status: "completed",
     sizeBytes: stored.sizeBytes,
-    manifestVersion: manifest.version,
+    manifestVersion: prepared.manifestVersion,
     storageProvider: stored.provider,
     storageKey: stored.storageKey,
-    fileName,
-    recordCounts,
-    academicYearLabel: academicYear ?? undefined,
+    fileName: prepared.fileName,
+    recordCounts: prepared.recordCounts,
+    academicYearLabel: prepared.academicYear ?? undefined,
     note: input.note,
   });
 
   const recordId = String(record._id);
   if (stored.provider === "local") {
-    cacheLocalBackupZip(recordId, zipBuffer);
+    cacheLocalBackupZip(recordId, prepared.zipBuffer);
   }
 
   return {
     recordId,
-    fileName,
+    fileName: prepared.fileName,
     sizeBytes: stored.sizeBytes,
-    manifestVersion: manifest.version,
-    recordCounts,
+    manifestVersion: prepared.manifestVersion,
+    recordCounts: prepared.recordCounts,
     storageProvider: stored.provider,
     storageKey: stored.storageKey,
     downloadReady: true,
-    zipBuffer: stored.provider === "local" ? zipBuffer : undefined,
+    zipBuffer: stored.provider === "local" ? prepared.zipBuffer : undefined,
   };
 };
 
