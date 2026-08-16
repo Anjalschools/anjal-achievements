@@ -24,7 +24,7 @@ const gradeToStage = (grade: string): string => {
   return "unknown";
 };
 
-const nextGradeValue = (grade: string): string | null => {
+export const nextGradeValue = (grade: string): string | null => {
   const normalized = normalizeGrade(grade);
   if (!normalized) return null;
   const idx = GRADE_OPTIONS.findIndex((row) => row.value === normalized);

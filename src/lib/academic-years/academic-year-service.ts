@@ -2,6 +2,10 @@ import mongoose from "mongoose";
 import connectDB from "@/lib/mongodb";
 import AcademicYear, { type AcademicYearStatus } from "@/models/AcademicYear";
 import { logAuditEvent, type AuditActor } from "@/lib/audit-log-service";
+import {
+  promoteStudentsForNewAcademicYear,
+  type StudentPromotionSummary,
+} from "@/lib/academic-years/promote-students-for-new-year";
 import type { NextRequest } from "next/server";
 
 export type AcademicYearRow = {
@@ -99,31 +103,61 @@ export const createAcademicYear = async (input: {
   if (!name) throw new Error("Academic year name is required");
   if (input.endDate <= input.startDate) throw new Error("endDate must be after startDate");
 
-  const created = await AcademicYear.create({
-    name,
-    label: String(input.label || "").trim() || normalizeLabel(name),
-    startDate: input.startDate,
-    endDate: input.endDate,
-    status: "draft",
-    isCurrent: false,
-    isLocked: false,
-    promotionExecuted: false,
-    snapshotCreated: false,
-    createdBy: input.actor.id,
-    updatedBy: input.actor.id,
-  });
+  const session = await mongoose.startSession();
+  let outcome: { year: AcademicYearRow; promotionSummary: StudentPromotionSummary } | null = null;
+
+  try {
+    await session.withTransaction(async () => {
+      const [doc] = await AcademicYear.create(
+        [
+          {
+            name,
+            label: String(input.label || "").trim() || normalizeLabel(name),
+            startDate: input.startDate,
+            endDate: input.endDate,
+            status: "draft",
+            isCurrent: false,
+            isLocked: false,
+            promotionExecuted: false,
+            snapshotCreated: false,
+            createdBy: input.actor.id,
+            updatedBy: input.actor.id,
+          },
+        ],
+        { session }
+      );
+
+      // Advance active students to their next grade / mark Grade 12 as graduated.
+      // Runs in the same transaction so a new academic year is never left half-promoted.
+      const promotionSummary = await promoteStudentsForNewAcademicYear(session);
+
+      doc.promotionExecuted = true;
+      await doc.save({ session });
+
+      outcome = { year: serializeYear(doc.toObject()), promotionSummary };
+    });
+  } finally {
+    await session.endSession();
+  }
+
+  if (!outcome) throw new Error("Failed to create academic year");
+  // Explicit intermediate binding works around a TS control-flow-narrowing quirk where
+  // destructuring straight off a `let` reassigned inside a withTransaction() closure
+  // resolves to `never` instead of the declared type.
+  const safeOutcome: { year: AcademicYearRow; promotionSummary: StudentPromotionSummary } = outcome;
+  const { year, promotionSummary } = safeOutcome;
 
   await auditYearChange({
     actionType: "academic_year_created",
-    entityId: String(created._id),
-    entityTitle: created.label,
-    descriptionAr: `تم إنشاء عام دراسي: ${created.label}`,
+    entityId: year.id,
+    entityTitle: year.label,
+    descriptionAr: `تم إنشاء عام دراسي: ${year.label}`,
     actor: input.actor,
     request: input.request,
-    after: serializeYear(created.toObject()),
+    after: { ...year, promotionSummary },
   });
 
-  return serializeYear(created.toObject());
+  return year;
 };
 
 export const updateAcademicYear = async (input: {
