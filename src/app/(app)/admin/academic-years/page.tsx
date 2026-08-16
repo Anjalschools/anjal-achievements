@@ -6,7 +6,7 @@ import PageHeader from "@/components/layout/PageHeader";
 import SectionCard from "@/components/layout/SectionCard";
 import IconActionButton from "@/components/ui/IconActionButton";
 import { getLocale } from "@/lib/i18n";
-import { Archive, CalendarRange, Loader2, Lock, Pencil, Star, Unlock } from "lucide-react";
+import { AlertTriangle, Archive, CalendarRange, Loader2, Lock, Pencil, Star, Unlock, X } from "lucide-react";
 
 type AcademicYearRow = {
   id: string;
@@ -19,6 +19,29 @@ type AcademicYearRow = {
   promotionExecuted: boolean;
   snapshotCreated: boolean;
   status: string;
+};
+
+type PromotionTransition = {
+  fromGrade: string;
+  fromGradeLabelAr: string;
+  fromGradeLabelEn: string;
+  toGrade: string | null;
+  toGradeLabelAr: string | null;
+  toGradeLabelEn: string | null;
+  studentCount: number;
+};
+
+type PromotionPreview = {
+  totalStudents: number;
+  promotableStudents: number;
+  graduatingStudents: number;
+  transitions: PromotionTransition[];
+};
+
+type PromotionSummary = {
+  totalEligible: number;
+  promotedCount: number;
+  graduatedCount: number;
 };
 
 type AcademicYearSummary = {
@@ -51,6 +74,13 @@ const AcademicYearsAdminPage = () => {
   const [editName, setEditName] = useState("");
   const [editStartDate, setEditStartDate] = useState("");
   const [editEndDate, setEditEndDate] = useState("");
+
+  const [confirmYear, setConfirmYear] = useState<AcademicYearRow | null>(null);
+  const [previewData, setPreviewData] = useState<PromotionPreview | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
+  const [confirmSubmitting, setConfirmSubmitting] = useState(false);
+  const [lastSetCurrentNotice, setLastSetCurrentNotice] = useState<string | null>(null);
 
   const statusLabel = useMemo(
     () =>
@@ -108,12 +138,9 @@ const AcademicYearsAdminPage = () => {
     }
   };
 
-  const runAction = async (id: string, action: "set_current" | "lock" | "unlock" | "archive") => {
+  const runAction = async (id: string, action: "lock" | "unlock" | "archive") => {
     if (!canManage) return;
     const confirmMessages: Record<typeof action, string> = {
-      set_current: isAr
-        ? "تغيير العام الحالي سيؤثر على جميع الطلبات الجديدة والتقارير المستقبلية.\n\nهل تريد المتابعة؟"
-        : "Changing the current year affects new applications and future reports.\n\nContinue?",
       lock: isAr
         ? "قفل العام الدراسي يمنع الطلبات والتعديلات الجديدة.\n\nهل تريد المتابعة؟"
         : "Locking this year prevents new applications and edits.\n\nContinue?",
@@ -140,6 +167,69 @@ const AcademicYearsAdminPage = () => {
       setError(e instanceof Error ? e.message : "Error");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const openSetCurrentDialog = async (row: AcademicYearRow) => {
+    if (!canManage) return;
+    setConfirmYear(row);
+    setPreviewData(null);
+    setPreviewError(null);
+    setPreviewLoading(true);
+    try {
+      const res = await fetch("/api/admin/academic-years?preview=1", { cache: "no-store" });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(typeof json.error === "string" ? json.error : "Failed");
+      if (json.promotionPreview) setPreviewData(json.promotionPreview as PromotionPreview);
+    } catch (e) {
+      setPreviewError(e instanceof Error ? e.message : "Error");
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
+  const closeSetCurrentDialog = () => {
+    if (confirmSubmitting) return;
+    setConfirmYear(null);
+    setPreviewData(null);
+    setPreviewError(null);
+  };
+
+  const confirmSetCurrent = async () => {
+    if (!confirmYear || !canManage) return;
+    setConfirmSubmitting(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/admin/academic-years/${encodeURIComponent(confirmYear.id)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "set_current" }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(typeof json.error === "string" ? json.error : "Failed");
+
+      const summary = json.promotionSummary as PromotionSummary | null;
+      if (json.alreadyPromoted) {
+        setLastSetCurrentNotice(
+          isAr
+            ? `تم تعيين "${confirmYear.label}" كعام حالي — تم تنفيذ ترحيل الطلاب مسبقًا لهذا العام، لم يُعَد تنفيذه.`
+            : `"${confirmYear.label}" set as current — students for this year were already promoted earlier; promotion was not re-run.`
+        );
+      } else if (summary) {
+        setLastSetCurrentNotice(
+          isAr
+            ? `تم تعيين "${confirmYear.label}" كعام حالي وترحيل ${summary.promotedCount} طالبًا وتخريج ${summary.graduatedCount} طالبًا.`
+            : `"${confirmYear.label}" set as current. Promoted ${summary.promotedCount} students, graduated ${summary.graduatedCount}.`
+        );
+      }
+
+      setConfirmYear(null);
+      setPreviewData(null);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Error");
+    } finally {
+      setConfirmSubmitting(false);
     }
   };
 
@@ -237,6 +327,11 @@ const AcademicYearsAdminPage = () => {
       />
 
       {error ? <p className="mb-4 text-sm text-red-600">{error}</p> : null}
+      {lastSetCurrentNotice ? (
+        <p className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+          {lastSetCurrentNotice}
+        </p>
+      ) : null}
 
       <div className="mb-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {summaryCards.map((card) => (
@@ -413,7 +508,7 @@ const AcademicYearsAdminPage = () => {
                                 <IconActionButton
                                   label={isAr ? "تعيين كعام حالي" : "Set as current year"}
                                   disabled={saving}
-                                  onClick={() => void runAction(row.id, "set_current")}
+                                  onClick={() => void openSetCurrentDialog(row)}
                                 >
                                   <Star className="h-4 w-4 text-primary" aria-hidden />
                                 </IconActionButton>
@@ -456,6 +551,114 @@ const AcademicYearsAdminPage = () => {
           </div>
         )}
       </SectionCard>
+
+      {confirmYear ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="set-current-dialog-title"
+        >
+          <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl">
+            <div className="mb-4 flex items-start gap-3">
+              <span className="mt-0.5 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-700">
+                <AlertTriangle className="h-5 w-5" aria-hidden />
+              </span>
+              <div className="min-w-0 flex-1">
+                <h2 id="set-current-dialog-title" className="text-base font-bold text-foreground">
+                  {isAr ? "تنبيه: تعيين العام الحالي وترحيل الطلاب" : "Warning: set current year and promote students"}
+                </h2>
+              </div>
+              <button
+                type="button"
+                onClick={closeSetCurrentDialog}
+                disabled={confirmSubmitting}
+                aria-label={isAr ? "إغلاق" : "Close"}
+                className="shrink-0 rounded-lg p-1 text-text-light hover:bg-slate-100 disabled:opacity-50"
+              >
+                <X className="h-4 w-4" aria-hidden />
+              </button>
+            </div>
+
+            <p className="whitespace-pre-line text-sm text-text-light">
+              {isAr
+                ? `أنت على وشك تعيين العام الدراسي ${confirmYear.label} كعام حالي.\n\nسيؤدي هذا الإجراء إلى ترحيل الطلاب إلى الصفوف التالية، وتحويل طلاب الصف الثالث الثانوي إلى خريجين.\n\nسيتم الاحتفاظ بسجل الطلاب وإنجازاتهم السابقة ولن يتم حذفها.\n\nلا تنفذ هذا الإجراء إلا بعد التأكد من جاهزية بيانات العام الجديد.`
+                : `You are about to set ${confirmYear.label} as the current academic year.\n\nThis will promote students to their next grade, and convert Grade 12 students to graduates.\n\nStudent records and their past achievements are preserved and will not be deleted.\n\nOnly proceed once the new year's data is ready.`}
+            </p>
+
+            {confirmYear.promotionExecuted ? (
+              <p className="mt-3 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs font-semibold text-sky-800">
+                {isAr
+                  ? "تم تنفيذ ترحيل الطلاب مسبقًا لهذا العام — لن يتم ترحيل الطلاب مرة أخرى، سيتم فقط تعيينه كعام حالي."
+                  : "Students for this year were already promoted earlier — promotion will not run again; only the current-year flag will change."}
+              </p>
+            ) : null}
+
+            <div className="mt-4 rounded-xl border border-border bg-slate-50 p-3">
+              {previewLoading ? (
+                <div className="flex items-center gap-2 py-3 text-sm text-text-light">
+                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                  {isAr ? "جاري حساب أعداد الترحيل المتوقعة…" : "Calculating expected promotion counts…"}
+                </div>
+              ) : previewError ? (
+                <p className="py-2 text-sm text-red-600">{previewError}</p>
+              ) : previewData ? (
+                <>
+                  <ul className="space-y-1 text-sm">
+                    {previewData.transitions.map((t) => (
+                      <li key={t.fromGrade} className="flex items-center justify-between gap-3">
+                        <span className="text-foreground">
+                          {isAr
+                            ? t.toGradeLabelAr
+                              ? `${t.fromGradeLabelAr} ← ${t.toGradeLabelAr}`
+                              : `${t.fromGradeLabelAr} ← خريجون`
+                            : t.toGradeLabelEn
+                              ? `${t.fromGradeLabelEn} → ${t.toGradeLabelEn}`
+                              : `${t.fromGradeLabelEn} → Graduates`}
+                        </span>
+                        <span className="font-bold tabular-nums text-foreground">
+                          {t.studentCount} {isAr ? "طالب" : "students"}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                  <div className="mt-2 flex items-center justify-between border-t border-border/70 pt-2 text-sm font-bold">
+                    <span>{isAr ? "إجمالي الطلاب المتأثرين" : "Total students affected"}</span>
+                    <span className="tabular-nums">{previewData.totalStudents}</span>
+                  </div>
+                </>
+              ) : (
+                <p className="py-2 text-sm text-text-light">
+                  {isAr ? "لا يوجد طلاب نشطون للترحيل حاليًا." : "No active students to promote."}
+                </p>
+              )}
+            </div>
+
+            <div className="mt-5 flex flex-wrap justify-end gap-2">
+              <button
+                type="button"
+                onClick={closeSetCurrentDialog}
+                disabled={confirmSubmitting}
+                className="rounded-xl border border-border px-4 py-2 text-sm font-bold text-foreground disabled:opacity-60"
+              >
+                {isAr ? "إلغاء" : "Cancel"}
+              </button>
+              <button
+                type="button"
+                onClick={() => void confirmSetCurrent()}
+                disabled={confirmSubmitting || previewLoading}
+                className="rounded-xl bg-primary px-4 py-2 text-sm font-bold text-white disabled:opacity-60"
+              >
+                {confirmSubmitting
+                  ? "…"
+                  : isAr
+                    ? "تأكيد تعيين العام وترحيل الطلاب"
+                    : "Confirm: set year and promote students"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </PageContainer>
   );
 };

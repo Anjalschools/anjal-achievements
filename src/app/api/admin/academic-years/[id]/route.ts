@@ -54,8 +54,13 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     const actor = actorFromUser(gate.user as IUser);
 
     if (action === "set_current") {
-      const item = await setAcademicYearAsCurrent({ id, actor, request });
-      return NextResponse.json({ ok: true, item });
+      const outcome = await setAcademicYearAsCurrent({ id, actor, request });
+      return NextResponse.json({
+        ok: true,
+        item: outcome.year,
+        promotionSummary: outcome.promotionSummary,
+        alreadyPromoted: outcome.alreadyPromoted,
+      });
     }
     if (action === "lock") {
       const item = await lockAcademicYear({ id, actor, request });

@@ -57,12 +57,47 @@ export const getEligibleStudents = async (): Promise<PromotionPreviewRow[]> => {
   });
 };
 
+export type PromotionTransitionSummary = {
+  fromGrade: string;
+  fromGradeLabelAr: string;
+  fromGradeLabelEn: string;
+  toGrade: string | null;
+  toGradeLabelAr: string | null;
+  toGradeLabelEn: string | null;
+  studentCount: number;
+};
+
+/** Groups eligible students by grade transition (e.g. "g4 → g5: 12 students"), in grade order. */
+const buildTransitionSummary = (students: PromotionPreviewRow[]): PromotionTransitionSummary[] => {
+  const byGrade = new Map<string, PromotionPreviewRow[]>();
+  for (const row of students) {
+    const bucket = byGrade.get(row.currentGrade);
+    if (bucket) bucket.push(row);
+    else byGrade.set(row.currentGrade, [row]);
+  }
+
+  return GRADE_OPTIONS.filter((g) => byGrade.has(g.value)).map((g) => {
+    const rows = byGrade.get(g.value) || [];
+    const sample = rows[0];
+    return {
+      fromGrade: g.value,
+      fromGradeLabelAr: sample.currentGradeLabelAr,
+      fromGradeLabelEn: sample.currentGradeLabelEn,
+      toGrade: sample.nextGrade,
+      toGradeLabelAr: sample.nextGradeLabelAr,
+      toGradeLabelEn: sample.nextGradeLabelEn,
+      studentCount: rows.length,
+    };
+  });
+};
+
 export const buildPromotionPlan = async () => {
   const students = await getEligibleStudents();
   return {
     totalStudents: students.length,
     promotableStudents: students.filter((row) => row.nextGrade).length,
     graduatingStudents: students.filter((row) => !row.nextGrade).length,
+    transitions: buildTransitionSummary(students),
     rows: students,
   };
 };

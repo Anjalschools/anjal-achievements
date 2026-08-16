@@ -90,6 +90,11 @@ const auditYearChange = async (input: {
   });
 };
 
+/**
+ * Creates a new academic year as a plain draft. Creating a year is NOT the promotion trigger —
+ * students are only advanced when this year is later explicitly set as current
+ * (see setAcademicYearAsCurrent below).
+ */
 export const createAcademicYear = async (input: {
   name: string;
   label?: string;
@@ -103,49 +108,21 @@ export const createAcademicYear = async (input: {
   if (!name) throw new Error("Academic year name is required");
   if (input.endDate <= input.startDate) throw new Error("endDate must be after startDate");
 
-  const session = await mongoose.startSession();
-  let outcome: { year: AcademicYearRow; promotionSummary: StudentPromotionSummary } | null = null;
+  const created = await AcademicYear.create({
+    name,
+    label: String(input.label || "").trim() || normalizeLabel(name),
+    startDate: input.startDate,
+    endDate: input.endDate,
+    status: "draft",
+    isCurrent: false,
+    isLocked: false,
+    promotionExecuted: false,
+    snapshotCreated: false,
+    createdBy: input.actor.id,
+    updatedBy: input.actor.id,
+  });
 
-  try {
-    await session.withTransaction(async () => {
-      const [doc] = await AcademicYear.create(
-        [
-          {
-            name,
-            label: String(input.label || "").trim() || normalizeLabel(name),
-            startDate: input.startDate,
-            endDate: input.endDate,
-            status: "draft",
-            isCurrent: false,
-            isLocked: false,
-            promotionExecuted: false,
-            snapshotCreated: false,
-            createdBy: input.actor.id,
-            updatedBy: input.actor.id,
-          },
-        ],
-        { session }
-      );
-
-      // Advance active students to their next grade / mark Grade 12 as graduated.
-      // Runs in the same transaction so a new academic year is never left half-promoted.
-      const promotionSummary = await promoteStudentsForNewAcademicYear(session);
-
-      doc.promotionExecuted = true;
-      await doc.save({ session });
-
-      outcome = { year: serializeYear(doc.toObject()), promotionSummary };
-    });
-  } finally {
-    await session.endSession();
-  }
-
-  if (!outcome) throw new Error("Failed to create academic year");
-  // Explicit intermediate binding works around a TS control-flow-narrowing quirk where
-  // destructuring straight off a `let` reassigned inside a withTransaction() closure
-  // resolves to `never` instead of the declared type.
-  const safeOutcome: { year: AcademicYearRow; promotionSummary: StudentPromotionSummary } = outcome;
-  const { year, promotionSummary } = safeOutcome;
+  const year = serializeYear(created.toObject());
 
   await auditYearChange({
     actionType: "academic_year_created",
@@ -154,7 +131,7 @@ export const createAcademicYear = async (input: {
     descriptionAr: `تم إنشاء عام دراسي: ${year.label}`,
     actor: input.actor,
     request: input.request,
-    after: { ...year, promotionSummary },
+    after: year,
   });
 
   return year;
@@ -200,16 +177,30 @@ export const updateAcademicYear = async (input: {
   return after;
 };
 
+export type SetCurrentOutcome = {
+  year: AcademicYearRow;
+  promotionSummary: StudentPromotionSummary | null;
+  /** True when this year's students were already promoted by an earlier set-current call — promotion was skipped. */
+  alreadyPromoted: boolean;
+};
+
+/**
+ * Sets an academic year as current. This is the promotion trigger: on first confirmation for a
+ * given year, active students are advanced to their next grade (or marked graduated at Grade 12)
+ * in the same transaction as the isCurrent flip, so the system is never left half-promoted.
+ * Guarded by AcademicYear.promotionExecuted so re-running this action for the same year (e.g. a
+ * duplicate request, or re-activating a previously-current year) never promotes students twice.
+ */
 export const setAcademicYearAsCurrent = async (input: {
   id: string;
   actor: AuditActor;
   request?: NextRequest;
-}) => {
+}): Promise<SetCurrentOutcome> => {
   await connectDB();
   if (!mongoose.Types.ObjectId.isValid(input.id)) throw new Error("Invalid academic year id");
 
   const session = await mongoose.startSession();
-  let result: AcademicYearRow | null = null;
+  let outcome: SetCurrentOutcome | null = null;
 
   try {
     await session.withTransaction(async () => {
@@ -228,27 +219,45 @@ export const setAcademicYearAsCurrent = async (input: {
       target.isCurrent = true;
       target.status = "active";
       target.updatedBy = input.actor.id;
+
+      const alreadyPromoted = target.promotionExecuted === true;
+      let promotionSummary: StudentPromotionSummary | null = null;
+      if (!alreadyPromoted) {
+        // Advance active students to their next grade / mark Grade 12 as graduated.
+        // Runs in the same transaction so "current year" is never left half-promoted.
+        promotionSummary = await promoteStudentsForNewAcademicYear(session);
+        target.promotionExecuted = true;
+      }
+
       await target.save({ session });
 
-      result = serializeYear(target.toObject());
+      const year = serializeYear(target.toObject());
 
       await auditYearChange({
         actionType: "academic_year_set_current",
         entityId: String(target._id),
         entityTitle: target.label,
-        descriptionAr: `تم تعيين العام الدراسي الحالي: ${target.label}`,
+        descriptionAr: alreadyPromoted
+          ? `تم تعيين العام الدراسي الحالي: ${target.label} (تم تنفيذ ترحيل الطلاب مسبقًا لهذا العام، لم يُعَد تنفيذه)`
+          : `تم تعيين العام الدراسي الحالي وترحيل الطلاب: ${target.label}`,
         actor: input.actor,
         request: input.request,
         before: { previousCurrent: beforeCurrent.map((row) => String(row._id)) },
-        after: result,
+        after: { ...year, promotionSummary, alreadyPromoted },
       });
+
+      outcome = { year, promotionSummary, alreadyPromoted };
     });
   } finally {
     await session.endSession();
   }
 
-  if (!result) throw new Error("Failed to set current academic year");
-  return result;
+  if (!outcome) throw new Error("Failed to set current academic year");
+  // Explicit intermediate binding works around a TS control-flow-narrowing quirk where
+  // using a `let` reassigned inside a withTransaction() closure resolves to `never`
+  // instead of the declared type right after the null-guard.
+  const safeOutcome: SetCurrentOutcome = outcome;
+  return safeOutcome;
 };
 
 export const lockAcademicYear = async (input: {
