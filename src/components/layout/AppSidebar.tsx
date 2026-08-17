@@ -411,6 +411,11 @@ const AppSidebar = () => {
     icon: PanelsTopLeft,
     label: locale === "ar" ? "إبرازات الصفحة الرئيسية" : "Home highlights",
   };
+  const homeGalleryItem = {
+    href: "/admin/home-gallery",
+    icon: Images,
+    label: locale === "ar" ? "معرض حفل التكريم" : "Ceremony gallery",
+  };
   const homeCeremonySettingsItem = {
     href: "/admin/settings/home-ceremony",
     icon: CalendarDays,
@@ -463,6 +468,7 @@ const AppSidebar = () => {
     { ...participationAnalyticsItem, capability: "reports" },
     { ...leaderboardItem, capability: "reviewAchievements" },
     { ...homeHighlightsItem, capability: "homeHighlights" },
+    { ...homeGalleryItem, capability: "homeHighlights" },
     { ...academicYearsAdminItem, capability: "academicYearsRead" },
     { ...homeCeremonySettingsItem, capability: "platformSettings" },
     { ...analyticsItem, capability: "advancedAnalytics" },
@@ -841,6 +847,9 @@ const AppSidebar = () => {
     }
     if (href === "/admin/alumni/inbox") {
       return pathname === "/admin/alumni/inbox" || pathname?.startsWith("/admin/alumni/inbox/");
+    }
+    if (href === "/admin/home-gallery") {
+      return pathname === "/admin/home-gallery" || pathname?.startsWith("/admin/home-gallery/");
     }
     if (href === "/admin/home-highlights") {
       return pathname === "/admin/home-highlights" || pathname?.startsWith("/admin/home-highlights/");

@@ -391,6 +391,7 @@ export const ADMIN_ROUTE_REQUIRED_CAPABILITY: Array<{
   { prefix: "/admin/school-years", capability: "schoolYearsAdmin" },
   { prefix: "/admin/academic-years", capability: "academicYearsRead" },
   { prefix: "/admin/home-highlights", capability: "homeHighlights" },
+  { prefix: "/admin/home-gallery", capability: "homeHighlights" },
   { prefix: "/admin/contact-messages", capability: "contactMessages" },
   { prefix: "/admin/letter-requests", capability: "letterRequests" },
   { prefix: "/admin/alumni/verification-center", capability: "alumniVerification" },

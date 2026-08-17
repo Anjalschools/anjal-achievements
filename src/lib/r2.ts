@@ -36,6 +36,17 @@ export const buildAchievementAttachmentR2Key = (originalFilename: string): strin
   return `achievements/attachments/${yyyy}/${mm}/${id}${ext}`;
 };
 
+/** Object key: home-gallery/{albumKey}/{yyyy}/{mm}/{random}{ext} */
+export const buildHomeGalleryR2Key = (albumKey: string, originalFilename: string): string => {
+  const now = new Date();
+  const yyyy = String(now.getUTCFullYear());
+  const mm = String(now.getUTCMonth() + 1).padStart(2, "0");
+  const id = randomBytes(16).toString("hex");
+  const ext = safeFileExtension(originalFilename);
+  const safeAlbum = (albumKey || "home-ceremony").replace(/[^a-z0-9-]/gi, "-").toLowerCase();
+  return `home-gallery/${safeAlbum}/${yyyy}/${mm}/${id}${ext}`;
+};
+
 /** Public URL for a stored object key (R2 public bucket / custom domain). */
 export const buildR2PublicObjectUrl = (key: string): string => {
   const { settings } = createOrGetR2S3Client();

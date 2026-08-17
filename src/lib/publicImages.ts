@@ -7,7 +7,7 @@ export const PUBLIC_IMG = {
   /** شعار ملوّن — الهيدر العام */
   logoColor: "/logoc.png",
   /** خلفية الـ Hero الرئيسية */
-  mainHero: "/main_hero.jpg",
+  mainHero: "/hero.jpg",
   /** تحت عنوان «الإنجاز الأسبوعي» */
   achieveWeeklySection: "/Achive_st.jpg",
   /** بطاقة «مشاركة عالمية في ISEF» */

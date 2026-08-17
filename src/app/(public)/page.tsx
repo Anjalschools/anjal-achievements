@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import PlatformFeaturedStrip from "@/components/landing/PlatformFeaturedStrip";
+import CeremonyGallery from "@/components/landing/CeremonyGallery";
 import {
   categories,
 } from "@/data/landing-content";
@@ -901,6 +902,7 @@ export default function Home() {
       <WhyShareSection />
       <CategoryChipsSection />
       <EventAnnouncement content={homePageContent} />
+      <CeremonyGallery />
       <StatisticsBar />
       <ParticipationNewsSection />
       <TopAchievementsSection />
